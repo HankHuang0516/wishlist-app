@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  phoneNumber      String    @unique
+  password         String
+  name             String?
+  nicknames        String?   // New: Comma separated nicknames
+  realName         String?   // New: Real name
+  address          String?   // New: Address
+  birthday         DateTime? // New: Birthday
+  avatarUrl        String?   // New: URL to avatar image
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Privacy Settings
+  isAvatarVisible   Boolean @default(true)
+  isPhoneVisible    Boolean @default(false)
+  isRealNameVisible Boolean @default(false)
+  isAddressVisible  Boolean @default(false)
+  isBirthdayVisible Boolean @default(false) // New
+
+  // Monetization
+  isPremium         Boolean @default(false) // New: Subscription status
+  maxWishlistItems  Int     @default(100)   // New: Global limit per wishlist
+  maxFollowing      Int     @default(100)   // New: Limit for following users
+
+  wishlists   Wishlist[]
+  itemWatches ItemWatch[] // Users watching items
+
+  // Social: Friends/Follows
+  following User[] @relation("UserFollows")
+  followedBy User[] @relation("UserFollows")
+  
+  // Auth
+  otp             String?
+  otpExpires      DateTime?
+
+  // Feedback
+  lastFeedbackAt  DateTime?
+  feedbacks       Feedback[]
+
+  // Purchase History
+  // Purchase History
+  purchasedItems  Item[]   @relation("PurchasedBy")
+  originalWishes  Item[]   @relation("OriginalWisher")
+  purchases       Purchase[] // History of account purchases (Premium, Limits)
+}
+
+model Purchase {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // 'PREMIUM', 'LIMIT_WISHLIST', 'LIMIT_FOLLOWING'
+  amount    Float
+  currency  String   @default("TWD")
+  status    String   @default("COMPLETED")
+  createdAt DateTime @default(now())
+}
+
+model Wishlist {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       Item[]
+  
+  maxItems    Int      @default(100)
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  name        String
+  price       String?
+  currency    String?  @default("USD")
+  link        String?
+  imageUrl    String?
+  notes       String?
+  priority    Int      @default(0)
+  isPurchased Boolean  @default(false)
+  isHidden    Boolean  @default(false)
+  aiStatus    String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  aiError     String?
+  
+  wishlistId  Int
+  wishlist    Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  
+  watchedBy   ItemWatch[]
+  
+  // Purchase History
+  purchasedById Int?
+  purchasedBy   User?    @relation("PurchasedBy", fields: [purchasedById], references: [id])
+  
+  originalUserId Int?
+  originalUser   User?   @relation("OriginalWisher", fields: [originalUserId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ItemWatch {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    Int
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, itemId])
+}
+
+
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  content   String
+  aiResponse String?
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}

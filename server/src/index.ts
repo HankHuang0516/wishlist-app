@@ -35,7 +35,7 @@ app.use('/uploads', express.static('public/uploads'));
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
-app.get('(.*)', (req: Request, res: Response) => {
+app.get('/:path*', (req: Request, res: Response) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 

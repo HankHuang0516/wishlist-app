@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const path_1 = __importDefault(require("path"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
@@ -28,8 +29,11 @@ app.use('/api/users', userRoutes_1.default);
 app.use('/api/feedback', feedbackRoutes_1.default);
 app.use('/api/payment', paymentRoutes_1.default);
 app.use('/uploads', express_1.default.static('public/uploads'));
-app.get('/', (req, res) => {
-    res.send('AI Wishlist API is running');
+// Serve static files from the client build directory
+const clientBuildPath = path_1.default.join(__dirname, '../../client/dist');
+app.use(express_1.default.static(clientBuildPath));
+app.get('*', (req, res) => {
+    res.sendFile(path_1.default.join(clientBuildPath, 'index.html'));
 });
 app.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);

@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from 'express';
+import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
@@ -28,8 +29,14 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/uploads', express.static('public/uploads'));
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('AI Wishlist API is running');
+
+
+// Serve static files from the client build directory
+const clientBuildPath = path.join(__dirname, '../../client/dist');
+app.use(express.static(clientBuildPath));
+
+app.get('*', (req: Request, res: Response) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
 app.listen(port, () => {

@@ -32,10 +32,10 @@ app.use('/uploads', express.static('public/uploads'));
 
 
 // Serve static files from the client build directory
-const clientBuildPath = path.join(__dirname, '../../client/dist');
+const clientBuildPath = path.join(__dirname, '../../../client/dist');
 app.use(express.static(clientBuildPath));
 
-app.get('/:path*', (req: Request, res: Response) => {
+app.use((req: Request, res: Response) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 

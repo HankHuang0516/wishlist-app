@@ -479,6 +479,27 @@ export default function SettingsPage() {
                 </div>
             )}
 
+            {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
+            {(!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (電腦版)</h2>
+                    <Card className="bg-gray-50 border-gray-200">
+                        <CardContent className="pt-6">
+                            <h3 className="font-medium text-lg text-gray-900">如何安裝到電腦？</h3>
+                            <p className="text-sm text-gray-600 mb-3">請檢查瀏覽器網址列右側是否有 <Download className="inline w-4 h-4 mx-1" /> 安裝圖示。</p>
+                            <div className="text-sm text-gray-700 space-y-2">
+                                <p>或者：</p>
+                                <ol className="list-decimal list-inside space-y-1">
+                                    <li>點擊瀏覽器右上角的 <span className="font-bold">選單圖示</span> (三個點)</li>
+                                    <li>選擇 <span className="font-bold">儲存並分享</span> (或 更多工具)</li>
+                                    <li>點擊 <span className="font-bold">安裝 Wishlist.ai</span></li>
+                                </ol>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             {/* Security Section */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold mt-8 mb-4">帳號安全</h2>

@@ -17,7 +17,7 @@ const feedbackRoutes_1 = __importDefault(require("./routes/feedbackRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const port = process.env.PORT || 8000;
+const port = parseInt(process.env.PORT || '8000', 10);
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.use('/api/auth', authRoutes_1.default);
@@ -32,9 +32,9 @@ app.use('/uploads', express_1.default.static('public/uploads'));
 // Serve static files from the client build directory
 const clientBuildPath = path_1.default.join(__dirname, '../../client/dist');
 app.use(express_1.default.static(clientBuildPath));
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path_1.default.join(clientBuildPath, 'index.html'));
 });
-app.listen(port, () => {
-    console.log(`[server]: Server is running at http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`[server]: Server is running at http://0.0.0.0:${port}`);
 });

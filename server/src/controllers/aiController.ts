@@ -151,6 +151,21 @@ const mockAnalyzeImage = async (filename: string) => {
     };
 };
 
+// Route handler for text analysis
+export const analyzeTextHandler = async (req: Request, res: Response) => {
+    try {
+        const { text, language } = req.body;
+        if (!text) {
+            return res.status(400).json({ error: 'Text is required' });
+        }
+        const responseText = await analyzeText(text, language);
+        res.json({ response: responseText });
+    } catch (error) {
+        console.error('AI Text Analysis Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 export const extractItemDetails = async (req: Request, res: Response) => {
     res.status(501).json({ error: 'Deprecated. Use image analysis.' });
 };

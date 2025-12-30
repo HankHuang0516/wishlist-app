@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import path from 'path';
-import fs from 'fs';
+
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
@@ -34,25 +34,9 @@ app.use('/uploads', express.static('public/uploads'));
 
 // Serve static files from the client build directory
 const clientBuildPath = path.join(__dirname, '../../client/dist');
-console.log('Debug: __dirname:', __dirname);
-console.log('Debug: clientBuildPath:', clientBuildPath);
-if (fs.existsSync(clientBuildPath)) {
-  console.log('Debug: clientBuildPath exists');
-  console.log('Debug: contents:', fs.readdirSync(clientBuildPath));
-} else {
-  console.log('Debug: clientBuildPath DOES NOT EXIST');
-  const parentDir = path.join(__dirname, '../../client');
-  if (fs.existsSync(parentDir)) {
-    console.log('Debug: parentDir exists. Contents:', fs.readdirSync(parentDir));
-  } else {
-    console.log('Debug: parentDir DOES NOT EXIST either');
-    console.log('Debug: root contents:', fs.readdirSync(path.join(__dirname, '../../')));
-  }
-}
-
 app.use(express.static(clientBuildPath));
 
-app.get('*', (req: Request, res: Response) => {
+app.get(/.*/, (req: Request, res: Response) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 

@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "User" ADD COLUMN "otp" TEXT;
-ALTER TABLE "User" ADD COLUMN "otpExpires" DATETIME;

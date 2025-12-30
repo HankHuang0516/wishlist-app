@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 

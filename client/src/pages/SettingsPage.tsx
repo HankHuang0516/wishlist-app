@@ -439,6 +439,25 @@ export default function SettingsPage() {
         )
     }
 
+    {/* iOS Instructions */ }
+    {
+        (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent)) && (
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
+                <Card className="bg-gray-50 border-gray-200">
+                    <CardContent className="pt-6">
+                        <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
+                        <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                            <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
+                            <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
+                            <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
+                        </ol>
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
+
     {/* Security Section */ }
     <div className="space-y-4">
         <h2 className="text-xl font-semibold mt-8 mb-4">帳號安全</h2>

@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Upload, User as UserIcon } from "lucide-react";
+import { Eye, EyeOff, Upload, User as UserIcon, Download } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
 import PaymentModal from "../components/PaymentModal";
 import { API_URL, API_BASE_URL } from '../config';

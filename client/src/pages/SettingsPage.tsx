@@ -147,12 +147,15 @@ export default function SettingsPage() {
         }
     };
 
+    const [isUploading, setIsUploading] = useState(false);
+
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const formData = new FormData();
             formData.append('avatar', file);
 
+            setIsUploading(true);
             try {
                 const res = await fetch(`${API_URL}/users/me/avatar`, {
                     method: 'POST',
@@ -162,9 +165,18 @@ export default function SettingsPage() {
                 if (res.ok) {
                     const data = await res.json();
                     setProfile(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
+                    alert('大頭照更新成功！');
+                } else {
+                    throw new Error('Upload failed');
                 }
             } catch (error) {
                 console.error(error);
+                alert('更新失敗，請重試。');
+            } finally {
+                setIsUploading(false);
+                // Reset input value to allow re-uploading the same file if needed in future, 
+                // though usually react handles this. Safest to clear it if we want to force change event next time.
+                if (fileInputRef.current) fileInputRef.current.value = '';
             }
         }
     };
@@ -219,9 +231,18 @@ export default function SettingsPage() {
                         )}
                     </div>
                     <div>
-                        <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-                            <Upload className="w-4 h-4 mr-2" />
-                            更換照片
+                        <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                            {isUploading ? (
+                                <>
+                                    <span className="animate-spin mr-2">⏳</span> {/* Using simple emoji as spinner placeholder or lucide Upload/Loader if available */}
+                                    更新中...
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    更換照片
+                                </>
+                            )}
                         </Button>
                         <input
                             type="file"

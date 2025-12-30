@@ -12,9 +12,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractItemDetails = exports.analyzeImage = exports.analyzeText = exports.analyzeLocalImage = void 0;
+exports.extractItemDetails = exports.analyzeTextHandler = exports.analyzeImage = exports.analyzeText = exports.analyzeLocalImage = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const dotenv_1 = __importDefault(require("dotenv"));
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 // Initialize Gemini
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -75,21 +77,36 @@ const analyzeText = (text_1, ...args_1) => __awaiter(void 0, [text_1, ...args_1]
     if (!apiKey || apiKey === "your_api_key_here")
         return "Mock AI Analysis: Feedback received (AI disabled)";
     try {
+        // Load FAQ context
+        let faqContent = "";
+        try {
+            const faqPath = path_1.default.join(__dirname, '../data/FAQ.md');
+            if (fs_1.default.existsSync(faqPath)) {
+                faqContent = fs_1.default.readFileSync(faqPath, 'utf-8');
+            }
+        }
+        catch (e) {
+            console.warn("Failed to load FAQ.md", e);
+        }
         const prompt = `
             Act as a polite and helpful customer support assistant for "Wishlist.ai".
-            The user has submitted the following text (Question or Feedback):
+            
+            Context (FAQ / User Guide):
+            ${faqContent}
+            
+            User Question:
             "${text}"
             
-            Current Language: ${language}.
+            Current Language Mode: ${language}.
             
             Instructions:
-            1. If the user is asking a "How-to" question about the app, provide a clear, step-by-step answer.
-            2. If the user is reporting a bug, apologize for the inconvenience and assure them it has been recorded for the team.
-            3. If the user is giving a suggestion, thank them warmly.
-            4. DO NOT generate technical TODO lists, bug reports, or developer jargon.
-            5. Keep the response friendly, concise, and helpful to a non-technical user.
+            1. **Prioritize the FAQ**: If the user's question is covered by the FAQ context above, Answer strictly based on that information.
+            2. **Language Strictness**: You MUST reply in ${language} (Traditional Chinese if not specified). Do not reply in English unless the user explicitly requested English.
+            3. **Tone**: Be friendly, concise, and helpful. Use emojis 🌟 periodically to sound approachable.
+            4. **Scope**: If the question is unrelated to the app, politely guide them back to Wishlist.ai topics.
+            5. **Format**: Use clear paragraphs or bullet points.
             
-            Reply ONLY in ${language}.
+            Reply ONLY in the requested language.
         `;
         const result = yield model.generateContent(prompt);
         const response = yield result.response;
@@ -97,7 +114,7 @@ const analyzeText = (text_1, ...args_1) => __awaiter(void 0, [text_1, ...args_1]
     }
     catch (error) {
         console.error('Error analyzing text:', error);
-        return "AI Analysis Failed";
+        return "AI Analysis Failed (AI 分析失敗，請稍後再試)";
     }
 });
 exports.analyzeText = analyzeText;
@@ -135,6 +152,22 @@ const mockAnalyzeImage = (filename) => __awaiter(void 0, void 0, void 0, functio
         description: "This is a mock response because the API Key is missing or invalid."
     };
 });
+// Route handler for text analysis
+const analyzeTextHandler = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { text, language } = req.body;
+        if (!text) {
+            return res.status(400).json({ error: 'Text is required' });
+        }
+        const responseText = yield (0, exports.analyzeText)(text, language);
+        res.json({ response: responseText });
+    }
+    catch (error) {
+        console.error('AI Text Analysis Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+exports.analyzeTextHandler = analyzeTextHandler;
 const extractItemDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.status(501).json({ error: 'Deprecated. Use image analysis.' });
 });

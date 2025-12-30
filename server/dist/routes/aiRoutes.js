@@ -15,4 +15,5 @@ const upload = (0, multer_1.default)({
 });
 router.use(auth_1.authenticateToken);
 router.post('/analyze-image', upload.single('image'), aiController_1.analyzeImage);
+router.post('/analyze-text', aiController_1.analyzeTextHandler);
 exports.default = router;

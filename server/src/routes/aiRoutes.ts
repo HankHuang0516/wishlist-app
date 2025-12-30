@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticateToken } from '../middleware/auth';
-import { analyzeImage } from '../controllers/aiController';
+import { analyzeImage, analyzeTextHandler } from '../controllers/aiController';
 
 const router = express.Router();
 
@@ -14,5 +14,6 @@ const upload = multer({
 router.use(authenticateToken);
 
 router.post('/analyze-image', upload.single('image'), analyzeImage);
+router.post('/analyze-text', analyzeTextHandler);
 
 export default router;

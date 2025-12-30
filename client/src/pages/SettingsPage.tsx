@@ -419,44 +419,65 @@ export default function SettingsPage() {
 
 
 
-            {/* App Installation Section - Only visible if installable */}
-            {
-                deferredPrompt && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式</h2>
-                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
-                            <CardContent className="pt-6 flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-medium text-lg text-blue-900">將 Wishlist.ai 加到主畫面</h3>
-                                    <p className="text-sm text-blue-700 mt-1">像原生 App 一樣使用，體驗更流暢。</p>
-                                </div>
-                                <Button onClick={handleInstallClick} className="bg-blue-600 hover:bg-blue-700 text-white">
-                                    立即安裝
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
 
-            {/* iOS Instructions */}
-            {
-                (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent)) && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
-                        <Card className="bg-gray-50 border-gray-200">
-                            <CardContent className="pt-6">
-                                <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
-                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                    <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
-                                    <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
-                                    <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
-                                </ol>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
+            {/* App Installation Section - Only visible if installable or on mobile not installed */}
+
+            {/* 1. Native Install Button (Android/Desktop when event fires) */}
+            {deferredPrompt && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式</h2>
+                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                        <CardContent className="pt-6 flex items-center justify-between">
+                            <div>
+                                <h3 className="font-medium text-lg text-blue-900">將 Wishlist.ai 加到主畫面</h3>
+                                <p className="text-sm text-blue-700 mt-1">獲得更流暢的 App 體驗</p>
+                            </div>
+                            <Button
+                                onClick={handleInstallClick}
+                                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
+                            >
+                                <Download className="w-4 h-4 mr-2" />
+                                立即安裝
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
+            {(!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
+                    <Card className="bg-gray-50 border-gray-200">
+                        <CardContent className="pt-6">
+                            <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
+                            <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
+                                <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
+                                <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
+                            </ol>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
+            {(!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (Android)</h2>
+                    <Card className="bg-gray-50 border-gray-200">
+                        <CardContent className="pt-6">
+                            <h3 className="font-medium text-lg text-gray-900">未看到安裝按鈕？</h3>
+                            <p className="text-sm text-gray-600 mb-3">如果您沒有看到上方的安裝按鈕，您可以手動安裝：</p>
+                            <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                <li>點擊瀏覽器右上角的 <span className="font-bold">選單圖示</span> (三個點)</li>
+                                <li>點擊 <span className="font-bold">安裝應用程式</span> 或 <span className="font-bold">加到主畫面</span></li>
+                                <li>點擊 <span className="font-bold">安裝</span></li>
+                            </ol>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Security Section */}
             <div className="space-y-4">

@@ -417,175 +417,175 @@ export default function SettingsPage() {
                 </Card>
             </div>
 
-        </div>
 
-            {/* App Installation Section - Only visible if installable */ }
-    {
-        deferredPrompt && (
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式</h2>
-                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
-                    <CardContent className="pt-6 flex items-center justify-between">
-                        <div>
-                            <h3 className="font-medium text-lg text-blue-900">將 Wishlist.ai 加到主畫面</h3>
-                            <p className="text-sm text-blue-700 mt-1">像原生 App 一樣使用，體驗更流暢。</p>
-                        </div>
-                        <Button onClick={handleInstallClick} className="bg-blue-600 hover:bg-blue-700 text-white">
-                            立即安裝
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        )
-    }
 
-    {/* iOS Instructions */ }
-    {
-        (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent)) && (
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
-                <Card className="bg-gray-50 border-gray-200">
-                    <CardContent className="pt-6">
-                        <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
-                        <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                            <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
-                            <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
-                            <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
-                        </ol>
-                    </CardContent>
-                </Card>
-            </div>
-        )
-    }
-
-    {/* Security Section */ }
-    <div className="space-y-4">
-        <h2 className="text-xl font-semibold mt-8 mb-4">帳號安全</h2>
-        <Card>
-            <CardContent className="pt-6 space-y-4">
-                <p className="text-sm text-gray-500">為了您的帳號安全，建議定期更改密碼。點擊下方按鈕前往修改頁面。</p>
-                <Link to="/change-password">
-                    <Button variant="outline" className="w-full">
-                        前往修改密碼
-                    </Button>
-                </Link>
-            </CardContent>
-        </Card>
-    </div>
-
-    {/* Monetization Section */ }
-    <div className="space-y-4 pb-12">
-        <h2 className="text-xl font-semibold mt-8 mb-4">贊助與升級</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Micro Transaction */}
-            <Card className="border-l-4 border-l-blue-500">
-                <CardHeader>
-                    <CardTitle>擴充清單容量</CardTitle>
-                    <CardDescription>單一清單上限 +10</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
-
-                    <div className="mb-4">
-                        <label className="text-sm text-gray-500 mb-1 block">選擇要擴充的清單類型</label>
-                        <select
-                            className="w-full border rounded p-2 text-sm"
-                            id="expansion-type-select"
-                        >
-                            <option value="wishlists">My Wishlists (所有願望清單)</option>
-                            <option value="following">Following (追蹤名單)</option>
-                        </select>
+            {/* App Installation Section - Only visible if installable */}
+            {
+                deferredPrompt && (
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式</h2>
+                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                            <CardContent className="pt-6 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-medium text-lg text-blue-900">將 Wishlist.ai 加到主畫面</h3>
+                                    <p className="text-sm text-blue-700 mt-1">像原生 App 一樣使用，體驗更流暢。</p>
+                                </div>
+                                <Button onClick={handleInstallClick} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                    立即安裝
+                                </Button>
+                            </CardContent>
+                        </Card>
                     </div>
+                )
+            }
 
-                    <Button className="w-full" variant="outline" onClick={() => {
-                        const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
-                        if (!select) return;
-                        const targetType = select.value;
-                        openPaymentModal(30, targetType === 'following' ? "追蹤名單擴充 (+10)" : "願望清單擴充 (+10)", { purchaseType: 'limit', target: targetType });
-                    }}>
-                        立即購買
-                    </Button>
-                </CardContent>
-            </Card>
+            {/* iOS Instructions */}
+            {
+                (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent)) && (
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
+                        <Card className="bg-gray-50 border-gray-200">
+                            <CardContent className="pt-6">
+                                <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
+                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                    <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
+                                    <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
+                                    <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
+                                </ol>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )
+            }
 
-            {/* Subscription */}
-            <Card className="border-l-4 border-l-amber-500 bg-amber-50/30">
-                <CardHeader>
-                    <CardTitle>無限訂閱制</CardTitle>
-                    <CardDescription>解鎖所有清單無限容量</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/月 (3 USD)</span></p>
-
-                    {profile.isPremium ? (
-                        <div className="space-y-3">
-                            <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
-                                ✨ 您目前是尊榮會員
-                            </div>
-                            <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
-                                openModal(
-                                    "取消訂閱確認",
-                                    "您確定要取消訂閱嗎？\n\n取消後：\n• 您的容量上限將恢復為預設值 (100)\n• 既有超過的項目可能無法編輯",
-                                    async () => {
-                                        try {
-                                            const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
-                                                method: 'POST',
-                                                headers: { 'Authorization': `Bearer ${token}` }
-                                            });
-                                            if (res.ok) {
-                                                alert("訂閱已取消，權益已變更。");
-                                                window.location.reload();
-                                            } else {
-                                                alert("取消失敗");
-                                            }
-                                        } catch (e) { console.error(e); }
-                                    },
-                                    "destructive",
-                                    "確認取消訂閱"
-                                );
-                            }}>
-                                取消訂閱
+            {/* Security Section */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold mt-8 mb-4">帳號安全</h2>
+                <Card>
+                    <CardContent className="pt-6 space-y-4">
+                        <p className="text-sm text-gray-500">為了您的帳號安全，建議定期更改密碼。點擊下方按鈕前往修改頁面。</p>
+                        <Link to="/change-password">
+                            <Button variant="outline" className="w-full">
+                                前往修改密碼
                             </Button>
-                        </div>
-                    ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                        openPaymentModal(90, "無限訂閱方案 (Premium)", { purchaseType: 'PREMIUM' });
-                    }}>
-                        立即訂閱 (NT$ 90)
-                    </Button>
-                    }
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
 
-                </CardContent>
-            </Card>
-        </div>
+            {/* Monetization Section */}
+            <div className="space-y-4 pb-12">
+                <h2 className="text-xl font-semibold mt-8 mb-4">贊助與升級</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Micro Transaction */}
+                    <Card className="border-l-4 border-l-blue-500">
+                        <CardHeader>
+                            <CardTitle>擴充清單容量</CardTitle>
+                            <CardDescription>單一清單上限 +10</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
 
-        {/* Purchase History Link */}
-        <div className="mt-6 pt-6 border-t">
-            <h3 className="text-lg font-medium mb-2">交易紀錄</h3>
-            <Link to="/purchase-history">
-                <Button variant="outline" className="w-full md:w-auto">
-                    查看贊助與購買紀錄
-                </Button>
-            </Link>
-        </div>
-        <ActionConfirmModal
-            isOpen={modalConfig.isOpen}
-            onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-            onConfirm={modalConfig.onConfirm}
-            title={modalConfig.title}
-            message={modalConfig.message}
-            confirmText={modalConfig.confirmText}
-            variant={modalConfig.variant}
-            isProcessing={modalConfig.isProcessing}
-        />
-        <PaymentModal
-            isOpen={paymentModalConfig.isOpen}
-            onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
-            amount={paymentModalConfig.amount}
-            itemName={paymentModalConfig.itemName}
-            onPaymentSuccess={handlePaymentSuccess}
-            extraPayload={paymentModalConfig.extraPayload}
-        />
-    </div>
+                            <div className="mb-4">
+                                <label className="text-sm text-gray-500 mb-1 block">選擇要擴充的清單類型</label>
+                                <select
+                                    className="w-full border rounded p-2 text-sm"
+                                    id="expansion-type-select"
+                                >
+                                    <option value="wishlists">My Wishlists (所有願望清單)</option>
+                                    <option value="following">Following (追蹤名單)</option>
+                                </select>
+                            </div>
+
+                            <Button className="w-full" variant="outline" onClick={() => {
+                                const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
+                                if (!select) return;
+                                const targetType = select.value;
+                                openPaymentModal(30, targetType === 'following' ? "追蹤名單擴充 (+10)" : "願望清單擴充 (+10)", { purchaseType: 'limit', target: targetType });
+                            }}>
+                                立即購買
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Subscription */}
+                    <Card className="border-l-4 border-l-amber-500 bg-amber-50/30">
+                        <CardHeader>
+                            <CardTitle>無限訂閱制</CardTitle>
+                            <CardDescription>解鎖所有清單無限容量</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/月 (3 USD)</span></p>
+
+                            {profile.isPremium ? (
+                                <div className="space-y-3">
+                                    <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
+                                        ✨ 您目前是尊榮會員
+                                    </div>
+                                    <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
+                                        openModal(
+                                            "取消訂閱確認",
+                                            "您確定要取消訂閱嗎？\n\n取消後：\n• 您的容量上限將恢復為預設值 (100)\n• 既有超過的項目可能無法編輯",
+                                            async () => {
+                                                try {
+                                                    const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
+                                                        method: 'POST',
+                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                    });
+                                                    if (res.ok) {
+                                                        alert("訂閱已取消，權益已變更。");
+                                                        window.location.reload();
+                                                    } else {
+                                                        alert("取消失敗");
+                                                    }
+                                                } catch (e) { console.error(e); }
+                                            },
+                                            "destructive",
+                                            "確認取消訂閱"
+                                        );
+                                    }}>
+                                        取消訂閱
+                                    </Button>
+                                </div>
+                            ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                                openPaymentModal(90, "無限訂閱方案 (Premium)", { purchaseType: 'PREMIUM' });
+                            }}>
+                                立即訂閱 (NT$ 90)
+                            </Button>
+                            }
+
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Purchase History Link */}
+                <div className="mt-6 pt-6 border-t">
+                    <h3 className="text-lg font-medium mb-2">交易紀錄</h3>
+                    <Link to="/purchase-history">
+                        <Button variant="outline" className="w-full md:w-auto">
+                            查看贊助與購買紀錄
+                        </Button>
+                    </Link>
+                </div>
+                <ActionConfirmModal
+                    isOpen={modalConfig.isOpen}
+                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    onConfirm={modalConfig.onConfirm}
+                    title={modalConfig.title}
+                    message={modalConfig.message}
+                    confirmText={modalConfig.confirmText}
+                    variant={modalConfig.variant}
+                    isProcessing={modalConfig.isProcessing}
+                />
+                <PaymentModal
+                    isOpen={paymentModalConfig.isOpen}
+                    onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    amount={paymentModalConfig.amount}
+                    itemName={paymentModalConfig.itemName}
+                    onPaymentSuccess={handlePaymentSuccess}
+                    extraPayload={paymentModalConfig.extraPayload}
+                />
+            </div>
         </div >
     );
 }

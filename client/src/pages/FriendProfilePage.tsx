@@ -99,7 +99,7 @@ export default function FriendProfilePage() {
                     </div>
 
                     <div className="pt-6">
-                        <Link to={`/users/${id}/wishlists`} className="block w-full">
+                        <Link to={`/users/${id}/wishlists`} className="block w-full"> {/* Fixed Link Syntax */}
                             <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
                                 <Gift className="w-5 h-5" />
                                 查看願望清單

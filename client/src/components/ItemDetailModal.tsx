@@ -35,7 +35,9 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     const [isEditing, setIsEditing] = useState(false);
 
     // D8 Fix logic: Local display state to handle immediate updates
+    // D8 Fix logic: Local display state to handle immediate updates
     const [displayItem, setDisplayItem] = useState<Item>(item);
+    const lastSavedData = useRef<any>(null);
 
     const [formData, setFormData] = useState({
         name: "",
@@ -47,6 +49,16 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
     useEffect(() => {
         if (item) {
+            // Check if incoming item is stale compared to what we just saved
+            if (lastSavedData.current) {
+                const saved = lastSavedData.current;
+                // If the incoming data differs from saved data (e.g. old price), ignore it
+                if (item.price !== saved.price || item.name !== saved.name) {
+                    return; // Ignore stale update
+                }
+                lastSavedData.current = null; // Synced!
+            }
+
             setDisplayItem(item); // Update if parent passes new prop
             setFormData({
                 name: item.name || "",
@@ -57,6 +69,11 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             });
         }
     }, [item]);
+
+    // Reset ref when modal re-opens
+    useEffect(() => {
+        if (!isOpen) lastSavedData.current = null;
+    }, [isOpen]);
 
     // Use displayItem for rendering instead of item
     const currentItem = displayItem;
@@ -81,6 +98,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
             if (res.ok) {
                 // Optimistic Update: Update local display state immediately
+                // Optimistic Update: Update local display state immediately
                 setDisplayItem(prev => ({
                     ...prev,
                     name: formData.name,
@@ -89,6 +107,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                     link: formData.link,
                     notes: formData.notes
                 }));
+
+                lastSavedData.current = formData; // Mark this as the expected truth
 
                 onUpdate(); // Trigger background sync
                 setIsEditing(false); // Return to View Mode (now showing updated data)

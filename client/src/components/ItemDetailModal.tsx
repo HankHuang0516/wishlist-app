@@ -33,6 +33,10 @@ interface ItemDetailModalProps {
 export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wisherName, wisherId, isOwner }: ItemDetailModalProps) {
     const { token } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
+
+    // D8 Fix logic: Local display state to handle immediate updates
+    const [displayItem, setDisplayItem] = useState<Item>(item);
+
     const [formData, setFormData] = useState({
         name: "",
         price: "",
@@ -43,6 +47,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
     useEffect(() => {
         if (item) {
+            setDisplayItem(item); // Update if parent passes new prop
             setFormData({
                 name: item.name || "",
                 price: item.price || "",
@@ -53,16 +58,19 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         }
     }, [item]);
 
+    // Use displayItem for rendering instead of item
+    const currentItem = displayItem;
+
     if (!isOpen) return null;
 
     // Is current user original wisher or list owner?
-    const is403 = item.aiError && item.aiError.includes('403');
-    const aiSearchLink = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(item.name)}`;
-    const showAiLink = item.link !== aiSearchLink; // Only show if not identical
+    const is403 = currentItem.aiError && currentItem.aiError.includes('403');
+    const aiSearchLink = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(currentItem.name)}`;
+    const showAiLink = currentItem.link !== aiSearchLink; // Only show if not identical
 
     const handleSave = async () => {
         try {
-            const res = await fetch(`${API_URL}/items/${item.id}`, {
+            const res = await fetch(`${API_URL}/items/${currentItem.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -72,8 +80,18 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             });
 
             if (res.ok) {
-                onUpdate();
-                setIsEditing(false);
+                // Optimistic Update: Update local display state immediately
+                setDisplayItem(prev => ({
+                    ...prev,
+                    name: formData.name,
+                    price: formData.price,
+                    currency: formData.currency,
+                    link: formData.link,
+                    notes: formData.notes
+                }));
+
+                onUpdate(); // Trigger background sync
+                setIsEditing(false); // Return to View Mode (now showing updated data)
             } else {
                 alert("更新失敗");
             }
@@ -86,7 +104,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     const handleDelete = async () => {
         if (!confirm("確定要刪除此物品嗎？")) return;
         try {
-            const res = await fetch(`${API_URL}/items/${item.id}`, {
+            const res = await fetch(`${API_URL}/items/${currentItem.id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -115,14 +133,14 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                 placeholder="物品名稱"
                             />
                         ) : (
-                            <span className="truncate pr-2">{item.name}</span>
+                            <span className="truncate pr-2">{currentItem.name}</span>
                         )}
-                        <div className={`text-xs px-2 py-1 rounded shrink-0 ${item.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                            item.aiStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                        <div className={`text-xs px-2 py-1 rounded shrink-0 ${currentItem.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                            currentItem.aiStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
                                 'bg-red-100 text-red-700'
                             }`}>
-                            {item.aiStatus === 'PENDING' ? 'AI 識別中...' :
-                                item.aiStatus === 'COMPLETED' ? 'AI 識別完成' : '識別失敗'}
+                            {currentItem.aiStatus === 'PENDING' ? 'AI 識別中...' :
+                                currentItem.aiStatus === 'COMPLETED' ? 'AI 識別完成' : '識別失敗'}
                         </div>
                     </CardTitle>
                 </CardHeader>
@@ -137,10 +155,10 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
                     {/* Image */}
                     <div className="flex justify-center bg-gray-50 rounded-lg p-2">
-                        {item.imageUrl ? (
+                        {currentItem.imageUrl ? (
                             <img
-                                src={`${API_BASE_URL}${item.imageUrl}`}
-                                alt={item.name}
+                                src={`${API_BASE_URL}${currentItem.imageUrl}`}
+                                alt={currentItem.name}
                                 className="max-h-64 object-contain"
                             />
                         ) : (
@@ -187,7 +205,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     </div>
                                 ) : (
                                     <p className="font-medium text-lg">
-                                        {item.price ? `${item.currency || 'TWD'} ${item.price}` : 'Unknown'}
+                                        {currentItem.price ? `${currentItem.currency || 'TWD'} ${currentItem.price}` : 'Unknown'}
                                     </p>
                                 )}
                             </div>
@@ -202,8 +220,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     />
                                 ) : (
                                     <div className="flex flex-col gap-2 mt-1">
-                                        {item.link && (
-                                            <a href={item.link} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline text-sm">
+                                        {currentItem.link && (
+                                            <a href={currentItem.link} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline text-sm">
                                                 <ExternalLink className="w-4 h-4 mr-1" />
                                                 商品連結
                                             </a>
@@ -230,7 +248,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     placeholder="輸入描述..."
                                 />
                             ) : (
-                                <p className="text-gray-700 mt-1 whitespace-pre-wrap">{item.notes || "無描述"}</p>
+                                <p className="text-gray-700 mt-1 whitespace-pre-wrap">{currentItem.notes || "無描述"}</p>
                             )}
                         </div>
                     </div>

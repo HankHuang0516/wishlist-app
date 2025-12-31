@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { User, Smartphone, MapPin, Tag, Gift } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus } from "lucide-react";
 import { Link } from "react-router-dom"; // Added Link import
 
 interface PublicProfile {
@@ -14,6 +14,7 @@ interface PublicProfile {
     phoneNumber: string | null;
     realName: string | null;
     address: string | null;
+    isFollowing?: boolean; // Added
 }
 
 export default function FriendProfilePage() {
@@ -62,6 +63,30 @@ export default function FriendProfilePage() {
         );
     };
 
+    const handleFollow = async () => {
+        try {
+            const res = await fetch(`${API_URL}/users/${id}/follow`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setProfile(prev => prev ? { ...prev, isFollowing: true } : null);
+            }
+        } catch (err) { console.error(err); }
+    };
+
+    const handleUnfollow = async () => {
+        try {
+            const res = await fetch(`${API_URL}/users/${id}/follow`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setProfile(prev => prev ? { ...prev, isFollowing: false } : null);
+            }
+        } catch (err) { console.error(err); }
+    };
+
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <h1 className="text-3xl font-bold text-muji-primary">好友資料</h1>
@@ -98,13 +123,32 @@ export default function FriendProfilePage() {
                         {renderField("地址", profile.address, MapPin)}
                     </div>
 
-                    <div className="pt-6">
+                    <div className="pt-6 space-y-3">
                         <Link to={`/users/${id}/wishlists`} className="block w-full"> {/* Fixed Link Syntax */}
                             <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
                                 <Gift className="w-5 h-5" />
                                 查看願望清單
                             </button>
                         </Link>
+
+                        {/* Follow Button */}
+                        {profile.isFollowing ? (
+                            <button
+                                onClick={handleUnfollow}
+                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <UserMinus className="w-5 h-5" />
+                                取消追蹤
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleFollow}
+                                className="w-full bg-pink-500 text-white py-3 rounded-md font-medium hover:bg-pink-600 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            >
+                                <UserPlus className="w-5 h-5" />
+                                加入好友
+                            </button>
+                        )}
                     </div>
 
                 </CardContent >
@@ -112,3 +156,4 @@ export default function FriendProfilePage() {
         </div >
     );
 }
+

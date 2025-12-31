@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { analyzeLocalImage } from './aiController';
+import { analyzeLocalImage, analyzeProductText } from './aiController';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import path from 'path';
@@ -278,21 +278,49 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
     }
 };
 
+const processTextAi = async (itemId: number, text: string) => {
+    try {
+        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId}`);
+        const result = await analyzeProductText(text);
+
+        await prisma.item.update({
+            where: { id: itemId },
+            data: {
+                name: result.name || text,
+                price: result.price ? String(result.price) : undefined,
+                currency: result.currency,
+                link: result.shoppingLink,
+                notes: result.description,
+                aiStatus: 'COMPLETED',
+                aiError: null
+            }
+        });
+    } catch (error: any) {
+        console.error(`[AsyncText] Failed for Item ${itemId}:`, error);
+        await prisma.item.update({
+            where: { id: itemId },
+            data: { aiStatus: 'FAILED', aiError: error.message }
+        });
+    }
+};
+
 export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const { wishlistId } = req.params;
-        const { url } = req.body;
+        const { url } = req.body; // 'url' is the field name from frontend, but can be text
 
-        if (!url) return res.status(400).json({ error: 'URL is required' });
+        if (!url) return res.status(400).json({ error: 'Input is required' });
+
+        const isUrl = url.trim().match(/^(http|https):\/\//);
 
         // 1. Create PENDING Item Immediately
         const item = await prisma.item.create({
             data: {
-                name: 'Processing Link...',
+                name: isUrl ? 'Processing Link...' : url, // Use input as name if text
                 wishlistId: Number(wishlistId),
-                link: url,
-                imageUrl: null, // No image yet
+                link: isUrl ? url : null,
+                imageUrl: null,
                 aiStatus: 'PENDING'
             }
         });
@@ -301,10 +329,14 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
         res.status(201).json(item);
 
         // 3. Trigger Async Processing
-        processUrlAi(item.id, url, userId);
+        if (isUrl) {
+            processUrlAi(item.id, url, userId);
+        } else {
+            processTextAi(item.id, url);
+        }
 
     } catch (error) {
-        console.error('Create Item URL Error:', error);
+        console.error('Create Item URL/Text Error:', error);
         res.status(500).json({ error: 'Failed to create item' });
     }
 };

@@ -291,30 +291,90 @@ const processUrlAi = (itemId, url, userId) => __awaiter(void 0, void 0, void 0, 
         yield prisma_1.default.item.update({ where: { id: itemId }, data: { aiStatus: 'FAILED', aiError: error.message } });
     }
 });
+// Force Redeploy: Triggering new build for D9 Fix
+const downloadImage = (url, itemId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const imageRes = yield fetch(url);
+        if (!imageRes.ok)
+            return null;
+        const arrayBuffer = yield imageRes.arrayBuffer();
+        const imageBuffer = Buffer.from(arrayBuffer);
+        const filename = `ai_${itemId}_${Date.now()}.jpg`;
+        // Ensure directory exists
+        const uploadDir = path_1.default.join('public', 'uploads');
+        if (!fs_1.default.existsSync(uploadDir)) {
+            fs_1.default.mkdirSync(uploadDir, { recursive: true });
+        }
+        const savePath = path_1.default.join(uploadDir, filename);
+        fs_1.default.writeFileSync(savePath, imageBuffer);
+        return `/uploads/${filename}`;
+    }
+    catch (e) {
+        console.error(`Failed to download image from ${url}:`, e);
+        return null; // Fail gracefully
+    }
+});
+const processTextAi = (itemId, text) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId}`);
+        const result = yield (0, aiController_1.analyzeProductText)(text);
+        let finalImageUrl = null;
+        if (result.imageUrl) {
+            // Download the image to avoid hotlinking 403 errors
+            finalImageUrl = yield downloadImage(result.imageUrl, itemId);
+        }
+        yield prisma_1.default.item.update({
+            where: { id: itemId },
+            data: {
+                name: result.name || text,
+                price: result.price ? String(result.price) : undefined,
+                currency: result.currency,
+                link: result.shoppingLink,
+                imageUrl: finalImageUrl, // Use local path
+                notes: result.description,
+                aiStatus: 'COMPLETED',
+                aiError: null
+            }
+        });
+    }
+    catch (error) {
+        console.error(`[AsyncText] Failed for Item ${itemId}:`, error);
+        yield prisma_1.default.item.update({
+            where: { id: itemId },
+            data: { aiStatus: 'FAILED', aiError: error.message }
+        });
+    }
+});
 const createItemFromUrl = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user.id;
         const { wishlistId } = req.params;
-        const { url } = req.body;
+        const { url } = req.body; // 'url' is the field name from frontend, but can be text
         if (!url)
-            return res.status(400).json({ error: 'URL is required' });
+            return res.status(400).json({ error: 'Input is required' });
+        const isUrl = url.trim().match(/^(http|https):\/\//);
         // 1. Create PENDING Item Immediately
         const item = yield prisma_1.default.item.create({
             data: {
-                name: 'Processing Link...',
+                name: isUrl ? 'Processing Link...' : url, // Use input as name if text
                 wishlistId: Number(wishlistId),
-                link: url,
-                imageUrl: null, // No image yet
+                link: isUrl ? url : null,
+                imageUrl: null,
                 aiStatus: 'PENDING'
             }
         });
         // 2. Return Response
         res.status(201).json(item);
         // 3. Trigger Async Processing
-        processUrlAi(item.id, url, userId);
+        if (isUrl) {
+            processUrlAi(item.id, url, userId);
+        }
+        else {
+            processTextAi(item.id, url);
+        }
     }
     catch (error) {
-        console.error('Create Item URL Error:', error);
+        console.error('Create Item URL/Text Error:', error);
         res.status(500).json({ error: 'Failed to create item' });
     }
 });

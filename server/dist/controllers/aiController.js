@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractItemDetails = exports.analyzeTextHandler = exports.analyzeImage = exports.analyzeText = exports.analyzeLocalImage = void 0;
+exports.extractItemDetails = exports.analyzeTextHandler = exports.analyzeImage = exports.analyzeText = exports.analyzeProductText = exports.analyzeLocalImage = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs_1 = __importDefault(require("fs"));
@@ -71,6 +71,55 @@ const analyzeLocalImage = (file_1, ...args_1) => __awaiter(void 0, [file_1, ...a
     }
 });
 exports.analyzeLocalImage = analyzeLocalImage;
+const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [productName_1, ...args_1], void 0, function* (productName, language = 'traditional chinese') {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === "your_api_key_here") {
+        return {
+            name: productName,
+            price: "100",
+            currency: "USD",
+            tags: ["manual", "search"],
+            imageUrl: null,
+            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`,
+            description: "Mock description for " + productName
+        };
+    }
+    const prompt = `
+        User wants to add a product to their wishlist by name: "${productName}".
+        Act as a shopping assistant. Infer the details of this product.
+        Language: ${language}.
+        
+        Return JSON object with:
+        1. name: Refined product name (keep user's intent but make it official if clear).
+        2. price: Estimated price (number only).
+        3. currency: ISO currency code.
+        4. tags: 3-5 keywords.
+        5. shoppingLink: A generic search URL for this product on Google Shopping.
+        6. description: Brief attractiveness description (1-2 sentences).
+        7. imageUrl: A representative product image URL (must be a valid direct image URL, e.g. ending in .jpg or .png, from a major retailer or manufacturer if possible).
+        
+        Return ONLY JSON.
+    `;
+    const result = yield model.generateContent(prompt);
+    const response = yield result.response;
+    const text = response.text();
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    try {
+        const data = JSON.parse(jsonStr);
+        // Ensure shopping link exists
+        data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
+        return data;
+    }
+    catch (e) {
+        console.error("Failed to parse Gemini Product JSON:", text);
+        return {
+            name: productName,
+            description: "Could not retrieve details via AI.",
+            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`
+        };
+    }
+});
+exports.analyzeProductText = analyzeProductText;
 // Analyze text feedback
 const analyzeText = (text_1, ...args_1) => __awaiter(void 0, [text_1, ...args_1], void 0, function* (text, language = 'traditional chinese') {
     const apiKey = process.env.GEMINI_API_KEY;

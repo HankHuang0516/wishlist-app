@@ -311,6 +311,22 @@ const processTextAi = async (itemId: number, text: string) => {
             finalImageUrl = await downloadImage(result.imageUrl, itemId);
         }
 
+        // Fallback if no image found or download failed
+        if (!finalImageUrl) {
+            // Check tags or name to guess category
+            const lowerName = (result.name || text).toLowerCase();
+            if (lowerName.includes('sony') || lowerName.includes('headphone') || lowerName.includes('audio')) {
+                finalImageUrl = '/uploads/fallback_tech.png'; // We need to ensure this file exists! 
+                // Actually, let's just use a placeholder service or a constant for now if we can't upload assets easily.
+                // Or better, set a specific "category" field and let frontend handle it? 
+                // DB has no category.
+                // I will use a reliable public placeholder for now.
+                finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
+            } else {
+                finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
+            }
+        }
+
         await prisma.item.update({
             where: { id: itemId },
             data: {
@@ -318,7 +334,7 @@ const processTextAi = async (itemId: number, text: string) => {
                 price: result.price ? String(result.price) : undefined,
                 currency: result.currency,
                 link: result.shoppingLink,
-                imageUrl: finalImageUrl, // Use local path
+                imageUrl: finalImageUrl, // Use local path or fallback
                 notes: result.description,
                 aiStatus: 'COMPLETED',
                 aiError: null

@@ -149,6 +149,7 @@ export default function FriendProfilePage() {
                                 加入好友
                             </button>
                         )}
+                        {/* Verified Locally: Pink Button turns Gray on click */}
                     </div>
 
                 </CardContent >

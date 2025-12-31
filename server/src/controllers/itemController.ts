@@ -278,10 +278,37 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
     }
 };
 
+const downloadImage = async (url: string, itemId: number): Promise<string | null> => {
+    try {
+        const imageRes = await fetch(url);
+        if (!imageRes.ok) return null;
+        const arrayBuffer = await imageRes.arrayBuffer();
+        const imageBuffer = Buffer.from(arrayBuffer);
+        const filename = `ai_${itemId}_${Date.now()}.jpg`;
+        // Ensure directory exists
+        const uploadDir = path.join('public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const savePath = path.join(uploadDir, filename);
+        fs.writeFileSync(savePath, imageBuffer);
+        return `/uploads/${filename}`;
+    } catch (e) {
+        console.error(`Failed to download image from ${url}:`, e);
+        return null; // Fail gracefully
+    }
+};
+
 const processTextAi = async (itemId: number, text: string) => {
     try {
         console.log(`[AsyncText] Processing text "${text}" for Item ${itemId}`);
         const result = await analyzeProductText(text);
+
+        let finalImageUrl = null;
+        if (result.imageUrl) {
+            // Download the image to avoid hotlinking 403 errors
+            finalImageUrl = await downloadImage(result.imageUrl, itemId);
+        }
 
         await prisma.item.update({
             where: { id: itemId },
@@ -290,7 +317,7 @@ const processTextAi = async (itemId: number, text: string) => {
                 price: result.price ? String(result.price) : undefined,
                 currency: result.currency,
                 link: result.shoppingLink,
-                imageUrl: result.imageUrl, // Save inferred image URL
+                imageUrl: finalImageUrl, // Use local path
                 notes: result.description,
                 aiStatus: 'COMPLETED',
                 aiError: null

@@ -84,6 +84,22 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        // Check if current user is following this profile user
+        const currentUserId = (req as AuthRequest).user?.id;
+        let isFollowing = false;
+
+        if (currentUserId && currentUserId !== user.id) {
+            const follow = await prisma.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUserId,
+                        followingId: user.id
+                    }
+                }
+            });
+            isFollowing = !!follow;
+        }
+
         // Apply Privacy Filters
         const publicProfile = {
             id: user.id,
@@ -96,7 +112,8 @@ export const getUserProfile = async (req: Request, res: Response) => {
             address: user.isAddressVisible ? user.address : null,
             birthday: user.isBirthdayVisible ? user.birthday : null, // New
 
-            avatarUrl: user.isAvatarVisible ? user.avatarUrl : null
+            avatarUrl: user.isAvatarVisible ? user.avatarUrl : null,
+            isFollowing // Added
         };
 
         res.json(publicProfile);

@@ -189,7 +189,7 @@ export default function WishlistDashboard() {
 
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-muji-primary">
-                    {isOwner ? "My Wishlists" : `${targetUserName}'s Public Wishlists`}
+                    {isOwner ? "My Wishlists (v2)" : `${targetUserName}'s Public Wishlists`}
                 </h1>
             </div>
 

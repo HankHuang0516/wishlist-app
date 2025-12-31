@@ -37,7 +37,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     // D8 Fix logic: Local display state to handle immediate updates
     // D8 Fix logic: Local display state to handle immediate updates
     const [displayItem, setDisplayItem] = useState<Item>(item);
-    const lastSavedData = useRef<any>(null);
+    const lastSavedData = useRef<any>(null); // Re-trigger build
 
     const [formData, setFormData] = useState({
         name: "",

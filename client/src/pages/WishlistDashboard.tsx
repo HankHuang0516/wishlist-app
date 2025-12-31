@@ -32,6 +32,7 @@ export default function WishlistDashboard() {
     const [creating, setCreating] = useState(false);
     const [newTitle, setNewTitle] = useState("");
     const [newDescription, setNewDescription] = useState("");
+    const [newIsPublic, setNewIsPublic] = useState(true);
 
     // Delete State
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -145,7 +146,7 @@ export default function WishlistDashboard() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ title: newTitle, description: newDescription })
+                body: JSON.stringify({ title: newTitle, description: newDescription, isPublic: newIsPublic })
             });
 
             if (res.ok) {
@@ -199,17 +200,38 @@ export default function WishlistDashboard() {
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleCreate} className="space-y-4">
-                            <Input
-                                placeholder="Wishlist Title (e.g. Birthday 2024)"
-                                value={newTitle}
-                                onChange={(e) => setNewTitle(e.target.value)}
-                                required
-                            />
+                            <div>
+                                <Input
+                                    placeholder="Wishlist Title (e.g. Birthday 2024)"
+                                    value={newTitle}
+                                    onChange={(e) => setNewTitle(e.target.value)}
+                                    maxLength={50}
+                                    required
+                                />
+                                <div className="text-right text-xs text-gray-400 mt-1">
+                                    {newTitle.length}/50
+                                </div>
+                            </div>
                             <Input
                                 placeholder="Description (Optional)"
                                 value={newDescription}
                                 onChange={(e) => setNewDescription(e.target.value)}
+                                maxLength={200}
                             />
+
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="newIsPublic"
+                                    checked={newIsPublic}
+                                    onChange={(e) => setNewIsPublic(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
+                                />
+                                <label htmlFor="newIsPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                    公開此清單 (Public) - {newIsPublic ? "所有人可見" : "僅自己可見"}
+                                </label>
+                            </div>
+
                             <Button disabled={creating || !newTitle}>
                                 {creating ? "Creating..." : "Create Wishlist"}
                             </Button>

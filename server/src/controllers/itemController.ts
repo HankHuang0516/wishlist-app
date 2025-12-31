@@ -278,6 +278,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
     }
 };
 
+// Force Redeploy: Triggering new build for D9 Fix
 const downloadImage = async (url: string, itemId: number): Promise<string | null> => {
     try {
         const imageRes = await fetch(url);

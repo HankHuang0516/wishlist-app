@@ -52,9 +52,17 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             // Check if incoming item is stale compared to what we just saved
             if (lastSavedData.current) {
                 const saved = lastSavedData.current;
-                // If the incoming data differs from saved data (e.g. old price), ignore it
-                if (item.price !== saved.price || item.name !== saved.name) {
-                    return; // Ignore stale update
+                // If the incoming data differs from saved data, it might be stale.
+                // We strictly require the server data to match our saved expectation before syncing.
+                const isMatch =
+                    item.name === saved.name &&
+                    item.price === saved.price &&
+                    (item.currency || 'TWD') === (saved.currency || 'TWD') &&
+                    (item.link || '') === (saved.link || '') &&
+                    (item.notes || '') === (saved.notes || '');
+
+                if (!isMatch) {
+                    return; // Ignore stale update, keep local display
                 }
                 lastSavedData.current = null; // Synced!
             }

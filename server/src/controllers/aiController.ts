@@ -69,6 +69,32 @@ export const analyzeLocalImage = async (file: { buffer: Buffer, mimetype: string
     }
 };
 
+// Helper: Google Custom Search for Image
+const searchGoogleImage = async (query: string): Promise<string | null> => {
+    const cseId = process.env.GOOGLE_CSE_ID;
+    const apiKey = process.env.GOOGLE_API_KEY;
+
+    if (!cseId || !apiKey) {
+        console.warn("Google CSE keys missing. Skipping image search.");
+        return null; // Fallback to Gemini hallucination (or random)
+    }
+
+    try {
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query)}&searchType=image&num=1&safe=active`;
+        const axios = require('axios');
+        const res = await axios.get(url);
+
+        if (res.data.items && res.data.items.length > 0) {
+            console.log("Found Google Image:", res.data.items[0].link);
+            return res.data.items[0].link;
+        }
+        return null;
+    } catch (error) {
+        console.error("Google Image Search failed:", error);
+        return null;
+    }
+};
+
 export const analyzeProductText = async (productName: string, language: string = 'traditional chinese') => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_api_key_here") {
@@ -83,6 +109,10 @@ export const analyzeProductText = async (productName: string, language: string =
         };
     }
 
+    // 1. Try to find a real image using Google Search (if configured)
+    const googleImage = await searchGoogleImage(productName);
+
+    // 2. Ask Gemini for details + (optional) image url if google failed
     const prompt = `
         User wants to add a product to their wishlist by name: "${productName}".
         Act as a shopping assistant. Infer the details of this product.
@@ -95,7 +125,7 @@ export const analyzeProductText = async (productName: string, language: string =
         4. tags: 3-5 keywords.
         5. shoppingLink: A generic search URL for this product on Google Shopping.
         6. description: Brief attractiveness description (1-2 sentences).
-        7. imageUrl: A representative product image URL (must be a valid direct image URL, e.g. ending in .jpg or .png, from a major retailer or manufacturer if possible).
+        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'A representative product image URL (Must be a direct link to JPG/PNG from a public site like Wikimedia, Manufacturer, or major CDN. Avoid retailer links that valid anti-bot/403). If unsure, leave null.'}
         
         Return ONLY JSON.
     `;
@@ -109,13 +139,20 @@ export const analyzeProductText = async (productName: string, language: string =
         const data = JSON.parse(jsonStr);
         // Ensure shopping link exists
         data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
+
+        // Use Google Image if found, otherwise keep Gemini's or null
+        if (googleImage) {
+            data.imageUrl = googleImage;
+        }
+
         return data;
     } catch (e) {
         console.error("Failed to parse Gemini Product JSON:", text);
         return {
             name: productName,
             description: "Could not retrieve details via AI.",
-            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`
+            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`,
+            imageUrl: googleImage // Fallback usage
         };
     }
 };

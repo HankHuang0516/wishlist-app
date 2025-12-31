@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { User, Smartphone, MapPin, Tag } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift } from "lucide-react";
 import { Link } from "react-router-dom"; // Added Link import
 
 interface PublicProfile {
@@ -98,11 +98,14 @@ export default function FriendProfilePage() {
                         {renderField("地址", profile.address, MapPin)}
                     </div>
 
-                    <div className="pt-4 flex justify-end">
-                        <Link to={`/ users / ${id}/wishlists`} className="text-sm font-medium text-muji-primary hover:underline underline-offset-4" >
-                            查看願望清單 & rarr;
-                        </Link >
-                    </div >
+                    <div className="pt-6">
+                        <Link to={`/users/${id}/wishlists`} className="block w-full">
+                            <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                <Gift className="w-5 h-5" />
+                                查看願望清單
+                            </button>
+                        </Link>
+                    </div>
 
                 </CardContent >
             </Card >

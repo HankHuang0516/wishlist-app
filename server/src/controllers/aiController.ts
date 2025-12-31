@@ -77,6 +77,7 @@ export const analyzeProductText = async (productName: string, language: string =
             price: "100",
             currency: "USD",
             tags: ["manual", "search"],
+            imageUrl: null,
             shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`,
             description: "Mock description for " + productName
         };
@@ -92,7 +93,9 @@ export const analyzeProductText = async (productName: string, language: string =
         2. price: Estimated price (number only).
         3. currency: ISO currency code.
         4. tags: 3-5 keywords.
-        5. description: Brief attractiveness description (1-2 sentences).
+        5. shoppingLink: A generic search URL for this product on Google Shopping.
+        6. description: Brief attractiveness description (1-2 sentences).
+        7. imageUrl: A representative product image URL (must be a valid direct image URL, e.g. ending in .jpg or .png, from a major retailer or manufacturer if possible).
         
         Return ONLY JSON.
     `;

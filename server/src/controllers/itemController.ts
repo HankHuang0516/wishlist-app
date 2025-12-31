@@ -290,6 +290,7 @@ const processTextAi = async (itemId: number, text: string) => {
                 price: result.price ? String(result.price) : undefined,
                 currency: result.currency,
                 link: result.shoppingLink,
+                imageUrl: result.imageUrl, // Save inferred image URL
                 notes: result.description,
                 aiStatus: 'COMPLETED',
                 aiError: null

@@ -43,8 +43,8 @@ const searchUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 birthday: true, // Select details to check privacy
                 isBirthdayVisible: true,
                 followedBy: {
-                    where: { id: currentUserId }, // Check if currently followed by me
-                    select: { id: true }
+                    where: { followerId: currentUserId }, // Check if currently followed by me
+                    select: { followerId: true }
                 }
             },
             take: 20
@@ -94,15 +94,6 @@ const followUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         });
         if (!currentUser)
             return res.status(404).json({ error: 'Current user not found' });
-        // Enforce Limit
-        // Note: isPremium is currently only infinite wishlists, let's assume it also gives infinite following? 
-        // Or keep them separate expansioms?
-        // User request implied they correspond to "Capacity Expansion" which is usually paid per slot or tier.
-        // Assuming "Premium" makes everything unlimited? 
-        // Let's stick to the specific "Capacity Expansion" logic: maxFollowing defaults to 100.
-        // If isPremium, maybe we should ignore limits? 
-        // The prompt says "Capacity Expansion" so let's stick to the counter.
-        // However, usually Premium implies unlimited. Let's make Premium override valid.
         if (!currentUser.isPremium && currentUser._count.following >= currentUser.maxFollowing) {
             return res.status(403).json({ error: `Following limit reached (${currentUser.maxFollowing}). Please expand capacity.` });
         }
@@ -113,12 +104,22 @@ const followUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         if (!targetUser) {
             return res.status(404).json({ error: 'User to follow not found' });
         }
-        yield prisma.user.update({
-            where: { id: currentUserId },
-            data: {
-                following: {
-                    connect: { id: targetId }
+        // Check if already following
+        const existingFollow = yield prisma.follow.findUnique({
+            where: {
+                followerId_followingId: {
+                    followerId: currentUserId,
+                    followingId: targetId
                 }
+            }
+        });
+        if (existingFollow) {
+            return res.status(400).json({ error: 'Already following' });
+        }
+        yield prisma.follow.create({
+            data: {
+                followerId: currentUserId,
+                followingId: targetId
             }
         });
         res.json({ message: 'Followed successfully' });
@@ -134,11 +135,11 @@ const unfollowUser = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     const { id } = req.params; // ID of user to unfollow
     const currentUserId = req.user.id;
     try {
-        yield prisma.user.update({
-            where: { id: currentUserId },
-            data: {
-                following: {
-                    disconnect: { id: parseInt(id) }
+        yield prisma.follow.delete({
+            where: {
+                followerId_followingId: {
+                    followerId: currentUserId,
+                    followingId: parseInt(id)
                 }
             }
         });
@@ -151,11 +152,12 @@ const unfollowUser = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.unfollowUser = unfollowUser;
 // Get list of people I follow
+// Get list of people I follow
 const getFollowing = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const currentUserId = req.user.id;
     try {
-        const user = yield prisma.user.findUnique({
-            where: { id: currentUserId },
+        const follows = yield prisma.follow.findMany({
+            where: { followerId: currentUserId },
             include: {
                 following: {
                     select: {
@@ -163,27 +165,23 @@ const getFollowing = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                         name: true,
                         avatarUrl: true,
                         nicknames: true,
-                        birthday: true, // Select details
+                        birthday: true,
                         isBirthdayVisible: true,
                         following: {
-                            where: { id: currentUserId },
-                            select: { id: true }
+                            where: { followingId: currentUserId },
+                            select: { followerId: true }
                         }
                     }
                 }
             }
         });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        // Transform result to include isMutual flag and birthday privacy
-        const results = user.following.map(f => ({
-            id: f.id,
-            name: f.name,
-            avatarUrl: f.avatarUrl,
-            nicknames: f.nicknames,
-            birthday: f.isBirthdayVisible ? f.birthday : null,
-            isMutual: f.following.length > 0
+        const results = follows.map(f => ({
+            id: f.following.id,
+            name: f.following.name,
+            avatarUrl: f.following.avatarUrl,
+            nicknames: f.following.nicknames,
+            birthday: f.following.isBirthdayVisible ? f.following.birthday : null,
+            isMutual: f.following.following.length > 0
         }));
         res.json(results);
     }
@@ -196,38 +194,25 @@ exports.getFollowing = getFollowing;
 const getUpcomingBirthdays = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const currentUserId = req.user.id;
     try {
-        const user = yield prisma.user.findUnique({
-            where: { id: currentUserId },
-            include: {
-                following: {
-                    select: {
-                        id: true,
-                        name: true,
-                        avatarUrl: true,
-                        nicknames: true,
-                        birthday: true,
-                        isBirthdayVisible: true
-                    }
-                }
-            }
+        const follows = yield prisma.follow.findMany({
+            where: { followerId: currentUserId },
+            include: { following: true }
         });
-        if (!user)
-            return res.status(404).json({ error: 'User not found' });
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const thirtyDaysFromNow = new Date(today);
         thirtyDaysFromNow.setDate(today.getDate() + 30);
-        const upcoming = user.following
-            .filter(f => f.birthday && f.isBirthdayVisible)
+        const upcoming = follows
+            .filter(f => f.following.birthday && f.following.isBirthdayVisible)
             .map(f => {
-            const bday = new Date(f.birthday);
+            const bday = new Date(f.following.birthday);
             // Construct next birthday for this year
             let nextBday = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
             // If passed, move to next year
             if (nextBday < today) {
                 nextBday.setFullYear(today.getFullYear() + 1);
             }
-            return Object.assign(Object.assign({}, f), { nextBday });
+            return Object.assign(Object.assign({}, f.following), { nextBday });
         })
             // Filter: Must be within next 30 days
             .filter(f => f.nextBday >= today && f.nextBday <= thirtyDaysFromNow)

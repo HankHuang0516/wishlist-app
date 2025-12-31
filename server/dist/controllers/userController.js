@@ -72,6 +72,7 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 exports.updateMe = updateMe;
 // Get another user's public profile (Respecting privacy)
 const getUserProfile = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const { id } = req.params;
         const user = yield prisma_1.default.user.findUnique({
@@ -79,6 +80,20 @@ const getUserProfile = (req, res) => __awaiter(void 0, void 0, void 0, function*
         });
         if (!user)
             return res.status(404).json({ error: 'User not found' });
+        // Check if current user is following this profile user
+        const currentUserId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        let isFollowing = false;
+        if (currentUserId && currentUserId !== user.id) {
+            const follow = yield prisma_1.default.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUserId,
+                        followingId: user.id
+                    }
+                }
+            });
+            isFollowing = !!follow;
+        }
         // Apply Privacy Filters
         const publicProfile = {
             id: user.id,
@@ -89,7 +104,8 @@ const getUserProfile = (req, res) => __awaiter(void 0, void 0, void 0, function*
             realName: user.isRealNameVisible ? user.realName : null,
             address: user.isAddressVisible ? user.address : null,
             birthday: user.isBirthdayVisible ? user.birthday : null, // New
-            avatarUrl: user.isAvatarVisible ? user.avatarUrl : null
+            avatarUrl: user.isAvatarVisible ? user.avatarUrl : null,
+            isFollowing // Added
         };
         res.json(publicProfile);
     }

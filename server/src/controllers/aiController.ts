@@ -69,6 +69,54 @@ export const analyzeLocalImage = async (file: { buffer: Buffer, mimetype: string
     }
 };
 
+export const analyzeProductText = async (productName: string, language: string = 'traditional chinese') => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === "your_api_key_here") {
+        return {
+            name: productName,
+            price: "100",
+            currency: "USD",
+            tags: ["manual", "search"],
+            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`,
+            description: "Mock description for " + productName
+        };
+    }
+
+    const prompt = `
+        User wants to add a product to their wishlist by name: "${productName}".
+        Act as a shopping assistant. Infer the details of this product.
+        Language: ${language}.
+        
+        Return JSON object with:
+        1. name: Refined product name (keep user's intent but make it official if clear).
+        2. price: Estimated price (number only).
+        3. currency: ISO currency code.
+        4. tags: 3-5 keywords.
+        5. description: Brief attractiveness description (1-2 sentences).
+        
+        Return ONLY JSON.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    try {
+        const data = JSON.parse(jsonStr);
+        // Ensure shopping link exists
+        data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
+        return data;
+    } catch (e) {
+        console.error("Failed to parse Gemini Product JSON:", text);
+        return {
+            name: productName,
+            description: "Could not retrieve details via AI.",
+            shoppingLink: `https://www.google.com/search?q=${encodeURIComponent(productName)}`
+        };
+    }
+};
+
 // Analyze text feedback
 export const analyzeText = async (text: string, language: string = 'traditional chinese') => {
     const apiKey = process.env.GEMINI_API_KEY;

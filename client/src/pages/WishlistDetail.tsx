@@ -405,7 +405,7 @@ export default function WishlistDetail() {
                     {isFabOpen && (
                         <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-5 fade-in duration-200">
                             <div className="flex items-center gap-2">
-                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">貼上網址</span>
+                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">文字/連結</span>
                                 <Button
                                     className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700 text-white p-0"
                                     onClick={() => { setIsFabOpen(false); setIsUrlModalOpen(true); }}
@@ -448,17 +448,23 @@ export default function WishlistDetail() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <Card className="w-full max-w-md bg-white">
                         <CardHeader>
-                            <CardTitle>貼上物品網址</CardTitle>
+                            <CardTitle>新建許願物品</CardTitle>
                         </CardHeader>
                         <form onSubmit={handleUrlSubmit}>
                             <CardContent>
-                                <Input
-                                    placeholder="https://example.com/product/123"
-                                    value={urlInput}
-                                    onChange={e => setUrlInput(e.target.value)}
-                                    required
-                                />
-                                <p className="text-xs text-gray-500 mt-2">AI 將自動抓取圖片並進行分析。</p>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">商品連結或名稱</label>
+                                    <Input
+                                        placeholder="貼上網址 或 輸入商品名稱 (例如: Apple Watch)"
+                                        value={urlInput}
+                                        onChange={e => setUrlInput(e.target.value)}
+                                        required
+                                        autoFocus
+                                    />
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        💡 <b>Smart Input:</b> 貼上網址可自動抓取圖片；直接輸入名稱，AI 將自動搜尋並填寫資料！
+                                    </p>
+                                </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2">
                                 <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)}>取消</Button>

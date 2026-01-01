@@ -56,6 +56,21 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
             data: { lastFeedbackAt: new Date() }
         });
 
+        // Send Notification Email
+        const emailContent = `
+            <h2>New Feedback Received</h2>
+            <p><strong>User ID:</strong> ${userId}</p>
+            <p><strong>Content:</strong></p>
+            <blockquote>${content}</blockquote>
+            <p><strong>AI Analysis:</strong></p>
+            <pre>${safeAiResponse}</pre>
+        `;
+
+        // Fire and forget (don't await to avoid blocking response)
+        import('../lib/emailService').then(service => {
+            service.sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent);
+        });
+
         res.status(201).json({
             message: 'Feedback received',
             aiAnalysis: safeAiResponse

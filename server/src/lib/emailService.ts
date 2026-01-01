@@ -7,16 +7,14 @@ else console.log('[EmailService] SMTP_PASS is SET (length: ' + process.env.SMTP_
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    port: 465, // SSL
+    secure: true, // true for 465
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
     },
-    tls: {
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 5000, // 5 seconds timeout
+    // tls: { rejectUnauthorized: false } // Not needed for Port 465 usually
+    connectionTimeout: 5000,
     greetingTimeout: 5000,
     socketTimeout: 10000
 });

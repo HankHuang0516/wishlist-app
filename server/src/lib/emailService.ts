@@ -13,13 +13,16 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-export const sendEmail = async (to: string, subject: string, html: string) => {
+export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {
     console.log(`[EmailService] Request to send email to: ${to}`);
+
+    // Debug Info to return to frontend
+    let debugLog = `User: ${process.env.SMTP_USER ? 'SET' : 'MISSING'}, Pass: ${process.env.SMTP_PASS ? 'SET' : 'MISSING'}`;
 
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         console.warn('⚠️ [Email Service] SMTP credentials missing in process.env. Skipping real send.');
         console.log(`[Mock Email Triggered] Subject: ${subject}`);
-        return;
+        return { success: false, error: 'SMTP credentials missing in env', log: debugLog };
     }
 
     try {
@@ -31,10 +34,13 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
             html
         });
         console.log(`✅ [Email Service] Email sent successfully! Message ID: ${info.messageId}`);
+        return { success: true, log: `Sent OK. ID: ${info.messageId}` };
     } catch (error: any) {
         console.error('❌ [Email Service] FATAL ERROR:', error);
-        if (error.response) {
-            console.error('[Email Service] SMTP Valid Response:', error.response);
-        }
+        return {
+            success: false,
+            error: error.message || 'Unknown SMTP Error',
+            log: `Error: ${JSON.stringify(error)}`
+        };
     }
 };

@@ -62,14 +62,15 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
             <pre>${safeAiResponse}</pre>
         `;
 
-        // Call directly (async, no await to prevent blocking)
-        sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent)
-            .then(() => console.log('[Feedback] Email send sequence initiated.'))
-            .catch(err => console.error('[Feedback] Failed to initiate email:', err));
+        // Call directly and AWAIT to capture logs for debugging
+        const emailResult = await sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent);
+
+        console.log('[Feedback] Email Send Result:', emailResult);
 
         res.status(201).json({
             message: 'Feedback received',
-            aiAnalysis: safeAiResponse
+            aiAnalysis: safeAiResponse,
+            emailDebug: emailResult // Tunneling server log to client
         });
 
     } catch (error) {

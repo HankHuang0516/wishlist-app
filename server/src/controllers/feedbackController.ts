@@ -62,15 +62,15 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
             <pre>${safeAiResponse}</pre>
         `;
 
-        // Call directly and AWAIT to capture logs for debugging
-        const emailResult = await sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent);
-
-        console.log('[Feedback] Email Send Result:', emailResult);
+        // Fire and forget (don't block response) - Use new port/timeout settings
+        console.log('[Feedback] Email Send Initiated (Background)...');
+        sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent)
+            .then(res => console.log('[Feedback] Email Result:', res))
+            .catch(err => console.error('[Feedback] Email Failed:', err));
 
         res.status(201).json({
             message: 'Feedback received',
-            aiAnalysis: safeAiResponse,
-            emailDebug: emailResult // Tunneling server log to client
+            aiAnalysis: safeAiResponse
         });
 
     } catch (error) {

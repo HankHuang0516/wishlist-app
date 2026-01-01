@@ -6,11 +6,19 @@ if (!process.env.SMTP_PASS) console.warn('[EmailService] SMTP_PASS is MISSING');
 else console.log('[EmailService] SMTP_PASS is SET (length: ' + process.env.SMTP_PASS.length + ')');
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-    }
+    },
+    tls: {
+        rejectUnauthorized: false
+    },
+    connectionTimeout: 5000, // 5 seconds timeout
+    greetingTimeout: 5000,
+    socketTimeout: 10000
 });
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {

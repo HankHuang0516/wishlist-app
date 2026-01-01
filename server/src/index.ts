@@ -46,6 +46,14 @@ app.use('/uploads', express.static('public/uploads'));
 
 
 
+// Debug Route for Email
+import { sendEmail } from './lib/emailService';
+app.post('/api/debug/email', async (req, res) => {
+  console.log('[Debug] Triggering Manual Email Test...');
+  const result = await sendEmail('hankhuang0516@gmail.com', 'Live Debug Test (Port 465)', 'If you receive this, the Live Server is working.');
+  res.json(result);
+});
+
 // Serve static files from the client build directory
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));

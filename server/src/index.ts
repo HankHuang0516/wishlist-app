@@ -12,10 +12,24 @@ import userRoutes from './routes/userRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
 dotenv.config();
 
 const app: Express = express();
 const port = parseInt(process.env.PORT || '8000', 10);
+
+// Security Middleware
+app.use(helmet()); // Set security HTTP headers
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(limiter); // Apply rate limiting to all requests
 
 app.use(cors());
 app.use(express.json());

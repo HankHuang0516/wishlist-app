@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { analyzeText } from './aiController';
+import { sendEmail } from '../lib/emailService'; // Static import
 
 interface AuthRequest extends Request {
     user?: any;
@@ -15,6 +16,8 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Content is required' });
         }
 
+        console.log(`[Feedback] Received from User ${userId}:`, content);
+
         // Check Cooldown (10 minutes)
         const user = await prisma.user.findUnique({
             where: { id: userId }
@@ -23,15 +26,7 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
         if (user?.lastFeedbackAt) {
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
             if (user.lastFeedbackAt > tenMinutesAgo) {
-                const remaining = Math.ceil((user.lastFeedbackAt.getTime() - tenMinutesAgo.getTime()) / 60000); // Wait, logic might be tricky.
-                // lastFeedbackAt > tenMinutesAgo implies it was RECENT.
-                // Reset calculation:
-                // nextAllowed = lastFeedbackAt + 10 mins.
-                // remaining = nextAllowed - now.
-                const nextAllowed = new Date(user.lastFeedbackAt.getTime() + 10 * 60 * 1000);
-                const remainingMinutes = Math.ceil((nextAllowed.getTime() - Date.now()) / 60000);
-
-                return res.status(429).json({ error: `Please wait ${remainingMinutes} minutes before sending more feedback.` });
+                return res.status(429).json({ error: 'Please wait 10 minutes between feedback.' });
             }
         }
 
@@ -57,6 +52,7 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
         });
 
         // Send Notification Email
+        console.log('[Feedback] Attempting to send email notification...');
         const emailContent = `
             <h2>New Feedback Received</h2>
             <p><strong>User ID:</strong> ${userId}</p>
@@ -66,10 +62,10 @@ export const createFeedback = async (req: AuthRequest, res: Response) => {
             <pre>${safeAiResponse}</pre>
         `;
 
-        // Fire and forget (don't await to avoid blocking response)
-        import('../lib/emailService').then(service => {
-            service.sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent);
-        });
+        // Call directly (async, no await to prevent blocking)
+        sendEmail('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent)
+            .then(() => console.log('[Feedback] Email send sequence initiated.'))
+            .catch(err => console.error('[Feedback] Failed to initiate email:', err));
 
         res.status(201).json({
             message: 'Feedback received',

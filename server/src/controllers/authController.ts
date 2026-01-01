@@ -13,6 +13,12 @@ export const register = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Phone number and password are required' });
         }
 
+        // Enforce strong password
+        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters long and contain both letters and numbers.' });
+        }
+
         const existingUser = await prisma.user.findUnique({ where: { phoneNumber } });
         if (existingUser) {
             return res.status(400).json({ error: 'User already exists' });
@@ -120,6 +126,12 @@ export const resetPassword = async (req: Request, res: Response) => {
 
         if (!user || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
             return res.status(400).json({ error: 'Invalid or expired OTP' });
+        }
+
+        // Enforce strong password
+        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordRegex.test(newPassword)) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters long and contain both letters and numbers.' });
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);

@@ -601,46 +601,46 @@ export default function SettingsPage() {
                     {/* ... (Existing Monetization Cards) ... */}
                 </div>
 
-                {/* Debug Tools Section */}
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-700">系統診斷 (Debug Tools)</h2>
-                    <Card>
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-medium text-lg">測試 Email 連線</h3>
-                                    <p className="text-sm text-gray-500">
-                                        點擊此按鈕，系統會嘗試發送一封測試信給您。
-                                        <br />
-                                        如果失敗，會顯示詳細錯誤訊息供診斷。
-                                    </p>
+                {/* Debug Tools Section - Admin Only */}
+                {profile.phoneNumber === '0935065876' && (
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                        <h2 className="text-xl font-semibold mb-4 text-gray-700">系統診斷 (Admin Only)</h2>
+                        <Card>
+                            <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-medium text-lg">測試 Email 連線</h3>
+                                        <p className="text-sm text-gray-500">
+                                            此功能僅供開發者測試 System Integrity。
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            const btn = document.getElementById('debug-email-btn');
+                                            if (btn) btn.innerText = "測試中...";
+                                            try {
+                                                const res = await fetch(`${API_URL}/feedback/test`, {
+                                                    method: 'POST',
+                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                });
+                                                const json = await res.json();
+                                                alert("測試結果:\n" + JSON.stringify(json, null, 2));
+                                            } catch (e: any) {
+                                                alert("連線失敗: " + e.message);
+                                            } finally {
+                                                if (btn) btn.innerText = "發送測試信";
+                                            }
+                                        }}
+                                        id="debug-email-btn"
+                                    >
+                                        發送測試信
+                                    </Button>
                                 </div>
-                                <Button
-                                    variant="outline"
-                                    onClick={async () => {
-                                        const btn = document.getElementById('debug-email-btn');
-                                        if (btn) btn.innerText = "測試中...";
-                                        try {
-                                            const res = await fetch(`${API_URL}/feedback/test`, {
-                                                method: 'POST',
-                                                headers: { 'Authorization': `Bearer ${token}` }
-                                            });
-                                            const json = await res.json();
-                                            alert("測試結果:\n" + JSON.stringify(json, null, 2));
-                                        } catch (e: any) {
-                                            alert("連線失敗: " + e.message);
-                                        } finally {
-                                            if (btn) btn.innerText = "發送測試信";
-                                        }
-                                    }}
-                                    id="debug-email-btn"
-                                >
-                                    發送測試信
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
 
                 {/* Purchase History Link */}
                 <div className="mt-6 pt-6 border-t">

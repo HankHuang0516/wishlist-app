@@ -102,8 +102,9 @@ export default function Layout() {
 
             {/* Footer */}
             <footer className="border-t border-muji-border bg-white py-6">
-                <div className="container mx-auto px-4 text-center text-sm text-muji-secondary">
-                    &copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.
+                <div className="container mx-auto px-4 flex justify-between items-center text-sm text-muji-secondary">
+                    <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
+                    <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>
                 </div>
             </footer>
         </div>

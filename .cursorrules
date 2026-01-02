@@ -50,6 +50,7 @@ wishlist-app/
 - This ensures the "Allow List" security feature works correctly for auto-approval.
 
 ### 2. Deployment
+- **部署前必須執行 `npm run test -- --run` 確認所有測試通過。**
 - Increment the version in `client/package.json` before major deployments.
 - The Git "Always Allow" rule is configured for `git` prefix.
 - **Git commit messages**: 避免在 `-m` 訊息中使用特殊字元（如 `$`, `()`, `&`），因為 PowerShell 可能會將其解析為變數或運算符，導致需要權限確認。

@@ -13,7 +13,8 @@ if (!process.env.RESEND_API_KEY) {
 }
 
 // Initialize Resend Client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend Client (Use mock key if missing to prevent crash)
+const resend = new Resend(process.env.RESEND_API_KEY || 're_123456789');
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {
     console.log(`[EmailService] Request to send email to: ${to}`);

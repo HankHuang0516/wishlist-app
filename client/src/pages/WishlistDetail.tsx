@@ -6,7 +6,7 @@ import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
 import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
 import ItemDetailModal from "../components/ItemDetailModal";
-import { API_URL, API_BASE_URL } from '../config';
+import { API_URL } from '../config';
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";

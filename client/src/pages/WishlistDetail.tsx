@@ -16,6 +16,7 @@ interface Item {
     price?: string;
     currency?: string;
     link?: string;
+    aiLink?: string;  // AI-generated shopping link
     imageUrl?: string;
     notes?: string;
     aiStatus: string; // PENDING, COMPLETED, FAILED

@@ -14,6 +14,7 @@ interface Item {
     price?: string;
     currency?: string;
     link?: string;
+    aiLink?: string;  // AI-generated shopping link
     imageUrl?: string;
     notes?: string;
     aiStatus: string; // PENDING, COMPLETED, FAILED
@@ -91,8 +92,11 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
     // Is current user original wisher or list owner?
     const is403 = currentItem.aiError && currentItem.aiError.includes('403');
-    const aiSearchLink = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(currentItem.name)}`;
-    const showAiLink = currentItem.link !== aiSearchLink; // Only show if not identical
+
+    // Smart link display logic:
+    // - Use aiLink from database (if available)
+    // - Fallback to dynamic Google Shopping search if no aiLink
+    const aiLink = currentItem.aiLink || `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(currentItem.name)}`;
 
     const handleSave = async () => {
         try {
@@ -249,19 +253,18 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     />
                                 ) : (
                                     <div className="flex flex-col gap-2 mt-1">
+                                        {/* User-provided link (if any) */}
                                         {currentItem.link && (
                                             <a href={currentItem.link} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline text-sm">
                                                 <ExternalLink className="w-4 h-4 mr-1" />
                                                 商品連結
                                             </a>
                                         )}
-                                        {/* AI Search Link */}
-                                        {showAiLink && (
-                                            <a href={aiSearchLink} target="_blank" rel="noopener noreferrer" className="flex items-center text-green-600 hover:underline text-sm">
-                                                <ExternalLink className="w-4 h-4 mr-1" />
-                                                AI 購買連結
-                                            </a>
-                                        )}
+                                        {/* AI Link: Show if user link exists (both shown) or no user link (AI only) */}
+                                        <a href={aiLink} target="_blank" rel="noopener noreferrer" className="flex items-center text-green-600 hover:underline text-sm">
+                                            <ExternalLink className="w-4 h-4 mr-1" />
+                                            {currentItem.link ? 'AI 購買連結' : '購買連結'}
+                                        </a>
                                     </div>
                                 )}
                             </div>

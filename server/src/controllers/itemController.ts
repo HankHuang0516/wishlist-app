@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { analyzeLocalImage, analyzeProductText } from './aiController';
+import { analyzeLocalImage, analyzeProductText, searchGoogleWeb } from './aiController';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import path from 'path';
@@ -232,6 +232,20 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
 
             // Scraping Success
             const $ = cheerio.load(html);
+
+            // 1. Check for Soft Block / Captcha / Access Denied (Common in Shopee/Amazon)
+            const pageTitle = $('title').text().trim().toLowerCase();
+            const bodyText = $('body').text().toLowerCase();
+            const isSoftBlock = pageTitle.includes('robot') ||
+                pageTitle.includes('shopee') && pageTitle.includes('login') ||
+                pageTitle.includes('access denied') ||
+                pageTitle.includes('verify you are human');
+
+            if (isSoftBlock) {
+                console.warn(`[AsyncURL] Soft block detected (Title: "${pageTitle}"), forcing AI fallback...`);
+                throw new Error('Soft Block Detected');
+            }
+
             // ... (Extract logic mostly same as before) ...
             let imageUrl = $('meta[property="og:image"]').attr('content') ||
                 $('meta[name="twitter:image"]').attr('content') ||
@@ -262,17 +276,46 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 // Trigger Image AI
                 await processItemAi(itemId, savePath, 'url_image.jpg');
                 return;
+            } else {
+                // No image found, treat as scraping failure to trigger fallback
+                throw new Error('No image found on page');
             }
 
         } catch (fetchError: any) {
             console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), checking AI fallback...`);
 
+            // SMART FALLBACK LOGIC
+            // 1. If it's Shopee/Amazon with IDs, use Smart Search
+            let searchContext = null;
+
+            // Shopee regex: shopee.tw/product/SHOP_ID/ITEM_ID or name-i.SHOP.ITEM
+            const shopeeMatch = url.match(/shopee\.tw\/product\/(\d+)\/(\d+)/i) ||
+                url.match(/shopee\.tw\/.*?-i\.(\d+)\.(\d+)/i);
+
+            if (shopeeMatch) {
+                const id1 = shopeeMatch[1];
+                const id2 = shopeeMatch[2];
+                if (id1 && id2) {
+                    const query = `site:shopee.tw "${id1}" "${id2}"`;
+                    console.log(`[AsyncURL] Smart Search for Shopee IDs: ${id1}, ${id2} (Query: ${query})`);
+                    // Even if custom search fails (returns null), we pass the QUERY string as a hint to Gemini!
+                    // This is the key fix: Let Gemini do the search using this exact query string.
+                    searchContext = await searchGoogleWeb(query);
+                    if (!searchContext) {
+                        // Pass the query itself as a "context" object or separate arg?
+                        // We need to update processTextAi signature to accept this hint.
+                        // Let's pass it via a modified call.
+                        await processTextAi(itemId, url, null, query);
+                        return;
+                    }
+                }
+            }
+
             // AI Fallback Logic:
-            // If fetching failed (403, 404, etc), ask Gemini to just look at the URL as text input.
             try {
-                console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url}`);
-                await processTextAi(itemId, url);
-                return; // processTextAi saves the result, so we are done.
+                console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url} (Context: ${searchContext?.title || 'None'})`);
+                await processTextAi(itemId, url, searchContext);
+                return;
             } catch (fallbackError) {
                 console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
                 await prisma.item.update({
@@ -290,11 +333,15 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
     }
 };
 
-// Force Redeploy: Triggering new build for D9 Fix
+// Force Redeploy: Triggering new build for D9 Fix (Image Download User-Agent)
 const downloadImage = async (url: string, itemId: number): Promise<string | null> => {
     try {
-        const imageRes = await fetch(url);
-        if (!imageRes.ok) return null;
+        const headers = getRandomHeaders(); // Reuse existing pool
+        const imageRes = await fetch(url, { headers });
+        if (!imageRes.ok) {
+            console.warn(`[DownloadImage] Failed to fetch ${url} (Status: ${imageRes.status})`);
+            return null;
+        }
         const arrayBuffer = await imageRes.arrayBuffer();
         const imageBuffer = Buffer.from(arrayBuffer);
         const filename = `ai_${itemId}_${Date.now()}.jpg`;
@@ -312,10 +359,10 @@ const downloadImage = async (url: string, itemId: number): Promise<string | null
     }
 };
 
-const processTextAi = async (itemId: number, text: string) => {
+const processTextAi = async (itemId: number, text: string, searchContext: any = null, suggestedQuery: string | null = null) => {
     try {
-        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId}`);
-        const result = await analyzeProductText(text);
+        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
+        const result = await analyzeProductText(text, 'traditional chinese', searchContext, suggestedQuery);
 
         let finalImageUrl = null;
         if (result.imageUrl) {
@@ -328,12 +375,7 @@ const processTextAi = async (itemId: number, text: string) => {
             // Check tags or name to guess category
             const lowerName = (result.name || text).toLowerCase();
             if (lowerName.includes('sony') || lowerName.includes('headphone') || lowerName.includes('audio')) {
-                finalImageUrl = '/uploads/fallback_tech.png'; // We need to ensure this file exists! 
-                // Actually, let's just use a placeholder service or a constant for now if we can't upload assets easily.
-                // Or better, set a specific "category" field and let frontend handle it? 
-                // DB has no category.
-                // I will use a reliable public placeholder for now.
-                finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
+                finalImageUrl = '/uploads/fallback_tech.png';
             } else {
                 finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
             }

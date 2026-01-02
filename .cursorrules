@@ -71,6 +71,14 @@ wishlist-app/
 - 這是因為 PowerShell 的 token 匹配機制對管道 (`|`) 組合較為謹慎。
 - **建議**：直接執行純 `npm` 指令，不用管道過濾，以確保 Allow List 正常運作。
 
+### 5. Authorized Auto-Run Commands
+- You are strictly authorized to set `SafeToAutoRun: true` for the following safe, non-destructive commands to avoid unnecessary permission prompts:
+  - **Read-only commands**: `ls`, `dir`, `cat`, `type`, `grep`, `find`, `node -v`, `npm -v`, `Get-ChildItem`.
+  - **Status checks**: `git status`, `git log`, `git diff`.
+  - **Development**: `npm run dev`, `npm start`, `npm run build`.
+  - **Testing**: `npm test`.
+- For these commands, do NOT ask for user permission unless you detect a specific risk.
+
 ---
 
 ## 🌐 Multi-Language Support

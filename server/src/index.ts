@@ -27,6 +27,9 @@ const port = parseInt(process.env.PORT || '8000', 10);
 // Security Middleware
 app.use(helmet()); // Set security HTTP headers
 
+// Trust proxy (required for Railway/reverse proxy to work with rate-limit)
+app.set('trust proxy', 1);
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs

@@ -58,9 +58,9 @@ wishlist-app/
   git push
   ```
 - The Git "Always Allow" rule is configured for `git` prefix.
-- **Git commit messages**: 避免在 `-m` 訊息中使用特殊字元（如 `$`, `()`, `&`），因為 PowerShell 可能會將其解析為變數或運算符，導致需要權限確認。
-  - ❌ `git commit -m "fix: (NTD/USD) instead of $ symbol"`
-  - ✅ `git commit -m "fix: Display currency code instead of dollar symbol"`
+- **Git commit messages**: 避免在 `-m` 訊息中使用特殊字元（如 `$`, `()`, `&`, `+`），因為 PowerShell 可能會將其解析為變數或運算符，導致需要權限確認。
+  - ❌ `git commit -m "feat: Add 25+ currencies"`
+  - ✅ `git commit -m "feat: Add 25 currencies support"`
 
 ### 3. Environment
 - Use `IPv4` first resolution for Node to avoid Railway/Gmail blocks.

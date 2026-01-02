@@ -86,6 +86,7 @@ model Item {
   price       String?
   currency    String?  @default("USD")
   link        String?
+  aiLink      String?  // AI-generated shopping link (separate from user link)
   imageUrl    String?
   notes       String?
   priority    Int      @default(0)

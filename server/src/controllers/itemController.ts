@@ -31,7 +31,7 @@ const processItemAi = async (itemId: number, imagePath: string, originalName: st
                 name: aiResult.name,
                 price: aiResult.price ? String(aiResult.price) : undefined,
                 currency: aiResult.currency,
-                link: aiResult.shoppingLink,
+                aiLink: aiResult.shoppingLink, // Save to aiLink, not link (user link)
                 notes: aiResult.description,
                 // tags: aiResult.tags // Schema doesn't have tags yet, maybe put in notes or new field? User didn't ask for tags DB field specifically but UI shows it.
                 // For now, let's append tags to notes or description if needed.
@@ -333,7 +333,7 @@ const processTextAi = async (itemId: number, text: string) => {
                 name: result.name || text,
                 price: result.price ? String(result.price) : undefined,
                 currency: result.currency,
-                link: result.shoppingLink,
+                aiLink: result.shoppingLink, // Save to aiLink, not link (user link)
                 imageUrl: finalImageUrl, // Use local path or fallback
                 notes: result.description,
                 aiStatus: 'COMPLETED',
@@ -433,6 +433,7 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
                 price: sourceItem.price,
                 currency: sourceItem.currency,
                 link: sourceItem.link,
+                aiLink: sourceItem.aiLink, // Copy AI link as well
                 imageUrl: sourceItem.imageUrl,
                 notes: sourceItem.notes,
                 wishlistId: Number(targetId),

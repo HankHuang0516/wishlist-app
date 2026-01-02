@@ -114,9 +114,17 @@ export const analyzeProductText = async (productName: string, language: string =
 
     // 2. Ask Gemini for details + (optional) image url if google failed
     const prompt = `
-        User wants to add a product to their wishlist by name: "${productName}".
+        User wants to add a product to their wishlist.
+        Input: "${productName}"
+        
+        The input might be a specific **Product Name** OR a **Product URL**.
+        
         Act as a shopping assistant. Infer the details of this product.
         Language: ${language}.
+        
+        Instructions:
+        - If input is a URL, extract/guess the product details from the URL structure or potential content.
+        - If input is a Name, search/infer details normally.
         
         Return JSON object with:
         1. name: Refined product name (keep user's intent but make it official if clear).

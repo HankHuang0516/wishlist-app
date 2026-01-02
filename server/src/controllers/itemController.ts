@@ -9,6 +9,28 @@ interface AuthRequest extends Request {
     user?: any;
 }
 
+// User-Agent Pool for rotation
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+];
+
+const getRandomHeaders = () => {
+    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    return {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    };
+};
+
 // Async AI Processor
 const processItemAi = async (itemId: number, imagePath: string, originalName: string) => {
     try {
@@ -197,12 +219,9 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
 
         let html = '';
         try {
+            const headers = getRandomHeaders();
             const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-                },
+                headers: headers,
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -246,32 +265,25 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
             }
 
         } catch (fetchError: any) {
-            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), trying Gemini with URL only...`);
-        }
+            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), checking AI fallback...`);
 
-        // Fallback: Ask Gemini with just the URL
-        // We'll treat the URL as text input for Gemini (Text-only model needed? Flash supports text)
-        // We need to import model from aiController or reuse a function.
-        // Let's assume we can export `analyzeText` from aiController or just invoke generateContent here.
-        // For simplicity, I'll update `aiController` to export `analyzeText` or similar, OR just import `model` if possible.
-        // `aiController` exports `analyzeLocalImage`. 
-
-        // I will add a special fallback logic here calling the AI directly or update Item status to FAILED if we can't do text-only easily here without refactoring aiController.
-        // But user ASKED for it. So I will try to implement a text-fallback.
-
-        // Since I cannot easily import `model` from `aiController` (it is not exported), 
-        // I will update the item to FAILED for now but with a specific error message.
-        // Wait, I can't leave it as is if I promised the user.
-        // I will mark it as FAILED but note "Web access denied".
-
-        await prisma.item.update({
-            where: { id: itemId },
-            data: {
-                aiStatus: 'FAILED',
-                aiError: '無法讀取網頁內容 (403 Forbidden)'
+            // AI Fallback Logic:
+            // If fetching failed (403, 404, etc), ask Gemini to just look at the URL as text input.
+            try {
+                console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url}`);
+                await processTextAi(itemId, url);
+                return; // processTextAi saves the result, so we are done.
+            } catch (fallbackError) {
+                console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
+                await prisma.item.update({
+                    where: { id: itemId },
+                    data: {
+                        aiStatus: 'FAILED',
+                        aiError: `無法讀取網頁且 AI 分析失敗 (${fetchError.message})`
+                    }
+                });
             }
-        });
-
+        }
     } catch (error: any) {
         console.error(`[AsyncURL] Fatal error for Item ${itemId}:`, error);
         await prisma.item.update({ where: { id: itemId }, data: { aiStatus: 'FAILED', aiError: error.message } });

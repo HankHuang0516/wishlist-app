@@ -6,6 +6,7 @@ import { ExternalLink, Info, Trash, Edit2, Save, X } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
+import { formatPriceWithConversion } from "../utils/currency";
 
 interface Item {
     id: number;
@@ -233,7 +234,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     </div>
                                 ) : (
                                     <p className="font-medium text-lg">
-                                        {currentItem.price ? `${currentItem.currency || 'TWD'} ${currentItem.price}` : 'Unknown'}
+                                        {currentItem.price ? formatPriceWithConversion(currentItem.price, currentItem.currency || 'TWD') : 'Unknown'}
                                     </p>
                                 )}
                             </div>

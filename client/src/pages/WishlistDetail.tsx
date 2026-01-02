@@ -8,6 +8,7 @@ import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as Imag
 import ItemDetailModal from "../components/ItemDetailModal";
 import { API_URL, API_BASE_URL } from '../config';
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
+import { formatPriceWithConversion } from "../utils/currency";
 
 interface Item {
     id: number;
@@ -357,7 +358,7 @@ export default function WishlistDetail() {
                             <div className="flex-1 flex flex-col justify-between">
                                 <div>
                                     <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
-                                    <p className="text-red-500 font-medium">{item.price ? `${item.price} ${item.currency || 'NTD'}` : '---'}</p>
+                                    <p className="text-red-500 font-medium">{item.price ? formatPriceWithConversion(item.price, item.currency || 'TWD') : '---'}</p>
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     {item.aiStatus === 'COMPLETED' ? (

@@ -35,6 +35,7 @@ const limiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: { error: '請求過於頻繁，請稍後再試。(Too many requests, please try again later.)' },
 });
 app.use(limiter); // Apply rate limiting to all requests
 

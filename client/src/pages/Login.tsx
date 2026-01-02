@@ -33,7 +33,15 @@ export default function Login() {
                 body: JSON.stringify({ phoneNumber, password }),
             });
 
-            const data = await res.json();
+            // Safely parse response - handle non-JSON responses
+            let data;
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                data = await res.json();
+            } else {
+                const text = await res.text();
+                data = { error: text || 'An unexpected error occurred' };
+            }
 
             if (!res.ok) {
                 throw new Error(data.error || 'Login failed');

@@ -354,7 +354,7 @@ export default function WishlistDetail() {
                             <div className="flex-1 flex flex-col justify-between">
                                 <div>
                                     <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
-                                    <p className="text-red-500 font-medium">{item.price ? `$${item.price}` : '---'}</p>
+                                    <p className="text-red-500 font-medium">{item.price ? `${item.price} ${item.currency || 'NTD'}` : '---'}</p>
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     {item.aiStatus === 'COMPLETED' ? (

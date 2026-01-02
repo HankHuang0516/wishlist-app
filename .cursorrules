@@ -1,0 +1,84 @@
+
+# Wishlist.ai - Agent Rules & Documentation Guide
+
+## 0. Pre-Work Requirements (必讀)
+- **ALWAYS read this file first** before starting any work.
+- Based on the task type, read the corresponding documentation files listed below.
+
+---
+
+## 📚 Documentation Reference Guide
+
+### 依據任務類型選擇讀取的文件：
+
+| 任務類型 | 必讀文件 |
+|----------|----------|
+| **一般開發/功能開發** | `server/src/data/FAQ.md` |
+| **進版/部署驗證** | `REGRESSION_TEST_PLAN.md` |
+| **安全審計** | `security/audit/Security-Audit-Prompt_Traditional-Chinese.md` |
+| **安全指南** | `security/guidelines/Security-Guidelines_Traditional-Chinese.md` |
+| **安全指南說明** | `security/guidelines/Security-Guidelines-Explanation_Traditional-Chinese.md` |
+| **安全修復** | `security-fixes.md` |
+| **前端開發** | `client/README.md` |
+
+### 文件路徑速查：
+
+```
+wishlist-app/
+├── .cursorrules                    # 🔴 Agent 規則 (必讀)
+├── security-fixes.md               # 安全修復紀錄
+├── client/
+│   └── README.md                   # 前端說明
+├── server/
+│   └── src/data/
+│       └── FAQ.md                  # ⭐ 產品 FAQ (一般任務必讀)
+└── security/
+    ├── audit/
+    │   └── Security-Audit-Prompt_*.md    # 安全審計提示 (16 語言)
+    └── guidelines/
+        ├── Security-Guidelines_*.md       # 安全指南 (16 語言)
+        └── Security-Guidelines-Explanation_*.md  # 指南說明 (16 語言)
+```
+
+---
+
+## 🔒 Security & Operational Rules
+
+### 1. Terminal Command Execution
+- **NEVER chain commands** using `;` or `&&` (e.g., `git add . ; git commit`).
+- ALWAYS execute commands sequentially in separate steps.
+- This ensures the "Allow List" security feature works correctly for auto-approval.
+
+### 2. Deployment
+- Increment the version in `client/package.json` before major deployments.
+- The Git "Always Allow" rule is configured for `git` prefix.
+
+### 3. Environment
+- Use `IPv4` first resolution for Node to avoid Railway/Gmail blocks.
+- Trim whitespace from all Environment Variables.
+
+### 4. PowerShell Pipeline Commands
+- 即使單獨的指令在 Allow List 中（如 `npm`, `Select-String`, `Select-Object`），**管道組合指令** 仍可能需要手動確認。
+- 這是因為 PowerShell 的 token 匹配機制對管道 (`|`) 組合較為謹慎。
+- **建議**：直接執行純 `npm` 指令，不用管道過濾，以確保 Allow List 正常運作。
+
+---
+
+## 🌐 Multi-Language Support
+
+安全相關文件支援以下語言：
+- Arabic (阿拉伯文)
+- Dutch (荷蘭文)
+- English (英文)
+- French (法文)
+- German (德文)
+- Italian (義大利文)
+- Japanese (日文)
+- Korean (韓文)
+- Portuguese (葡萄牙文)
+- Russian (俄文)
+- Simplified-Chinese (簡體中文)
+- Spanish (西班牙文)
+- Thai (泰文)
+- **Traditional-Chinese (繁體中文)** ← 預設
+- Vietnamese (越南文)

@@ -3,7 +3,7 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/Card";
 import { ExternalLink, Info, Trash, Edit2, Save, X } from "lucide-react";
-import { API_URL, API_BASE_URL } from '../config';
+import { API_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
 import { formatPriceWithConversion } from "../utils/currency";

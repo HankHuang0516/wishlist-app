@@ -9,6 +9,7 @@ import ItemDetailModal from "../components/ItemDetailModal";
 import { API_URL, API_BASE_URL } from '../config';
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import { formatPriceWithConversion } from "../utils/currency";
+import { getImageUrl } from "../utils/image";
 
 interface Item {
     id: number;
@@ -347,7 +348,7 @@ export default function WishlistDetail() {
                             {/* Image & Main Info */}
                             <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
                                 {item.imageUrl ? (
-                                    <img src={`${API_BASE_URL}${item.imageUrl}`} alt={item.name} className="w-full h-full object-cover" />
+                                    <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
                                 ) : <span className="text-xs text-gray-400">No Img</span>}
                                 {item.aiStatus === 'PENDING' && (
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

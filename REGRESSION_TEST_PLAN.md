@@ -148,6 +148,24 @@ npm run test
 
 ---
 
+### F. Bug Regression Tests (已修復問題驗證)
+
+| ID | 測試項目 | 觸發條件/步驟 | 預期結果 |
+|----|----------|--------------|----------|
+| F1 | `Shopee Soft Block` 處理 | 輸入 Shopee 連結 (觸發 Robot Check) | Server 偵測 "Soft block detected"，自動切換至 AI Fallback |
+| F2 | `Smart Search` (Shopee IDs) | URL 為 `shopee.tw/product/123/456` | 系統辨識 ID 並執行 `site:shopee.tw "123" "456"` 搜尋 |
+| F3 | `Gemini Grounding` Fallback | Google Custom Search 失敗/無結果 | AI 自動使用內建 `googleSearch` 工具查出正確商品 (如遊戲名稱) |
+| F4 | `Resend API` 缺失啟動 | 移除 `.env` 中的 `RESEND_API_KEY` 並啟動 Server | Server 正常啟動不崩潰 (使用 Mock Key) |
+| F5 | `Gemini Model` 版本確認 | 執行 AI 分析 | 無 `404 Not Found` 錯誤 (使用 `gemini-1.5-flash-001`) |
+| F6 | `TS Error` (GoogleSearch) | 執行 `npm run dev` (Server) | 無 `TS2353` 編譯錯誤 (使用 `@ts-ignore` 或正確型別) |
+| F7 | `Social Follow` | 點擊追蹤使用者 | API 回傳 200 OK (非 500)，資料庫新增關聯 |
+| F8 | `AI Image Double Fallback` | 網址無法直接抓圖時 (如 Shopee ID) | 觸發 "Secondary Image Search"，確保顯示有效圖片非破圖(X) |
+| F9 | `Static File Serving` | 前端 (5173) 讀取後端 (8000) 圖片 | 圖片正常顯示，無 403 Forbidden 或 CORP 錯誤 (Helmet Config Correct) |
+| F10 | `E-commerce Crawler Resilience` | 測試 Momo, PChome, Yahoo, Books 爬蟲 | 全數通過 (Status 200, Content Loaded)，無阻擋 |
+
+
+---
+
 ## 📱 Cross-Platform Tests (PWA)
 
 | 平台 | 測試項目 |

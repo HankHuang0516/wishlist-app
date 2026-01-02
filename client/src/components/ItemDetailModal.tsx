@@ -7,6 +7,7 @@ import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
 import { formatPriceWithConversion } from "../utils/currency";
+import { getImageUrl } from "../utils/image";
 
 interface Item {
     id: number;
@@ -166,7 +167,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                 placeholder="物品名稱"
                             />
                         ) : (
-                            <span className="truncate pr-2">{currentItem.name}</span>
+                            <span className="break-words pr-2 line-clamp-2 leading-tight">{currentItem.name}</span>
                         )}
                         <div className={`text-xs px-2 py-1 rounded shrink-0 ${currentItem.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
                             currentItem.aiStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
@@ -190,7 +191,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                     <div className="flex justify-center bg-gray-50 rounded-lg p-2">
                         {currentItem.imageUrl ? (
                             <img
-                                src={`${API_BASE_URL}${currentItem.imageUrl}`}
+                                src={getImageUrl(currentItem.imageUrl)}
                                 alt={currentItem.name}
                                 className="max-h-64 object-contain"
                             />

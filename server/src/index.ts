@@ -25,7 +25,9 @@ const app: Express = express();
 const port = parseInt(process.env.PORT || '8000', 10);
 
 // Security Middleware
-app.use(helmet()); // Set security HTTP headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+})); // Set security HTTP headers with relaxed CORP for images
 
 // Trust proxy (required for Railway/reverse proxy to work with rate-limit)
 app.set('trust proxy', 1);

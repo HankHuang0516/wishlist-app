@@ -9,7 +9,13 @@ dotenv.config();
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+const model = genAI.getGenerativeModel({
+    model: "gemini-flash-latest",
+    tools: [
+        // @ts-ignore
+        { googleSearch: {} }
+    ]
+});
 
 // Helper to convert buffer to generative part
 function fileToGenerativePart(buffer: Buffer, mimeType: string) {
@@ -95,7 +101,40 @@ const searchGoogleImage = async (query: string): Promise<string | null> => {
     }
 };
 
-export const analyzeProductText = async (productName: string, language: string = 'traditional chinese') => {
+
+// Helper: Google Custom Search for Web (JSON)
+export const searchGoogleWeb = async (query: string): Promise<{ title: string, snippet: string, link: string } | null> => {
+    const cseId = process.env.GOOGLE_CSE_ID;
+    const apiKey = process.env.GOOGLE_API_KEY;
+
+    if (!cseId || !apiKey) {
+        console.warn("Google CSE keys missing. Skipping web search.");
+        return null;
+    }
+
+    try {
+        // Without searchType=image, it defaults to web
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query)}&num=1&safe=active`;
+        const axios = require('axios'); // Ensure axios is available or use fetch
+        const res = await axios.get(url);
+
+        if (res.data.items && res.data.items.length > 0) {
+            const item = res.data.items[0];
+            console.log("Found Google Web Result:", item.title);
+            return {
+                title: item.title,
+                snippet: item.snippet,
+                link: item.link
+            };
+        }
+        return null; // No results
+    } catch (error: any) {
+        console.error("Google Web Search failed:", error?.message || error);
+        return null;
+    }
+};
+
+export const analyzeProductText = async (productName: string, language: string = 'traditional chinese', searchContext: any = null, suggestedSearchQuery: string | null = null) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_api_key_here") {
         return {
@@ -110,19 +149,42 @@ export const analyzeProductText = async (productName: string, language: string =
     }
 
     // 1. Try to find a real image using Google Search (if configured)
-    const googleImage = await searchGoogleImage(productName);
+    // Only search image if we didn't get a confirmed link from searchContext
+    let googleImage = null;
+    if (!searchContext || !searchContext.imageUrl) {
+        googleImage = await searchGoogleImage(searchContext?.title || productName);
+    }
+
 
     // 2. Ask Gemini for details + (optional) image url if google failed
+    // Incorporate Search Context if available
+    let contextStr = "";
+    if (searchContext) {
+        contextStr = `
+        Additional Context found from Google Search:
+        Title: "${searchContext.title}"
+        Snippet: "${searchContext.snippet}"
+        Link: "${searchContext.link}"
+        `;
+    }
+
     const prompt = `
         User wants to add a product to their wishlist.
         Input: "${productName}"
+        ${contextStr}
         
         The input might be a specific **Product Name** OR a **Product URL**.
+        
+        **CRITICAL INSTRUCTION**:
+        - You have access to Google Search. USE IT.
+        ${suggestedSearchQuery ? `- **USE THIS EXACT SEARCH QUERY**: "${suggestedSearchQuery}"` : '- SEARCH for the input (especially if it is a URL) to find the actual product page title and details.'}
+        - If input is a URL like 'shopee.tw/product/123/456', search for "shopee.tw/product/123/456" or "Shopee 123 456" to find the title.
         
         Act as a shopping assistant. Infer the details of this product.
         Language: ${language}.
         
         Instructions:
+        - If "Additional Context" is provided, PRIORTIZE it as the source of truth for the product name and description.
         - If input is a URL, extract/guess the product details from the URL structure or potential content.
         - If input is a Name, search/infer details normally.
         
@@ -133,7 +195,7 @@ export const analyzeProductText = async (productName: string, language: string =
         4. tags: 3-5 keywords.
         5. shoppingLink: A generic search URL for this product on Google Shopping.
         6. description: Brief attractiveness description (1-2 sentences).
-        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'A representative product image URL (Must be a direct link to JPG/PNG from a public site like Wikimedia, Manufacturer, or major CDN. Avoid retailer links that valid anti-bot/403). If unsure, leave null.'}
+        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'A representative product image URL found via Search. Must be a direct link to JPG/PNG. If unsure, leave null.'}
         
         Return ONLY JSON.
     `;
@@ -149,8 +211,16 @@ export const analyzeProductText = async (productName: string, language: string =
         data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
 
         // Use Google Image if found, otherwise keep Gemini's or null
+        // Double Fallback: If we didn't find an image initially (e.g. because input was a URL),
+        // but now we have a proper Product Name from Gemini, try searching Image again!
         if (googleImage) {
             data.imageUrl = googleImage;
+        } else if (!data.imageUrl && data.name) {
+            console.log(`[AI] Initial image search failed, trying again with inferred name: "${data.name}"`);
+            const secondaryImage = await searchGoogleImage(data.name);
+            if (secondaryImage) {
+                data.imageUrl = secondaryImage;
+            }
         }
 
         return data;

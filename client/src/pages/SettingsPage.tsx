@@ -99,12 +99,17 @@ export default function SettingsPage() {
     };
 
     useEffect(() => {
-        fetchProfile();
-    }, []);
+        if (token) {
+            fetchProfile();
+        }
+    }, [token]);
 
     const fetchProfile = async () => {
         try {
-            if (!token) return; // Wait for token
+            if (!token) {
+                // Token not yet loaded, keep showing loading state
+                return;
+            }
             const res = await fetch(`${API_URL}/users/me`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -121,7 +126,10 @@ export default function SettingsPage() {
         } catch (error) {
             console.error(error);
         } finally {
-            setLoading(false);
+            // Only set loading to false if we actually attempted the fetch
+            if (token) {
+                setLoading(false);
+            }
         }
     };
 

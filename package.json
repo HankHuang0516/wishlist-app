@@ -5,7 +5,13 @@
   "scripts": {
     "postinstall": "npm install --prefix client && npm install --prefix server",
     "build": "npm run build --prefix client && npm run build --prefix server",
-    "start": "npm start --prefix server"
+    "start": "npm start --prefix server",
+    "test": "npm run test --prefix client",
+    "test:watch": "npm run test -- --watch --prefix client",
+    "smoke-test": "node scripts/smoke-test.js",
+    "smoke-test:prod": "node scripts/smoke-test.js --prod",
+    "regression": "node scripts/regression-test.js",
+    "regression:quick": "node scripts/regression-test.js --quick"
   },
   "engines": {
     "node": ">=20.0.0"

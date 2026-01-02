@@ -70,17 +70,20 @@ export default function WishlistDetail() {
 
     useEffect(() => {
         fetchWishlist();
+    }, [id]);
 
-        // Polling for AI status
+    // Separate useEffect for polling AI status
+    useEffect(() => {
+        const hasPending = wishlist?.items.some(i => i.aiStatus === 'PENDING');
+        if (!hasPending) return;
+
+        // Polling for AI status - only when there are pending items
         const interval = setInterval(() => {
-            const hasPending = wishlist?.items.some(i => i.aiStatus === 'PENDING');
-            if (hasPending) {
-                fetchWishlist(true); // silent fetch
-            }
-        }, 3000);
+            fetchWishlist(true); // silent fetch
+        }, 5000); // 5 seconds (increased from 3 to reduce rate limit pressure)
 
         return () => clearInterval(interval);
-    }, [id, wishlist?.items]);
+    }, [wishlist?.items.length, id]); // Only re-run when items count changes, not on every items update
 
     const fetchWishlist = async (silent = false) => {
         try {

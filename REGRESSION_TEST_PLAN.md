@@ -162,6 +162,9 @@ npm run test
 | F8 | `AI Image Double Fallback` | 網址無法直接抓圖時 (如 Shopee ID) | 觸發 "Secondary Image Search"，確保顯示有效圖片非破圖(X) |
 | F9 | `Static File Serving` | 前端 (5173) 讀取後端 (8000) 圖片 | 圖片正常顯示，無 403 Forbidden 或 CORP 錯誤 (Helmet Config Correct) |
 | F10 | `E-commerce Crawler Resilience` | 測試 Momo, PChome, Yahoo, Books 爬蟲 | 全數通過 (Status 200, Content Loaded)，無阻擋 |
+| F11 | `Google CSE ID 設定` | 執行 `searchGoogleWeb("momo購物網")` | 返回 `totalResults > 0`，非 0 結果 (確保 CSE 設定為搜尋整個網路) |
+| F12 | `Momo 商品名稱解析` | 添加 Momo URL `i_code=14244558` | 商品名顯示完整名稱（如 Nintendo Switch），非「待確認商品」|
+| F13 | `Proactive Smart Search` | 使用 Momo/PChome/Shopee URL | 系統執行 Google CSE 搜尋後再傳給 AI，有 `Got search context` log |
 
 
 ---

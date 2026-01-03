@@ -1,0 +1,31 @@
+============================================================
+MOMO DETAILED ANALYSIS
+============================================================
+
+URL: https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=14244558
+
+--- HTTP Response ---
+Status: 200
+Status Text: OK
+Headers:
+  content-security-policy: frame-ancestors 'self'...
+  content-type: text/html; charset=utf-8...
+
+--- Page Content Analysis ---
+HTML Length: 907626 bytes
+Title: ?intendo 隞餃予?witch 2 ?芸甇魚頠???銝餅?蝯??S2?拍?隤???銋?????H?澆?鞎潦?momo鞈潛蝬?- 憟質??刻 - 2026撟???
+--- OG Meta Tags ---
+og:title: ?intendo 隞餃予?witch 2 ?芸甇魚頠???銝餅?蝯??S2?拍?隤???銋?????H?澆?鞎潦?og:image: https://og.momoshop.com.tw/1767064008/goodsimg/0014/244/558/14244558_L.jpg
+og:description: ?恍霈之嚗蜓璈?摨衣雁??霈撟??箄”?曇?鞊??銝??∠鈭?頠詨?閮剛?????舀
+
+--- Blocking Indicators ---
+Contains "captcha": true
+Contains "robot": true
+Contains "verify": false
+Contains "cloudflare": false
+Contains "challenge": false
+
+--- Image Count ---
+Total <img> tags: 861
+
+??LOOKS OK: OG image found, content appears loaded

@@ -86,13 +86,24 @@ const searchGoogleImage = async (query: string): Promise<string | null> => {
     }
 
     try {
-        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query)}&searchType=image&num=1&safe=active`;
+        // -site:facebook.com -site:instagram.com to exclude social media noise
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query + " -site:facebook.com -site:instagram.com")}&searchType=image&num=3&safe=active`;
         const axios = require('axios');
         const res = await axios.get(url);
 
         if (res.data.items && res.data.items.length > 0) {
-            console.log("Found Google Image:", res.data.items[0].link);
-            return res.data.items[0].link;
+            // Filter out unstable image sources manually just in case
+            const validImage = res.data.items.find((item: any) => {
+                const link = item.link || '';
+                return !link.includes('fbsbx.com') &&
+                    !link.includes('facebook.com') &&
+                    !link.includes('instagram.com');
+            });
+
+            if (validImage) {
+                console.log("Found Google Image:", validImage.link);
+                return validImage.link;
+            }
         }
         return null;
     } catch (error) {

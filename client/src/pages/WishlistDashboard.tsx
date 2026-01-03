@@ -8,9 +8,7 @@ import { Button } from "../components/ui/Button"; // Added Button
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
 import { Eye, EyeOff, Trash2 } from "lucide-react"; // Added Icons
 
-import { Button } from "../components/ui/Button"; // Added Button
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
-import { Eye, EyeOff, Trash2 } from "lucide-react"; // Added Icons
+
 import { t } from "../utils/localization";
 
 import DeleteConfirmModal from "../components/DeleteConfirmModal";

@@ -296,7 +296,7 @@ const translations: Record<string, Record<string, string>> = {
         // Wishlist Dashboard
         'dashboard.totalItems': '物品總數',
         'dashboard.perList': '每份清單',
-        'dashboard.myWishlists': '我的願望清單',
+
         'dashboard.userWishlists': '{name} 的公開清單',
         'dashboard.createTitle': '建立新清單',
         'dashboard.titlePlaceholder': '清單名稱 (例如: 2024 生日)',
@@ -519,7 +519,7 @@ const translations: Record<string, Record<string, string>> = {
         // Wishlist Dashboard
         'dashboard.totalItems': 'Total Items',
         'dashboard.perList': 'Per List',
-        'dashboard.myWishlists': 'My Wishlists',
+
         'dashboard.userWishlists': '{name}\'s Public Wishlists',
         'dashboard.createTitle': 'Create New Wishlist',
         'dashboard.titlePlaceholder': 'Wishlist Title (e.g. Birthday 2024)',

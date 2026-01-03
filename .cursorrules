@@ -54,7 +54,12 @@ wishlist-app/
     - `|` (Pipe) -> Remove
     - `;` (Semicolon) -> Remove
     - `(` or `)` (Parentheses) -> Remove
+  - **NEVER** use redirect operators in commands (they bypass Allow List):
+    - `>` or `>>` (Output Redirect) -> Write output in script instead
+    - `<` (Input Redirect) -> Pass as argument instead
   - PowerShell treats these as operators/variables, triggering unavoidable permission prompts.
+  - ❌ `npx tsx script.ts > output.txt`
+  - ✅ `npx tsx script.ts` (with `fs.writeFileSync` in script)
   - ❌ `git commit -m "Fix UI & API"`
   - ✅ `git commit -m "Fix UI and API"`
 

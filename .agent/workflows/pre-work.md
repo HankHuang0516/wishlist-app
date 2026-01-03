@@ -22,3 +22,10 @@ Before starting ANY task in this project, you MUST:
 4. **For Terminal Commands**:
    - NEVER chain commands with `;` or `&&`
    - Execute commands sequentially in separate steps
+
+5. **For E-commerce URL Features** (8D Lesson):
+   - After deployment, verify on PRODUCTION with these test URLs:
+     - Momo: `https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=14244558`
+     - PChome: `https://24h.pchome.com.tw/prod/DSAR0S-A900F7PCX`
+     - Shopee: Use any product URL with `/product/ID/ID` format
+   - If any fail, check if cloud IP is blocked and add Proactive Smart Search

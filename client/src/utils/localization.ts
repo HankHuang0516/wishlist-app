@@ -107,7 +107,21 @@ const translations: Record<string, Record<string, string>> = {
         'nav.social': '朋友',
         'nav.settings': '設定',
         'nav.logout': '登出',
-        'nav.login': '登入'
+        'nav.login': '登入',
+        // Homepage
+        'home.title': '整理你的願望。',
+        'home.subtitle': 'AI 智慧許願清單，拍照就能記錄。分享給朋友，送禮不再煩惱。',
+        'home.getStarted': '開始使用',
+        'home.learnMore': '了解更多',
+        // Feature Cards
+        'home.feature1.title': '拍一下，願望就記住了 📱',
+        'home.feature1.desc': 'AI 自動幫你找到商品名稱、價格和購買連結',
+        'home.feature2.title': '送禮不踩雷，朋友說讚 🎁',
+        'home.feature2.desc': '分享你的願望清單，讓朋友知道你想要什麼',
+        'home.feature3.title': '願望不再忘記 ✨',
+        'home.feature3.desc': '依照場合分類，生日、節日、犒賞自己都能輕鬆管理',
+        'home.feature4.title': '偷看清單，送進心坎 💕',
+        'home.feature4.desc': '另一半偷偷查看願望，買到心儀禮物超幸福'
     },
     'en-US': {
         'nav.home': 'Home',
@@ -115,7 +129,21 @@ const translations: Record<string, Record<string, string>> = {
         'nav.social': 'Social',
         'nav.settings': 'Settings',
         'nav.logout': 'Logout',
-        'nav.login': 'Login'
+        'nav.login': 'Login',
+        // Homepage
+        'home.title': 'Organize your desires.',
+        'home.subtitle': 'A minimalist wishlist powered by AI. Snap a photo, we\'ll do the rest. Share with friends, simplify your gifting.',
+        'home.getStarted': 'Get Started',
+        'home.learnMore': 'Learn More',
+        // Feature Cards
+        'home.feature1.title': 'Snap it, save it 📱',
+        'home.feature1.desc': 'AI finds product name, price, and shopping links automatically',
+        'home.feature2.title': 'Perfect gifts, happy friends 🎁',
+        'home.feature2.desc': 'Share your wishlist so friends know what you really want',
+        'home.feature3.title': 'Never forget a wish ✨',
+        'home.feature3.desc': 'Organize by occasion - birthdays, holidays, treats for yourself',
+        'home.feature4.title': 'Peek & surprise 💕',
+        'home.feature4.desc': 'Your partner secretly checks your list and gets the perfect gift'
     }
 };
 

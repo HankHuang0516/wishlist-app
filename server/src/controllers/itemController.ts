@@ -214,14 +214,24 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
         console.log(`[AsyncURL] Processing ${url} for Item ${itemId}`);
 
         // PROACTIVE SMART SEARCH: Skip direct scraping for known blocked sites
-        // These sites block cloud IPs, so we use AI Grounding directly
+        // These sites block cloud IPs, so we use Google Custom Search + AI
         const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
         if (momoMatch && momoMatch[1]) {
             const iCode = momoMatch[1];
-            // D13 FIX: Use natural language query instead of "site:" operator
-            const query = `momoshop product ${iCode}`;
+            // D15 FIX: Use Google Custom Search API first for reliable context
+            // Then pass the context to Gemini for parsing
+            const query = `momo購物網 ${iCode}`;
             console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
-            await processTextAi(itemId, url, userId, null, query);
+
+            // Try Google Custom Search first for reliable product info
+            const searchContext = await searchGoogleWeb(query);
+            if (searchContext) {
+                console.log(`[AsyncURL] Got search context: ${searchContext.title}`);
+            } else {
+                console.log(`[AsyncURL] No search context found, AI will try grounding`);
+            }
+
+            await processTextAi(itemId, url, userId, searchContext, query);
             return;
         }
 

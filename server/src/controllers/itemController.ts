@@ -213,6 +213,17 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
     try {
         console.log(`[AsyncURL] Processing ${url} for Item ${itemId}`);
 
+        // PROACTIVE SMART SEARCH: Skip direct scraping for known blocked sites
+        // These sites block cloud IPs, so we use AI Grounding directly
+        const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
+        if (momoMatch && momoMatch[1]) {
+            const iCode = momoMatch[1];
+            const query = `site:momoshop.com.tw i_code=${iCode}`;
+            console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
+            await processTextAi(itemId, url, null, query);
+            return;
+        }
+
         // 1. Fetch HTML with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
@@ -308,6 +319,32 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                         await processTextAi(itemId, url, null, query);
                         return;
                     }
+                }
+            }
+
+            // Momo regex: momoshop.com.tw/goods/GoodsDetail.jsp?i_code=XXXXXX
+            const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
+            if (momoMatch && momoMatch[1]) {
+                const iCode = momoMatch[1];
+                const query = `site:momoshop.com.tw i_code=${iCode}`;
+                console.log(`[AsyncURL] Smart Search for Momo i_code: ${iCode} (Query: ${query})`);
+                searchContext = await searchGoogleWeb(query);
+                if (!searchContext) {
+                    await processTextAi(itemId, url, null, query);
+                    return;
+                }
+            }
+
+            // PChome regex: 24h.pchome.com.tw/prod/XXXXX
+            const pchomeMatch = url.match(/pchome\.com\.tw\/prod\/([A-Z0-9-]+)/i);
+            if (pchomeMatch && pchomeMatch[1]) {
+                const prodId = pchomeMatch[1];
+                const query = `site:pchome.com.tw ${prodId}`;
+                console.log(`[AsyncURL] Smart Search for PChome prod: ${prodId} (Query: ${query})`);
+                searchContext = await searchGoogleWeb(query);
+                if (!searchContext) {
+                    await processTextAi(itemId, url, null, query);
+                    return;
                 }
             }
 

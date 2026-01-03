@@ -353,8 +353,19 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url} (Context: ${searchContext?.title || 'None'})`);
                 await processTextAi(itemId, url, searchContext);
                 return;
-            } catch (fallbackError) {
+            } catch (fallbackError: any) {
                 console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
+
+                // Log crawler failure to database
+                await prisma.crawlerLog.create({
+                    data: {
+                        userId,
+                        url,
+                        errorMessage: fetchError.message || 'Unknown fetch error',
+                        debugMessage: `AI Fallback also failed: ${fallbackError.message}`
+                    }
+                });
+
                 await prisma.item.update({
                     where: { id: itemId },
                     data: {
@@ -366,6 +377,17 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
         }
     } catch (error: any) {
         console.error(`[AsyncURL] Fatal error for Item ${itemId}:`, error);
+
+        // Log fatal crawler error to database
+        await prisma.crawlerLog.create({
+            data: {
+                userId,
+                url,
+                errorMessage: error.message || 'Unknown fatal error',
+                debugMessage: error.stack?.substring(0, 500) || null
+            }
+        });
+
         await prisma.item.update({ where: { id: itemId }, data: { aiStatus: 'FAILED', aiError: error.message } });
     }
 };

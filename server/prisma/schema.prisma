@@ -53,6 +53,7 @@ model User {
   purchasedItems  Item[]   @relation("PurchasedBy")
   originalWishes  Item[]   @relation("OriginalWisher")
   purchases       Purchase[] // History of account purchases (Premium, Limits)
+  crawlerLogs     CrawlerLog[] // Crawler failure logs
 }
 
 model Purchase {
@@ -141,4 +142,15 @@ model Follow {
   createdAt  DateTime @default(now())
 
   @@id([followerId, followingId])
+}
+
+model CrawlerLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  url          String
+  errorMessage String
+  debugMessage String?
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id])
 }

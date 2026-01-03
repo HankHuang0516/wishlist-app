@@ -10,6 +10,7 @@ import { API_URL } from '../config';
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
+import { t } from "../utils/localization";
 
 interface Item {
     id: number;
@@ -167,7 +168,7 @@ export default function WishlistDetail() {
                 setIsUrlModalOpen(false);
                 setUrlInput("");
             } else {
-                alert("Failed to fetch URL. Please check the link.");
+                alert(t('common.error'));
             }
         } catch (err) { console.error(err); }
     };
@@ -194,7 +195,7 @@ export default function WishlistDetail() {
                 if (res.ok) {
                     navigate('/dashboard');
                 } else {
-                    alert("Delete failed");
+                    alert(t('common.error'));
                 }
             } else if (deleteTarget.type === 'item' && deleteTarget.id) {
                 const res = await fetch(`${API_URL}/items/${deleteTarget.id}`, {
@@ -265,12 +266,12 @@ export default function WishlistDetail() {
                 body: JSON.stringify({ targetWishlistId: selectedTargetWishlistId })
             });
             if (res.ok) {
-                alert("已成功加入您的願望清單！");
+                alert(t('detail.cloneSuccess'));
                 setIsCloneModalOpen(false);
                 setItemToClone(null);
             } else {
                 const data = await res.json();
-                alert(data.error || "複製失敗");
+                alert(data.error || t('common.error'));
             }
         } catch (err) { console.error(err); }
     };
@@ -280,7 +281,7 @@ export default function WishlistDetail() {
         setIsDetailOpen(true);
     };
 
-    if (loading && !wishlist) return <div className="p-4 text-center">Loading...</div>;
+    if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
     if (!wishlist) return <div className="p-4 text-center">Wishlist not found</div>;
 
     const isOwner = user?.id === wishlist.userId;
@@ -304,13 +305,13 @@ export default function WishlistDetail() {
                                     className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
                                 />
                                 <label htmlFor="isPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    公開此清單 (Public)
+                                    {t('dashboard.publicLabel')}
                                 </label>
                             </div>
 
                             <div className="flex gap-2">
-                                <Button onClick={handleUpdateWishlist} size="sm">Save</Button>
-                                <Button variant="secondary" onClick={() => setIsEditing(false)} size="sm">Cancel</Button>
+                                <Button onClick={handleUpdateWishlist} size="sm">{t('common.save')}</Button>
+                                <Button variant="secondary" onClick={() => setIsEditing(false)} size="sm">{t('common.cancel')}</Button>
                             </div>
                         </div>
                     ) : (
@@ -352,7 +353,7 @@ export default function WishlistDetail() {
                                 ) : <span className="text-xs text-gray-400">No Img</span>}
                                 {item.aiStatus === 'PENDING' && (
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <span className="text-xs text-white font-bold animate-pulse">AI識別中</span>
+                                        <span className="text-xs text-white font-bold animate-pulse">{t('ai.analyzing')}</span>
                                     </div>
                                 )}
                             </div>
@@ -364,11 +365,11 @@ export default function WishlistDetail() {
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     {item.aiStatus === 'COMPLETED' ? (
-                                        <span className="text-green-600">AI 識別完成</span>
+                                        <span className="text-green-600">{t('ai.complete')}</span>
                                     ) : item.aiStatus === 'FAILED' ? (
-                                        <span className="text-red-600">識別失敗</span>
+                                        <span className="text-red-600">{t('ai.failed')}</span>
                                     ) : (
-                                        <span className="text-yellow-600">AI 識別中...</span>
+                                        <span className="text-yellow-600">{t('ai.analyzing')}...</span>
                                     )}
                                 </div>
                             </div>
@@ -411,7 +412,7 @@ export default function WishlistDetail() {
                     {isFabOpen && (
                         <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-5 fade-in duration-200">
                             <div className="flex items-center gap-2">
-                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">文字/連結</span>
+                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">{t('detail.addUrl')}</span>
                                 <Button
                                     className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700 text-white p-0"
                                     onClick={() => { setIsFabOpen(false); setIsUrlModalOpen(true); }}
@@ -420,7 +421,7 @@ export default function WishlistDetail() {
                                 </Button>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">上傳照片</span>
+                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">{t('detail.uploadImg')}</span>
                                 <Button
                                     className="rounded-full w-12 h-12 shadow-lg bg-green-600 hover:bg-green-700 text-white p-0"
                                     onClick={() => fileInputRef.current?.click()}
@@ -454,27 +455,27 @@ export default function WishlistDetail() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <Card className="w-full max-w-md bg-white">
                         <CardHeader>
-                            <CardTitle>新建許願物品</CardTitle>
+                            <CardTitle>{t('detail.addItemTitle')}</CardTitle>
                         </CardHeader>
                         <form onSubmit={handleUrlSubmit}>
                             <CardContent>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">商品連結或名稱</label>
+                                    <label className="text-sm font-medium text-gray-700">{t('detail.itemLabel')}</label>
                                     <Input
-                                        placeholder="貼上網址 或 輸入商品名稱 (例如: Apple Watch)"
+                                        placeholder={t('detail.itemPlaceholder')}
                                         value={urlInput}
                                         onChange={e => setUrlInput(e.target.value)}
                                         required
                                         autoFocus
                                     />
                                     <p className="text-xs text-gray-500 mt-2">
-                                        💡 <b>Smart Input:</b> 貼上網址可自動抓取圖片；直接輸入名稱，AI 將自動搜尋並填寫資料！
+                                        💡 <b>Smart Input:</b> {t('detail.smartInputTip')}
                                     </p>
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2">
-                                <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)}>取消</Button>
-                                <Button type="submit">新增</Button>
+                                <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)}>{t('common.cancel')}</Button>
+                                <Button type="submit">{t('common.add')}</Button>
                             </CardFooter>
                         </form>
                     </Card>
@@ -499,10 +500,10 @@ export default function WishlistDetail() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <Card className="w-full max-w-sm bg-white">
                         <CardHeader>
-                            <CardTitle>加入到我的願望清單</CardTitle>
+                            <CardTitle>{t('detail.cloneTitle')}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <p className="text-sm text-gray-600">請選擇要儲存此物品的清單：</p>
+                            <p className="text-sm text-gray-600">{t('detail.cloneDesc')}</p>
                             <div className="space-y-2 max-h-60 overflow-y-auto">
                                 {myWishlists.length > 0 ? myWishlists.map(wl => (
                                     <div
@@ -514,13 +515,13 @@ export default function WishlistDetail() {
                                         {selectedTargetWishlistId === wl.id && <div className="w-2 h-2 rounded-full bg-muji-primary" />}
                                     </div>
                                 )) : (
-                                    <p className="text-sm text-red-500">您還沒有建立任何清單。</p>
+                                    <p className="text-sm text-red-500">{t('dashboard.emptyOwner')}</p>
                                 )}
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => setIsCloneModalOpen(false)}>取消</Button>
-                            <Button onClick={handleCloneConfirm} disabled={!selectedTargetWishlistId}>確認加入</Button>
+                            <Button variant="secondary" onClick={() => setIsCloneModalOpen(false)}>{t('common.cancel')}</Button>
+                            <Button onClick={handleCloneConfirm} disabled={!selectedTargetWishlistId}>{t('detail.cloneConfirm')}</Button>
                         </CardFooter>
                     </Card>
                 </div>
@@ -530,8 +531,8 @@ export default function WishlistDetail() {
                 isOpen={deleteModalOpen}
                 onClose={() => setDeleteModalOpen(false)}
                 onConfirm={executeDelete}
-                title={deleteTarget?.type === 'wishlist' ? "刪除願望清單" : "刪除物品"}
-                message={deleteTarget?.type === 'wishlist' ? "您確定要刪除整個願望清單嗎？此操作無法復原。" : "您確定要刪除此物品嗎？"}
+                title={deleteTarget?.type === 'wishlist' ? t('dashboard.deleteConfirmTitle') : t('detail.deleteItemTitle')}
+                message={deleteTarget?.type === 'wishlist' ? t('dashboard.deleteConfirmMsg') : t('detail.deleteItemMsg')}
                 isDeleting={isDeleting}
             />
         </div>

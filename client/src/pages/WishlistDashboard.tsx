@@ -8,6 +8,11 @@ import { Button } from "../components/ui/Button"; // Added Button
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
 import { Eye, EyeOff, Trash2 } from "lucide-react"; // Added Icons
 
+import { Button } from "../components/ui/Button"; // Added Button
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
+import { Eye, EyeOff, Trash2 } from "lucide-react"; // Added Icons
+import { t } from "../utils/localization";
+
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 
 interface Wishlist {
@@ -56,7 +61,7 @@ export default function WishlistDashboard() {
                 setWishlists(prev => prev.filter(w => w.id !== deleteId));
                 setDeleteModalOpen(false);
             } else {
-                alert("Delete failed");
+                alert(t('common.error'));
             }
         } catch (error) { console.error(error); }
         finally { setIsDeleting(false); }
@@ -162,7 +167,7 @@ export default function WishlistDashboard() {
         }
     };
 
-    if (loading) return <div className="p-4 text-center">Loading...</div>;
+    if (loading) return <div className="p-4 text-center">{t('common.processing')}</div>;
 
     // Calculate Total Items
     const totalItems = wishlists.reduce((acc, list) => acc + (list.items?.length || 0), 0);
@@ -174,12 +179,12 @@ export default function WishlistDashboard() {
                 <div className="grid grid-cols-1 mb-8">
                     <Card className="bg-muji-light border-none">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-500">Total Items</CardTitle>
+                            <CardTitle className="text-sm font-medium text-gray-500">{t('dashboard.totalItems')}</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-muji-primary">
                                 <div className="text-2xl font-bold text-muji-primary">
-                                    {totalItems} <span className="text-sm text-gray-400 font-normal">/ {user?.isPremium ? '∞' : maxCapacity} (Per List)</span>
+                                    {totalItems} <span className="text-sm text-gray-400 font-normal">/ {user?.isPremium ? '∞' : maxCapacity} ({t('dashboard.perList')})</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -189,20 +194,20 @@ export default function WishlistDashboard() {
 
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-muji-primary">
-                    {isOwner ? "My Wishlists" : `${targetUserName}'s Public Wishlists`}
+                    {isOwner ? t('dashboard.myWishlists') : t('dashboard.userWishlists').replace('{name}', targetUserName)}
                 </h1>
             </div>
 
             {isOwner && (
                 <Card className="mb-8">
                     <CardHeader>
-                        <CardTitle className="text-xl">Create New Wishlist</CardTitle>
+                        <CardTitle className="text-xl">{t('dashboard.createTitle')}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleCreate} className="space-y-4">
                             <div>
                                 <Input
-                                    placeholder="Wishlist Title (e.g. Birthday 2024)"
+                                    placeholder={t('dashboard.titlePlaceholder')}
                                     value={newTitle}
                                     onChange={(e) => setNewTitle(e.target.value)}
                                     maxLength={50}
@@ -213,7 +218,7 @@ export default function WishlistDashboard() {
                                 </div>
                             </div>
                             <Input
-                                placeholder="Description (Optional)"
+                                placeholder={t('dashboard.descPlaceholder')}
                                 value={newDescription}
                                 onChange={(e) => setNewDescription(e.target.value)}
                                 maxLength={200}
@@ -228,12 +233,12 @@ export default function WishlistDashboard() {
                                     className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
                                 />
                                 <label htmlFor="newIsPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    公開此清單 (Public) - {newIsPublic ? "所有人可見" : "僅自己可見"}
+                                    {t('dashboard.publicLabel')} - {newIsPublic ? t('dashboard.public') : t('dashboard.private')}
                                 </label>
                             </div>
 
                             <Button disabled={creating || !newTitle}>
-                                {creating ? "Creating..." : "Create Wishlist"}
+                                {creating ? t('common.processing') : t('dashboard.createBtn')}
                             </Button>
                         </form>
                     </CardContent>
@@ -257,7 +262,7 @@ export default function WishlistDashboard() {
                             </CardContent>
                             <CardFooter className="flex justify-between items-center">
                                 <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                    {list.isPublic ? "Public" : "Private"}
+                                    {list.isPublic ? t('common.public') : t('common.private')}
                                 </span>
                                 {isOwner && (
                                     <div className="flex gap-1">
@@ -297,15 +302,15 @@ export default function WishlistDashboard() {
                 isOpen={deleteModalOpen}
                 onClose={() => setDeleteModalOpen(false)}
                 onConfirm={confirmDelete}
-                title="刪除願望清單"
-                message="您確定要刪除整個願望清單嗎？包含其中的所有物品。此操作無法復原。"
+                title={t('dashboard.deleteConfirmTitle')}
+                message={t('dashboard.deleteConfirmMsg')}
                 isDeleting={isDeleting}
             />
 
             {
                 wishlists.length === 0 && (
                     <div className="text-center text-muji-secondary py-10">
-                        {isOwner ? "You don't have any wishlists yet. Create one above!" : "This user hasn't created any public wishlists."}
+                        {isOwner ? t('dashboard.emptyOwner') : t('dashboard.emptyVisitor')}
                     </div>
                 )
             }

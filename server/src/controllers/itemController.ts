@@ -218,7 +218,8 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
         const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
         if (momoMatch && momoMatch[1]) {
             const iCode = momoMatch[1];
-            const query = `site:momoshop.com.tw i_code=${iCode}`;
+            // D13 FIX: Use natural language query instead of "site:" operator
+            const query = `momoshop product ${iCode}`;
             console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
             await processTextAi(itemId, url, userId, null, query);
             return;

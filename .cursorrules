@@ -47,21 +47,18 @@ wishlist-app/
 ### 1. Terminal Command Execution
 - **NEVER chain commands** using `;` or `&&` (e.g., `git add . ; git commit`).
 - ALWAYS execute commands sequentially in separate steps.
-- **CRITICAL: FORBIDDEN CHARACTERS**
-  - **NEVER** use the following characters in ANY command argument (especially `git commit -m`):
-    - `&` (Ampersand) -> Use `and`
-    - `$` (Dollar Sign) -> Remove or describe
+- **CRITICAL: FORBIDDEN CHARACTERS (Security Trigger)**
+  - **These characters trigger manual permission prompts EVEN IF `SafeToAutoRun` is true.**
+  - **NEVER** use them in ANY command argument (especially `git commit` messages):
+    - `(` or `)` (Parentheses) -> ❌ `Fix (CSP)` ✅ `Fix CSP`
+    - `&` (Ampersand) -> ❌ `UI & API` ✅ `UI and API`
     - `|` (Pipe) -> Remove
     - `;` (Semicolon) -> Remove
-    - `(` or `)` (Parentheses) -> Remove
-  - **NEVER** use redirect operators in commands (they bypass Allow List):
-    - `>` or `>>` (Output Redirect) -> Write output in script instead
-    - `<` (Input Redirect) -> Pass as argument instead
-  - PowerShell treats these as operators/variables, triggering unavoidable permission prompts.
-  - ❌ `npx tsx script.ts > output.txt`
-  - ✅ `npx tsx script.ts` (with `fs.writeFileSync` in script)
-  - ❌ `git commit -m "Fix UI & API"`
-  - ✅ `git commit -m "Fix UI and API"`
+    - `$` (Dollar Sign) -> Remove
+  - **Reason**: PowerShell treats these as executable blocks/operators. The IDE's security layer intercepts them before the agent's "Safe" flag can apply.
+  
+  - ❌ `git commit -m "fix D11: Update CSP (ui-avatars, momo)"` -> **Triggers Prompt!**
+  - ✅ `git commit -m "fix D11: Update CSP for ui-avatars and momo"` -> **Auto-runs**
 
 - **GLOBAL INSTALL REQUIRES PERMISSION** (設計如此):
   - `npm install -g` 會修改系統全域狀態，因此**永遠需要權限確認**。
@@ -148,3 +145,12 @@ wishlist-app/
 - **原因**：Helmet 預設 CSP 嚴格限制 `img-src` 僅允許 `self` 和 `data:`
 - **解決方案**：在 `server/src/index.ts` 的 `helmet()` 設定中，明確開放 `img-src` 包含 `https:`, `http:`, `*`
 - **預防**：未來新增外部資源引用時，需同步檢查 Helmet CSP 設定
+
+### Issue D12: Google Image Search Fallback (2026-01-03)
+- **問題**：商品圖片顯示為 ui-avatars 文字圖 ("Switch 2...") 而非真實產品圖
+- **原因**：AI 嘗試使用 `searchGoogleImage` 尋找圖片失敗，系統自動 Fallback 到 ui-avatars
+- **可能原因**：
+  1. **Quota Exceeded**: Google Custom Search API 每日免費額度僅 100 次
+  2. **Missing Keys**: `GOOGLE_API_KEY` 或 `GOOGLE_CSE_ID` 未設定或無效
+  3. **No Results**: 搜尋關鍵字找不到相關圖片
+- **檢查方式**：查看 `railway logs` 搜尋 "Google Image Search failed"

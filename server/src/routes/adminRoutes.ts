@@ -89,4 +89,70 @@ router.get('/health', (req: Request, res: Response) => {
     });
 });
 
+// GET /api/admin/gemini-status
+// Check Gemini API status and quota-related errors
+router.get('/gemini-status', adminAuth, async (req: Request, res: Response) => {
+    try {
+        // Count quota-related errors (429) in the last 24 hours
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const quotaErrors = await prisma.crawlerLog.count({
+            where: {
+                errorMessage: { contains: '429' },
+                createdAt: { gte: oneDayAgo }
+            }
+        });
+
+        const totalErrors24h = await prisma.crawlerLog.count({
+            where: { createdAt: { gte: oneDayAgo } }
+        });
+
+        // Recent quota errors
+        const recentQuotaErrors = await prisma.crawlerLog.findMany({
+            where: {
+                errorMessage: { contains: '429' }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5
+        });
+
+        // Test Gemini API availability (simple test)
+        let geminiStatus = 'unknown';
+        let geminiError = null;
+
+        try {
+            const { GoogleGenerativeAI } = require('@google/generative-ai');
+            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+            // Simple test prompt
+            const result = await model.generateContent('Say "OK" in one word');
+            geminiStatus = result.response.text() ? 'ok' : 'error';
+        } catch (testError: any) {
+            geminiStatus = 'error';
+            geminiError = testError.message;
+
+            // Check if it's a quota error
+            if (testError.message?.includes('429')) {
+                geminiStatus = 'quota_exceeded';
+            }
+        }
+
+        res.json({
+            geminiStatus,
+            geminiError,
+            quotaErrors24h: quotaErrors,
+            totalErrors24h: totalErrors24h,
+            recentQuotaErrors: recentQuotaErrors.map(e => ({
+                id: e.id,
+                url: e.url,
+                createdAt: e.createdAt
+            })),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

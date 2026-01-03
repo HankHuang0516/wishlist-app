@@ -63,6 +63,12 @@ wishlist-app/
   - ❌ `git commit -m "Fix UI & API"`
   - ✅ `git commit -m "Fix UI and API"`
 
+- **GLOBAL INSTALL REQUIRES PERMISSION** (設計如此):
+  - `npm install -g` 會修改系統全域狀態，因此**永遠需要權限確認**。
+  - 這是安全機制，不是 Bug。即使 `npm` 在 Allow List 中也一樣。
+  - ❌ 無法自動執行: `npm install -g @railway/cli`
+  - ✅ 可以自動執行: `npm install express` (專案內安裝)
+
 ### 2. Deployment
 - **部署前必須執行 `npm run test -- --run` 確認所有測試通過。**
 - **每次部署都必須更新 `client/package.json` 版本號**（使用 `git rev-list --count HEAD` + 1）。
@@ -85,7 +91,19 @@ wishlist-app/
 - 這是因為 PowerShell 的 token 匹配機制對管道 (`|`) 組合較為謹慎。
 - **建議**：直接執行純 `npm` 指令，不用管道過濾，以確保 Allow List 正常運作。
 
-
+### 5. Railway CLI Configuration
+- **登入帳號**: `hankhuang0516@gmail.com`
+- **專案名稱**: `thorough-presence`
+- **環境**: `production`
+- **Authorized Commands** (已設定 Allow List):
+  - `railway status` - 查看專案狀態
+  - `railway logs` - 查看即時日誌
+  - `railway variables` - 查看環境變數
+  - `railway up` - 部署
+- **Admin API Endpoints** (無需 CLI):
+  - Health: `https://wishlist-app-production.up.railway.app/api/admin/health`
+  - Stats: `https://wishlist-app-production.up.railway.app/api/admin/stats?key=wishlist-admin-2026`
+  - Logs: `https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-admin-2026`
 
 ---
 

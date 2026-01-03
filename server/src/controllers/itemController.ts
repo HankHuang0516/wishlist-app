@@ -220,7 +220,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
             const iCode = momoMatch[1];
             const query = `site:momoshop.com.tw i_code=${iCode}`;
             console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
-            await processTextAi(itemId, url, null, query);
+            await processTextAi(itemId, url, userId, null, query);
             return;
         }
 
@@ -316,7 +316,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                         // Pass the query itself as a "context" object or separate arg?
                         // We need to update processTextAi signature to accept this hint.
                         // Let's pass it via a modified call.
-                        await processTextAi(itemId, url, null, query);
+                        await processTextAi(itemId, url, userId, null, query);
                         return;
                     }
                 }
@@ -330,7 +330,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 console.log(`[AsyncURL] Smart Search for Momo i_code: ${iCode} (Query: ${query})`);
                 searchContext = await searchGoogleWeb(query);
                 if (!searchContext) {
-                    await processTextAi(itemId, url, null, query);
+                    await processTextAi(itemId, url, userId, null, query);
                     return;
                 }
             }
@@ -343,7 +343,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 console.log(`[AsyncURL] Smart Search for PChome prod: ${prodId} (Query: ${query})`);
                 searchContext = await searchGoogleWeb(query);
                 if (!searchContext) {
-                    await processTextAi(itemId, url, null, query);
+                    await processTextAi(itemId, url, userId, null, query);
                     return;
                 }
             }
@@ -351,7 +351,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
             // AI Fallback Logic:
             try {
                 console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url} (Context: ${searchContext?.title || 'None'})`);
-                await processTextAi(itemId, url, searchContext);
+                await processTextAi(itemId, url, userId, searchContext);
                 return;
             } catch (fallbackError: any) {
                 console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
@@ -418,7 +418,7 @@ const downloadImage = async (url: string, itemId: number): Promise<string | null
     }
 };
 
-const processTextAi = async (itemId: number, text: string, searchContext: any = null, suggestedQuery: string | null = null) => {
+const processTextAi = async (itemId: number, text: string, userId: number, searchContext: any = null, suggestedQuery: string | null = null) => {
     try {
         console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
         const result = await analyzeProductText(text, 'traditional chinese', searchContext, suggestedQuery);
@@ -455,6 +455,17 @@ const processTextAi = async (itemId: number, text: string, searchContext: any = 
         });
     } catch (error: any) {
         console.error(`[AsyncText] Failed for Item ${itemId}:`, error);
+
+        // Log AI errors to CrawlerLog for monitoring
+        await prisma.crawlerLog.create({
+            data: {
+                userId,
+                url: text, // The input text or URL
+                errorMessage: error.message || 'Unknown AI error',
+                debugMessage: `AI processing failed. Suggested query: ${suggestedQuery || 'None'}`
+            }
+        });
+
         await prisma.item.update({
             where: { id: itemId },
             data: { aiStatus: 'FAILED', aiError: error.message }
@@ -490,7 +501,7 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
         if (isUrl) {
             processUrlAi(item.id, url, userId);
         } else {
-            processTextAi(item.id, url);
+            processTextAi(item.id, url, userId);
         }
 
     } catch (error) {

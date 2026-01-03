@@ -155,4 +155,73 @@ router.get('/gemini-status', adminAuth, async (req: Request, res: Response) => {
     }
 });
 
+// POST /api/admin/check-image
+// Validate if an image URL is accessible
+router.post('/check-image', adminAuth, async (req: Request, res: Response) => {
+    try {
+        const { url } = req.body;
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        const { validateImageUrl } = require('../lib/imageValidator');
+        const result = await validateImageUrl(url);
+
+        res.json({
+            url,
+            accessible: result.valid,
+            contentType: result.contentType,
+            statusCode: result.statusCode,
+            error: result.error,
+            blockedDomain: result.blockedDomain,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/admin/all-images
+// Returns all unique image URLs from items in the database
+router.get('/all-images', adminAuth, async (req: Request, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 500;
+
+        const items = await prisma.item.findMany({
+            where: {
+                imageUrl: { not: null }
+            },
+            select: {
+                id: true,
+                imageUrl: true,
+                name: true
+            },
+            take: limit,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Get unique URLs
+        const urlSet = new Set<string>();
+        const images = items
+            .filter(item => {
+                if (!item.imageUrl || urlSet.has(item.imageUrl)) return false;
+                urlSet.add(item.imageUrl);
+                return true;
+            })
+            .map(item => ({
+                id: item.id,
+                url: item.imageUrl,
+                name: item.name
+            }));
+
+        res.json({
+            count: images.length,
+            images,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

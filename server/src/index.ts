@@ -15,6 +15,7 @@ import itemRoutes from './routes/itemRoutes';
 import userRoutes from './routes/userRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
 import paymentRoutes from './routes/paymentRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -52,6 +53,7 @@ app.use('/api/users', socialRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/uploads', express.static('public/uploads'));
 
 

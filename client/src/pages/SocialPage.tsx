@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
@@ -7,6 +8,7 @@ import { Search, UserMinus, Users, Eye, Info, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { API_URL, API_BASE_URL } from '../config';
+import { t } from "../utils/localization";
 
 interface User {
     id: number;
@@ -97,7 +99,7 @@ export default function SocialPage() {
             } else {
                 // Determine error reason (e.g. limit reached)
                 const err = await res.json();
-                alert(`無法追蹤: ${err.error || 'Unknown error'}`);
+                alert(`${t('social.unfollowErr')}: ${err.error || 'Unknown error'}`);
             }
         } catch (err) {
             console.error(err);
@@ -121,20 +123,20 @@ export default function SocialPage() {
 
     return (
         <div className="container mx-auto p-4 space-y-6 max-w-2xl">
-            <h1 className="text-3xl font-bold font-serif text-gray-800">Social</h1>
+            <h1 className="text-3xl font-bold font-serif text-gray-800">{t('social.title')}</h1>
 
             <div className="flex space-x-4 border-b">
                 <button
                     className={`pb-2 px-4 ${activeTab === 'search' ? 'border-b-2 border-stone-800 font-medium' : 'text-gray-500'}`}
                     onClick={() => setActiveTab('search')}
                 >
-                    Find Friends
+                    {t('social.findFriends')}
                 </button>
                 <button
                     className={`pb-2 px-4 ${activeTab === 'following' ? 'border-b-2 border-stone-800 font-medium' : 'text-gray-500'}`}
                     onClick={() => setActiveTab('following')}
                 >
-                    Following
+                    {t('social.following')}
                 </button>
             </div>
 
@@ -142,7 +144,7 @@ export default function SocialPage() {
                 <div className="space-y-4">
                     <div className="flex space-x-2">
                         <Input
-                            placeholder="Data by name or phone..."
+                            placeholder={t('social.searchPlaceholder')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -170,11 +172,11 @@ export default function SocialPage() {
                                         <div>
                                             <p className="font-medium text-lg">{user.name || "Unknown"}</p>
                                             <p className="text-xs text-muji-secondary">
-                                                {user.nicknames ? `暱稱: ${user.nicknames}` : user.phoneNumber}
+                                                {user.nicknames ? `${t('social.nicknamePrefix')}${user.nicknames}` : user.phoneNumber}
                                             </p>
                                             {user.birthday && (
                                                 <p className="text-xs text-pink-500 font-medium">
-                                                    生日: {new Date(user.birthday).toLocaleDateString()}
+                                                    {t('social.birthdayPrefix')}{new Date(user.birthday).toLocaleDateString()}
                                                 </p>
                                             )}
                                         </div>
@@ -197,11 +199,11 @@ export default function SocialPage() {
 
                                         {/* C: Follow/Unfollow */}
                                         {user.isFollowing ? (
-                                            <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50" onClick={() => handleUnfollow(user.id)} title="Unfollow">
+                                            <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50" onClick={() => handleUnfollow(user.id)} title={t('social.unfollow')}>
                                                 <UserMinus className="w-5 h-5" />
                                             </Button>
                                         ) : (
-                                            <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleFollow(user.id)} title="Follow">
+                                            <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleFollow(user.id)} title={t('social.follow')}>
                                                 <Users className="w-5 h-5" /> {/* UserPlus icon requested as 'two small people', Users is close */}
                                             </Button>
                                         )}
@@ -245,17 +247,17 @@ export default function SocialPage() {
                                             <div className="flex items-center gap-2">
                                                 <p className="font-medium text-lg text-gray-900">{user.name}</p>
                                                 {user.isMutual ? (
-                                                    <span className="text-pink-500 text-xs font-bold bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">朋友</span>
+                                                    <span className="text-pink-500 text-xs font-bold bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">{t('social.mutual')}</span>
                                                 ) : (
-                                                    <span className="text-gray-400 text-xs font-bold bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">偷窺</span>
+                                                    <span className="text-gray-400 text-xs font-bold bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">{t('social.peek')}</span>
                                                 )}
                                             </div>
                                             <p className="text-xs text-muji-secondary">
-                                                {user.nicknames ? `暱稱: ${user.nicknames}` : user.phoneNumber}
+                                                {user.nicknames ? `${t('social.nicknamePrefix')}${user.nicknames}` : user.phoneNumber}
                                             </p>
                                             {user.birthday && (
                                                 <p className="text-xs text-pink-500 font-medium">
-                                                    生日: {new Date(user.birthday).toLocaleDateString()}
+                                                    {t('social.birthdayPrefix')}{new Date(user.birthday).toLocaleDateString()}
                                                 </p>
                                             )}
                                         </div>
@@ -282,9 +284,9 @@ export default function SocialPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="text-red-500 hover:bg-red-50 hover:text-red-600"
-                                            title="Unfollow"
+                                            title={t('social.unfollow')}
                                             onClick={() => {
-                                                if (confirm(`確定要刪除好友 ${user.name} 嗎？`)) {
+                                                if (confirm(t('social.confirmUnfollow').replace('{name}', user.name))) {
                                                     handleUnfollow(user.id);
                                                 }
                                             }}
@@ -297,7 +299,7 @@ export default function SocialPage() {
                         ))}
                         {followingList.length === 0 && (
                             <div className="text-center py-10 bg-gray-50 rounded-lg">
-                                <p className="text-gray-400">尚未加入任何好友</p>
+                                <p className="text-gray-400">{t('social.noFollowing')}</p>
                             </div>
                         )}
                     </div>

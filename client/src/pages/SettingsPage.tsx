@@ -9,6 +9,7 @@ import { Eye, EyeOff, Upload, User as UserIcon, Download } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
 import PaymentModal from "../components/PaymentModal";
 import { API_URL, API_BASE_URL } from '../config';
+import { t } from "../utils/localization";
 
 interface UserProfile {
     id: number;
@@ -67,7 +68,7 @@ export default function SettingsPage() {
                 setModalConfig(prev => ({ ...prev, isOpen: false, isProcessing: false })); // Close on finish
             },
             variant,
-            confirmText: confirmTextWithPrice || "確認 (Confirm)"
+            confirmText: confirmTextWithPrice || t('common.confirm')
         });
     };
 
@@ -94,7 +95,7 @@ export default function SettingsPage() {
     };
 
     const handlePaymentSuccess = (data: any) => {
-        alert(`付款成功！交易編號: ${data.transactionId}`);
+        alert(`Payment Successful! Transaction ID: ${data.transactionId}`);
         window.location.reload();
     };
 
@@ -194,13 +195,13 @@ export default function SettingsPage() {
                 if (res.ok) {
                     const data = await res.json();
                     setProfile(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
-                    alert('大頭照更新成功！');
+                    alert(t('settings.uploaded') || 'Avatar updated successfully!');
                 } else {
                     throw new Error('Upload failed');
                 }
             } catch (error) {
                 console.error(error);
-                alert('更新失敗，請重試。');
+                alert(t('common.error') || 'Update failed, please try again.');
             } finally {
                 setIsUploading(false);
                 // Reset input value to allow re-uploading the same file if needed in future, 
@@ -210,37 +211,37 @@ export default function SettingsPage() {
         }
     };
 
-    if (loading) return <div className="p-8 text-center">Loading settings...</div>;
-    if (!profile) return <div className="p-8 text-center">無法讀取個人資料，請<Link to="/login" className="text-blue-500 underline">重新登入</Link>。</div>;
+    if (loading) return <div className="p-8 text-center">{t('common.loading')}</div>;
+    if (!profile) return <div className="p-8 text-center">{t('common.error')} <Link to="/login" className="text-blue-500 underline">{t('nav.login')}</Link></div>;
 
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
-            <h1 className="text-3xl font-bold text-muji-primary">個人設定</h1>
+            <h1 className="text-3xl font-bold text-muji-primary">{t('settings.profile')}</h1>
 
             {/* Avatar Section */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                        <span>大頭照</span>
+                        <span>{t('settings.avatar')}</span>
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleUpdate({ isAvatarVisible: !profile.isAvatarVisible })}
-                            title={profile.isAvatarVisible ? "公開顯示" : "隱藏 (顯示預設圖)"}
+                            title={profile.isAvatarVisible ? t('settings.public') : t('settings.hidden')}
                         >
                             {profile.isAvatarVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                         </Button>
                     </CardTitle>
                     <CardDescription>
                         {profile.isAvatarVisible
-                            ? "目前狀態: 所有人可見 (讓朋友更容易找到你)"
-                            : "目前狀態: 隱藏 (別人看到會是預設灰色人)"}
+                            ? t('settings.avatarVisible')
+                            : t('settings.avatarHidden')}
                     </CardDescription>
                     {/* Read-Only Name Display */}
                     <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-100 flex flex-col gap-1">
-                        <span className="text-xs text-muji-secondary font-medium">姓名 (Login Name)</span>
+                        <span className="text-xs text-muji-secondary font-medium">{t('register.name')} (Login Name)</span>
                         <span className="text-sm text-muji-primary font-semibold">{profile.name}</span>
                     </div>
                 </CardHeader>
@@ -264,12 +265,12 @@ export default function SettingsPage() {
                             {isUploading ? (
                                 <>
                                     <span className="animate-spin mr-2">⏳</span> {/* Using simple emoji as spinner placeholder or lucide Upload/Loader if available */}
-                                    更新中...
+                                    {t('settings.uploading')}
                                 </>
                             ) : (
                                 <>
                                     <Upload className="w-4 h-4 mr-2" />
-                                    更換照片
+                                    {t('settings.changeAvatar')}
                                 </>
                             )}
                         </Button>
@@ -287,9 +288,9 @@ export default function SettingsPage() {
             {/* Nicknames Section - Always Visible */}
             <Card>
                 <CardHeader>
-                    <CardTitle>暱稱</CardTitle>
+                    <CardTitle>{t('settings.nicknames')}</CardTitle>
                     <CardDescription>
-                        (最多5個，預設為 piggy) 越多暱稱使自己更容易被搜尋到。
+                        {t('settings.nicknamesDesc')}
                         <span className={`ml-2 text-xs ${nicknameCount > 5 ? 'text-red-500' : 'text-gray-400'}`}>
                             {nicknameCount}/5
                         </span>
@@ -307,40 +308,40 @@ export default function SettingsPage() {
                             // Save on blur
                             handleUpdate({ nicknames: e.target.value });
                         }}
-                        placeholder="例如: piggy, 小豬, 佩琪 (用逗號分隔)"
+                        placeholder={t('settings.nicknamesPlaceholder')}
                     />
-                    <p className="text-xs text-muji-secondary mt-2">請使用逗號分隔多個暱稱。持續顯示，不可隱藏。</p>
+                    <p className="text-xs text-muji-secondary mt-2">{t('settings.nicknamesPlaceholder')}</p>
                 </CardContent>
             </Card>
 
             {/* Private Info Section */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">隱私資料 (禮物送到家專用)</h2>
+                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.privacyTitle')}</h2>
 
                 {/* Real Name */}
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">真實姓名</label>
+                                <label className="text-sm font-medium">{t('settings.realName')}</label>
                                 <Input
                                     value={profile.realName || ""}
                                     onChange={(e) => setProfile({ ...profile, realName: e.target.value })}
                                     onBlur={(e) => handleUpdate({ realName: e.target.value })}
-                                    placeholder="輸入真實姓名"
+                                    placeholder={t('settings.realName')}
                                 />
                             </div>
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isRealNameVisible: !profile.isRealNameVisible })}
-                                title={profile.isRealNameVisible ? "公開" : "隱藏"}
+                                title={profile.isRealNameVisible ? t('settings.public') : t('settings.hidden')}
                             >
                                 {profile.isRealNameVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
                         </div>
                         <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isRealNameVisible ? "目前: 公開顯示" : "目前: 隱藏 (僅用於送禮)"}
+                            {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                         </p>
                     </CardContent>
                 </Card>
@@ -350,12 +351,12 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">寄送地址</label>
+                                <label className="text-sm font-medium">{t('settings.address')}</label>
                                 <Input
                                     value={profile.address || ""}
                                     onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                                     onBlur={(e) => handleUpdate({ address: e.target.value })}
-                                    placeholder="輸入地址"
+                                    placeholder={t('settings.address')}
                                 />
                             </div>
                             <Button
@@ -367,7 +368,7 @@ export default function SettingsPage() {
                             </Button>
                         </div>
                         <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isAddressVisible ? "目前: 公開顯示" : "目前: 隱藏 (僅用於送禮)"}
+                            {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                         </p>
                     </CardContent>
                 </Card>
@@ -377,7 +378,7 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">手機號碼</label>
+                                <label className="text-sm font-medium">{t('settings.phone')}</label>
                                 <Input
                                     value={profile.phoneNumber}
                                     disabled
@@ -393,7 +394,7 @@ export default function SettingsPage() {
                             </Button>
                         </div>
                         <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isPhoneVisible ? "目前: 公開顯示" : "目前: 隱藏"}
+                            {profile.isPhoneVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                         </p>
                     </CardContent>
                 </Card>
@@ -403,9 +404,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">生日</label>
+                                <label className="text-sm font-medium">{t('settings.birthday')}</label>
                                 <Input
-                                    value={profile.birthday ? new Date(profile.birthday).toLocaleDateString() : "未設定"}
+                                    value={profile.birthday ? new Date(profile.birthday).toLocaleDateString() : "Not set"}
                                     disabled
                                     className="bg-gray-100 text-gray-500 cursor-not-allowed"
                                 />
@@ -419,7 +420,7 @@ export default function SettingsPage() {
                             </Button>
                         </div>
                         <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isBirthdayVisible ? "目前: 公開顯示" : "目前: 隱藏 (設為隱藏時，不會出現在朋友的生日提醒中)"}
+                            {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHiddenBirthday')}
                         </p>
                     </CardContent>
                 </Card>
@@ -433,19 +434,19 @@ export default function SettingsPage() {
             {/* 1. Native Install Button (Android/Desktop when event fires) */}
             {deferredPrompt && (
                 <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式</h2>
+                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
                     <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
                         <CardContent className="pt-6 flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium text-lg text-blue-900">將 Wishlist.ai 加到主畫面</h3>
-                                <p className="text-sm text-blue-700 mt-1">獲得更流暢的 App 體驗</p>
+                                <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
+                                <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
                             </div>
                             <Button
                                 onClick={handleInstallClick}
                                 className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
                             >
                                 <Download className="w-4 h-4 mr-2" />
-                                立即安裝
+                                {t('settings.installBtn')}
                             </Button>
                         </CardContent>
                     </Card>
@@ -455,14 +456,14 @@ export default function SettingsPage() {
             {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
             {(!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
                 <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (iOS)</h2>
+                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
                     <Card className="bg-gray-50 border-gray-200">
                         <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">如何加入主畫面？</h3>
+                            <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
                             <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                <li>點擊瀏覽器下方的 <span className="font-bold">分享</span> 按鈕 (Share Icon)</li>
-                                <li>往下滑找到並點擊 <span className="font-bold">加入主畫面</span> (Add to Home Screen)</li>
-                                <li>點擊右上角的 <span className="font-bold">加入</span> (Add)</li>
+                                <li>Tap <span className="font-bold">Share</span> button</li>
+                                <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
+                                <li>Tap <span className="font-bold">Add</span></li>
                             </ol>
                         </CardContent>
                     </Card>
@@ -472,15 +473,15 @@ export default function SettingsPage() {
             {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
             {(!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
                 <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (Android)</h2>
+                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (Android)</h2>
                     <Card className="bg-gray-50 border-gray-200">
                         <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">未看到安裝按鈕？</h3>
-                            <p className="text-sm text-gray-600 mb-3">如果您沒有看到上方的安裝按鈕，您可以手動安裝：</p>
+                            <h3 className="font-medium text-lg text-gray-900">Don't see the button?</h3>
+                            <p className="text-sm text-gray-600 mb-3">Manually install:</p>
                             <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                <li>點擊瀏覽器右上角的 <span className="font-bold">選單圖示</span> (三個點)</li>
-                                <li>點擊 <span className="font-bold">安裝應用程式</span> 或 <span className="font-bold">加到主畫面</span></li>
-                                <li>點擊 <span className="font-bold">安裝</span></li>
+                                <li>Tap the <span className="font-bold">Menu icon</span> (three dots)</li>
+                                <li>Tap <span className="font-bold">Install App</span> or <span className="font-bold">Add to Home screen</span></li>
+                                <li>Tap <span className="font-bold">Install</span></li>
                             </ol>
                         </CardContent>
                     </Card>
@@ -490,19 +491,11 @@ export default function SettingsPage() {
             {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
             {(!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
                 <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">安裝應用程式 (電腦版)</h2>
+                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (Desktop)</h2>
                     <Card className="bg-gray-50 border-gray-200">
                         <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">如何安裝到電腦？</h3>
-                            <p className="text-sm text-gray-600 mb-3">請檢查瀏覽器網址列右側是否有 <Download className="inline w-4 h-4 mx-1" /> 安裝圖示。</p>
-                            <div className="text-sm text-gray-700 space-y-2">
-                                <p>或者：</p>
-                                <ol className="list-decimal list-inside space-y-1">
-                                    <li>點擊瀏覽器右上角的 <span className="font-bold">選單圖示</span> (三個點)</li>
-                                    <li>選擇 <span className="font-bold">儲存並分享</span> (或 更多工具)</li>
-                                    <li>點擊 <span className="font-bold">安裝 Wishlist.ai</span></li>
-                                </ol>
-                            </div>
+                            <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
+                            <p className="text-sm text-gray-600 mb-3">Check address bar for install icon <Download className="inline w-4 h-4 mx-1" /></p>
                         </CardContent>
                     </Card>
                 </div>
@@ -510,13 +503,13 @@ export default function SettingsPage() {
 
             {/* Security Section */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">帳號安全</h2>
+                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.securityTitle')}</h2>
                 <Card>
                     <CardContent className="pt-6 space-y-4">
-                        <p className="text-sm text-gray-500">為了您的帳號安全，建議定期更改密碼。點擊下方按鈕前往修改頁面。</p>
+                        <p className="text-sm text-gray-500">{t('settings.securityDesc')}</p>
                         <Link to="/change-password">
                             <Button variant="outline" className="w-full">
-                                前往修改密碼
+                                {t('settings.changePassword')}
                             </Button>
                         </Link>
                     </CardContent>
@@ -525,25 +518,25 @@ export default function SettingsPage() {
 
             {/* Monetization Section */}
             <div className="space-y-4 pb-12">
-                <h2 className="text-xl font-semibold mt-8 mb-4">贊助與升級</h2>
+                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.monetizationTitle')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Micro Transaction */}
                     <Card className="border-l-4 border-l-blue-500">
                         <CardHeader>
-                            <CardTitle>擴充清單容量</CardTitle>
-                            <CardDescription>單一清單上限 +10</CardDescription>
+                            <CardTitle>{t('settings.expandList')}</CardTitle>
+                            <CardDescription>{t('settings.expandListDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
 
                             <div className="mb-4">
-                                <label className="text-sm text-gray-500 mb-1 block">選擇要擴充的清單類型</label>
+                                <label className="text-sm text-gray-500 mb-1 block">Type</label>
                                 <select
                                     className="w-full border rounded p-2 text-sm"
                                     id="expansion-type-select"
                                 >
-                                    <option value="wishlists">My Wishlists (所有願望清單)</option>
-                                    <option value="following">Following (追蹤名單)</option>
+                                    <option value="wishlists">{t('dashboard.myWishlists')}</option>
+                                    <option value="following">{t('social.following')}</option>
                                 </select>
                             </div>
 
@@ -551,9 +544,9 @@ export default function SettingsPage() {
                                 const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
                                 if (!select) return;
                                 const targetType = select.value;
-                                openPaymentModal(30, targetType === 'following' ? "追蹤名單擴充 (+10)" : "願望清單擴充 (+10)", { purchaseType: 'limit', target: targetType });
+                                openPaymentModal(30, targetType === 'following' ? "Following Expansion (+10)" : "Wishlist Expansion (+10)", { purchaseType: 'limit', target: targetType });
                             }}>
-                                立即購買
+                                {t('settings.buyNow')}
                             </Button>
                         </CardContent>
                     </Card>
@@ -561,21 +554,21 @@ export default function SettingsPage() {
                     {/* Subscription */}
                     <Card className="border-l-4 border-l-amber-500 bg-amber-50/30">
                         <CardHeader>
-                            <CardTitle>無限訂閱制</CardTitle>
-                            <CardDescription>解鎖所有清單無限容量</CardDescription>
+                            <CardTitle>{t('settings.premiumTitle')}</CardTitle>
+                            <CardDescription>{t('settings.premiumDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/月 (3 USD)</span></p>
+                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/mo (3 USD)</span></p>
 
                             {profile.isPremium ? (
                                 <div className="space-y-3">
                                     <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
-                                        ✨ 您目前是尊榮會員
+                                        {t('settings.isPremium')}
                                     </div>
                                     <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
                                         openModal(
-                                            "取消訂閱確認",
-                                            "您確定要取消訂閱嗎？\n\n取消後：\n• 您的容量上限將恢復為預設值 (100)\n• 既有超過的項目可能無法編輯",
+                                            t('settings.cancelSubscription'),
+                                            "Are you sure you want to cancel? \n\nYour limit will revert to default (100).",
                                             async () => {
                                                 try {
                                                     const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
@@ -583,66 +576,65 @@ export default function SettingsPage() {
                                                         headers: { 'Authorization': `Bearer ${token}` }
                                                     });
                                                     if (res.ok) {
-                                                        alert("訂閱已取消，權益已變更。");
+                                                        alert("Subscription cancelled.");
                                                         window.location.reload();
                                                     } else {
-                                                        alert("取消失敗");
+                                                        alert("Failed to cancel");
                                                     }
                                                 } catch (e) { console.error(e); }
                                             },
                                             "destructive",
-                                            "確認取消訂閱"
+                                            t('common.confirm')
                                         );
                                     }}>
-                                        取消訂閱
+                                        {t('settings.cancelSubscription')}
                                     </Button>
                                 </div>
                             ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                                openPaymentModal(90, "無限訂閱方案 (Premium)", { purchaseType: 'PREMIUM' });
+                                openPaymentModal(90, "Premium Subscription", { purchaseType: 'PREMIUM' });
                             }}>
-                                立即訂閱 (NT$ 90)
+                                {t('settings.subscribe')} (NT$ 90)
                             </Button>
                             }
 
                         </CardContent>
                     </Card>
-                    {/* ... (Existing Monetization Cards) ... */}
                 </div>
 
                 {/* Debug Tools Section - Admin Only */}
                 {profile.phoneNumber === '0935065876' && (
                     <div className="mt-8 pt-6 border-t border-gray-200">
-                        <h2 className="text-xl font-semibold mb-4 text-gray-700">系統診斷 (Admin Only)</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-gray-700">System Diagnostics (Admin Only)</h2>
                         <Card>
                             <CardContent className="pt-6">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <h3 className="font-medium text-lg">測試 Email 連線</h3>
+                                        <h3 className="font-medium text-lg">Test Email</h3>
                                         <p className="text-sm text-gray-500">
-                                            此功能僅供開發者測試 System Integrity。
+                                            Internal system integrity check.
                                         </p>
                                     </div>
                                     <Button
                                         variant="outline"
                                         onClick={async () => {
                                             const btn = document.getElementById('debug-email-btn');
-                                            if (btn) btn.innerText = "測試中...";
+                                            if (btn) btn.innerText = "Testing...";
                                             try {
                                                 const res = await fetch(`${API_URL}/feedback/test`, {
                                                     method: 'POST',
                                                     headers: { 'Authorization': `Bearer ${token}` }
                                                 });
                                                 const json = await res.json();
-                                                alert("測試結果:\n" + JSON.stringify(json, null, 2));
+                                                alert("Test Result:\n" + JSON.stringify(json, null, 2));
                                             } catch (e: any) {
-                                                alert("連線失敗: " + e.message);
+                                                alert("Connection Failed: " + e.message);
                                             } finally {
-                                                if (btn) btn.innerText = "發送測試信";
+                                                if (btn) btn.innerText = "Send Test Email";
                                             }
                                         }}
                                         id="debug-email-btn"
                                     >
-                                        發送測試信
+                                        Send Test Email
                                     </Button>
                                 </div>
                             </CardContent>
@@ -652,10 +644,10 @@ export default function SettingsPage() {
 
                 {/* Purchase History Link */}
                 <div className="mt-6 pt-6 border-t">
-                    <h3 className="text-lg font-medium mb-2">交易紀錄</h3>
+                    <h3 className="text-lg font-medium mb-2">{t('settings.historyTitle')}</h3>
                     <Link to="/purchase-history">
                         <Button variant="outline" className="w-full md:w-auto">
-                            查看贊助與購買紀錄
+                            {t('settings.viewHistory')}
                         </Button>
                     </Link>
                 </div>

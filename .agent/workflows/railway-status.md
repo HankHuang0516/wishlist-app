@@ -48,3 +48,16 @@ description: Fetch Railway backend data (stats, crawler logs, health)
 ## 備註
 - API Key: `wishlist-admin-2026`
 - 這些端點可用 `read_url_content` 工具直接存取，不需要權限確認
+
+## 新增端點：Gemini API 狀態
+```
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/gemini-status?key=wishlist-admin-2026
+```
+
+回傳內容：
+| 欄位 | 說明 |
+|------|------|
+| geminiStatus | `ok` / `error` / `quota_exceeded` |
+| quotaErrors24h | 過去 24 小時的 429 錯誤數 |
+| totalErrors24h | 過去 24 小時的總錯誤數 |
+| recentQuotaErrors | 最近 5 筆 quota 錯誤 |

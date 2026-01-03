@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
+import { t } from "../utils/localization";
 
 export default function Login() {
     const [phoneNumber, setPhoneNumber] = useState("");
@@ -59,14 +60,14 @@ export default function Login() {
         <div className="flex items-center justify-center min-h-[60vh]">
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1 text-center">
-                    <CardTitle className="text-2xl">Welcome back</CardTitle>
-                    <p className="text-sm text-muji-secondary">Enter your phone number to sign in</p>
+                    <CardTitle className="text-2xl">{t('login.title')}</CardTitle>
+                    <p className="text-sm text-muji-secondary">{t('login.subtitle')}</p>
                 </CardHeader>
                 <form onSubmit={handleSubmit}>
                     <CardContent className="space-y-4">
                         {error && <div className="text-red-500 text-sm text-center">{error}</div>}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">Phone Number</label>
+                            <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">{t('login.phoneNumber')}</label>
                             <Input
                                 id="phoneNumber"
                                 placeholder="0912345678"
@@ -77,7 +78,7 @@ export default function Login() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="password">Password</label>
+                            <label className="text-sm font-medium leading-none" htmlFor="password">{t('login.password')}</label>
                             <Input
                                 id="password"
                                 type="password"
@@ -88,15 +89,15 @@ export default function Login() {
                         </div>
 
                         <div className="flex justify-end">
-                            <Link to="/forgot-password" className="text-sm text-muji-secondary hover:text-muji-primary">Forgot password?</Link>
+                            <Link to="/forgot-password" className="text-sm text-muji-secondary hover:text-muji-primary">{t('login.forgotPassword')}</Link>
                         </div>
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-4">
                         <Button className="w-full" disabled={loading}>
-                            {loading ? "Signing In..." : "Sign In"}
+                            {loading ? t('login.signingIn') : t('login.signIn')}
                         </Button>
                         <div className="text-center text-sm text-muji-secondary">
-                            Don't have an account? <Link to="/register" className="underline cursor-pointer hover:text-muji-primary">Sign up</Link>
+                            {t('login.noAccount')} <Link to="/register" className="underline cursor-pointer hover:text-muji-primary">{t('login.signUp')}</Link>
                         </div>
                     </CardFooter>
                 </form>
@@ -104,3 +105,4 @@ export default function Login() {
         </div >
     );
 }
+

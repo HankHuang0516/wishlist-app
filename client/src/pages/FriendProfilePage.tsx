@@ -1,10 +1,12 @@
+
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus } from "lucide-react";
-import { Link } from "react-router-dom"; // Added Link import
+import { Link } from "react-router-dom";
+import { t } from "../utils/localization";
 
 interface PublicProfile {
     id: number;
@@ -43,7 +45,7 @@ export default function FriendProfilePage() {
         }
     };
 
-    if (loading) return <div className="p-8 text-center">Loading profile...</div>;
+    if (loading) return <div className="p-8 text-center">{t('common.processing')}</div>;
     if (!profile) return <div className="p-8 text-center">User not found</div>;
 
     const renderField = (label: string, value: string | null, Icon: any) => {
@@ -56,7 +58,7 @@ export default function FriendProfilePage() {
                 <div>
                     <p className="text-xs text-muji-secondary font-medium">{label}</p>
                     <p className={`font-medium ${isHidden ? 'text-gray-400 italic' : 'text-muji-primary'}`}>
-                        {isHidden ? '已隱藏' : value}
+                        {isHidden ? t('friend.hidden') : value}
                     </p>
                 </div>
             </div>
@@ -89,11 +91,11 @@ export default function FriendProfilePage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
-            <h1 className="text-3xl font-bold text-muji-primary">好友資料</h1>
+            <h1 className="text-3xl font-bold text-muji-primary">{t('friend.title')}</h1>
 
             <Card>
                 <CardHeader>
-                    <CardTitle>基本資料</CardTitle>
+                    <CardTitle>{t('friend.basicInfo')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {/* Avatar Section */}
@@ -107,7 +109,7 @@ export default function FriendProfilePage() {
                                     {/* Overlay for hidden explicitly? API returns null if hidden, so we just show default */}
                                     {profile.avatarUrl === null && (
                                         <div className="absolute inset-0 flex items-center justify-center bg-black/5 text-xs text-gray-500 font-bold">
-                                            隱藏
+                                            {t('friend.hidden')}
                                         </div>
                                     )}
                                 </div>
@@ -116,18 +118,18 @@ export default function FriendProfilePage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {renderField("姓名", profile.name, User)}
-                        {renderField("暱稱", profile.nicknames, Tag)}
-                        {renderField("真實姓名", profile.realName, User)}
-                        {renderField("手機", profile.phoneNumber, Smartphone)}
-                        {renderField("地址", profile.address, MapPin)}
+                        {renderField(t('settings.displayName'), profile.name, User)}
+                        {renderField(t('settings.nickname'), profile.nicknames, Tag)}
+                        {renderField(t('settings.realName'), profile.realName, User)}
+                        {renderField(t('settings.phone'), profile.phoneNumber, Smartphone)}
+                        {renderField(t('settings.address'), profile.address, MapPin)}
                     </div>
 
                     <div className="pt-6 space-y-3">
-                        <Link to={`/users/${id}/wishlists`} className="block w-full"> {/* Fixed Link Syntax */}
+                        <Link to={`/users/${id}/wishlists`} className="block w-full">
                             <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
                                 <Gift className="w-5 h-5" />
-                                查看願望清單
+                                {t('friend.viewWishlist')}
                             </button>
                         </Link>
 
@@ -138,7 +140,7 @@ export default function FriendProfilePage() {
                                 className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2"
                             >
                                 <UserMinus className="w-5 h-5" />
-                                取消追蹤
+                                {t('social.unfollow')}
                             </button>
                         ) : (
                             <button
@@ -146,10 +148,9 @@ export default function FriendProfilePage() {
                                 className="w-full bg-pink-500 text-white py-3 rounded-md font-medium hover:bg-pink-600 transition-colors flex items-center justify-center gap-2 shadow-sm"
                             >
                                 <UserPlus className="w-5 h-5" />
-                                加入好友
+                                {t('social.follow')}
                             </button>
                         )}
-                        {/* Verified Locally: Pink Button turns Gray on click */}
                     </div>
 
                 </CardContent >

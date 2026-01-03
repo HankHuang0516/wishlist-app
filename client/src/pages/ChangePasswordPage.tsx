@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -6,6 +7,7 @@ import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { ChevronLeft } from "lucide-react";
+import { t } from "../utils/localization";
 
 export default function ChangePasswordPage() {
     const { token } = useAuth();
@@ -21,12 +23,12 @@ export default function ChangePasswordPage() {
         setError("");
 
         if (newPassword !== confirmPassword) {
-            setError("New passwords do not match");
+            setError(t('changePwd.matchErr'));
             return;
         }
 
         if (newPassword.length < 6) {
-            setError("Password must be at least 6 characters");
+            setError(t('changePwd.lengthErr'));
             return;
         }
 
@@ -42,15 +44,15 @@ export default function ChangePasswordPage() {
             });
 
             if (res.ok) {
-                alert("Password changed successfully!");
+                alert(t('changePwd.success'));
                 navigate('/settings');
             } else {
                 const data = await res.json();
-                setError(data.error || "Failed to update password");
+                setError(data.error || t('common.error'));
             }
         } catch (err) {
             console.error(err);
-            setError("An error occurred");
+            setError(t('common.error'));
         } finally {
             setLoading(false);
         }
@@ -60,13 +62,13 @@ export default function ChangePasswordPage() {
         <div className="max-w-md mx-auto py-10 px-4">
             <Link to="/settings" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-6">
                 <ChevronLeft className="w-4 h-4 mr-1" />
-                Back to Settings
+                {t('common.back')}
             </Link>
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Change Password</CardTitle>
-                    <CardDescription>Enter your current password and a new password.</CardDescription>
+                    <CardTitle>{t('changePwd.title')}</CardTitle>
+                    <CardDescription>{t('changePwd.desc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {error && (
@@ -76,7 +78,7 @@ export default function ChangePasswordPage() {
                     )}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Current Password</label>
+                            <label className="text-sm font-medium">{t('changePwd.current')}</label>
                             <Input
                                 type="password"
                                 value={currentPassword}
@@ -85,7 +87,7 @@ export default function ChangePasswordPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">New Password</label>
+                            <label className="text-sm font-medium">{t('changePwd.new')}</label>
                             <Input
                                 type="password"
                                 value={newPassword}
@@ -94,7 +96,7 @@ export default function ChangePasswordPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Confirm New Password</label>
+                            <label className="text-sm font-medium">{t('changePwd.confirm')}</label>
                             <Input
                                 type="password"
                                 value={confirmPassword}
@@ -103,7 +105,7 @@ export default function ChangePasswordPage() {
                             />
                         </div>
                         <Button className="w-full" type="submit" disabled={loading}>
-                            {loading ? "Updating..." : "Update Password"}
+                            {loading ? t('changePwd.updating') : t('changePwd.update')}
                         </Button>
                     </form>
                 </CardContent>

@@ -1,8 +1,10 @@
+
 import { useEffect, useState } from "react";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
-import { Card, CardContent } from "../components/ui/Card"; // Removed unused components
+import { Card, CardContent } from "../components/ui/Card";
 import { ExternalLink, ShoppingBag, User } from "lucide-react";
+import { t } from "../utils/localization";
 
 interface PurchasedItem {
     id: number;
@@ -60,14 +62,14 @@ export default function PurchaseHistoryPage() {
 
     const getTypeName = (type: string) => {
         switch (type) {
-            case 'PREMIUM': return 'Premium Subscription';
-            case 'LIMIT_WISHLIST': return 'Wishlist Capacity +10';
-            case 'LIMIT_FOLLOWING': return 'Following Capacity +10';
+            case 'PREMIUM': return t('settings.premiumTitle');
+            case 'LIMIT_WISHLIST': return t('settings.expandList');
+            case 'LIMIT_FOLLOWING': return t('settings.expandList'); // Or similar key
             default: return type;
         }
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading history...</div>;
+    if (loading) return <div className="p-8 text-center text-gray-500">{t('common.processing')}</div>;
 
     return (
         <div className="max-w-4xl mx-auto py-8 space-y-12">
@@ -79,24 +81,24 @@ export default function PurchaseHistoryPage() {
                         <ShoppingBag className="w-8 h-8 text-amber-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Account Purchases</h1>
-                        <p className="text-gray-500">Subscriptions and Upgrades</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('purchase.accountTitle')}</h1>
+                        <p className="text-gray-500">{t('purchase.accountDesc')}</p>
                     </div>
                 </div>
 
                 {transactions.length === 0 ? (
                     <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-gray-400">No account purchases found.</p>
+                        <p className="text-gray-400">{t('purchase.noAccount')}</p>
                     </div>
                 ) : (
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                         <table className="w-full text-left bg-white">
                             <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase tracking-wider">
                                 <tr>
-                                    <th className="px-6 py-4">Item</th>
-                                    <th className="px-6 py-4">Date</th>
-                                    <th className="px-6 py-4 text-right">Amount</th>
-                                    <th className="px-6 py-4 text-center">Status</th>
+                                    <th className="px-6 py-4">{t('common.item')}</th>
+                                    <th className="px-6 py-4">{t('common.date')}</th>
+                                    <th className="px-6 py-4 text-right">{t('common.amount')}</th>
+                                    <th className="px-6 py-4 text-center">{t('common.status')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -125,14 +127,14 @@ export default function PurchaseHistoryPage() {
                         <User className="w-8 h-8 text-green-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Gifts Sent</h1>
-                        <p className="text-gray-500">Items you have marked as purchased for friends</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('purchase.giftsTitle')}</h1>
+                        <p className="text-gray-500">{t('purchase.giftsDesc')}</p>
                     </div>
                 </div>
 
                 {items.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-gray-500">You haven't marked any items as purchased yet.</p>
+                        <p className="text-gray-500">{t('purchase.noGifts')}</p>
                     </div>
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -147,7 +149,7 @@ export default function PurchaseHistoryPage() {
                                         </div>
                                     )}
                                     <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow font-medium">
-                                        Purchased
+                                        {t('common.purchased')}
                                     </div>
                                 </div>
                                 <CardContent className="p-4 space-y-3">
@@ -166,7 +168,7 @@ export default function PurchaseHistoryPage() {
                                         </div>
                                         <div className="text-sm overflow-hidden">
                                             <p className="font-medium truncate">{item.wishlist.user.nicknames?.split(',')[0] || item.wishlist.user.name}</p>
-                                            <p className="text-xs text-gray-400 truncate">For {item.wishlist.user.name}</p>
+                                            <p className="text-xs text-gray-400 truncate">{t('purchase.for').replace('{name}', item.wishlist.user.name)}</p>
                                         </div>
                                     </div>
 
@@ -178,7 +180,7 @@ export default function PurchaseHistoryPage() {
                                             className="flex items-center justify-center w-full mt-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded py-1 hover:bg-blue-50 transition-colors"
                                         >
                                             <ExternalLink className="w-4 h-4 mr-1" />
-                                            View Item
+                                            {t('common.viewItem')}
                                         </a>
                                     )}
                                 </CardContent>

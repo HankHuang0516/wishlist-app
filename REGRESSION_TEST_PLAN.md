@@ -165,6 +165,10 @@ npm run test
 | F11 | `Google CSE ID 設定` | 執行 `searchGoogleWeb("momo購物網")` | 返回 `totalResults > 0`，非 0 結果 (確保 CSE 設定為搜尋整個網路) |
 | F12 | `Momo 商品名稱解析` | 添加 Momo URL `i_code=14244558` | 商品名顯示完整名稱（如 Nintendo Switch），非「待確認商品」|
 | F13 | `Proactive Smart Search` | 使用 Momo/PChome/Shopee URL | 系統執行 Google CSE 搜尋後再傳給 AI，有 `Got search context` log |
+| F14 | `Learn More 滾動` | 首頁點擊 "了解更多" 按鈕 | 頁面平滑滾動到 Feature Preview 區域 |
+| F15 | `i18n 首頁標題` | 變更瀏覽器語系為 en-US | 首頁標題顯示 "Organize your desires." 而非中文 |
+| F16 | `i18n Feature Cards` | 使用 zh-TW 語系 | 4 張功能卡片標題與描述顯示中文 |
+| F17 | `Locale Detection` | 檢查 `navigator.language` | 系統正確偵測並切換語系 (zh/en) |
 
 
 ---

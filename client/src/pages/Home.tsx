@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { Info, Gift } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getNextHoliday } from "../utils/localization";
+import { getNextHoliday, t } from "../utils/localization";
 
 export default function Home() {
     const { isAuthenticated, token } = useAuth();
@@ -118,37 +118,40 @@ export default function Home() {
         <div className="flex flex-col items-center justify-center space-y-12 py-12">
             <section className="text-center space-y-6 max-w-2xl">
                 <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl text-muji-primary">
-                    Organize your desires.
+                    {t('home.title')}
                 </h1>
                 <p className="text-lg text-muji-secondary mx-auto max-w-[700px]">
-                    A minimalist wishlist powered by AI. Snap a photo, we'll do the rest.
-                    Share with friends, simplify your gifting.
+                    {t('home.subtitle')}
                 </p>
                 <div className="flex justify-center space-x-4">
                     <Link to="/login">
-                        <Button size="lg">Get Started</Button>
+                        <Button size="lg">{t('home.getStarted')}</Button>
                     </Link>
-                    <Button variant="outline" size="lg">
-                        Learn More
+                    <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+                    >
+                        {t('home.learnMore')}
                     </Button>
                 </div>
             </section>
 
             {/* Feature Preview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+            <div id="features" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
                 {/* Feature 1: AI Photo */}
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-pink-50 to-white">
                     <div className="h-48 overflow-hidden">
                         <img
                             src="/features/feature1.png"
-                            alt="AI 智慧拍照"
+                            alt={t('home.feature1.title')}
                             className="w-full h-full object-cover"
                         />
                     </div>
                     <CardContent className="text-center p-4">
-                        <h3 className="font-bold text-lg text-muji-primary">拍一下，願望就記住了 📱</h3>
+                        <h3 className="font-bold text-lg text-muji-primary">{t('home.feature1.title')}</h3>
                         <p className="text-sm text-muji-secondary mt-2">
-                            AI 自動幫你找到商品名稱、價格和購買連結
+                            {t('home.feature1.desc')}
                         </p>
                     </CardContent>
                 </Card>
@@ -158,14 +161,14 @@ export default function Home() {
                     <div className="h-48 overflow-hidden">
                         <img
                             src="/features/feature2.png"
-                            alt="分享給朋友"
+                            alt={t('home.feature2.title')}
                             className="w-full h-full object-cover"
                         />
                     </div>
                     <CardContent className="text-center p-4">
-                        <h3 className="font-bold text-lg text-muji-primary">送禮不踩雷，朋友說讚 🎁</h3>
+                        <h3 className="font-bold text-lg text-muji-primary">{t('home.feature2.title')}</h3>
                         <p className="text-sm text-muji-secondary mt-2">
-                            分享你的願望清單，讓朋友知道你想要什麼
+                            {t('home.feature2.desc')}
                         </p>
                     </CardContent>
                 </Card>
@@ -175,14 +178,14 @@ export default function Home() {
                     <div className="h-48 overflow-hidden">
                         <img
                             src="/features/feature3.png"
-                            alt="分類管理"
+                            alt={t('home.feature3.title')}
                             className="w-full h-full object-cover"
                         />
                     </div>
                     <CardContent className="text-center p-4">
-                        <h3 className="font-bold text-lg text-muji-primary">願望不再忘記 ✨</h3>
+                        <h3 className="font-bold text-lg text-muji-primary">{t('home.feature3.title')}</h3>
                         <p className="text-sm text-muji-secondary mt-2">
-                            依照場合分類，生日、節日、犒賞自己都能輕鬆管理
+                            {t('home.feature3.desc')}
                         </p>
                     </CardContent>
                 </Card>
@@ -192,14 +195,14 @@ export default function Home() {
                     <div className="h-48 overflow-hidden">
                         <img
                             src="/features/feature4.png"
-                            alt="貼心送禮"
+                            alt={t('home.feature4.title')}
                             className="w-full h-full object-cover"
                         />
                     </div>
                     <CardContent className="text-center p-4">
-                        <h3 className="font-bold text-lg text-muji-primary">偷看清單，送進心坎 💕</h3>
+                        <h3 className="font-bold text-lg text-muji-primary">{t('home.feature4.title')}</h3>
                         <p className="text-sm text-muji-secondary mt-2">
-                            另一半偷偷查看願望，買到心儀禮物超幸福
+                            {t('home.feature4.desc')}
                         </p>
                     </CardContent>
                 </Card>

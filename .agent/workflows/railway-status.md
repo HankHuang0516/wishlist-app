@@ -46,12 +46,12 @@ description: Fetch Railway backend data (stats, crawler logs, health)
 ```
 
 ## 備註
-- API Key: `wishlist-admin-2026`
+- API Key: `wishlist-secure-admin-2026-xK9p`
 - 這些端點可用 `read_url_content` 工具直接存取，不需要權限確認
 
 ## 新增端點：Gemini API 狀態
 ```
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/gemini-status?key=wishlist-admin-2026
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/gemini-status?key=wishlist-secure-admin-2026-xK9p
 ```
 
 回傳內容：

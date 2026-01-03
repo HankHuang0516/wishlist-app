@@ -423,15 +423,14 @@ const processTextAi = async (itemId: number, text: string, userId: number, searc
         console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
         const result = await analyzeProductText(text, 'traditional chinese', searchContext, suggestedQuery);
 
-        let finalImageUrl = null;
-        if (result.imageUrl) {
-            // Download the image to avoid hotlinking 403 errors
-            finalImageUrl = await downloadImage(result.imageUrl, itemId);
-        }
+        // Option C: Use original image URL directly (no download)
+        // Railway's ephemeral filesystem causes downloaded images to disappear on redeploy
+        // TODO: Consider Cloudinary for persistent image storage in the future
+        let finalImageUrl = result.imageUrl || null;
 
-        // Fallback if no image found or download failed
+        // Fallback if no image URL from AI
         if (!finalImageUrl) {
-            // Check tags or name to guess category
+            // Generate a placeholder based on product name
             const lowerName = (result.name || text).toLowerCase();
             if (lowerName.includes('sony') || lowerName.includes('headphone') || lowerName.includes('audio')) {
                 finalImageUrl = '/uploads/fallback_tech.png';

@@ -51,14 +51,17 @@ wishlist-app/
   - **These characters trigger manual permission prompts EVEN IF `SafeToAutoRun` is true.**
   - **NEVER** use them in ANY command argument (especially `git commit` messages):
     - `(` or `)` (Parentheses) -> ❌ `Fix (CSP)` ✅ `Fix CSP`
+    - **Conventional Commits Warning**:
+      - ❌ `fix(crawler):` -> Triggers Prompt (Parentheses)
+      - ✅ `fix: crawler -` -> Safe (No Parentheses)
     - `&` (Ampersand) -> ❌ `UI & API` ✅ `UI and API`
     - `|` (Pipe) -> Remove
     - `;` (Semicolon) -> Remove
     - `$` (Dollar Sign) -> Remove
   - **Reason**: PowerShell treats these as executable blocks/operators. The IDE's security layer intercepts them before the agent's "Safe" flag can apply.
   
-  - ❌ `git commit -m "fix D11: Update CSP (ui-avatars, momo)"` -> **Triggers Prompt!**
-  - ✅ `git commit -m "fix D11: Update CSP for ui-avatars and momo"` -> **Auto-runs**
+  - ❌ `git commit -m "fix(crawler): update Momo AI info (v0.0.87)"` -> **Triggers Prompt (parentheses)!**
+  - ✅ `git commit -m "fix: crawler - update Momo AI info - v0.0.87"` -> **Auto-runs**
 
 - **GLOBAL INSTALL REQUIRES PERMISSION** (設計如此):
   - `npm install -g` 會修改系統全域狀態，因此**永遠需要權限確認**。

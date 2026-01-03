@@ -75,6 +75,11 @@ export const analyzeLocalImage = async (file: { buffer: Buffer, mimetype: string
     }
 };
 
+// Helper: Validate if image is accessible (delegated to lib)
+import { isImageAccessible, validateImageUrl } from '../lib/imageValidator';
+export { isImageAccessible, validateImageUrl };
+
+
 // Helper: Google Custom Search for Image
 const searchGoogleImage = async (query: string): Promise<string | null> => {
     const cseId = process.env.GOOGLE_CSE_ID;
@@ -87,23 +92,33 @@ const searchGoogleImage = async (query: string): Promise<string | null> => {
 
     try {
         // -site:facebook.com -site:instagram.com to exclude social media noise
-        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query + " -site:facebook.com -site:instagram.com")}&searchType=image&num=3&safe=active`;
+        // Search for more items (num=5) to have a pool for validation
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query + " -site:facebook.com -site:instagram.com")}&searchType=image&num=5&safe=active`;
         const axios = require('axios');
         const res = await axios.get(url);
 
         if (res.data.items && res.data.items.length > 0) {
-            // Filter out unstable image sources manually just in case
-            const validImage = res.data.items.find((item: any) => {
-                const link = item.link || '';
-                return !link.includes('fbsbx.com') &&
-                    !link.includes('facebook.com') &&
-                    !link.includes('instagram.com');
-            });
+            console.log(`[ImageSearch] Found ${res.data.items.length} candidates. Validating...`);
 
-            if (validImage) {
-                console.log("Found Google Image:", validImage.link);
-                return validImage.link;
+            // Iterate through items to find the first ACCESSIBLE one
+            for (const item of res.data.items) {
+                const link = item.link || '';
+
+                // 1. Static Filter (Exclude known bad domains)
+                if (link.includes('fbsbx.com') || link.includes('facebook.com') || link.includes('instagram.com')) {
+                    continue;
+                }
+
+                // 2. Dynamic Validation (Check if URL is alive)
+                const isValid = await isImageAccessible(link);
+                if (isValid) {
+                    console.log("✅ Found Valid Google Image:", link);
+                    return link;
+                } else {
+                    console.log("⚠️ Skipping inaccessible image:", link);
+                }
             }
+            console.warn("❌ No valid accessible images found in search results.");
         }
         return null;
     } catch (error) {
@@ -186,29 +201,39 @@ export const analyzeProductText = async (productName: string, language: string =
         
         The input might be a specific **Product Name** OR a **Product URL**.
         
-        **CRITICAL INSTRUCTION**:
-        - You have access to Google Search. USE IT.
-        ${suggestedSearchQuery ? `- **USE THIS EXACT SEARCH QUERY**: "${suggestedSearchQuery}"` : '- SEARCH for the input (especially if it is a URL) to find the actual product page title and details.'}
-        - If input is a URL like 'shopee.tw/product/123/456', search for "shopee.tw/product/123/456" or "Shopee 123 456" to find the title.
+        ##########################################################
+        # MANDATORY: YOU MUST USE GOOGLE SEARCH BEFORE ANSWERING #
+        ##########################################################
         
-        Act as a shopping assistant. Infer the details of this product.
-        Language: ${language}.
+        ${suggestedSearchQuery ? `1. EXECUTE THIS EXACT SEARCH: "${suggestedSearchQuery}"
+        2. Read the search results carefully.
+        3. Extract the REAL product name from the search results.
+        4. DO NOT GUESS or HALLUCINATE the product name. If search returns no results, say "Unknown Product".` :
+            `1. SEARCH for the input (especially if it is a URL) to find the actual product page.
+        2. Read the search results to get the REAL product details.`}
+        
+        IMPORTANT ANTI-HALLUCINATION RULES:
+        - If the input is a Momo URL with i_code=XXXXX, the product MUST be from momoshop.com.tw
+        - NEVER return a product name that doesn't match the actual search results
+        - If unsure, return name as "Unknown Product from [Store Name]"
+        
+        Act as a shopping assistant. Language: ${language}.
         
         Instructions:
-        - If "Additional Context" is provided, PRIORTIZE it as the source of truth for the product name and description.
-        - If input is a URL, extract/guess the product details from the URL structure or potential content.
-        - If input is a Name, search/infer details normally.
+        - If "Additional Context" is provided, PRIORITIZE it as the source of truth.
+        - If input is a URL, SEARCH for it first, then extract details from results.
+        - NEVER GUESS product names - only use information from search results.
         
         Return JSON object with:
-        1. name: Refined product name (keep user's intent but make it official if clear).
-        2. price: Estimated price (number only).
-        3. currency: ISO currency code.
+        1. name: Exact product name from search results (NOT guessed).
+        2. price: Price from search results (number only). Use 0 if unknown.
+        3. currency: ISO currency code (default: TWD for Taiwan stores).
         4. tags: 3-5 keywords.
         5. shoppingLink: A generic search URL for this product on Google Shopping.
-        6. description: Brief attractiveness description (1-2 sentences).
-        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'A representative product image URL found via Search. Must be a direct link to JPG/PNG. If unsure, leave null.'}
+        6. description: Brief description (1-2 sentences) from search results.
+        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'Product image URL from search results. Must be direct JPG/PNG link. Leave null if unsure.'}
         
-        Return ONLY JSON.
+        Return ONLY valid JSON, no markdown.
     `;
 
     const result = await model.generateContent(prompt);

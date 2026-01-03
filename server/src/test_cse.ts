@@ -3,49 +3,44 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env for defaults (CSE ID)
+// Load .env
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const verifyCSE = async () => {
-    // UPDATED Key from User (Key 1 - Unrestricted)
-    const API_KEY = "AIzaSyAnpndAiH3ujMIoduTcC3dE6rq9IA2g8ng";
-    // CSE ID from .env
-    const CSE_ID = process.env.GOOGLE_CSE_ID;
-
-    console.log("Testing Google Custom Search API...");
-    console.log("API Key (Prefix):", API_KEY.substring(0, 10) + "...");
-    console.log("CSE ID:", CSE_ID);
-
-    if (!CSE_ID) {
-        console.error("❌ Error: GOOGLE_CSE_ID is missing in .env");
-        process.exit(1);
-    }
-
-    const query = "Nintendo Switch 2";
-    const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${CSE_ID}&key=${API_KEY}&q=${encodeURIComponent(query)}&searchType=image&num=1&safe=active`;
-
+const isImageAccessible = async (url: string): Promise<boolean> => {
     try {
-        console.log(`Searching for: "${query}"...`);
-        const res = await axios.get(url);
+        console.log(`Checking URL: ${url.substring(0, 60)}...`);
+        const response = await axios.get(url, {
+            timeout: 5000,
+            responseType: 'stream',
+            validateStatus: (status) => status === 200
+        });
 
-        if (res.data.items && res.data.items.length > 0) {
-            console.log("\n✅ Success! Found Image:");
-            console.log("Title:", res.data.items[0].title);
-            console.log("Link:", res.data.items[0].link);
-            console.log("Mime:", res.data.items[0].mime);
-        } else {
-            console.log("\n⚠️ Response OK, but no items found.");
-            console.log("Response data:", JSON.stringify(res.data, null, 2));
+        const contentType = response.headers['content-type'];
+        console.log(`  > Status: ${response.status}`);
+        console.log(`  > Type: ${contentType}`);
+
+        if (contentType && contentType.startsWith('image/')) {
+            response.data.destroy();
+            return true;
         }
+        return false;
     } catch (error: any) {
-        console.error("\n❌ API Request Failed:");
-        if (error.response) {
-            console.error("Status:", error.response.status);
-            console.error("Data:", JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error("Error:", error.message);
-        }
+        console.log(`  > Failed: ${error.message}`);
+        return false;
     }
 };
 
-verifyCSE();
+const verifyValidation = async () => {
+    const badUrl = "https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=859695209924239"; // The FB link
+    const goodUrl = "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png"; // Known good image
+
+    console.log("\n--- Testing Bad URL (Expect False) ---");
+    const resultBad = await isImageAccessible(badUrl);
+    console.log("Result:", resultBad);
+
+    console.log("\n--- Testing Good URL (Expect True) ---");
+    const resultGood = await isImageAccessible(goodUrl);
+    console.log("Result:", resultGood);
+};
+
+verifyValidation();

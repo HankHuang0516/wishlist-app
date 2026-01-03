@@ -134,13 +134,75 @@ export default function Home() {
                 </div>
             </section>
 
-            {/* Feature Preview (Placeholder) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
-                {[1, 2, 3].map((i) => (
-                    <Card key={i} className="h-64 flex items-center justify-center bg-gray-50 border-dashed">
-                        <span className="text-muji-secondary">Feature Preview {i}</span>
-                    </Card>
-                ))}
+            {/* Feature Preview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+                {/* Feature 1: AI Photo */}
+                <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-pink-50 to-white">
+                    <div className="h-48 overflow-hidden">
+                        <img
+                            src="/features/feature1.png"
+                            alt="AI 智慧拍照"
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                    <CardContent className="text-center p-4">
+                        <h3 className="font-bold text-lg text-muji-primary">拍一下，願望就記住了 📱</h3>
+                        <p className="text-sm text-muji-secondary mt-2">
+                            AI 自動幫你找到商品名稱、價格和購買連結
+                        </p>
+                    </CardContent>
+                </Card>
+
+                {/* Feature 2: Share with Friends */}
+                <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-purple-50 to-white">
+                    <div className="h-48 overflow-hidden">
+                        <img
+                            src="/features/feature2.png"
+                            alt="分享給朋友"
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                    <CardContent className="text-center p-4">
+                        <h3 className="font-bold text-lg text-muji-primary">送禮不踩雷，朋友說讚 🎁</h3>
+                        <p className="text-sm text-muji-secondary mt-2">
+                            分享你的願望清單，讓朋友知道你想要什麼
+                        </p>
+                    </CardContent>
+                </Card>
+
+                {/* Feature 3: Organize */}
+                <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-green-50 to-white">
+                    <div className="h-48 overflow-hidden">
+                        <img
+                            src="/features/feature3.png"
+                            alt="分類管理"
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                    <CardContent className="text-center p-4">
+                        <h3 className="font-bold text-lg text-muji-primary">願望不再忘記 ✨</h3>
+                        <p className="text-sm text-muji-secondary mt-2">
+                            依照場合分類，生日、節日、犒賞自己都能輕鬆管理
+                        </p>
+                    </CardContent>
+                </Card>
+
+                {/* Feature 4: Couple Gift */}
+                <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-red-50 to-white">
+                    <div className="h-48 overflow-hidden">
+                        <img
+                            src="/features/feature4.png"
+                            alt="貼心送禮"
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                    <CardContent className="text-center p-4">
+                        <h3 className="font-bold text-lg text-muji-primary">偷看清單，送進心坎 💕</h3>
+                        <p className="text-sm text-muji-secondary mt-2">
+                            另一半偷偷查看願望，買到心儀禮物超幸福
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );

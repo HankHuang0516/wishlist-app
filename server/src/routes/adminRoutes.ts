@@ -4,11 +4,18 @@ import { PrismaClient } from '@prisma/client';
 const router = Router();
 const prisma = new PrismaClient();
 
-// Simple API Key check middleware
-// In production, use env variable: ADMIN_API_KEY
-const ADMIN_KEY = process.env.ADMIN_API_KEY || 'wishlist-admin-2026';
+// Admin API Key - MUST be set in Railway environment variables
+// Generate a secure key: openssl rand -base64 32
+const ADMIN_KEY = process.env.ADMIN_API_KEY;
+
+if (!ADMIN_KEY) {
+    console.warn('[ADMIN] Warning: ADMIN_API_KEY not set. Admin endpoints disabled.');
+}
 
 const adminAuth = (req: Request, res: Response, next: Function) => {
+    if (!ADMIN_KEY) {
+        return res.status(503).json({ error: 'Admin API not configured' });
+    }
     const apiKey = req.headers['x-admin-key'] || req.query.key;
     if (apiKey !== ADMIN_KEY) {
         return res.status(401).json({ error: 'Unauthorized' });

@@ -141,3 +141,10 @@ wishlist-app/
 - **問題**：某些電商網站阻擋伺服器下載圖片
 - **解決方案**：使用隨機 User-Agent headers (`getRandomHeaders()`)
 
+
+### Issue D11: CSP Blocking External Images (2026-01-03)
+- **問題**：Gemini Fallback 使用 ui-avatars.com 或直接連結外部圖片時，圖片無法顯示
+- **錯誤訊息**：`Refused to load the image ... because it violates the following Content Security Policy directive: "img-src 'self' data:"`
+- **原因**：Helmet 預設 CSP 嚴格限制 `img-src` 僅允許 `self` 和 `data:`
+- **解決方案**：在 `server/src/index.ts` 的 `helmet()` 設定中，明確開放 `img-src` 包含 `https:`, `http:`, `*`
+- **預防**：未來新增外部資源引用時，需同步檢查 Helmet CSP 設定

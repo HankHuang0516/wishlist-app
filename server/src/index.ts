@@ -27,8 +27,16 @@ const port = parseInt(process.env.PORT || '8000', 10);
 
 // Security Middleware
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-})); // Set security HTTP headers with relaxed CORP for images
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "http:", "*"], // Allow images from any source
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Required for some inline scripts
+      connectSrc: ["'self'", "https:", "http:"], // Allow connecting to APIs
+    },
+  },
+}));
 
 // Trust proxy (required for Railway/reverse proxy to work with rate-limit)
 app.set('trust proxy', 1);

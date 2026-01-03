@@ -11,7 +11,7 @@ Before starting ANY task in this project, you MUST:
 ## 0. 🔴 Auto Bug Check (Priority)
 **First**, check if there are any crawler errors in production:
 ```
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-admin-2026
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-secure-admin-2026-xK9p
 ```
 
 - If `count > 0`: **STOP!** Alert the user about the errors and offer to investigate/fix before proceeding with their task.

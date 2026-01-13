@@ -176,8 +176,12 @@ export const flickrService = {
             });
 
             const sizes = sizesRes.sizes.size;
-            const targetSize = sizes.find((s: any) => s.label === 'Original') ||
+            // Prioritize 'Large' sizes over 'Original' to ensure public accessibility
+            // Flickr's Original size can be restricted even for public photos
+            const targetSize = sizes.find((s: any) => s.label === 'Large 2048') ||
+                sizes.find((s: any) => s.label === 'Large 1600') ||
                 sizes.find((s: any) => s.label === 'Large') ||
+                sizes.find((s: any) => s.label === 'Original') ||
                 sizes[sizes.length - 1];
 
             if (targetSize && targetSize.source) {

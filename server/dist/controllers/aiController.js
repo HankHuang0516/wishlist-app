@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractItemDetails = exports.analyzeTextHandler = exports.analyzeImage = exports.analyzeText = exports.analyzeProductText = exports.analyzeLocalImage = void 0;
+exports.extractItemDetails = exports.analyzeTextHandler = exports.analyzeImage = exports.analyzeText = exports.analyzeProductText = exports.searchGoogleWeb = exports.validateImageUrl = exports.isImageAccessible = exports.analyzeLocalImage = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs_1 = __importDefault(require("fs"));
@@ -20,7 +20,13 @@ const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 // Initialize Gemini
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+const model = genAI.getGenerativeModel({
+    model: "gemini-flash-latest",
+    tools: [
+        // @ts-ignore
+        { googleSearch: {} }
+    ]
+});
 // Helper to convert buffer to generative part
 function fileToGenerativePart(buffer, mimeType) {
     return {
@@ -71,6 +77,10 @@ const analyzeLocalImage = (file_1, ...args_1) => __awaiter(void 0, [file_1, ...a
     }
 });
 exports.analyzeLocalImage = analyzeLocalImage;
+// Helper: Validate if image is accessible (delegated to lib)
+const imageValidator_1 = require("../lib/imageValidator");
+Object.defineProperty(exports, "isImageAccessible", { enumerable: true, get: function () { return imageValidator_1.isImageAccessible; } });
+Object.defineProperty(exports, "validateImageUrl", { enumerable: true, get: function () { return imageValidator_1.validateImageUrl; } });
 // Helper: Google Custom Search for Image
 const searchGoogleImage = (query) => __awaiter(void 0, void 0, void 0, function* () {
     const cseId = process.env.GOOGLE_CSE_ID;
@@ -80,12 +90,31 @@ const searchGoogleImage = (query) => __awaiter(void 0, void 0, void 0, function*
         return null; // Fallback to Gemini hallucination (or random)
     }
     try {
-        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query)}&searchType=image&num=1&safe=active`;
+        // -site:facebook.com -site:instagram.com to exclude social media noise
+        // Search for more items (num=5) to have a pool for validation
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query + " -site:facebook.com -site:instagram.com")}&searchType=image&num=5&safe=active`;
         const axios = require('axios');
         const res = yield axios.get(url);
         if (res.data.items && res.data.items.length > 0) {
-            console.log("Found Google Image:", res.data.items[0].link);
-            return res.data.items[0].link;
+            console.log(`[ImageSearch] Found ${res.data.items.length} candidates. Validating...`);
+            // Iterate through items to find the first ACCESSIBLE one
+            for (const item of res.data.items) {
+                const link = item.link || '';
+                // 1. Static Filter (Exclude known bad domains)
+                if (link.includes('fbsbx.com') || link.includes('facebook.com') || link.includes('instagram.com')) {
+                    continue;
+                }
+                // 2. Dynamic Validation (Check if URL is alive)
+                const isValid = yield (0, imageValidator_1.isImageAccessible)(link);
+                if (isValid) {
+                    console.log("✅ Found Valid Google Image:", link);
+                    return link;
+                }
+                else {
+                    console.log("⚠️ Skipping inaccessible image:", link);
+                }
+            }
+            console.warn("❌ No valid accessible images found in search results.");
         }
         return null;
     }
@@ -94,7 +123,37 @@ const searchGoogleImage = (query) => __awaiter(void 0, void 0, void 0, function*
         return null;
     }
 });
-const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [productName_1, ...args_1], void 0, function* (productName, language = 'traditional chinese') {
+// Helper: Google Custom Search for Web (JSON)
+const searchGoogleWeb = (query) => __awaiter(void 0, void 0, void 0, function* () {
+    const cseId = process.env.GOOGLE_CSE_ID;
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!cseId || !apiKey) {
+        console.warn("Google CSE keys missing. Skipping web search.");
+        return null;
+    }
+    try {
+        // Without searchType=image, it defaults to web
+        const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${cseId}&key=${apiKey}&q=${encodeURIComponent(query)}&num=1&safe=active`;
+        const axios = require('axios'); // Ensure axios is available or use fetch
+        const res = yield axios.get(url);
+        if (res.data.items && res.data.items.length > 0) {
+            const item = res.data.items[0];
+            console.log("Found Google Web Result:", item.title);
+            return {
+                title: item.title,
+                snippet: item.snippet,
+                link: item.link
+            };
+        }
+        return null; // No results
+    }
+    catch (error) {
+        console.error("Google Web Search failed:", (error === null || error === void 0 ? void 0 : error.message) || error);
+        return null;
+    }
+});
+exports.searchGoogleWeb = searchGoogleWeb;
+const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [productName_1, ...args_1], void 0, function* (productName, language = 'traditional chinese', searchContext = null, suggestedSearchQuery = null) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_api_key_here") {
         return {
@@ -108,23 +167,62 @@ const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [prod
         };
     }
     // 1. Try to find a real image using Google Search (if configured)
-    const googleImage = yield searchGoogleImage(productName);
+    // Only search image if we didn't get a confirmed link from searchContext
+    let googleImage = null;
+    if (!searchContext || !searchContext.imageUrl) {
+        googleImage = yield searchGoogleImage((searchContext === null || searchContext === void 0 ? void 0 : searchContext.title) || productName);
+    }
     // 2. Ask Gemini for details + (optional) image url if google failed
+    // Incorporate Search Context if available
+    let contextStr = "";
+    if (searchContext) {
+        contextStr = `
+        Additional Context found from Google Search:
+        Title: "${searchContext.title}"
+        Snippet: "${searchContext.snippet}"
+        Link: "${searchContext.link}"
+        `;
+    }
     const prompt = `
-        User wants to add a product to their wishlist by name: "${productName}".
-        Act as a shopping assistant. Infer the details of this product.
-        Language: ${language}.
+        User wants to add a product to their wishlist.
+        Input: "${productName}"
+        ${contextStr}
+        
+        The input might be a specific **Product Name** OR a **Product URL**.
+        
+        ##########################################################
+        # MANDATORY: YOU MUST USE GOOGLE SEARCH BEFORE ANSWERING #
+        ##########################################################
+        
+        ${suggestedSearchQuery ? `1. EXECUTE THIS EXACT SEARCH: "${suggestedSearchQuery}"
+        2. Read the search results carefully.
+        3. Extract the REAL product name from the search results.
+        4. DO NOT GUESS or HALLUCINATE the product name. If search returns no results, say "Unknown Product".` :
+        `1. SEARCH for the input (especially if it is a URL) to find the actual product page.
+        2. Read the search results to get the REAL product details.`}
+        
+        IMPORTANT ANTI-HALLUCINATION RULES:
+        - If the input is a Momo URL with i_code=XXXXX, the product MUST be from momoshop.com.tw
+        - NEVER return a product name that doesn't match the actual search results
+        - If unsure, return name as "Unknown Product from [Store Name]"
+        
+        Act as a shopping assistant. Language: ${language}.
+        
+        Instructions:
+        - If "Additional Context" is provided, PRIORITIZE it as the source of truth.
+        - If input is a URL, SEARCH for it first, then extract details from results.
+        - NEVER GUESS product names - only use information from search results.
         
         Return JSON object with:
-        1. name: Refined product name (keep user's intent but make it official if clear).
-        2. price: Estimated price (number only).
-        3. currency: ISO currency code.
+        1. name: Exact product name from search results (NOT guessed).
+        2. price: Price from search results (number only). Use 0 if unknown.
+        3. currency: ISO currency code (default: TWD for Taiwan stores).
         4. tags: 3-5 keywords.
         5. shoppingLink: A generic search URL for this product on Google Shopping.
-        6. description: Brief attractiveness description (1-2 sentences).
-        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'A representative product image URL (Must be a direct link to JPG/PNG from a public site like Wikimedia, Manufacturer, or major CDN. Avoid retailer links that valid anti-bot/403). If unsure, leave null.'}
+        6. description: Brief description (1-2 sentences) from search results.
+        7. imageUrl: ${googleImage ? 'IGNORE THIS FIELD (Use provided)' : 'Product image URL from search results. Must be direct JPG/PNG link. Leave null if unsure.'}
         
-        Return ONLY JSON.
+        Return ONLY valid JSON, no markdown.
     `;
     const result = yield model.generateContent(prompt);
     const response = yield result.response;
@@ -135,8 +233,17 @@ const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [prod
         // Ensure shopping link exists
         data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
         // Use Google Image if found, otherwise keep Gemini's or null
+        // Double Fallback: If we didn't find an image initially (e.g. because input was a URL),
+        // but now we have a proper Product Name from Gemini, try searching Image again!
         if (googleImage) {
             data.imageUrl = googleImage;
+        }
+        else if (!data.imageUrl && data.name) {
+            console.log(`[AI] Initial image search failed, trying again with inferred name: "${data.name}"`);
+            const secondaryImage = yield searchGoogleImage(data.name);
+            if (secondaryImage) {
+                data.imageUrl = secondaryImage;
+            }
         }
         return data;
     }

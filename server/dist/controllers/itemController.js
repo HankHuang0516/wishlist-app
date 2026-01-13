@@ -51,12 +51,47 @@ const aiController_1 = require("./aiController");
 const fs_1 = __importDefault(require("fs"));
 const cheerio = __importStar(require("cheerio"));
 const path_1 = __importDefault(require("path"));
+const flickr_1 = require("../lib/flickr");
+// User-Agent Pool for rotation
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+];
+const getRandomHeaders = () => {
+    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    return {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    };
+};
 // Async AI Processor
-const processItemAi = (itemId, imagePath, originalName) => __awaiter(void 0, void 0, void 0, function* () {
+const processItemAi = (itemId, imagePathOrUrl, originalName) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log(`[AsyncAI] Starting analysis for Item ${itemId}`);
-        // Read file buffer
-        const imageBuffer = fs_1.default.readFileSync(imagePath);
+        let imageBuffer;
+        // Check if it's a URL or local file path
+        if (imagePathOrUrl.startsWith('http')) {
+            // Download from URL (Flickr URL)
+            console.log(`[AsyncAI] Downloading image from URL: ${imagePathOrUrl}`);
+            const response = yield fetch(imagePathOrUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download image: ${response.statusText}`);
+            }
+            const arrayBuffer = yield response.arrayBuffer();
+            imageBuffer = Buffer.from(arrayBuffer);
+        }
+        else {
+            // Read from local file path
+            imageBuffer = fs_1.default.readFileSync(imagePathOrUrl);
+        }
         const fileForAi = {
             buffer: imageBuffer,
             mimetype: 'image/jpeg', // simplified, or detect from path
@@ -70,17 +105,39 @@ const processItemAi = (itemId, imagePath, originalName) => __awaiter(void 0, voi
                 name: aiResult.name,
                 price: aiResult.price ? String(aiResult.price) : undefined,
                 currency: aiResult.currency,
-                link: aiResult.shoppingLink,
+                aiLink: aiResult.shoppingLink, // Save to aiLink, not link (user link)
                 notes: aiResult.description,
-                // tags: aiResult.tags // Schema doesn't have tags yet, maybe put in notes or new field? User didn't ask for tags DB field specifically but UI shows it.
-                // For now, let's append tags to notes or description if needed.
+                // tags: aiResult.tags
                 aiStatus: 'COMPLETED',
                 aiError: null
             }
         });
+        // No need to upload to Flickr again if it's already a Flickr URL
+        if (!imagePathOrUrl.startsWith('http')) {
+            // Only upload to Flickr if we used a local file path
+            try {
+                const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, `item_${itemId}_${Date.now()}.jpg`, `Item ${itemId} - ${aiResult.name || originalName}`);
+                if (flickrUrl) {
+                    console.log(`[AsyncAI] Migrated Item ${itemId} to Flickr: ${flickrUrl}`);
+                    yield prisma_1.default.item.update({
+                        where: { id: itemId },
+                        data: { imageUrl: flickrUrl }
+                    });
+                    // Clean up local file after successful Flickr upload
+                    try {
+                        fs_1.default.unlinkSync(imagePathOrUrl);
+                    }
+                    catch (e) {
+                        console.warn(`[AsyncAI] Failed to delete temp file:`, e);
+                    }
+                }
+            }
+            catch (flickrErr) {
+                console.error(`[AsyncAI] Flickr upload failed for Item ${itemId}`, flickrErr);
+                // Continue, don't fail the whole process
+            }
+        }
         console.log(`[AsyncAI] Completed Item ${itemId}`);
-        // Clean up temp file if needed, but for now user wants persistence so maybe keep it?
-        // Actually we need persistent storage. For now, assuming imagePath is stable.
     }
     catch (error) {
         console.error(`[AsyncAI] Failed for Item ${itemId}:`, error);
@@ -101,20 +158,44 @@ const createItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         if (!file) {
             return res.status(400).json({ error: 'Image is required' });
         }
-        // 1. Create Item with PENDING status
-        // We'll use the uploaded file path as imageUrl for now (served statically)
-        const imageUrl = `/uploads/${file.filename}`; // Assuming multer saves to public/uploads or similar
+        // 1. Upload to Flickr immediately
+        console.log('[CreateItem] Uploading image to Flickr...');
+        const imageBuffer = fs_1.default.readFileSync(file.path);
+        const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, `item_${Date.now()}_${file.originalname}`, 'New wishlist item', 'wishlist-app');
+        // Use Flickr URL or fallback to local if upload failed
+        const imageUrl = flickrUrl || `/uploads/${file.filename}`;
+        if (flickrUrl) {
+            console.log('[CreateItem] Flickr upload successful:', flickrUrl);
+            // Clean up local file since we have Flickr URL
+            try {
+                fs_1.default.unlinkSync(file.path);
+            }
+            catch (e) {
+                console.warn('[CreateItem] Failed to delete temp file:', e);
+            }
+        }
+        else {
+            console.warn('[CreateItem] Flickr upload failed, using local path');
+        }
+        // 2. Create Item with PENDING status
         const item = yield prisma_1.default.item.create({
             data: {
                 name: 'Analyzing...', // Placeholder
                 wishlistId: Number(wishlistId),
-                imageUrl: imageUrl, // Save relative path
+                imageUrl: imageUrl, // Use Flickr URL
                 aiStatus: 'PENDING'
             }
         });
-        // 2. Trigger Async AI
-        // Don't await this! Fire and forget.
-        processItemAi(item.id, file.path, file.originalname);
+        // 3. Trigger Async AI
+        // If we have Flickr URL, pass that, otherwise pass local file path
+        if (flickrUrl) {
+            // Use Flickr URL for AI analysis
+            processItemAi(item.id, flickrUrl, file.originalname);
+        }
+        else {
+            // Fallback to local file path
+            processItemAi(item.id, file.path, file.originalname);
+        }
         res.status(201).json(item);
     }
     catch (error) {
@@ -213,19 +294,37 @@ const updateItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 exports.updateItem = updateItem;
 // Async URL Processor
 const processUrlAi = (itemId, url, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         console.log(`[AsyncURL] Processing ${url} for Item ${itemId}`);
+        // PROACTIVE SMART SEARCH: Skip direct scraping for known blocked sites
+        // These sites block cloud IPs, so we use Google Custom Search + AI
+        const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
+        if (momoMatch && momoMatch[1]) {
+            const iCode = momoMatch[1];
+            // D15 FIX: Use Google Custom Search API first for reliable context
+            // Then pass the context to Gemini for parsing
+            const query = `momo購物網 ${iCode}`;
+            console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
+            // Try Google Custom Search first for reliable product info
+            const searchContext = yield (0, aiController_1.searchGoogleWeb)(query);
+            if (searchContext) {
+                console.log(`[AsyncURL] Got search context: ${searchContext.title}`);
+            }
+            else {
+                console.log(`[AsyncURL] No search context found, AI will try grounding`);
+            }
+            yield processTextAi(itemId, url, userId, searchContext, query);
+            return;
+        }
         // 1. Fetch HTML with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
         let html = '';
         try {
+            const headers = getRandomHeaders();
             const response = yield fetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-                },
+                headers: headers,
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -235,6 +334,17 @@ const processUrlAi = (itemId, url, userId) => __awaiter(void 0, void 0, void 0, 
             html = yield response.text();
             // Scraping Success
             const $ = cheerio.load(html);
+            // 1. Check for Soft Block / Captcha / Access Denied (Common in Shopee/Amazon)
+            const pageTitle = $('title').text().trim().toLowerCase();
+            const bodyText = $('body').text().toLowerCase();
+            const isSoftBlock = pageTitle.includes('robot') ||
+                pageTitle.includes('shopee') && pageTitle.includes('login') ||
+                pageTitle.includes('access denied') ||
+                pageTitle.includes('verify you are human');
+            if (isSoftBlock) {
+                console.warn(`[AsyncURL] Soft block detected (Title: "${pageTitle}"), forcing AI fallback...`);
+                throw new Error('Soft Block Detected');
+            }
             // ... (Extract logic mostly same as before) ...
             let imageUrl = $('meta[property="og:image"]').attr('content') ||
                 $('meta[name="twitter:image"]').attr('content') ||
@@ -253,50 +363,126 @@ const processUrlAi = (itemId, url, userId) => __awaiter(void 0, void 0, void 0, 
                 const savePath = path_1.default.join('public', 'uploads', filename);
                 const dbImageUrl = `/uploads/${filename}`;
                 fs_1.default.writeFileSync(savePath, imageBuffer);
+                let finalImageUrl = dbImageUrl;
+                // Flickr Persistence
+                const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, filename, `Scraped Item ${itemId}`);
+                if (flickrUrl) {
+                    finalImageUrl = flickrUrl;
+                }
                 // Update Item with Image
                 yield prisma_1.default.item.update({
                     where: { id: itemId },
-                    data: { imageUrl: dbImageUrl }
+                    data: { imageUrl: finalImageUrl }
                 });
                 // Trigger Image AI
                 yield processItemAi(itemId, savePath, 'url_image.jpg');
                 return;
             }
+            else {
+                // No image found, treat as scraping failure to trigger fallback
+                throw new Error('No image found on page');
+            }
         }
         catch (fetchError) {
-            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), trying Gemini with URL only...`);
-        }
-        // Fallback: Ask Gemini with just the URL
-        // We'll treat the URL as text input for Gemini (Text-only model needed? Flash supports text)
-        // We need to import model from aiController or reuse a function.
-        // Let's assume we can export `analyzeText` from aiController or just invoke generateContent here.
-        // For simplicity, I'll update `aiController` to export `analyzeText` or similar, OR just import `model` if possible.
-        // `aiController` exports `analyzeLocalImage`. 
-        // I will add a special fallback logic here calling the AI directly or update Item status to FAILED if we can't do text-only easily here without refactoring aiController.
-        // But user ASKED for it. So I will try to implement a text-fallback.
-        // Since I cannot easily import `model` from `aiController` (it is not exported), 
-        // I will update the item to FAILED for now but with a specific error message.
-        // Wait, I can't leave it as is if I promised the user.
-        // I will mark it as FAILED but note "Web access denied".
-        yield prisma_1.default.item.update({
-            where: { id: itemId },
-            data: {
-                aiStatus: 'FAILED',
-                aiError: '無法讀取網頁內容 (403 Forbidden)'
+            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), checking AI fallback...`);
+            // SMART FALLBACK LOGIC
+            // 1. If it's Shopee/Amazon with IDs, use Smart Search
+            let searchContext = null;
+            // Shopee regex: shopee.tw/product/SHOP_ID/ITEM_ID or name-i.SHOP.ITEM
+            const shopeeMatch = url.match(/shopee\.tw\/product\/(\d+)\/(\d+)/i) ||
+                url.match(/shopee\.tw\/.*?-i\.(\d+)\.(\d+)/i);
+            if (shopeeMatch) {
+                const id1 = shopeeMatch[1];
+                const id2 = shopeeMatch[2];
+                if (id1 && id2) {
+                    const query = `site:shopee.tw "${id1}" "${id2}"`;
+                    console.log(`[AsyncURL] Smart Search for Shopee IDs: ${id1}, ${id2} (Query: ${query})`);
+                    // Even if custom search fails (returns null), we pass the QUERY string as a hint to Gemini!
+                    // This is the key fix: Let Gemini do the search using this exact query string.
+                    searchContext = yield (0, aiController_1.searchGoogleWeb)(query);
+                    if (!searchContext) {
+                        // Pass the query itself as a "context" object or separate arg?
+                        // We need to update processTextAi signature to accept this hint.
+                        // Let's pass it via a modified call.
+                        yield processTextAi(itemId, url, userId, null, query);
+                        return;
+                    }
+                }
             }
-        });
+            // Momo regex: momoshop.com.tw/goods/GoodsDetail.jsp?i_code=XXXXXX
+            const momoMatch = url.match(/momoshop\.com\.tw.*[?&]i_code=(\d+)/i);
+            if (momoMatch && momoMatch[1]) {
+                const iCode = momoMatch[1];
+                const query = `site:momoshop.com.tw i_code=${iCode}`;
+                console.log(`[AsyncURL] Smart Search for Momo i_code: ${iCode} (Query: ${query})`);
+                searchContext = yield (0, aiController_1.searchGoogleWeb)(query);
+                if (!searchContext) {
+                    yield processTextAi(itemId, url, userId, null, query);
+                    return;
+                }
+            }
+            // PChome regex: 24h.pchome.com.tw/prod/XXXXX
+            const pchomeMatch = url.match(/pchome\.com\.tw\/prod\/([A-Z0-9-]+)/i);
+            if (pchomeMatch && pchomeMatch[1]) {
+                const prodId = pchomeMatch[1];
+                const query = `site:pchome.com.tw ${prodId}`;
+                console.log(`[AsyncURL] Smart Search for PChome prod: ${prodId} (Query: ${query})`);
+                searchContext = yield (0, aiController_1.searchGoogleWeb)(query);
+                if (!searchContext) {
+                    yield processTextAi(itemId, url, userId, null, query);
+                    return;
+                }
+            }
+            // AI Fallback Logic:
+            try {
+                console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url} (Context: ${(searchContext === null || searchContext === void 0 ? void 0 : searchContext.title) || 'None'})`);
+                yield processTextAi(itemId, url, userId, searchContext);
+                return;
+            }
+            catch (fallbackError) {
+                console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
+                // Log crawler failure to database
+                yield prisma_1.default.crawlerLog.create({
+                    data: {
+                        userId,
+                        url,
+                        errorMessage: fetchError.message || 'Unknown fetch error',
+                        debugMessage: `AI Fallback also failed: ${fallbackError.message}`
+                    }
+                });
+                yield prisma_1.default.item.update({
+                    where: { id: itemId },
+                    data: {
+                        aiStatus: 'FAILED',
+                        aiError: `無法讀取網頁且 AI 分析失敗 (${fetchError.message})`
+                    }
+                });
+            }
+        }
     }
     catch (error) {
         console.error(`[AsyncURL] Fatal error for Item ${itemId}:`, error);
+        // Log fatal crawler error to database
+        yield prisma_1.default.crawlerLog.create({
+            data: {
+                userId,
+                url,
+                errorMessage: error.message || 'Unknown fatal error',
+                debugMessage: ((_a = error.stack) === null || _a === void 0 ? void 0 : _a.substring(0, 500)) || null
+            }
+        });
         yield prisma_1.default.item.update({ where: { id: itemId }, data: { aiStatus: 'FAILED', aiError: error.message } });
     }
 });
-// Force Redeploy: Triggering new build for D9 Fix
+// Force Redeploy: Triggering new build for D9 Fix (Image Download User-Agent)
 const downloadImage = (url, itemId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const imageRes = yield fetch(url);
-        if (!imageRes.ok)
+        const headers = getRandomHeaders(); // Reuse existing pool
+        const imageRes = yield fetch(url, { headers });
+        if (!imageRes.ok) {
+            console.warn(`[DownloadImage] Failed to fetch ${url} (Status: ${imageRes.status})`);
             return null;
+        }
         const arrayBuffer = yield imageRes.arrayBuffer();
         const imageBuffer = Buffer.from(arrayBuffer);
         const filename = `ai_${itemId}_${Date.now()}.jpg`;
@@ -307,33 +493,33 @@ const downloadImage = (url, itemId) => __awaiter(void 0, void 0, void 0, functio
         }
         const savePath = path_1.default.join(uploadDir, filename);
         fs_1.default.writeFileSync(savePath, imageBuffer);
-        return `/uploads/${filename}`;
+        let finalPath = `/uploads/${filename}`;
+        // Flickr Persistence
+        const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, filename, `Downloaded Item ${itemId}`);
+        if (flickrUrl) {
+            finalPath = flickrUrl;
+        }
+        return finalPath;
     }
     catch (e) {
         console.error(`Failed to download image from ${url}:`, e);
         return null; // Fail gracefully
     }
 });
-const processTextAi = (itemId, text) => __awaiter(void 0, void 0, void 0, function* () {
+const processTextAi = (itemId_1, text_1, userId_1, ...args_1) => __awaiter(void 0, [itemId_1, text_1, userId_1, ...args_1], void 0, function* (itemId, text, userId, searchContext = null, suggestedQuery = null) {
     try {
-        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId}`);
-        const result = yield (0, aiController_1.analyzeProductText)(text);
-        let finalImageUrl = null;
-        if (result.imageUrl) {
-            // Download the image to avoid hotlinking 403 errors
-            finalImageUrl = yield downloadImage(result.imageUrl, itemId);
-        }
-        // Fallback if no image found or download failed
+        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
+        const result = yield (0, aiController_1.analyzeProductText)(text, 'traditional chinese', searchContext, suggestedQuery);
+        // Option C: Use original image URL directly (no download)
+        // Railway's ephemeral filesystem causes downloaded images to disappear on redeploy
+        // TODO: Consider Cloudinary for persistent image storage in the future
+        let finalImageUrl = result.imageUrl || null;
+        // Fallback if no image URL from AI
         if (!finalImageUrl) {
-            // Check tags or name to guess category
+            // Generate a placeholder based on product name
             const lowerName = (result.name || text).toLowerCase();
             if (lowerName.includes('sony') || lowerName.includes('headphone') || lowerName.includes('audio')) {
-                finalImageUrl = '/uploads/fallback_tech.png'; // We need to ensure this file exists! 
-                // Actually, let's just use a placeholder service or a constant for now if we can't upload assets easily.
-                // Or better, set a specific "category" field and let frontend handle it? 
-                // DB has no category.
-                // I will use a reliable public placeholder for now.
-                finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
+                finalImageUrl = '/uploads/fallback_tech.png';
             }
             else {
                 finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
@@ -345,7 +531,7 @@ const processTextAi = (itemId, text) => __awaiter(void 0, void 0, void 0, functi
                 name: result.name || text,
                 price: result.price ? String(result.price) : undefined,
                 currency: result.currency,
-                link: result.shoppingLink,
+                aiLink: result.shoppingLink, // Save to aiLink, not link (user link)
                 imageUrl: finalImageUrl, // Use local path or fallback
                 notes: result.description,
                 aiStatus: 'COMPLETED',
@@ -355,6 +541,15 @@ const processTextAi = (itemId, text) => __awaiter(void 0, void 0, void 0, functi
     }
     catch (error) {
         console.error(`[AsyncText] Failed for Item ${itemId}:`, error);
+        // Log AI errors to CrawlerLog for monitoring
+        yield prisma_1.default.crawlerLog.create({
+            data: {
+                userId,
+                url: text, // The input text or URL
+                errorMessage: error.message || 'Unknown AI error',
+                debugMessage: `AI processing failed. Suggested query: ${suggestedQuery || 'None'}`
+            }
+        });
         yield prisma_1.default.item.update({
             where: { id: itemId },
             data: { aiStatus: 'FAILED', aiError: error.message }
@@ -386,7 +581,7 @@ const createItemFromUrl = (req, res) => __awaiter(void 0, void 0, void 0, functi
             processUrlAi(item.id, url, userId);
         }
         else {
-            processTextAi(item.id, url);
+            processTextAi(item.id, url, userId);
         }
     }
     catch (error) {
@@ -440,6 +635,7 @@ const cloneItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 price: sourceItem.price,
                 currency: sourceItem.currency,
                 link: sourceItem.link,
+                aiLink: sourceItem.aiLink, // Copy AI link as well
                 imageUrl: sourceItem.imageUrl,
                 notes: sourceItem.notes,
                 wishlistId: Number(targetId),

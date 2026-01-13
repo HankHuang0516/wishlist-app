@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createFeedback = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const aiController_1 = require("./aiController");
+const emailService_1 = require("../lib/emailService"); // Static import
 const createFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user.id;
@@ -22,6 +23,7 @@ const createFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
         if (!content) {
             return res.status(400).json({ error: 'Content is required' });
         }
+        console.log(`[Feedback] Received from User ${userId}:`, content);
         // Check Cooldown (10 minutes)
         const user = yield prisma_1.default.user.findUnique({
             where: { id: userId }
@@ -29,14 +31,7 @@ const createFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
         if (user === null || user === void 0 ? void 0 : user.lastFeedbackAt) {
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
             if (user.lastFeedbackAt > tenMinutesAgo) {
-                const remaining = Math.ceil((user.lastFeedbackAt.getTime() - tenMinutesAgo.getTime()) / 60000); // Wait, logic might be tricky.
-                // lastFeedbackAt > tenMinutesAgo implies it was RECENT.
-                // Reset calculation:
-                // nextAllowed = lastFeedbackAt + 10 mins.
-                // remaining = nextAllowed - now.
-                const nextAllowed = new Date(user.lastFeedbackAt.getTime() + 10 * 60 * 1000);
-                const remainingMinutes = Math.ceil((nextAllowed.getTime() - Date.now()) / 60000);
-                return res.status(429).json({ error: `Please wait ${remainingMinutes} minutes before sending more feedback.` });
+                return res.status(429).json({ error: 'Please wait 10 minutes between feedback.' });
             }
         }
         // Analyze with AI
@@ -56,6 +51,21 @@ const createFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
             where: { id: userId },
             data: { lastFeedbackAt: new Date() }
         });
+        // Send Notification Email
+        console.log('[Feedback] Attempting to send email notification...');
+        const emailContent = `
+            <h2>New Feedback Received</h2>
+            <p><strong>User ID:</strong> ${userId}</p>
+            <p><strong>Content:</strong></p>
+            <blockquote>${content}</blockquote>
+            <p><strong>AI Analysis:</strong></p>
+            <pre>${safeAiResponse}</pre>
+        `;
+        // Fire and forget (don't block response) - Use new port/timeout settings
+        console.log('[Feedback] Email Send Initiated (Background)...');
+        (0, emailService_1.sendEmail)('hankhuang0516@gmail.com', 'New User Feedback - Wishlist App', emailContent)
+            .then(res => console.log('[Feedback] Email Result:', res))
+            .catch(err => console.error('[Feedback] Email Failed:', err));
         res.status(201).json({
             message: 'Feedback received',
             aiAnalysis: safeAiResponse

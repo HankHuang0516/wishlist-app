@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flickr Image Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Flickr Image Display Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Direct Flickr URL</h2>
+        <p>URL: <code>https://live.staticflickr.com/65535/55038197737_2bfc0dafa7_o.png</code></p>
+        <img
+            src="https://live.staticflickr.com/65535/55038197737_2bfc0dafa7_o.png"
+            alt="任天堂 Switch（OLED款式）"
+            onload="document.getElementById('status1').className='status success'; document.getElementById('status1').textContent='✅ Image loaded successfully'"
+            onerror="document.getElementById('status2').className='status error'; document.getElementById('status1').textContent='❌ Failed to load image'"
+        >
+        <div id="status1" class="status">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Other Flickr Images</h2>
+        <h3>Dyson V15</h3>
+        <img
+            src="https://live.staticflickr.com/65535/55038197612_975454f4a9_o.png"
+            alt="Dyson V15"
+        >
+
+        <h3>東京豪德寺招財貓</h3>
+        <img
+            src="https://live.staticflickr.com/65535/55039443925_42d517fb26_o.jpg"
+            alt="東京豪德寺招財貓"
+        >
+
+        <h3>Apple iPhone 17</h3>
+        <img
+            src="https://live.staticflickr.com/65535/55038197922_3e6abf3933_o.jpg"
+            alt="Apple iPhone 17"
+        >
+    </div>
+
+    <div class="test-section">
+        <h2>Network Inspector</h2>
+        <p>請開啟瀏覽器的開發者工具（F12）查看 Network 標籤，檢查：</p>
+        <ul>
+            <li>圖片請求的 HTTP 狀態碼</li>
+            <li>是否有 CORS 錯誤</li>
+            <li>Response headers</li>
+        </ul>
+    </div>
+
+    <script>
+        // Check if images can be fetched
+        async function testImageFetch(url) {
+            try {
+                const response = await fetch(url, { mode: 'no-cors' });
+                console.log(`Fetch ${url}:`, response);
+            } catch (error) {
+                console.error(`Fetch error for ${url}:`, error);
+            }
+        }
+
+        testImageFetch('https://live.staticflickr.com/65535/55038197737_2bfc0dafa7_o.png');
+    </script>
+</body>
+</html>

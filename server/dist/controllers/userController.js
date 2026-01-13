@@ -15,6 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPurchaseHistory = exports.getPurchasedItems = exports.updateSubscription = exports.cancelSubscription = exports.updatePassword = exports.uploadAvatar = exports.getUserProfile = exports.updateMe = exports.getMe = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const flickr_1 = require("../lib/flickr");
+const fs_1 = __importDefault(require("fs"));
 // Get current user's full profile (Settings page)
 const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -123,7 +125,17 @@ const uploadAvatar = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         if (!file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        const avatarUrl = `/uploads/${file.filename}`;
+        let avatarUrl = `/uploads/${file.filename}`;
+        try {
+            const imageBuffer = fs_1.default.readFileSync(file.path);
+            const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, `avatar_${userId}_${Date.now()}.jpg`, `Avatar for User ${userId}`);
+            if (flickrUrl) {
+                avatarUrl = flickrUrl;
+            }
+        }
+        catch (err) {
+            console.error('[UploadAvatar] Flickr upload failed:', err);
+        }
         const updatedUser = yield prisma_1.default.user.update({
             where: { id: userId },
             data: { avatarUrl }

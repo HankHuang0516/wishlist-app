@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx ts-node:*)",
+      "Bash($env:FLICKR_API_KEY=\"63e5e74b99b60fd251c0f4ffdbd669c5\")",
+      "Bash($env:FLICKR_API_SECRET=\"c838d03f399b981a\")",
+      "Bash(timeout /t 3)",
+      "Bash(powershell -Command \"$env:FLICKR_API_KEY=''63e5e74b99b60fd251c0f4ffdbd669c5''; $env:FLICKR_API_SECRET=''c838d03f399b981a''; npx ts-node scripts/get_flickr_token.ts\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File run_flickr_oauth.ps1)",
+      "Bash(timeout /t 5)",
+      "Bash(node -e:*)",
+      "Bash(npm info:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

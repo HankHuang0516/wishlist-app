@@ -4,6 +4,7 @@ import { analyzeLocalImage, analyzeProductText, searchGoogleWeb } from './aiCont
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import path from 'path';
+import { flickrService } from '../lib/flickr';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -32,12 +33,27 @@ const getRandomHeaders = () => {
 };
 
 // Async AI Processor
-const processItemAi = async (itemId: number, imagePath: string, originalName: string) => {
+const processItemAi = async (itemId: number, imagePathOrUrl: string, originalName: string) => {
     try {
         console.log(`[AsyncAI] Starting analysis for Item ${itemId}`);
 
-        // Read file buffer
-        const imageBuffer = fs.readFileSync(imagePath);
+        let imageBuffer: Buffer;
+
+        // Check if it's a URL or local file path
+        if (imagePathOrUrl.startsWith('http')) {
+            // Download from URL (Flickr URL)
+            console.log(`[AsyncAI] Downloading image from URL: ${imagePathOrUrl}`);
+            const response = await fetch(imagePathOrUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download image: ${response.statusText}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            imageBuffer = Buffer.from(arrayBuffer);
+        } else {
+            // Read from local file path
+            imageBuffer = fs.readFileSync(imagePathOrUrl);
+        }
+
         const fileForAi = {
             buffer: imageBuffer,
             mimetype: 'image/jpeg', // simplified, or detect from path
@@ -55,17 +71,43 @@ const processItemAi = async (itemId: number, imagePath: string, originalName: st
                 currency: aiResult.currency,
                 aiLink: aiResult.shoppingLink, // Save to aiLink, not link (user link)
                 notes: aiResult.description,
-                // tags: aiResult.tags // Schema doesn't have tags yet, maybe put in notes or new field? User didn't ask for tags DB field specifically but UI shows it.
-                // For now, let's append tags to notes or description if needed.
+                // tags: aiResult.tags
                 aiStatus: 'COMPLETED',
                 aiError: null
             }
         });
 
-        console.log(`[AsyncAI] Completed Item ${itemId}`);
+        // No need to upload to Flickr again if it's already a Flickr URL
+        if (!imagePathOrUrl.startsWith('http')) {
+            // Only upload to Flickr if we used a local file path
+            try {
+                const flickrUrl = await flickrService.uploadImage(
+                    imageBuffer,
+                    `item_${itemId}_${Date.now()}.jpg`,
+                    `Item ${itemId} - ${aiResult.name || originalName}`
+                );
 
-        // Clean up temp file if needed, but for now user wants persistence so maybe keep it?
-        // Actually we need persistent storage. For now, assuming imagePath is stable.
+                if (flickrUrl) {
+                    console.log(`[AsyncAI] Migrated Item ${itemId} to Flickr: ${flickrUrl}`);
+                    await prisma.item.update({
+                        where: { id: itemId },
+                        data: { imageUrl: flickrUrl }
+                    });
+
+                    // Clean up local file after successful Flickr upload
+                    try {
+                        fs.unlinkSync(imagePathOrUrl);
+                    } catch (e) {
+                        console.warn(`[AsyncAI] Failed to delete temp file:`, e);
+                    }
+                }
+            } catch (flickrErr) {
+                console.error(`[AsyncAI] Flickr upload failed for Item ${itemId}`, flickrErr);
+                // Continue, don't fail the whole process
+            }
+        }
+
+        console.log(`[AsyncAI] Completed Item ${itemId}`);
 
     } catch (error: any) {
         console.error(`[AsyncAI] Failed for Item ${itemId}:`, error);
@@ -89,22 +131,50 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Image is required' });
         }
 
-        // 1. Create Item with PENDING status
-        // We'll use the uploaded file path as imageUrl for now (served statically)
-        const imageUrl = `/uploads/${file.filename}`; // Assuming multer saves to public/uploads or similar
+        // 1. Upload to Flickr immediately
+        console.log('[CreateItem] Uploading image to Flickr...');
+        const imageBuffer = fs.readFileSync(file.path);
+        const flickrUrl = await flickrService.uploadImage(
+            imageBuffer,
+            `item_${Date.now()}_${file.originalname}`,
+            'New wishlist item',
+            'wishlist-app'
+        );
 
+        // Use Flickr URL or fallback to local if upload failed
+        const imageUrl = flickrUrl || `/uploads/${file.filename}`;
+
+        if (flickrUrl) {
+            console.log('[CreateItem] Flickr upload successful:', flickrUrl);
+            // Clean up local file since we have Flickr URL
+            try {
+                fs.unlinkSync(file.path);
+            } catch (e) {
+                console.warn('[CreateItem] Failed to delete temp file:', e);
+            }
+        } else {
+            console.warn('[CreateItem] Flickr upload failed, using local path');
+        }
+
+        // 2. Create Item with PENDING status
         const item = await prisma.item.create({
             data: {
                 name: 'Analyzing...', // Placeholder
                 wishlistId: Number(wishlistId),
-                imageUrl: imageUrl, // Save relative path
+                imageUrl: imageUrl, // Use Flickr URL
                 aiStatus: 'PENDING'
             }
         });
 
-        // 2. Trigger Async AI
-        // Don't await this! Fire and forget.
-        processItemAi(item.id, file.path, file.originalname);
+        // 3. Trigger Async AI
+        // If we have Flickr URL, pass that, otherwise pass local file path
+        if (flickrUrl) {
+            // Use Flickr URL for AI analysis
+            processItemAi(item.id, flickrUrl, file.originalname);
+        } else {
+            // Fallback to local file path
+            processItemAi(item.id, file.path, file.originalname);
+        }
 
         res.status(201).json(item);
 
@@ -289,10 +359,22 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 const dbImageUrl = `/uploads/${filename}`;
                 fs.writeFileSync(savePath, imageBuffer);
 
+                let finalImageUrl = dbImageUrl;
+
+                // Flickr Persistence
+                const flickrUrl = await flickrService.uploadImage(
+                    imageBuffer,
+                    filename,
+                    `Scraped Item ${itemId}`
+                );
+                if (flickrUrl) {
+                    finalImageUrl = flickrUrl;
+                }
+
                 // Update Item with Image
                 await prisma.item.update({
                     where: { id: itemId },
-                    data: { imageUrl: dbImageUrl }
+                    data: { imageUrl: finalImageUrl }
                 });
 
                 // Trigger Image AI
@@ -422,7 +504,20 @@ const downloadImage = async (url: string, itemId: number): Promise<string | null
         }
         const savePath = path.join(uploadDir, filename);
         fs.writeFileSync(savePath, imageBuffer);
-        return `/uploads/${filename}`;
+
+        let finalPath = `/uploads/${filename}`;
+
+        // Flickr Persistence
+        const flickrUrl = await flickrService.uploadImage(
+            imageBuffer,
+            filename,
+            `Downloaded Item ${itemId}`
+        );
+        if (flickrUrl) {
+            finalPath = flickrUrl;
+        }
+
+        return finalPath;
     } catch (e) {
         console.error(`Failed to download image from ${url}:`, e);
         return null; // Fail gracefully

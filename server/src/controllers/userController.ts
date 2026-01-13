@@ -2,6 +2,8 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
+import { flickrService } from '../lib/flickr';
+import fs from 'fs';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -133,7 +135,21 @@ export const uploadAvatar = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
-        const avatarUrl = `/uploads/${file.filename}`;
+        let avatarUrl = `/uploads/${file.filename}`;
+
+        try {
+            const imageBuffer = fs.readFileSync(file.path);
+            const flickrUrl = await flickrService.uploadImage(
+                imageBuffer,
+                `avatar_${userId}_${Date.now()}.jpg`,
+                `Avatar for User ${userId}`
+            );
+            if (flickrUrl) {
+                avatarUrl = flickrUrl;
+            }
+        } catch (err) {
+            console.error('[UploadAvatar] Flickr upload failed:', err);
+        }
 
         const updatedUser = await prisma.user.update({
             where: { id: userId },

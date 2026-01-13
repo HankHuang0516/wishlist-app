@@ -145,7 +145,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         const imageUrl = flickrUrl || `/uploads/${file.filename}`;
 
         if (flickrUrl) {
-            console.log('[CreateItem] Flickr upload successful:', flickrUrl);
+            console.log('[CreateItem] ✅ Flickr upload successful:', flickrUrl);
             // Clean up local file since we have Flickr URL
             try {
                 fs.unlinkSync(file.path);
@@ -153,7 +153,8 @@ export const createItem = async (req: AuthRequest, res: Response) => {
                 console.warn('[CreateItem] Failed to delete temp file:', e);
             }
         } else {
-            console.warn('[CreateItem] Flickr upload failed, using local path');
+            console.error('[CreateItem] ❌ FLICKR UPLOAD FAILED - Check environment variables and Flickr service logs above');
+            console.error('[CreateItem] Falling back to local storage:', `/uploads/${file.filename}`);
         }
 
         // 2. Create Item with PENDING status

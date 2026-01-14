@@ -93,6 +93,7 @@ model Item {
   priority    Int      @default(0)
   isPurchased Boolean  @default(false)
   isHidden    Boolean  @default(false)
+  uploadStatus String  @default("PENDING") // PENDING, UPLOADING, COMPLETED, FAILED
   aiStatus    String   @default("PENDING") // PENDING, COMPLETED, FAILED
   aiError     String?
   

@@ -121,6 +121,65 @@ const processItemAi = async (itemId: number, imagePathOrUrl: string, originalNam
     }
 };
 
+// Background Upload Processor
+const processItemUpload = async (itemId: number, filePath: string, filename: string) => {
+    try {
+        console.log(`[AsyncUpload] Starting Flickr upload for Item ${itemId}`);
+
+        await prisma.item.update({
+            where: { id: itemId },
+            data: { uploadStatus: 'UPLOADING' }
+        });
+
+        const imageBuffer = fs.readFileSync(filePath);
+        const flickrUrl = await flickrService.uploadImage(
+            imageBuffer,
+            `item_${itemId}_${Date.now()}_${filename}`,
+            `Item ${itemId}`,
+            'wishlist-app'
+        );
+
+        if (flickrUrl) {
+            console.log(`[AsyncUpload] ✅ Flickr upload successful for Item ${itemId}: ${flickrUrl}`);
+            await prisma.item.update({
+                where: { id: itemId },
+                data: {
+                    imageUrl: flickrUrl,
+                    uploadStatus: 'COMPLETED'
+                }
+            });
+
+            // Clean up local file
+            try {
+                fs.unlinkSync(filePath);
+            } catch (e) {
+                console.warn(`[AsyncUpload] Failed to delete temp file:`, e);
+            }
+
+            // Trigger AI analysis with Flickr URL
+            processItemAi(itemId, flickrUrl, filename);
+        } else {
+            console.error(`[AsyncUpload] ❌ Flickr upload failed for Item ${itemId}`);
+            await prisma.item.update({
+                where: { id: itemId },
+                data: { uploadStatus: 'FAILED' }
+            });
+            // Still try AI with local file
+            processItemAi(itemId, filePath, filename);
+        }
+
+    } catch (error: any) {
+        console.error(`[AsyncUpload] Error for Item ${itemId}:`, error);
+        await prisma.item.update({
+            where: { id: itemId },
+            data: {
+                uploadStatus: 'FAILED',
+                aiError: error.message
+            }
+        });
+    }
+};
+
 export const createItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
@@ -131,53 +190,22 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Image is required' });
         }
 
-        // 1. Upload to Flickr immediately
-        console.log('[CreateItem] Uploading image to Flickr...');
-        const imageBuffer = fs.readFileSync(file.path);
-        const flickrUrl = await flickrService.uploadImage(
-            imageBuffer,
-            `item_${Date.now()}_${file.originalname}`,
-            'New wishlist item',
-            'wishlist-app'
-        );
-
-        // Use Flickr URL or fallback to local if upload failed
-        const imageUrl = flickrUrl || `/uploads/${file.filename}`;
-
-        if (flickrUrl) {
-            console.log('[CreateItem] ✅ Flickr upload successful:', flickrUrl);
-            // Clean up local file since we have Flickr URL
-            try {
-                fs.unlinkSync(file.path);
-            } catch (e) {
-                console.warn('[CreateItem] Failed to delete temp file:', e);
-            }
-        } else {
-            console.error('[CreateItem] ❌ FLICKR UPLOAD FAILED - Check environment variables and Flickr service logs above');
-            console.error('[CreateItem] Falling back to local storage:', `/uploads/${file.filename}`);
-        }
-
-        // 2. Create Item with PENDING status
+        // 1. Create Item immediately with local preview
         const item = await prisma.item.create({
             data: {
                 name: 'Analyzing...', // Placeholder
                 wishlistId: Number(wishlistId),
-                imageUrl: imageUrl, // Use Flickr URL
+                imageUrl: `/uploads/${file.filename}`, // Temporary local path
+                uploadStatus: 'PENDING',
                 aiStatus: 'PENDING'
             }
         });
 
-        // 3. Trigger Async AI
-        // If we have Flickr URL, pass that, otherwise pass local file path
-        if (flickrUrl) {
-            // Use Flickr URL for AI analysis
-            processItemAi(item.id, flickrUrl, file.originalname);
-        } else {
-            // Fallback to local file path
-            processItemAi(item.id, file.path, file.originalname);
-        }
-
+        // 2. Return response immediately (100ms instead of 4000ms!)
         res.status(201).json(item);
+
+        // 3. Trigger background upload + AI processing
+        processItemUpload(item.id, file.path, file.originalname);
 
     } catch (error) {
         console.error('Create Item Error:', error);

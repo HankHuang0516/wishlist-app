@@ -21,6 +21,7 @@ interface Item {
     aiLink?: string;  // AI-generated shopping link
     imageUrl?: string;
     notes?: string;
+    uploadStatus: string; // PENDING, UPLOADING, COMPLETED, FAILED
     aiStatus: string; // PENDING, COMPLETED, FAILED
     aiError?: string;
     isHidden: boolean;
@@ -76,15 +77,19 @@ export default function WishlistDetail() {
         fetchWishlist();
     }, [id]);
 
-    // Separate useEffect for polling AI status
+    // Separate useEffect for polling upload & AI status
     useEffect(() => {
-        const hasPending = wishlist?.items.some(i => i.aiStatus === 'PENDING');
+        const hasPending = wishlist?.items.some(i =>
+            i.uploadStatus === 'PENDING' ||
+            i.uploadStatus === 'UPLOADING' ||
+            i.aiStatus === 'PENDING'
+        );
         if (!hasPending) return;
 
-        // Polling for AI status - only when there are pending items
+        // Polling for upload & AI status - only when there are pending items
         const interval = setInterval(() => {
             fetchWishlist(true); // silent fetch
-        }, 5000); // 5 seconds (increased from 3 to reduce rate limit pressure)
+        }, 3000); // 3 seconds for faster feedback during upload
 
         return () => clearInterval(interval);
     }, [wishlist?.items.length, id]); // Only re-run when items count changes, not on every items update
@@ -341,38 +346,49 @@ export default function WishlistDetail() {
 
             {/* Item List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {wishlist.items.map(item => (
-                    <Card key={item.id} className={`overflow-hidden transition-opacity ${item.isHidden ? 'opacity-50' : 'opacity-100'} border-l-4 ${item.aiStatus === 'COMPLETED' ? 'border-l-green-500' :
-                        item.aiStatus === 'PENDING' ? 'border-l-yellow-500' : 'border-l-red-500'
-                        }`}>
-                        <CardContent className="p-4 flex gap-4 h-full">
-                            {/* Image & Main Info */}
-                            <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
-                                {item.imageUrl ? (
-                                    <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
-                                ) : <span className="text-xs text-gray-400">No Img</span>}
-                                {item.aiStatus === 'PENDING' && (
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <span className="text-xs text-white font-bold animate-pulse">{t('ai.analyzing')}</span>
-                                    </div>
-                                )}
-                            </div>
+                {wishlist.items.map(item => {
+                    const isProcessing = item.uploadStatus !== 'COMPLETED' || item.aiStatus === 'PENDING';
+                    const borderColor = (item.uploadStatus === 'COMPLETED' && item.aiStatus === 'COMPLETED') ? 'border-l-green-500' :
+                        isProcessing ? 'border-l-yellow-500' : 'border-l-red-500';
 
-                            <div className="flex-1 flex flex-col justify-between">
-                                <div>
-                                    <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
-                                    <p className="text-red-500 font-medium">{item.price ? formatPriceWithConversion(item.price, item.currency || 'TWD') : '---'}</p>
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                    {item.aiStatus === 'COMPLETED' ? (
-                                        <span className="text-green-600">{t('ai.complete')}</span>
-                                    ) : item.aiStatus === 'FAILED' ? (
-                                        <span className="text-red-600">{t('ai.failed')}</span>
-                                    ) : (
-                                        <span className="text-yellow-600">{t('ai.analyzing')}...</span>
+                    return (
+                        <Card key={item.id} className={`overflow-hidden transition-opacity ${item.isHidden ? 'opacity-50' : 'opacity-100'} border-l-4 ${borderColor}`}>
+                            <CardContent className="p-4 flex gap-4 h-full">
+                                {/* Image & Main Info */}
+                                <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
+                                    {item.imageUrl ? (
+                                        <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
+                                    ) : <span className="text-xs text-gray-400">No Img</span>}
+                                    {isProcessing && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <span className="text-xs text-white font-bold animate-pulse">
+                                                {item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING'
+                                                    ? '⬆️ Uploading...'
+                                                    : t('ai.analyzing')}
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
-                            </div>
+
+                                <div className="flex-1 flex flex-col justify-between">
+                                    <div>
+                                        <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
+                                        <p className="text-red-500 font-medium">{item.price ? formatPriceWithConversion(item.price, item.currency || 'TWD') : '---'}</p>
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {item.uploadStatus === 'FAILED' ? (
+                                            <span className="text-red-600">Upload Failed</span>
+                                        ) : item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING' ? (
+                                            <span className="text-blue-600 animate-pulse">⬆️ Uploading...</span>
+                                        ) : item.aiStatus === 'COMPLETED' ? (
+                                            <span className="text-green-600">{t('ai.complete')}</span>
+                                        ) : item.aiStatus === 'FAILED' ? (
+                                            <span className="text-red-600">{t('ai.failed')}</span>
+                                        ) : (
+                                            <span className="text-yellow-600">{t('ai.analyzing')}...</span>
+                                        )}
+                                    </div>
+                                </div>
 
                             {/* Actions Column */}
                             <div className="flex flex-col gap-2 justify-center border-l pl-3 ml-1">
@@ -402,7 +418,8 @@ export default function WishlistDetail() {
                             </div>
                         </CardContent>
                     </Card>
-                ))}
+                    );
+                })}
             </div>
 
             {/* FAB & Menu */}

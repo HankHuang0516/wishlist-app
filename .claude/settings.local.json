@@ -11,7 +11,17 @@
       "Bash(node -e:*)",
       "Bash(npm info:*)",
       "Bash(curl:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git push:*)",
+      "Bash(gh api:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(npm run test:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git commit:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npx prisma db push)",
+      "Bash(npx prisma generate:*)"
     ]
   }
 }

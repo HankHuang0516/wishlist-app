@@ -102,8 +102,14 @@ export default function Layout() {
 
             {/* Footer */}
             <footer className="border-t border-muji-border bg-white py-6">
-                <div className="container mx-auto px-4 flex justify-between items-center text-sm text-muji-secondary">
-                    <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
+                <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-muji-secondary gap-4">
+                    <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+                        <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
+                        <div className="flex gap-4">
+                            <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
+                            <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
+                        </div>
+                    </div>
                     <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>
                 </div>
             </footer>

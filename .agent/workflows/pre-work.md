@@ -42,3 +42,4 @@ Based on the task type, read the corresponding documentation as specified in `.c
   - PChome: `https://24h.pchome.com.tw/prod/DSAR0S-A900F7PCX`
   - Shopee: Use any product URL with `/product/ID/ID` format
 - If any fail, check if cloud IP is blocked and add Proactive Smart Search
+- **Verify that all pages match the local language based on the device region**

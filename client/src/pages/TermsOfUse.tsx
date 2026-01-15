@@ -1,4 +1,4 @@
-import { t } from "../utils/localization";
+// import { t } from "../utils/localization";
 
 export default function TermsOfUse() {
     return (

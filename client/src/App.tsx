@@ -12,6 +12,8 @@ import FriendProfilePage from "./pages/FriendProfilePage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PurchaseHistoryPage from "./pages/PurchaseHistoryPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import TermsOfUse from "./pages/TermsOfUse";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import { AuthProvider } from "./context/AuthContext";
 
 function App() {
@@ -23,6 +25,8 @@ function App() {
             <Route index element={<Home />} />
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
+            <Route path="terms" element={<TermsOfUse />} />
+            <Route path="privacy" element={<PrivacyPolicy />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />

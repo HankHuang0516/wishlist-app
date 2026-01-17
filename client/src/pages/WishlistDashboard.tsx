@@ -299,7 +299,11 @@ export default function WishlistDashboard() {
                 </div>
             )}
 
-            {filteredWishlists.length === 0 && !creating && !loading ? (
+            {loading && wishlists.length === 0 ? (
+                <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muji-primary" />
+                </div>
+            ) : filteredWishlists.length === 0 && !creating && !loading ? (
                 <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-200">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Gift className="w-8 h-8 text-gray-400" />

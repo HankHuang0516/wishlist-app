@@ -308,8 +308,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                     alt={currentItem.name}
                                     className="max-h-64 object-contain"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 rounded-lg">
-                                    <span className="bg-black/70 text-white text-xs px-2 py-1 rounded">Click to Zoom</span>
+                                <div className="absolute bottom-2 right-2 bg-black/50 text-white p-1.5 rounded-full pointer-events-none">
+                                    <Maximize2 className="w-4 h-4" />
                                 </div>
                             </>
                         ) : (

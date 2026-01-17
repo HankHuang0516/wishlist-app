@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { t } from "../utils/localization";
 
@@ -108,8 +108,9 @@ export default function FriendProfilePage() {
                                     <User className="w-16 h-16" />
                                     {/* Overlay for hidden explicitly? API returns null if hidden, so we just show default */}
                                     {profile.avatarUrl === null && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/5 text-xs text-gray-500 font-bold">
-                                            {t('friend.hidden')}
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 backdrop-blur-sm text-gray-500">
+                                            <EyeOff className="w-6 h-6 mb-1 opacity-50" />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('friend.hidden')}</span>
                                         </div>
                                     )}
                                 </div>
@@ -125,7 +126,8 @@ export default function FriendProfilePage() {
                         {renderField(t('settings.address'), profile.address, MapPin)}
                     </div>
 
-                    <div className="pt-6 space-y-3">
+                    <div className="pt-6 grid grid-cols-2 gap-3">
+                        {/* View Wishlist - Primary Action */}
                         <Link to={`/users/${id}/wishlists`} className="block w-full">
                             <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
                                 <Gift className="w-5 h-5" />
@@ -133,11 +135,11 @@ export default function FriendProfilePage() {
                             </button>
                         </Link>
 
-                        {/* Follow Button */}
+                        {/* Follow Button - Secondary Action */}
                         {profile.isFollowing ? (
                             <button
                                 onClick={handleUnfollow}
-                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2"
+                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2 border border-gray-200"
                             >
                                 <UserMinus className="w-5 h-5" />
                                 {t('social.unfollow')}
@@ -145,7 +147,7 @@ export default function FriendProfilePage() {
                         ) : (
                             <button
                                 onClick={handleFollow}
-                                className="w-full bg-pink-500 text-white py-3 rounded-md font-medium hover:bg-pink-600 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                className="w-full bg-white text-pink-500 border border-pink-500 py-3 rounded-md font-medium hover:bg-pink-50 transition-colors flex items-center justify-center gap-2"
                             >
                                 <UserPlus className="w-5 h-5" />
                                 {t('social.follow')}

@@ -57,6 +57,7 @@ export default function WishlistDetail() {
     const [editTitle, setEditTitle] = useState("");
     const [editDesc, setEditDesc] = useState("");
     const [editIsPublic, setEditIsPublic] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'item' | 'wishlist', id?: number } | null>(null);
@@ -348,19 +349,15 @@ export default function WishlistDetail() {
                                             }
                                         } else {
                                             navigator.clipboard.writeText(url);
-                                            const btn = document.getElementById('share-btn-text');
-                                            if (btn) {
-                                                const original = btn.innerText;
-                                                btn.innerText = t('detail.copied');
-                                                setTimeout(() => btn.innerText = original, 2000);
-                                            }
+                                            setCopied(true);
+                                            setTimeout(() => setCopied(false), 2000);
                                         }
                                     }}
                                     title={t('wishlist.share')}
                                 >
-                                    <Button variant="outline" size="sm" id="share-btn-text" className="gap-2">
-                                        <LinkIcon className="w-4 h-4" />
-                                        {t('wishlist.share')}
+                                    <Button variant="outline" size="sm" className={`gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200' : ''}`}>
+                                        {copied ? <span className="font-medium">✓</span> : <LinkIcon className="w-4 h-4" />}
+                                        {copied ? t('detail.copied') : t('wishlist.share')}
                                     </Button>
                                 </button>
                                 <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">

@@ -330,6 +330,22 @@ export default function SettingsPage() {
                 </CardContent>
             </Card>
 
+            {/* Notification Settings */}
+            <Link to="/settings/notifications" className="block">
+                <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-muji-secondary">
+                    <CardHeader className="flex flex-row items-center justify-between py-4">
+                        <div className="space-y-1">
+                            <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
+                            <CardDescription>{t('settings.emailNotifs')}</CardDescription>
+                        </div>
+                        <div className="text-muji-secondary">
+                            <i className="fas fa-chevron-right"></i> {/* Or just chevron icon */}
+                            <span className="text-2xl">›</span>
+                        </div>
+                    </CardHeader>
+                </Card>
+            </Link>
+
             {/* Private Info Section */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.privacyTitle')}</h2>

@@ -201,6 +201,20 @@ const translations: Record<string, Record<string, string>> = {
         'wishlist.price': '價格',
         'wishlist.buyNow': '立即購買',
 
+        // Detail
+        'detail.addUrl': '新增連結',
+        'detail.uploadImg': '上傳圖片',
+        'detail.addItemTitle': '新增物品',
+        'detail.itemLabel': '商品網址 (支援各大電商)',
+        'detail.itemPlaceholder': 'https://shopee.tw/product/...',
+        'detail.smartInputTip': '貼上商品網址，AI 將自動為您填寫名稱、價格和圖片！',
+        'detail.cloneTitle': '加入我的清單',
+        'detail.cloneDesc': '選擇要加入的清單',
+        'detail.cloneConfirm': '確認加入',
+        'detail.cloneSuccess': '成功加入清單',
+        'detail.deleteItemTitle': '刪除物品',
+        'detail.deleteItemMsg': '確定要刪除此物品嗎？',
+
         // Common
         'common.loading': '載入中...',
         'common.error': '發生錯誤',
@@ -324,19 +338,7 @@ const translations: Record<string, Record<string, string>> = {
         'dashboard.emptyOwner': '您還沒有建立任何清單。在上方建立一個吧！',
         'dashboard.emptyVisitor': '此用戶尚未建立任何公開清單。',
 
-        // Wishlist Detail
-        'detail.addItemTitle': '新建許願物品',
-        'detail.itemLabel': '商品連結或名稱',
-        'detail.itemPlaceholder': '貼上網址 或 輸入商品名稱',
-        'detail.smartInputTip': '貼上網址可自動抓取圖片；直接輸入名稱，AI 將自動搜尋！',
-        'detail.addUrl': '文字/連結',
-        'detail.uploadImg': '上傳照片',
-        'detail.cloneTitle': '加入到我的願望清單',
-        'detail.cloneDesc': '請選擇要儲存此物品的清單：',
-        'detail.cloneConfirm': '確認加入',
-        'detail.cloneSuccess': '已成功加入您的願望清單！',
-        'detail.deleteItemTitle': '刪除物品',
-        'detail.deleteItemMsg': '您確定要刪除此物品嗎？',
+
     },
     'en-US': {
         // Navigation
@@ -437,6 +439,20 @@ const translations: Record<string, Record<string, string>> = {
         'wishlist.share': 'Share',
         'wishlist.price': 'Price',
         'wishlist.buyNow': 'Buy Now',
+
+        // Detail
+        'detail.addUrl': 'Add URL',
+        'detail.uploadImg': 'Upload Image',
+        'detail.addItemTitle': 'Add Item',
+        'detail.itemLabel': 'Product URL',
+        'detail.itemPlaceholder': 'https://amazon.com/...',
+        'detail.smartInputTip': 'Paste a product URL, and AI will auto-fill the name, price, and image!',
+        'detail.cloneTitle': 'Add to My Wishlist',
+        'detail.cloneDesc': 'Select a wishlist',
+        'detail.cloneConfirm': 'Add to Wishlist',
+        'detail.cloneSuccess': 'Added to wishlist successfully',
+        'detail.deleteItemTitle': 'Delete Item',
+        'detail.deleteItemMsg': 'Are you sure you want to delete this item?',
 
         // Common
         'common.loading': 'Loading...',
@@ -561,19 +577,7 @@ const translations: Record<string, Record<string, string>> = {
         'dashboard.emptyOwner': 'You don\'t have any wishlists yet. Create one above!',
         'dashboard.emptyVisitor': 'This user hasn\'t created any public wishlists.',
 
-        // Wishlist Detail
-        'detail.addItemTitle': 'Add New Item',
-        'detail.itemLabel': 'Item Link or Name',
-        'detail.itemPlaceholder': 'Paste URL or enter item name',
-        'detail.smartInputTip': 'Paste URL to grab image, or enter name for AI search!',
-        'detail.addUrl': 'Text/Link',
-        'detail.uploadImg': 'Upload Image',
-        'detail.cloneTitle': 'Add to My Wishlist',
-        'detail.cloneDesc': 'Select a wishlist to save this item to:',
-        'detail.cloneConfirm': 'Add to Wishlist',
-        'detail.cloneSuccess': 'Successfully added to your wishlist!',
-        'detail.deleteItemTitle': 'Delete Item',
-        'detail.deleteItemMsg': 'Are you sure you want to delete this item?',
+
     }
 };
 

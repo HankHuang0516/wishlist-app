@@ -442,6 +442,14 @@ export default function WishlistDetail() {
                         </Card>
                     );
                 })}
+
+                {/* Empty State */}
+                {wishlist.items.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-muji-secondary bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+                        <Gift className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p className="text-lg font-medium">{isOwner ? t('wishlist.emptyOwner') : t('wishlist.emptyVisitor')}</p>
+                    </div>
+                )}
             </div>
 
             {/* FAB & Menu */}

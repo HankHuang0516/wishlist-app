@@ -35,7 +35,7 @@ export default function Home() {
     if (isAuthenticated) {
         return (
             <div className="container mx-auto p-4 space-y-8">
-                <h1 className="text-3xl font-bold text-muji-primary font-serif">Welcome Back.</h1>
+                <h1 className="text-3xl font-bold text-muji-primary">Welcome Back.</h1>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Holiday Card */}

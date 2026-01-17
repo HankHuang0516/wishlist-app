@@ -171,8 +171,8 @@ export default function SocialPage() {
                         {searchResults.map((user, index) => (
                             <Card key={user.id}>
                                 <CardContent className="flex items-center justify-between p-4">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                                             {user.avatarUrl ? (
                                                 <img src={`${API_BASE_URL}${user.avatarUrl}`} alt={user.name} className="w-full h-full object-cover" />
                                             ) : (
@@ -194,7 +194,7 @@ export default function SocialPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center space-x-2">
+                                    <div className="flex items-center space-x-3">
                                         {/* A: Profile Info */}
                                         <Link to={`/users/${user.id}/profile`}>
                                             <Button variant="ghost" size="icon" className="text-blue-600 font-bold hover:bg-blue-50">

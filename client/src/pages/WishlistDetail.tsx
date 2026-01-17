@@ -68,6 +68,7 @@ export default function WishlistDetail() {
     const [isFabOpen, setIsFabOpen] = useState(false);
     const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
     const [urlInput, setUrlInput] = useState("");
+    const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
 
     // Item Detail Modal State
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -175,6 +176,8 @@ export default function WishlistDetail() {
 
     const handleUrlSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSubmittingUrl) return;
+        setIsSubmittingUrl(true);
         try {
             const res = await fetch(`${API_URL}/wishlists/${id}/items/url`, {
                 method: 'POST',
@@ -189,6 +192,7 @@ export default function WishlistDetail() {
                 alert(t('common.error'));
             }
         } catch (err) { console.error(err); }
+        finally { setIsSubmittingUrl(false); }
     };
 
     const handleDeleteWishlist = () => {
@@ -582,8 +586,10 @@ export default function WishlistDetail() {
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2 bg-gray-50 pt-4 pb-4 px-6 rounded-b-xl">
-                                <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)}>{t('common.cancel')}</Button>
-                                <Button type="submit">{t('common.add')}</Button>
+                                <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)} disabled={isSubmittingUrl}>{t('common.cancel')}</Button>
+                                <Button type="submit" disabled={isSubmittingUrl}>
+                                    {isSubmittingUrl ? t('common.loading') : t('common.add')}
+                                </Button>
                             </CardFooter>
                         </form>
                     </Card>
@@ -665,6 +671,7 @@ export default function WishlistDetail() {
                     {feedbackMessage}
                 </div>
             )}
+            {!token && <div className="h-24 md:hidden"></div>} {/* Spacer for guest banner */}
         </div>
     );
 }

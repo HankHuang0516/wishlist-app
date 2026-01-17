@@ -17,10 +17,12 @@ export default function ChangePasswordPage() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setSuccess("");
 
         if (newPassword !== confirmPassword) {
             setError(t('changePwd.matchErr'));
@@ -44,8 +46,8 @@ export default function ChangePasswordPage() {
             });
 
             if (res.ok) {
-                alert(t('changePwd.success'));
-                navigate('/settings');
+                setSuccess(t('auth.pwdUpdated'));
+                setTimeout(() => navigate('/settings'), 1500);
             } else {
                 const data = await res.json();
                 setError(data.error || t('common.error'));
@@ -74,6 +76,11 @@ export default function ChangePasswordPage() {
                     {error && (
                         <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm mb-4">
                             {error}
+                        </div>
+                    )}
+                    {success && (
+                        <div className="bg-green-50 text-green-600 p-3 rounded-md text-sm mb-4 animate-in fade-in slide-in-from-top-2">
+                            {success}
                         </div>
                     )}
                     <form onSubmit={handleSubmit} className="space-y-4">

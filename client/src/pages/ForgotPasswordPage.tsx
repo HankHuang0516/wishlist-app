@@ -15,11 +15,12 @@ export default function ForgotPasswordPage() {
     const [otp, setOtp] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
+    const [successMessage, setSuccessMessage] = useState("");
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setSuccessMessage("");
         setLoading(true);
 
         try {
@@ -31,8 +32,11 @@ export default function ForgotPasswordPage() {
             const data = await res.json();
 
             if (res.ok) {
-                alert(t('forgot.otpSentAlert'));
-                setStep("reset");
+                setSuccessMessage(t('auth.codeSent'));
+                setTimeout(() => {
+                    setStep("reset");
+                    setSuccessMessage("");
+                }, 1500);
             } else {
                 setError(data.error || t('common.error'));
             }
@@ -46,6 +50,7 @@ export default function ForgotPasswordPage() {
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setSuccessMessage("");
         setLoading(true);
 
         try {
@@ -57,8 +62,8 @@ export default function ForgotPasswordPage() {
             const data = await res.json();
 
             if (res.ok) {
-                alert(t('forgot.resetSuccessAlert'));
-                navigate('/login');
+                setSuccessMessage(t('auth.resetSuccess'));
+                setTimeout(() => navigate('/login'), 2000);
             } else {
                 setError(data.error || t('common.error'));
             }
@@ -91,6 +96,11 @@ export default function ForgotPasswordPage() {
                     {error && (
                         <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm font-medium border border-red-200">
                             {error}
+                        </div>
+                    )}
+                    {successMessage && (
+                        <div className="bg-green-50 text-green-600 p-3 rounded mb-4 text-sm font-medium border border-green-200 animate-in fade-in slide-in-from-top-2">
+                            {successMessage}
                         </div>
                     )}
 

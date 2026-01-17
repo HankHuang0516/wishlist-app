@@ -87,8 +87,12 @@ export default function PurchaseHistoryPage() {
                 </div>
 
                 {transactions.length === 0 ? (
-                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-gray-400">{t('purchase.noAccount')}</p>
+                    <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <ShoppingBag className="w-8 h-8 text-gray-300" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">{t('purchase.emptyTitle')}</h3>
+                        <p className="text-gray-500 text-sm max-w-xs mx-auto">{t('purchase.emptyDesc')}</p>
                     </div>
                 ) : (
                     <div className="space-y-4">

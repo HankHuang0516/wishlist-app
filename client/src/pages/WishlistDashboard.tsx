@@ -317,84 +317,67 @@ export default function WishlistDashboard() {
                     )}
                 </div>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {filteredWishlists.map((list) => (
-                        <div key={list.id} onClick={() => navigate(`/wishlists/${list.id}`)}>
-                            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer relative group">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-lg font-bold truncate pr-6">{list.title}</CardTitle>
-                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-muji-primary rounded-full">
-                                        {list.items?.length || 0}
-                                    </span>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-muji-secondary text-sm line-clamp-2">
-                                        {list.description || "No description"}
-                                    </p>
-                                </CardContent>
-                                <CardFooter className="flex justify-between items-center">
-                                    <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                        {list.isPublic ? t('common.public') : t('common.private')}
-                                    </span>
-                                    {isOwner && (
-                                        <div className="flex gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleTogglePrivacy(list.id, list.isPublic);
-                                                }}
-                                                title={list.isPublic ? "Make Private" : "Make Public"}
-                                            >
-                                                {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    handleDeleteClick(list.id);
-                                                }}
-                                                title={t('common.delete')}
-                                                aria-label={t('common.delete')}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardFooter>
-                            </Card>
-                        </div>
-                    ))}
-                </div>
+                { isOwner && (
+                    <div className="flex gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleTogglePrivacy(list.id, list.isPublic);
+                            }}
+                            title={list.isPublic ? "Make Private" : "Make Public"}
+                        >
+                            {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteClick(list.id);
+                            }}
+                            title={t('common.delete')}
+                            aria-label={t('common.delete')}
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div >
+                )
+}
+        </CardFooter >
+                            </Card >
+                        </div >
+                    ))
+}
+                </div >
             )}
 
-            <DeleteConfirmModal
-                isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
-                onConfirm={confirmDelete}
-                title={t('dashboard.deleteConfirmTitle')}
-                message={t('dashboard.deleteConfirmMsg')}
-                isDeleting={isDeleting}
-            />
+<DeleteConfirmModal
+    isOpen={deleteModalOpen}
+    onClose={() => setDeleteModalOpen(false)}
+    onConfirm={confirmDelete}
+    title={t('dashboard.deleteConfirmTitle')}
+    message={t('dashboard.deleteConfirmMsg')}
+    isDeleting={isDeleting}
+/>
 
-            {
-                wishlists.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
-                        <div className="bg-muji-primary/10 p-4 rounded-full">
-                            <Gift className="w-12 h-12 text-muji-primary" />
-                        </div>
-                        <div className="space-y-1">
-                            <h3 className="text-xl font-bold text-gray-900">{t('dashboard.emptyTitle')}</h3>
-                            <p className="text-gray-500 max-w-sm mx-auto">{t('dashboard.emptyDesc')}</p>
-                        </div>
-                    </div>
-                )
-            }
+{
+    wishlists.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+            <div className="bg-muji-primary/10 p-4 rounded-full">
+                <Gift className="w-12 h-12 text-muji-primary" />
+            </div>
+            <div className="space-y-1">
+                <h3 className="text-xl font-bold text-gray-900">{t('dashboard.emptyTitle')}</h3>
+                <p className="text-gray-500 max-w-sm mx-auto">{t('dashboard.emptyDesc')}</p>
+            </div>
+        </div>
+    )
+}
         </div >
     );
 }

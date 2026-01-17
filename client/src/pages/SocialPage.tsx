@@ -28,10 +28,12 @@ export default function SocialPage() {
     const [searchResults, setSearchResults] = useState<User[]>([]);
     const [followingList, setFollowingList] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [hasSearched, setHasSearched] = useState(false);
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
         setLoading(true);
+        setHasSearched(true);
         try {
             const res = await fetch(`${API_URL}/users/search?query=${searchQuery}`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -159,7 +161,6 @@ export default function SocialPage() {
                             <Card key={user.id}>
                                 <CardContent className="flex items-center justify-between p-4">
                                     <div className="flex items-center space-x-3">
-                                        <div className="font-mono text-gray-400 w-6">{index + 1}</div>
                                         <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                                             {user.avatarUrl ? (
                                                 <img src={`${API_BASE_URL}${user.avatarUrl}`} alt={user.name} className="w-full h-full object-cover" />
@@ -211,8 +212,10 @@ export default function SocialPage() {
                                 </CardContent>
                             </Card>
                         ))}
-                        {searchResults.length === 0 && searchQuery && !loading && (
-                            <p className="text-center text-gray-500 py-4">{t('social.noUsers')}</p>
+                        {searchResults.length === 0 && hasSearched && !loading && (
+                            <div className="text-center py-10 bg-gray-50 rounded-lg">
+                                <p className="text-gray-400">{t('social.noUsers')}</p>
+                            </div>
                         )}
                     </div>
                 </div>

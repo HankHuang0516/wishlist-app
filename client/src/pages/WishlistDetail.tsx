@@ -22,7 +22,7 @@ interface Item {
     imageUrl?: string;
     notes?: string;
     uploadStatus: string; // PENDING, UPLOADING, COMPLETED, FAILED
-    aiStatus: string; // PENDING, COMPLETED, FAILED
+    aiStatus: string; // PENDING, COMPLETED, FAILED, SKIPPED
     aiError?: string;
     isHidden: boolean;
     originalUser?: {
@@ -349,7 +349,8 @@ export default function WishlistDetail() {
                 {wishlist.items.map(item => {
                     const isProcessing = item.uploadStatus !== 'COMPLETED' || item.aiStatus === 'PENDING';
                     const borderColor = (item.uploadStatus === 'COMPLETED' && item.aiStatus === 'COMPLETED') ? 'border-l-green-500' :
-                        isProcessing ? 'border-l-yellow-500' : 'border-l-red-500';
+                        item.aiStatus === 'SKIPPED' ? 'border-l-orange-500' :
+                            isProcessing ? 'border-l-yellow-500' : 'border-l-red-500';
 
                     return (
                         <Card key={item.id} className={`overflow-hidden transition-opacity ${item.isHidden ? 'opacity-50' : 'opacity-100'} border-l-4 ${borderColor}`}>
@@ -384,40 +385,42 @@ export default function WishlistDetail() {
                                             <span className="text-green-600">{t('ai.complete')}</span>
                                         ) : item.aiStatus === 'FAILED' ? (
                                             <span className="text-red-600">{t('ai.failed')}</span>
+                                        ) : item.aiStatus === 'SKIPPED' ? (
+                                            <span className="text-orange-600">傳統模式</span>
                                         ) : (
                                             <span className="text-yellow-600">{t('ai.analyzing')}...</span>
                                         )}
                                     </div>
                                 </div>
 
-                            {/* Actions Column */}
-                            <div className="flex flex-col gap-2 justify-center border-l pl-3 ml-1">
-                                {isOwner ? (
-                                    <>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => openDetail(item)}>
-                                            <Info className="w-5 h-5 font-bold" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
-                                            {item.isHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
-                                            <Trash2 className="w-5 h-5" />
-                                        </Button>
-                                    </>
-                                ) : (
-                                    <>
-                                        {/* Visitor Actions: Clone (+), Info (i), Watch (Eye) */}
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
-                                            <Plus className="w-5 h-5 font-bold" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
-                                            <Info className="w-5 h-5 font-bold stroke-[3px]" />
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                {/* Actions Column */}
+                                <div className="flex flex-col gap-2 justify-center border-l pl-3 ml-1">
+                                    {isOwner ? (
+                                        <>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => openDetail(item)}>
+                                                <Info className="w-5 h-5 font-bold" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
+                                                {item.isHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
+                                                <Trash2 className="w-5 h-5" />
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Visitor Actions: Clone (+), Info (i), Watch (Eye) */}
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
+                                                <Plus className="w-5 h-5 font-bold" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
+                                                <Info className="w-5 h-5 font-bold stroke-[3px]" />
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
                     );
                 })}
             </div>

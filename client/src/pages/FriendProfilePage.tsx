@@ -1,13 +1,13 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff, ChevronLeft } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { t } from "../utils/localization";
+import Header from "../components/Header";
 
 interface PublicProfile {
     id: number;
@@ -92,16 +92,13 @@ export default function FriendProfilePage() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
-            <Button
-                variant="ghost"
-                className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900"
-                onClick={() => navigate(-1)}
-            >
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                {t('common.back')}
-            </Button>
-            <h1 className="text-3xl font-bold text-muji-primary">{t('friend.title')}</h1>
+        <div className="max-w-2xl mx-auto space-y-6 pb-20">
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b mb-6 px-4 py-3 flex items-center shadow-sm">
+                <Button variant="ghost" className="p-0 mr-4 h-auto hover:bg-transparent" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="w-6 h-6 text-gray-600" />
+                </Button>
+                <h1 className="text-lg font-bold text-muji-primary">Profile</h1>
+            </div>
 
             <Card>
                 <CardHeader>

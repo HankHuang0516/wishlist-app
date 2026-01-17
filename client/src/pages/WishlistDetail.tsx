@@ -642,6 +642,8 @@ export default function WishlistDetail() {
                             </CardFooter>
                         </Card>
                     </div>
+                )
+            }
             {/* Edit Wishlist Modal */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">

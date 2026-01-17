@@ -43,6 +43,7 @@ export default function WishlistDashboard() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isCreateExpanded, setIsCreateExpanded] = useState(false);
 
     const handleDeleteClick = (id: number) => {
         setDeleteId(id);
@@ -210,50 +211,70 @@ export default function WishlistDashboard() {
             </div>
 
             {isOwner && (
-                <Card className="mb-8">
-                    <CardHeader>
-                        <CardTitle className="text-xl">{t('dashboard.createTitle')}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleCreate} className="space-y-4">
-                            <div>
-                                <Input
-                                    placeholder={t('dashboard.titlePlaceholder')}
-                                    value={newTitle}
-                                    onChange={(e) => setNewTitle(e.target.value)}
-                                    maxLength={50}
-                                    required
-                                />
-                                <div className="text-right text-xs text-gray-400 mt-1">
-                                    {newTitle.length}/50
-                                </div>
-                            </div>
-                            <Input
-                                placeholder={t('dashboard.descPlaceholder')}
-                                value={newDescription}
-                                onChange={(e) => setNewDescription(e.target.value)}
-                                maxLength={200}
-                            />
+                <div className="mb-8">
+                    {!isCreateExpanded ? (
+                        <Button
+                            onClick={() => setIsCreateExpanded(true)}
+                            className="w-full md:w-auto border-dashed border-2 bg-transparent text-muji-primary hover:bg-gray-50 mb-4"
+                            variant="outline"
+                        >
+                            + {t('dashboard.createNew')}
+                        </Button>
+                    ) : (
+                        <Card className="animate-in slide-in-from-top-4 duration-300">
+                            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <CardTitle className="text-xl">{t('dashboard.createTitle')}</CardTitle>
+                                <Button variant="ghost" size="sm" onClick={() => setIsCreateExpanded(false)}>
+                                    ✕
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                <form onSubmit={handleCreate} className="space-y-4">
+                                    <div>
+                                        <Input
+                                            placeholder={t('dashboard.titlePlaceholder')}
+                                            value={newTitle}
+                                            onChange={(e) => setNewTitle(e.target.value)}
+                                            maxLength={50}
+                                            required
+                                        />
+                                        <div className="text-right text-xs text-gray-400 mt-1">
+                                            {newTitle.length}/50
+                                        </div>
+                                    </div>
+                                    <Input
+                                        placeholder={t('dashboard.descPlaceholder')}
+                                        value={newDescription}
+                                        onChange={(e) => setNewDescription(e.target.value)}
+                                        maxLength={200}
+                                    />
 
-                            <div className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    id="newIsPublic"
-                                    checked={newIsPublic}
-                                    onChange={(e) => setNewIsPublic(e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
-                                />
-                                <label htmlFor="newIsPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    {t('dashboard.publicLabel')} - {newIsPublic ? t('dashboard.public') : t('dashboard.private')}
-                                </label>
-                            </div>
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="newIsPublic"
+                                            checked={newIsPublic}
+                                            onChange={(e) => setNewIsPublic(e.target.checked)}
+                                            className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
+                                        />
+                                        <label htmlFor="newIsPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                            {t('dashboard.publicLabel')} - {newIsPublic ? t('dashboard.public') : t('dashboard.private')}
+                                        </label>
+                                    </div>
 
-                            <Button disabled={creating || !newTitle}>
-                                {creating ? t('common.processing') : t('dashboard.createBtn')}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                                    <div className="flex justify-end gap-2">
+                                        <Button type="button" variant="ghost" onClick={() => setIsCreateExpanded(false)}>
+                                            {t('common.cancel')}
+                                        </Button>
+                                        <Button disabled={creating || !newTitle}>
+                                            {creating ? t('common.processing') : t('dashboard.createBtn')}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
             )}
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

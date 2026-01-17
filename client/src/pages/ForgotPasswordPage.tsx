@@ -120,7 +120,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                             </div>
                             <Button className="w-full" type="submit" disabled={loading}>
-                                {loading ? t('forgot.sending') : t('forgot.sendCode')}
+                                {loading ? t('common.processing') : t('forgot.sendCode')}
                             </Button>
                         </form>
                     ) : (

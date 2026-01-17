@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./ui/Card"
 import { useAuth } from "../context/AuthContext";
 import { Upload } from "lucide-react";
 import { API_URL } from '../config';
+import { t } from "../utils/localization";
 
 interface ItemData {
     name: string;
@@ -103,7 +104,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <Card className="w-full max-w-md bg-white">
                 <CardHeader>
-                    <CardTitle>{step === 'upload' ? "Add Item via AI" : "Review Item"}</CardTitle>
+                    <CardTitle>{step === 'upload' ? t('item.addTitle') : t('item.reviewTitle')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -123,8 +124,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                             ) : (
                                 <div className="flex flex-col items-center text-muji-secondary">
                                     <Upload className="w-12 h-12 mb-2" />
-                                    <p>Click to upload an image</p>
-                                    <p className="text-xs">Supports JPG, PNG</p>
+                                    <p>{t('item.clickToUpload')}</p>
+                                    <p className="text-xs">{t('item.supports')}</p>
                                 </div>
                             )}
                         </div>
@@ -134,7 +135,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                 <img src={imagePreviewUrl} alt="Preview" className="w-full h-48 object-contain bg-gray-50 rounded" />
                             )}
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Name</label>
+                                <label className="text-sm font-medium">{t('item.name')}</label>
                                 <Input
                                     value={previewData?.name || ""}
                                     onChange={(e) => setPreviewData({ ...previewData!, name: e.target.value })}
@@ -142,14 +143,15 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Price</label>
+                                    <label className="text-sm font-medium">{t('item.price')}</label>
                                     <Input
                                         value={previewData?.price || ""}
                                         onChange={(e) => setPreviewData({ ...previewData!, price: e.target.value })}
+                                        inputMode="decimal"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Currency</label>
+                                    <label className="text-sm font-medium">{t('item.currency')}</label>
                                     <Input
                                         value={previewData?.currency || "USD"}
                                         onChange={(e) => setPreviewData({ ...previewData!, currency: e.target.value })}
@@ -157,7 +159,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Shopping Link</label>
+                                <label className="text-sm font-medium">{t('item.link')}</label>
                                 <Input
                                     value={previewData?.shoppingLink || ""}
                                     onChange={(e) => setPreviewData({ ...previewData!, shoppingLink: e.target.value })}
@@ -174,13 +176,13 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                     )}
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2">
-                    <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+                    <Button variant="secondary" onClick={handleClose}>{t('common.cancel')}</Button>
                     {step === 'upload' ? (
                         <Button onClick={handleAnalyze} disabled={loading || !selectedFile}>
-                            {loading ? "Analyzing..." : "Analyze Image"}
+                            {loading ? t('item.analyzing') : t('item.analyze')}
                         </Button>
                     ) : (
-                        <Button onClick={handleSave}>Save to Wishlist</Button>
+                        <Button onClick={handleSave}>{t('item.save')}</Button>
                     )}
                 </CardFooter>
             </Card>

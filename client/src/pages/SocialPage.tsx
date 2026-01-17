@@ -169,7 +169,7 @@ export default function SocialPage() {
 
                     <div className="space-y-2">
                         {searchResults.map((user, index) => (
-                            <Card key={user.id}>
+                            <Card key={user.id} className="transition-transform active:scale-95 duration-200">
                                 <CardContent className="flex items-center justify-between p-4">
                                     <div className="flex items-center space-x-4">
                                         <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">

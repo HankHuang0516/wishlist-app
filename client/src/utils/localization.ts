@@ -214,6 +214,7 @@ const translations: Record<string, Record<string, string>> = {
         'detail.cloneSuccess': '成功加入清單',
         'detail.deleteItemTitle': '刪除物品',
         'detail.deleteItemMsg': '確定要刪除此物品嗎？',
+        'detail.copied': '已複製！',
 
         // Common
         'common.loading': '載入中...',
@@ -222,6 +223,7 @@ const translations: Record<string, Record<string, string>> = {
         'common.cancel': '取消',
         'common.confirm': '確認',
         'common.save': '儲存',
+        'common.saved': '已儲存！',
         'common.delete': '刪除',
         'common.edit': '編輯',
         'common.close': '關閉',
@@ -453,6 +455,7 @@ const translations: Record<string, Record<string, string>> = {
         'detail.cloneSuccess': 'Added to wishlist successfully',
         'detail.deleteItemTitle': 'Delete Item',
         'detail.deleteItemMsg': 'Are you sure you want to delete this item?',
+        'detail.copied': 'Copied!',
 
         // Common
         'common.loading': 'Loading...',
@@ -461,6 +464,7 @@ const translations: Record<string, Record<string, string>> = {
         'common.cancel': 'Cancel',
         'common.confirm': 'Confirm',
         'common.save': 'Save',
+        'common.saved': 'Saved!',
         'common.delete': 'Delete',
         'common.edit': 'Edit',
         'common.close': 'Close',

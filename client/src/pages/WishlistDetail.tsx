@@ -323,6 +323,25 @@ export default function WishlistDetail() {
                         <>
                             <div className="flex items-center gap-2">
                                 <h1 className="text-3xl font-bold text-muji-primary">{wishlist.title}</h1>
+                                <button
+                                    onClick={() => {
+                                        const url = window.location.href;
+                                        navigator.clipboard.writeText(url);
+                                        const btn = document.getElementById('share-btn-text');
+                                        if (btn) {
+                                            const original = btn.innerText;
+                                            btn.innerText = t('detail.copied');
+                                            setTimeout(() => btn.innerText = original, 2000);
+                                        }
+                                    }}
+                                    className="text-gray-400 hover:text-muji-primary transition-colors p-1"
+                                    title={t('wishlist.share')}
+                                >
+                                    <span id="share-btn-text" className="text-sm font-medium border rounded px-2 py-1 flex items-center gap-1">
+                                        <LinkIcon className="w-3 h-3" />
+                                        {t('wishlist.share')}
+                                    </span>
+                                </button>
                                 <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
                                     {wishlist.items.length}/{wishlist.maxItems || 100}
                                 </span>

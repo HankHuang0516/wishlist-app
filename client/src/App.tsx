@@ -17,10 +17,14 @@ import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import { AuthProvider } from "./context/AuthContext";
 
+import NotFound from "./pages/NotFound";
+import OfflineBanner from "./components/OfflineBanner";
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <OfflineBanner />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
@@ -38,6 +42,7 @@ function App() {
             <Route path="purchase-history" element={<PurchaseHistoryPage />} />
             <Route path="users/:userId/wishlists" element={<WishlistDashboard />} />
             <Route path="users/:id/profile" element={<FriendProfilePage />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </AuthProvider>

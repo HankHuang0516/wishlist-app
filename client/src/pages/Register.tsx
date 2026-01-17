@@ -71,6 +71,7 @@ export default function Register() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 required
+                                className="text-base md:text-sm"
                             />
                         </div>
 
@@ -83,6 +84,7 @@ export default function Register() {
                                 onChange={(e) => setBirthday(e.target.value)}
                                 required
                                 max={new Date().toISOString().split('T')[0]} // updated to allow selection up to today
+                                className="text-base md:text-sm"
                             />
                         </div>
                         <div className="space-y-2">
@@ -94,6 +96,7 @@ export default function Register() {
                                 value={phoneNumber}
                                 onChange={(e) => setPhoneNumber(e.target.value)}
                                 required
+                                className="text-base md:text-sm"
                             />
                         </div>
                         <div className="space-y-2">
@@ -105,7 +108,7 @@ export default function Register() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    className="pr-10"
+                                    className="pr-10 text-base md:text-sm"
                                 />
                                 <button
                                     type="button"

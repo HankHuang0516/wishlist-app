@@ -8,6 +8,7 @@ import WishlistDashboard from "./pages/WishlistDashboard";
 import WishlistDetail from "./pages/WishlistDetail";
 import SocialPage from "./pages/SocialPage";
 import SettingsPage from "./pages/SettingsPage";
+import NotificationsSettingsPage from "./pages/NotificationsSettingsPage";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PurchaseHistoryPage from "./pages/PurchaseHistoryPage";
@@ -32,6 +33,7 @@ function App() {
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="settings/notifications" element={<NotificationsSettingsPage />} />
             <Route path="change-password" element={<ChangePasswordPage />} />
             <Route path="purchase-history" element={<PurchaseHistoryPage />} />
             <Route path="users/:userId/wishlists" element={<WishlistDashboard />} />

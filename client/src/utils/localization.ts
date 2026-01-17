@@ -226,6 +226,11 @@ const translations: Record<string, Record<string, string>> = {
         // Settings - Deep Content
         'settings.avatar': '大頭照',
         'settings.displayName': '顯示名稱',
+        'settings.nickname': '暱稱',
+
+        'settings.emailNotifs': '電子郵件通知',
+        'settings.notifMarketing': '接收行銷與更新資訊',
+        'settings.notifSecurity': '帳號安全警示 (強制開啟)',
         'settings.avatarVisible': '目前狀態: 所有人可見 (讓朋友更容易找到你)',
         'settings.avatarHidden': '目前狀態: 隱藏 (別人看到會是預設灰色人)',
         'settings.changeAvatar': '更換照片',
@@ -458,6 +463,11 @@ const translations: Record<string, Record<string, string>> = {
         // Settings - Deep Content
         'settings.avatar': 'Profile Picture',
         'settings.displayName': 'Display Name',
+        'settings.nickname': 'Nickname',
+
+        'settings.emailNotifs': 'Email Notifications',
+        'settings.notifMarketing': 'Receive Marketing & Updates',
+        'settings.notifSecurity': 'Security Alerts (Required)',
         'settings.avatarVisible': 'Status: Visible to everyone (Easier for friends to find you)',
         'settings.avatarHidden': 'Status: Hidden (Others see default avatar)',
         'settings.changeAvatar': 'Change Photo',

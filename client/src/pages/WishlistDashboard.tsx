@@ -165,7 +165,18 @@ export default function WishlistDashboard() {
         }
     };
 
-    if (loading) return <div className="p-4 text-center">{t('common.processing')}</div>;
+    if (loading) {
+        return (
+            <div className="container mx-auto p-4 space-y-8">
+                <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-8" />
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-32 bg-gray-200 rounded animate-pulse" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     // Calculate Total Items
     const totalItems = wishlists.reduce((acc, list) => acc + (list.items?.length || 0), 0);
@@ -285,6 +296,8 @@ export default function WishlistDashboard() {
                                                 e.stopPropagation();
                                                 handleDeleteClick(list.id);
                                             }}
+                                            title={t('common.delete')}
+                                            aria-label={t('common.delete')}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </Button>

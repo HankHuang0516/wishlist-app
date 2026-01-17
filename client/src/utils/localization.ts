@@ -130,7 +130,16 @@ const translations: Record<string, Record<string, string>> = {
 
         // Login Page
         'login.title': '歡迎回來',
-        'login.subtitle': '輸入手機號碼登入',
+        'feedback.title': '意見回饋',
+        'feedback.placeholder': '遇到問題？有功能建議？或只是想聊天？',
+        'feedback.submit': '送出',
+        'feedback.submitting': '處理中...',
+        'feedback.cancel': '取消',
+        'feedback.success': '感謝您的回饋！',
+        'feedback.aiReply': 'Wishlist.ai 客服回覆:',
+        'feedback.close': '關閉',
+        'feedback.note': '注意：兩次提交之間需間隔 10 分鐘。',
+        'settings.securityMandatory': '(系統強制)',
         'login.phoneNumber': '手機號碼',
         'login.password': '密碼',
         'login.forgotPassword': '忘記密碼？',

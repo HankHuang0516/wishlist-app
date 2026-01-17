@@ -1,10 +1,9 @@
-import { } from "lucide-react"; // All unused? Check logic. Wait, if all unused, delete line.
 import { API_URL } from '../config';
 import { useState } from 'react';
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "./ui/Card";
 import { useAuth } from "../context/AuthContext";
-
+import { t, getUserLocale } from "../utils/localization";
 interface FeedbackModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -33,7 +32,7 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                 },
                 body: JSON.stringify({
                     content,
-                    language: navigator.language || 'zh-TW'
+                    language: getUserLocale()
                 })
             });
 
@@ -57,45 +56,45 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <Card className="w-full max-w-lg bg-white">
                 <CardHeader>
-                    <CardTitle>意見回饋</CardTitle>
+                    <CardTitle>{t('feedback.title')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {result ? (
                         <div className="bg-green-50 p-4 rounded-lg space-y-4">
-                            <h3 className="font-bold text-green-800">感謝您的回饋！</h3>
+                            <h3 className="font-bold text-green-800">{t('feedback.success')}</h3>
                             <p className="text-sm text-green-700">{result.message}</p>
 
                             {result.aiAnalysis && (
                                 <div className="mt-4 border-t border-green-200 pt-2">
-                                    <h4 className="font-semibold text-green-800 text-sm mb-1">Wishlist.ai 客服回覆:</h4>
+                                    <h4 className="font-semibold text-green-800 text-sm mb-1">{t('feedback.aiReply')}</h4>
                                     <pre className="text-sm text-green-900 whitespace-pre-wrap font-sans bg-green-100 p-3 rounded leading-relaxed">
                                         {result.aiAnalysis}
                                     </pre>
                                 </div>
                             )}
-                            <Button onClick={onClose} className="w-full mt-4">關閉</Button>
+                            <Button onClick={onClose} className="w-full mt-4">{t('feedback.close')}</Button>
                         </div>
                     ) : (
                         <>
                             <textarea
                                 className="w-full border rounded-md p-3 min-h-[150px] resize-none focus:outline-none focus:ring-2 focus:ring-muji-primary"
-                                placeholder="遇到問題？有功能建議？或只是想聊天？"
+                                placeholder={t('feedback.placeholder')}
                                 value={content}
                                 onChange={(e) => setContent(e.target.value)}
                                 disabled={loading}
                             />
                             {error && <p className="text-red-500 text-sm">{error}</p>}
                             <p className="text-xs text-gray-500">
-                                注意：兩次提交之間需間隔 10 分鐘。
+                                {t('feedback.note')}
                             </p>
                         </>
                     )}
                 </CardContent>
                 {!result && (
                     <CardFooter className="flex justify-end gap-2">
-                        <Button variant="ghost" onClick={onClose} disabled={loading}>取消</Button>
+                        <Button variant="ghost" onClick={onClose} disabled={loading}>{t('feedback.cancel')}</Button>
                         <Button onClick={handleSubmit} disabled={loading || !content.trim()}>
-                            {loading ? "處理中..." : "送出"}
+                            {loading ? t('feedback.submitting') : t('feedback.submit')}
                         </Button>
                     </CardFooter>
                 )}

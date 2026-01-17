@@ -29,7 +29,7 @@ export default function NotificationsSettingsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                         <label className="text-sm font-medium text-gray-700">
-                            {t('settings.notifSecurity')}
+                            {t('settings.notifSecurity')} <span className="text-xs text-red-500 ml-1">{t('settings.securityMandatory')}</span>
                         </label>
                         <input type="checkbox" className="h-5 w-5 text-muji-primary rounded focus:ring-muji-primary" defaultChecked disabled />
                     </div>

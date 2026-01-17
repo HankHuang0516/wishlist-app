@@ -58,6 +58,7 @@ export default function WishlistDetail() {
     const [editDesc, setEditDesc] = useState("");
     const [editIsPublic, setEditIsPublic] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'item' | 'wishlist', id?: number } | null>(null);
@@ -198,6 +199,27 @@ export default function WishlistDetail() {
     const handleDeleteItem = (itemId: number) => {
         setDeleteTarget({ type: 'item', id: itemId });
         setDeleteModalOpen(true);
+    };
+
+    const handleToggleStatus = async (item: Item) => {
+        try {
+            // Optimistic update
+            const newStatus = item.status === 'PURCHASED' ? 'AVAILABLE' : 'PURCHASED';
+
+            // Assume success locally for UI speed? No, better wait for server or use optimistic.
+            // Let's just call API.
+            const res = await fetch(`${API_URL}/wishlists/${id}/items/${item.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            if (res.ok) {
+                fetchWishlist(true); // silent refresh
+                setFeedbackMessage(newStatus === 'PURCHASED' ? t('detail.markedPurchased') : t('detail.markedAvailable'));
+                setTimeout(() => setFeedbackMessage(null), 3000);
+            }
+        } catch (e) { console.error(e); }
     };
 
     const executeDelete = async () => {
@@ -457,6 +479,9 @@ export default function WishlistDetail() {
                                         </>
                                     ) : (
                                         <>
+                                            <Button variant="ghost" size="icon" className={`h-8 w-8 ${item.status === 'PURCHASED' ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-green-600'}`} onClick={() => handleToggleStatus(item)} title={item.status === 'PURCHASED' ? "Mark as Available" : "Mark as Purchased"}>
+                                                <Gift className="w-5 h-5 font-bold" />
+                                            </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>
@@ -632,6 +657,12 @@ export default function WishlistDetail() {
                             Join Now
                         </Button>
                     </Link>
+                </div>
+            )}
+            {/* Feedback Toast */}
+            {feedbackMessage && (
+                <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
+                    {feedbackMessage}
                 </div>
             )}
         </div>

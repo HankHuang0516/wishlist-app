@@ -240,7 +240,7 @@ export default function SettingsPage() {
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-2xl mx-auto space-y-6 pb-24">
             <h1 className="text-3xl font-bold text-muji-primary">{t('settings.profile')}</h1>
 
             {/* Language Section */}

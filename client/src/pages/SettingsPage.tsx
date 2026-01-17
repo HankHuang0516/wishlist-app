@@ -746,6 +746,52 @@ export default function SettingsPage() {
                     </Card>
                 </div>
 
+                {/* Danger Zone */}
+                <div className="mt-8">
+                    <h2 className="text-xl font-semibold mb-4 text-red-600 font-serif">Danger Zone</h2>
+                    <Card className="border-red-100 bg-red-50/30">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-medium text-lg text-red-900">{t('settings.deleteAccount')}</h3>
+                                    <p className="text-sm text-red-700 mt-1">{t('settings.deleteAccountDesc')}</p>
+                                </div>
+                                <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                        openModal(
+                                            t('settings.deleteAccount'),
+                                            t('settings.deleteConfirm'),
+                                            async () => {
+                                                try {
+                                                    const res = await fetch(`${API_URL}/users/me`, {
+                                                        method: 'DELETE',
+                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                    });
+                                                    if (res.ok) {
+                                                        logout();
+                                                        window.location.href = '/';
+                                                    } else {
+                                                        const data = await res.json();
+                                                        alert(data.error || "Delete failed");
+                                                    }
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    alert("Connection error");
+                                                }
+                                            },
+                                            "destructive",
+                                            t('common.delete')
+                                        );
+                                    }}
+                                >
+                                    {t('settings.deleteAccount')}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
                 {/* Debug Tools Section - Admin Only */}
                 {profile.phoneNumber === '0935065876' && (
                     <div className="mt-8 pt-6 border-t border-gray-200">

@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "../components/ui/Button";
@@ -16,7 +16,7 @@ export default function NotificationsSettingsPage() {
         setMarketingEnabled(checked);
         localStorage.setItem('notif_marketing', String(checked));
         setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        setTimeout(() => setSaved(false), 3000);
     };
 
     return (
@@ -32,7 +32,12 @@ export default function NotificationsSettingsPage() {
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <CardTitle className="text-lg">{t('settings.emailNotifs')}</CardTitle>
-                        {saved && <span className="text-xs text-green-600 font-medium animate-pulse">{t('common.saved')}</span>}
+                        {saved && (
+                            <span className="text-sm text-green-600 font-bold flex items-center animate-in fade-in slide-in-from-top-1">
+                                <Check className="w-4 h-4 mr-1" />
+                                {t('common.saved')}
+                            </span>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">

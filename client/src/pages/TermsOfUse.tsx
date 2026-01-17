@@ -1,13 +1,26 @@
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "../components/ui/Button";
 import { getUserLocale } from "../utils/localization";
 
 export default function TermsOfUse() {
     const isZh = getUserLocale().startsWith('zh');
+    const navigate = useNavigate();
+
+    const Header = ({ title }: { title: string }) => (
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b mb-6 px-4 py-3 flex items-center shadow-sm">
+            <Button variant="ghost" className="p-0 mr-4 h-auto hover:bg-transparent" onClick={() => navigate(-1)}>
+                <ArrowLeft className="w-6 h-6 text-gray-600" />
+            </Button>
+            <h1 className="text-lg font-bold text-muji-primary truncate">{title}</h1>
+        </div>
+    );
 
     if (isZh) {
         return (
-            <div className="max-w-4xl mx-auto py-8">
-                <h1 className="text-3xl font-bold mb-6 text-muji-primary">使用者條款 (Terms of Use)</h1>
-                <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
+            <div className="max-w-4xl mx-auto pb-8">
+                <Header title="使用者條款 (Terms of Use)" />
+                <div className="px-4 prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. 同意條款</h2>
                         <p>
@@ -88,9 +101,9 @@ export default function TermsOfUse() {
         );
     } else {
         return (
-            <div className="max-w-4xl mx-auto py-8">
-                <h1 className="text-3xl font-bold mb-6 text-muji-primary">Terms of Use</h1>
-                <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
+            <div className="max-w-4xl mx-auto pb-8">
+                <Header title="Terms of Use" />
+                <div className="px-4 prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. Acceptance of Terms</h2>
                         <p>

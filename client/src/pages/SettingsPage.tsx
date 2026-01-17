@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Upload, User as UserIcon, Download } from "lucide-react";
+import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
 import PaymentModal from "../components/PaymentModal";
 import { API_URL, API_BASE_URL } from '../config';
@@ -303,30 +303,35 @@ export default function SettingsPage() {
                             </div>
                         )}
                         {!profile.isAvatarVisible && (
-                            <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/10 flex items-center justify-center pointer-events-none">
                                 <EyeOff className="text-white drop-shadow-md w-8 h-8" />
                             </div>
                         )}
+
+                        {/* Camera Overlay */}
+                        <div
+                            className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer text-white"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <Camera className="w-8 h-8" />
+                        </div>
                     </div>
-                    <div>
-                        <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                            {isUploading ? (
-                                <>
-                                    <span className="animate-spin mr-2">⏳</span> {/* Using simple emoji as spinner placeholder or lucide Upload/Loader if available */}
-                                    {t('settings.uploading')}
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    {t('settings.changeAvatar')}
-                                </>
-                            )}
+                    <div className="space-y-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                        >
+                            {isUploading ? t('settings.uploading') : t('settings.uploadAvatar')}
                         </Button>
+                        <p className="text-xs text-muji-secondary">
+                            {t('settings.maxSize')}
+                        </p>
                         <input
-                            type="file"
                             ref={fileInputRef}
-                            hidden
+                            type="file"
                             accept="image/*"
+                            className="hidden"
                             onChange={handleAvatarUpload}
                         />
                     </div>
@@ -507,56 +512,61 @@ export default function SettingsPage() {
             {/* App Installation Section - Only visible if installable or on mobile not installed */}
 
             {/* 1. Native Install Button (Android/Desktop when event fires) */}
-            {deferredPrompt && (
-                <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
-                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
-                        <CardContent className="pt-6 flex items-center justify-between">
-                            <div>
-                                <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
-                                <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
-                            </div>
-                            <Button
-                                onClick={handleInstallClick}
-                                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
-                            >
-                                <Download className="w-4 h-4 mr-2" />
-                                {t('settings.installBtn')}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+            {
+                deferredPrompt && (
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
+                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                            <CardContent className="pt-6 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
+                                    <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
+                                </div>
+                                <Button
+                                    onClick={handleInstallClick}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
+                                >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {t('settings.installBtn')}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )
+            }
 
             {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
-            {(!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
-                    <Card className="bg-gray-50 border-gray-200">
-                        <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
-                            <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                <li>Tap <span className="font-bold">Share</span> button</li>
-                                <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
-                                <li>Tap <span className="font-bold">Add</span></li>
-                            </ol>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+            {
+                (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
+                        <Card className="bg-gray-50 border-gray-200">
+                            <CardContent className="pt-6">
+                                <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
+                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                    <li>Tap <span className="font-bold">Share</span> button</li>
+                                    <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
+                                    <li>Tap <span className="font-bold">Add</span></li>
+                                </ol>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )
+            }
 
             {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
+            {/* 3. Android Manual Instructions (Fallback) */}
             {(!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
                 <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (Android)</h2>
+                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.android')})</h2>
                     <Card className="bg-gray-50 border-gray-200">
                         <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">Don't see the button?</h3>
-                            <p className="text-sm text-gray-600 mb-3">Manually install:</p>
+                            <h3 className="font-medium text-lg text-gray-900">{t('pwa.noButton')}</h3>
+                            <p className="text-sm text-gray-600 mb-3">{t('pwa.manual')}</p>
                             <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                <li>Tap the <span className="font-bold">Menu icon</span> (three dots)</li>
-                                <li>Tap <span className="font-bold">Install App</span> or <span className="font-bold">Add to Home screen</span></li>
-                                <li>Tap <span className="font-bold">Install</span></li>
+                                <li><strong>{t('pwa.step1')}</strong></li>
+                                <li><strong>{t('pwa.step2')}</strong></li>
+                                <li><strong>{t('pwa.step3')}</strong></li>
                             </ol>
                         </CardContent>
                     </Card>
@@ -564,17 +574,19 @@ export default function SettingsPage() {
             )}
 
             {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
-            {(!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                <div className="space-y-4">
-                    <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (Desktop)</h2>
-                    <Card className="bg-gray-50 border-gray-200">
-                        <CardContent className="pt-6">
-                            <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
-                            <p className="text-sm text-gray-600 mb-3">Check address bar for install icon <Download className="inline w-4 h-4 mx-1" /></p>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+            {
+                (!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.desktop')})</h2>
+                        <Card className="bg-gray-50 border-gray-200">
+                            <CardContent className="pt-6">
+                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
+                                <p className="text-sm text-gray-600 mb-3">{t('pwa.desktopDesc')} <Download className="inline w-4 h-4 mx-1" /></p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )
+            }
 
             {/* Security Section */}
             <div className="space-y-4">

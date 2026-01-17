@@ -140,6 +140,17 @@ const translations: Record<string, Record<string, string>> = {
         'feedback.close': '關閉',
         'feedback.note': '注意：兩次提交之間需間隔 10 分鐘。',
         'settings.securityMandatory': '(系統強制)',
+
+        // PWA
+        'pwa.installTitle': '安裝 App',
+        'pwa.android': 'Android',
+        'pwa.noButton': "Don't see the button?",
+        'pwa.manual': 'Manually install:',
+        'pwa.step1': 'Tap the Menu icon (three dots)',
+        'pwa.step2': 'Tap "Install App" or "Add to Home screen"',
+        'pwa.step3': 'Tap "Install"',
+        'pwa.howTo': 'How to install?',
+        'pwa.desktopDesc': 'Check address bar for install icon',
         'login.phoneNumber': '手機號碼',
         'login.password': '密碼',
         'login.forgotPassword': '忘記密碼？',

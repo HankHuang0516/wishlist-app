@@ -521,11 +521,14 @@ export default function WishlistDetail() {
             {isUrlModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <Card className="w-full max-w-md bg-white">
-                        <CardHeader>
-                            <CardTitle>{t('detail.addItemTitle')}</CardTitle>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center gap-2">
+                                <LinkIcon className="w-5 h-5 text-muji-primary" />
+                                {t('detail.addItemTitle')}
+                            </CardTitle>
                         </CardHeader>
                         <form onSubmit={handleUrlSubmit}>
-                            <CardContent>
+                            <CardContent className="space-y-4">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-gray-700">{t('detail.itemLabel')}</label>
                                     <Input
@@ -534,13 +537,18 @@ export default function WishlistDetail() {
                                         onChange={e => setUrlInput(e.target.value)}
                                         required
                                         autoFocus
+                                        className="h-11"
                                     />
-                                    <p className="text-sm text-gray-600 mt-3 bg-blue-50 p-2 rounded border border-blue-100">
-                                        ✨ <b>Tip:</b> {t('detail.smartInputTip')}
-                                    </p>
+                                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex gap-3 items-start">
+                                        <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                        <div className="text-sm text-blue-800">
+                                            <p className="font-semibold mb-0.5">Tip</p>
+                                            {t('detail.smartInputTip')}
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
-                            <CardFooter className="flex justify-end gap-2">
+                            <CardFooter className="flex justify-end gap-2 bg-gray-50 pt-4 pb-4 px-6 rounded-b-xl">
                                 <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)}>{t('common.cancel')}</Button>
                                 <Button type="submit">{t('common.add')}</Button>
                             </CardFooter>

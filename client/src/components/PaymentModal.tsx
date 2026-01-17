@@ -210,11 +210,16 @@ export default function PaymentModal({ isOpen, onClose, onPaymentSuccess, amount
 
                         {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
 
-                        <div className="mt-4 bg-gray-50 p-3 rounded text-xs text-gray-500">
-                            <p className="font-bold">測試信用卡 (Sandbox)</p>
-                            <p>Card: 4311-9522-2222-2222</p>
-                            <p>Date: MM/YY (Any future date)</p>
-                            <p>CCV: 123</p>
+                        <div className="mt-4 bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100">
+                            <p className="font-bold flex items-center gap-2">
+                                <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded">TEST</span>
+                                Sandbox Credit Card
+                            </p>
+                            <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs">
+                                <p>Card: 4311-9522-2222-2222</p>
+                                <p>CCV: 123</p>
+                                <p>Date: MM/YY (Future)</p>
+                            </div>
                         </div>
                     </>
                 )}

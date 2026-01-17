@@ -453,6 +453,39 @@ export default function SettingsPage() {
                     </CardContent>
                 </Card>
 
+                {/* Birthday */}
+                <Card>
+                    <CardContent className="pt-6">
+                        <div className="flex items-end justify-between gap-4">
+                            <div className="flex-1 space-y-2">
+                                <label className="text-sm font-medium">Birthday</label>
+                                <Input
+                                    type="date"
+                                    value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
+                                    onChange={(e) => setProfile({ ...profile, birthday: e.target.value })}
+                                    onBlur={(e) => handleUpdate({ birthday: e.target.value })}
+                                />
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
+                                title={profile.isBirthdayVisible ? t('settings.public') : t('settings.hidden')}
+                            >
+                                {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                            </Button>
+                        </div>
+                        <div className="flex justify-between items-center mt-2">
+                            <p className="text-xs text-muji-secondary">
+                                {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                            </p>
+                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'birthday' ? 'opacity-100' : 'opacity-0'}`}>
+                                {t('common.saved')}
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Address */}
                 <Card>
                     <CardContent className="pt-6">

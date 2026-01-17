@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff, ChevronLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { t } from "../utils/localization";
 
@@ -91,6 +91,10 @@ export default function FriendProfilePage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
+            <Link to="/social" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900">
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                {t('common.back')}
+            </Link>
             <h1 className="text-3xl font-bold text-muji-primary">{t('friend.title')}</h1>
 
             <Card>

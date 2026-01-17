@@ -265,6 +265,14 @@ export default function WishlistDetail() {
     };
 
     const handleCloneClick = (item: Item) => {
+        if (!token) {
+            // Guest guard
+            if (confirm("Sign in to save this item to your wishlist!")) {
+                navigate('/login?redirect=' + encodeURIComponent(window.location.pathname));
+            }
+            return;
+        }
+
         setItemToClone(item);
         fetchMyWishlists(); // Load fresh list
         setIsCloneModalOpen(true);
@@ -610,6 +618,22 @@ export default function WishlistDetail() {
                 message={deleteTarget?.type === 'wishlist' ? t('dashboard.deleteConfirmMsg') : t('detail.deleteItemMsg')}
                 isDeleting={isDeleting}
             />
+
+            {/* Guest CTA Banner */}
+            {!token && (
+                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40 flex items-center justify-between pb-8 md:pb-4">
+                    <div className="flex-1 mr-4">
+                        <p className="font-bold text-muji-primary text-sm sm:text-base">Love this list?</p>
+                        <p className="text-xs text-muji-secondary">Join Wishlist.ai to create your own collection.</p>
+                    </div>
+                    <Link to="/register">
+                        <Button className="bg-muji-primary hover:bg-stone-800 text-white shadow-lg">
+                            <UserPlus className="w-4 h-4 mr-2" />
+                            Join Now
+                        </Button>
+                    </Link>
+                </div>
+            )}
         </div>
     );
 }

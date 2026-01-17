@@ -50,6 +50,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         notes: ""
     });
 
+    const [error, setError] = useState("");
+
     useEffect(() => {
         if (item) {
             // Check if incoming item is stale compared to what we just saved
@@ -126,12 +128,13 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
                 onUpdate(); // Trigger background sync
                 setIsEditing(false); // Return to View Mode (now showing updated data)
+                setIsEditing(false); // Return to View Mode (now showing updated data)
             } else {
-                alert("更新失敗");
+                setError("更新失敗");
             }
         } catch (error) {
             console.error(error);
-            alert("更新發生錯誤");
+            setError("更新發生錯誤");
         }
     };
 
@@ -145,12 +148,13 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             if (res.ok) {
                 onUpdate();
                 onClose();
+                onClose();
             } else {
-                alert("刪除失敗");
+                setError("刪除失敗");
             }
         } catch (e) {
             console.error(e);
-            alert("刪除發生錯誤");
+            setError("刪除發生錯誤");
         }
     };
 
@@ -203,10 +207,11 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                 }, 1500);
             } else {
                 console.error("Clone failed");
+                setError("加入清單失敗");
             }
         } catch (e) {
             console.error(e);
-            alert("發生錯誤");
+            setError("發生錯誤");
         }
     };
 
@@ -267,7 +272,14 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {/* Error Alert */}
+                    {/* Error Feedback */}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm mb-4">
+                            {error}
+                        </div>
+                    )}
+
+                    {/* 403 / AI Error Alert */}
                     {is403 && (
                         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm">
                             <strong>AI 無法存取此網頁 (反爬蟲阻擋)</strong>

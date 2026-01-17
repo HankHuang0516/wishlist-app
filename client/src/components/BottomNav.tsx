@@ -23,7 +23,7 @@ export default function BottomNav() {
                         className={`flex flex-col items-center justify-center gap-1 ${isActive(item.path) ? "text-muji-primary" : "text-gray-400 hover:text-gray-600"
                             }`}
                     >
-                        <div className={`p-1 px-3 rounded-full mb-0.5 transition-colors ${isActive(item.path) ? "bg-muji-primary/10" : "bg-transparent"}`}>
+                        <div className={`p-1 px-5 rounded-full mb-0.5 transition-all duration-200 ${isActive(item.path) ? "bg-muji-primary/10 w-auto" : "bg-transparent"}`}>
                             <item.icon className={`h-6 w-6 ${isActive(item.path) ? "text-muji-primary stroke-[2.5px]" : "stroke-[1.5px]"}`} />
                         </div>
                         <span className="text-[10px] font-medium leading-none">{item.label}</span>

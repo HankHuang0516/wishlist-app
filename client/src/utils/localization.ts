@@ -225,6 +225,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Settings - Deep Content
         'settings.avatar': '大頭照',
+        'settings.displayName': '顯示名稱',
         'settings.avatarVisible': '目前狀態: 所有人可見 (讓朋友更容易找到你)',
         'settings.avatarHidden': '目前狀態: 隱藏 (別人看到會是預設灰色人)',
         'settings.changeAvatar': '更換照片',
@@ -267,6 +268,7 @@ const translations: Record<string, Record<string, string>> = {
         'social.unfollowErr': '無法追蹤',
         'social.birthdayPrefix': '生日: ',
         'social.nicknamePrefix': '暱稱: ',
+        'social.noUsers': '找不到使用者',
 
         // Forgot Password - Extra
         'forgot.enterOtpDesc': '請輸入驗證碼與新密碼',
@@ -455,6 +457,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Settings - Deep Content
         'settings.avatar': 'Profile Picture',
+        'settings.displayName': 'Display Name',
         'settings.avatarVisible': 'Status: Visible to everyone (Easier for friends to find you)',
         'settings.avatarHidden': 'Status: Hidden (Others see default avatar)',
         'settings.changeAvatar': 'Change Photo',
@@ -497,6 +500,7 @@ const translations: Record<string, Record<string, string>> = {
         'social.unfollowErr': 'Cannot follow',
         'social.birthdayPrefix': 'Birthday: ',
         'social.nicknamePrefix': 'Nickname: ',
+        'social.noUsers': 'No users found',
 
         // Forgot Password - Extra
         'forgot.enterOtpDesc': 'Enter verification code and new password',

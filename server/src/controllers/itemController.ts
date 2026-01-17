@@ -5,6 +5,7 @@ import fs from 'fs';
 import * as cheerio from 'cheerio';
 import path from 'path';
 import { flickrService } from '../lib/flickr';
+import { checkAndIncrementAiUsage } from '../lib/usageService';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -33,9 +34,25 @@ const getRandomHeaders = () => {
 };
 
 // Async AI Processor
-const processItemAi = async (itemId: number, imagePathOrUrl: string, originalName: string) => {
+const processItemAi = async (itemId: number, imagePathOrUrl: string, originalName: string, userId: number) => {
     try {
         console.log(`[AsyncAI] Starting analysis for Item ${itemId}`);
+
+        // Check AI quota
+        const canUseAi = await checkAndIncrementAiUsage(userId);
+        if (!canUseAi) {
+            console.log(`[AsyncAI] User ${userId} exceeded AI limit - using Traditional Mode`);
+            await prisma.item.update({
+                where: { id: itemId },
+                data: {
+                    name: originalName.replace(/\.[^/.]+$/, '') || 'Image Item',
+                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
+                    aiStatus: 'SKIPPED',
+                    aiError: 'Daily AI limit exceeded'
+                }
+            });
+            return;
+        }
 
         let imageBuffer: Buffer;
 
@@ -122,7 +139,7 @@ const processItemAi = async (itemId: number, imagePathOrUrl: string, originalNam
 };
 
 // Background Upload Processor
-const processItemUpload = async (itemId: number, filePath: string, filename: string) => {
+const processItemUpload = async (itemId: number, filePath: string, filename: string, userId: number) => {
     try {
         console.log(`[AsyncUpload] Starting Flickr upload for Item ${itemId}`);
 
@@ -156,8 +173,8 @@ const processItemUpload = async (itemId: number, filePath: string, filename: str
                 console.warn(`[AsyncUpload] Failed to delete temp file:`, e);
             }
 
-            // Trigger AI analysis with Flickr URL
-            processItemAi(itemId, flickrUrl, filename);
+            // Trigger AI analysis with Flickr URL (pass userId for quota check)
+            processItemAi(itemId, flickrUrl, filename, userId);
         } else {
             console.error(`[AsyncUpload] ❌ Flickr upload failed for Item ${itemId}`);
             await prisma.item.update({
@@ -165,7 +182,7 @@ const processItemUpload = async (itemId: number, filePath: string, filename: str
                 data: { uploadStatus: 'FAILED' }
             });
             // Still try AI with local file
-            processItemAi(itemId, filePath, filename);
+            processItemAi(itemId, filePath, filename, userId);
         }
 
     } catch (error: any) {
@@ -204,8 +221,8 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         // 2. Return response immediately (100ms instead of 4000ms!)
         res.status(201).json(item);
 
-        // 3. Trigger background upload + AI processing
-        processItemUpload(item.id, file.path, file.originalname);
+        // 3. Trigger background upload + AI processing (pass userId for quota check)
+        processItemUpload(item.id, file.path, file.originalname, userId);
 
     } catch (error) {
         console.error('Create Item Error:', error);
@@ -406,8 +423,8 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                     data: { imageUrl: finalImageUrl }
                 });
 
-                // Trigger Image AI
-                await processItemAi(itemId, savePath, 'url_image.jpg');
+                // Trigger Image AI (pass userId for quota check)
+                await processItemAi(itemId, savePath, 'url_image.jpg', userId);
                 return;
             } else {
                 // No image found, treat as scraping failure to trigger fallback
@@ -556,6 +573,29 @@ const downloadImage = async (url: string, itemId: number): Promise<string | null
 const processTextAi = async (itemId: number, text: string, userId: number, searchContext: any = null, suggestedQuery: string | null = null) => {
     try {
         console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
+
+        // Check AI quota BEFORE calling AI
+        const canUseAi = await checkAndIncrementAiUsage(userId);
+        if (!canUseAi) {
+            console.log(`[AsyncText] User ${userId} exceeded AI limit - using Traditional Mode`);
+
+            // Traditional Mode: Use search context if available, otherwise just store the text
+            const fallbackName = searchContext?.title || text.substring(0, 100);
+            const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=random&size=200`;
+
+            await prisma.item.update({
+                where: { id: itemId },
+                data: {
+                    name: fallbackName,
+                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
+                    imageUrl: fallbackImage,
+                    aiStatus: 'SKIPPED',
+                    aiError: 'Daily AI limit exceeded'
+                }
+            });
+            return;
+        }
+
         const result = await analyzeProductText(text, 'traditional chinese', searchContext, suggestedQuery);
 
         // Option C: Use original image URL directly (no download)

@@ -32,6 +32,10 @@ model User {
   maxWishlistItems  Int     @default(100)   // New: Global limit per wishlist
   maxFollowing      Int     @default(100)   // New: Limit for following users
 
+  // AI Usage Limits (Free users: 5/day)
+  aiUsageCount      Int      @default(0)
+  lastAiUsageDate   DateTime @default(now())
+
   wishlists   Wishlist[]
   itemWatches ItemWatch[] // Users watching items
 

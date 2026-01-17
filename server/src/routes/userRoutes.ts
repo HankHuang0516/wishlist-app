@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory } from '../controllers/userController';
+import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage } from '../controllers/userController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
@@ -24,6 +24,7 @@ router.put('/me', authenticateToken, updateMe);
 router.put('/me/password', authenticateToken, updatePassword);
 router.get('/me/purchases', authenticateToken, getPurchasedItems);
 router.get('/me/transaction-history', authenticateToken, getPurchaseHistory);
+router.get('/me/ai-usage', authenticateToken, getAiUsage);
 router.post('/me/subscription', authenticateToken, updateSubscription);
 router.post('/me/subscription/cancel', authenticateToken, cancelSubscription);
 router.post('/me/avatar', authenticateToken, upload.single('avatar'), uploadAvatar);

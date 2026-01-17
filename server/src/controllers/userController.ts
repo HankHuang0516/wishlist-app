@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import { flickrService } from '../lib/flickr';
 import fs from 'fs';
+import { getAiUsageInfo } from '../lib/usageService';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -356,5 +357,17 @@ export const getPurchaseHistory = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Fetch History Error:', error);
         res.status(500).json({ error: 'Failed to fetch history' });
+    }
+};
+
+// Get AI Usage Info
+export const getAiUsage = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user.id;
+        const usage = await getAiUsageInfo(userId);
+        res.json(usage);
+    } catch (error) {
+        console.error('Get AI Usage Error:', error);
+        res.status(500).json({ error: 'Failed to fetch AI usage' });
     }
 };

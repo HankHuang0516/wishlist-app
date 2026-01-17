@@ -149,8 +149,12 @@ const translations: Record<string, Record<string, string>> = {
         'pwa.step1': 'Tap the Menu icon (three dots)',
         'pwa.step2': 'Tap "Install App" or "Add to Home screen"',
         'pwa.step3': 'Tap "Install"',
-        'pwa.howTo': 'How to install?',
-        'pwa.desktopDesc': 'Check address bar for install icon',
+        'pwa.howTo': '如何安裝？',
+        'pwa.desktopDesc': '請檢查網址列右側的安裝圖示',
+
+        // Wishlist Detail
+        'wishlist.emptyOwner': '此清單目前是空的。點擊 + 新增項目！',
+        'wishlist.emptyVisitor': '此願望清單目前是空的。',
         'login.phoneNumber': '手機號碼',
         'login.password': '密碼',
         'login.forgotPassword': '忘記密碼？',

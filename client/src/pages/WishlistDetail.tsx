@@ -431,8 +431,8 @@ export default function WishlistDetail() {
                     {/* Menu Options */}
                     {isFabOpen && (
                         <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-5 fade-in duration-200">
-                            <div className="flex items-center gap-2">
-                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">{t('detail.addUrl')}</span>
+                            <div className="flex items-center gap-2 justify-end">
+                                <span className="bg-white px-3 py-1.5 rounded-full shadow-md text-sm font-medium text-gray-700">{t('detail.addUrl')}</span>
                                 <Button
                                     className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700 text-white p-0"
                                     onClick={() => { setIsFabOpen(false); setIsUrlModalOpen(true); }}
@@ -440,8 +440,8 @@ export default function WishlistDetail() {
                                     <LinkIcon className="w-5 h-5" />
                                 </Button>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="bg-white px-2 py-1 rounded shadow text-xs font-medium">{t('detail.uploadImg')}</span>
+                            <div className="flex items-center gap-2 justify-end">
+                                <span className="bg-white px-3 py-1.5 rounded-full shadow-md text-sm font-medium text-gray-700">{t('detail.uploadImg')}</span>
                                 <Button
                                     className="rounded-full w-12 h-12 shadow-lg bg-green-600 hover:bg-green-700 text-white p-0"
                                     onClick={() => fileInputRef.current?.click()}
@@ -488,8 +488,8 @@ export default function WishlistDetail() {
                                         required
                                         autoFocus
                                     />
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        💡 <b>Smart Input:</b> {t('detail.smartInputTip')}
+                                    <p className="text-sm text-gray-600 mt-3 bg-blue-50 p-2 rounded border border-blue-100">
+                                        ✨ <b>Tip:</b> {t('detail.smartInputTip')}
                                     </p>
                                 </div>
                             </CardContent>

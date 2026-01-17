@@ -51,6 +51,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     });
 
     const [error, setError] = useState("");
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (item) {
@@ -102,6 +103,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     const aiLink = currentItem.aiLink || `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(currentItem.name)}`;
 
     const handleSave = async () => {
+        setSaving(true);
         try {
             const res = await fetch(`${API_URL}/items/${currentItem.id}`, {
                 method: 'PUT',
@@ -135,6 +137,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         } catch (error) {
             console.error(error);
             setError("更新發生錯誤");
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -329,7 +333,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
 
                         <div className="grid grid-cols-1 gap-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-500">價格</label>
+                                <label className="text-sm font-medium text-gray-500">{t('detail.price')}</label>
                                 {isEditing ? (
                                     <div className="flex gap-2">
                                         <Input
@@ -341,8 +345,9 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                         <Input
                                             value={formData.price}
                                             onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                            placeholder="價格"
+                                            placeholder={t('detail.price')}
                                             className="flex-1"
+                                            inputMode="decimal"
                                         />
                                     </div>
                                 ) : (
@@ -353,12 +358,12 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-500">連結</label>
+                                <label className="text-sm font-medium text-gray-500">{t('detail.link')}</label>
                                 {isEditing ? (
                                     <Input
                                         value={formData.link}
                                         onChange={e => setFormData({ ...formData, link: e.target.value })}
-                                        placeholder="商品連結"
+                                        placeholder={t('detail.link')}
                                     />
                                 ) : (
                                     <div className="flex flex-col gap-2 mt-1">
@@ -366,7 +371,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                         {currentItem.link && (
                                             <a href={currentItem.link} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline text-sm">
                                                 <ExternalLink className="w-4 h-4 mr-1" />
-                                                商品連結
+                                                {t('detail.link')}
                                             </a>
                                         )}
                                         {/* AI Link: Show if user link exists (both shown) or no user link (AI only) */}
@@ -380,13 +385,13 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-gray-500">描述 / 備註</label>
+                            <label className="text-sm font-medium text-gray-500">{t('detail.notes')}</label>
                             {isEditing ? (
                                 <textarea
                                     value={formData.notes}
                                     onChange={e => setFormData({ ...formData, notes: e.target.value })}
                                     className="w-full min-h-[100px] border rounded-md p-2 text-sm focus:ring-muji-primary focus:border-muji-primary"
-                                    placeholder="輸入描述..."
+                                    placeholder={t('detail.notes')}
                                 />
                             ) : (
                                 <p className="text-gray-700 mt-1 whitespace-pre-wrap">{currentItem.notes || "無描述"}</p>
@@ -398,11 +403,12 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                 <CardFooter className="flex justify-between border-t pt-4">
                     {isEditing ? (
                         <div className="flex w-full justify-between">
-                            <Button variant="secondary" onClick={() => setIsEditing(false)}>
-                                <X className="w-4 h-4 mr-2" /> Cancel
+                            <Button variant="secondary" onClick={() => setIsEditing(false)} disabled={saving}>
+                                <X className="w-4 h-4 mr-2" /> {t('common.cancel')}
                             </Button>
-                            <Button onClick={handleSave}>
-                                <Save className="w-4 h-4 mr-2" /> Save
+                            <Button onClick={handleSave} disabled={saving}>
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                {saving ? t('common.saving') : t('common.save')}
                             </Button>
                         </div>
                     ) : (

@@ -22,6 +22,7 @@ interface PublicProfile {
 
 export default function FriendProfilePage() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { token } = useAuth();
     const [profile, setProfile] = useState<PublicProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -91,91 +92,82 @@ export default function FriendProfilePage() {
     };
 
     return (
-import { useNavigate, useParams } from "react-router-dom";
-    // ... imports
+        <div className="max-w-2xl mx-auto space-y-6">
+            <Button
+                variant="ghost"
+                className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900"
+                onClick={() => navigate(-1)}
+            >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                {t('common.back')}
+            </Button>
+            <h1 className="text-3xl font-bold text-muji-primary">{t('friend.title')}</h1>
 
-    export default function FriendProfilePage() {
-        const { id } = useParams();
-        const navigate = useNavigate();
-        // ...
-
-        return (
-            <div className="max-w-2xl mx-auto space-y-6">
-                <Button
-                    variant="ghost"
-                    className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900"
-                    onClick={() => navigate(-1)}
-                >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    {t('common.back')}
-                </Button>
-                <h1 className="text-3xl font-bold text-muji-primary">{t('friend.title')}</h1>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{t('friend.basicInfo')}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Avatar Section */}
-                        <div className="flex justify-center mb-8">
-                            <div className="w-32 h-32 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-sm relative">
-                                {profile.avatarUrl ? (
-                                    <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
-                                        <User className="w-16 h-16" />
-                                        {/* Overlay for hidden explicitly? API returns null if hidden, so we just show default */}
-                                        {profile.avatarUrl === null && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 backdrop-blur-sm text-gray-500">
-                                                <EyeOff className="w-6 h-6 mb-1 opacity-50" />
-                                                <span className="text-[10px] font-bold uppercase tracking-wider">{t('friend.hidden')}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {renderField(t('settings.displayName'), profile.name, User)}
-                            {renderField(t('settings.nickname'), profile.nicknames, Tag)}
-                            {renderField(t('settings.realName'), profile.realName, User)}
-                            {renderField(t('settings.phone'), profile.phoneNumber, Smartphone)}
-                            {renderField(t('settings.address'), profile.address, MapPin)}
-                        </div>
-
-                        <div className="pt-6 grid grid-cols-2 gap-3">
-                            {/* View Wishlist - Primary Action */}
-                            <Link to={`/users/${id}/wishlists`} className="block w-full">
-                                <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
-                                    <Gift className="w-5 h-5" />
-                                    {t('friend.viewWishlist')}
-                                </button>
-                            </Link>
-
-                            {/* Follow Button - Secondary Action */}
-                            {profile.isFollowing ? (
-                                <button
-                                    onClick={handleUnfollow}
-                                    className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2 border border-gray-200"
-                                >
-                                    <UserMinus className="w-5 h-5" />
-                                    {t('social.unfollow')}
-                                </button>
+            <Card>
+                <CardHeader>
+                    <CardTitle>{t('friend.basicInfo')}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Avatar Section */}
+                    <div className="flex justify-center mb-8">
+                        <div className="w-32 h-32 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-sm relative">
+                            {profile.avatarUrl ? (
+                                <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />
                             ) : (
-                                <button
-                                    onClick={handleFollow}
-                                    className="w-full bg-white text-pink-500 border border-pink-500 py-3 rounded-md font-medium hover:bg-pink-50 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <UserPlus className="w-5 h-5" />
-                                    {t('social.follow')}
-                                </button>
+                                <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
+                                    <User className="w-16 h-16" />
+                                    {/* Overlay for hidden explicitly? API returns null if hidden, so we just show default */}
+                                    {profile.avatarUrl === null && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 backdrop-blur-sm text-gray-500">
+                                            <EyeOff className="w-6 h-6 mb-1 opacity-50" />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('friend.hidden')}</span>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
+                    </div>
 
-                    </CardContent >
-                </Card >
-            </div >
-        );
-    }
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {renderField(t('settings.displayName'), profile.name, User)}
+                        {renderField(t('settings.nickname'), profile.nicknames, Tag)}
+                        {renderField(t('settings.realName'), profile.realName, User)}
+                        {renderField(t('settings.phone'), profile.phoneNumber, Smartphone)}
+                        {renderField(t('settings.address'), profile.address, MapPin)}
+                    </div>
+
+                    <div className="pt-6 grid grid-cols-2 gap-3">
+                        {/* View Wishlist - Primary Action */}
+                        <Link to={`/users/${id}/wishlists`} className="block w-full">
+                            <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                <Gift className="w-5 h-5" />
+                                {t('friend.viewWishlist')}
+                            </button>
+                        </Link>
+
+                        {/* Follow Button - Secondary Action */}
+                        {profile.isFollowing ? (
+                            <button
+                                onClick={handleUnfollow}
+                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2 border border-gray-200"
+                            >
+                                <UserMinus className="w-5 h-5" />
+                                {t('social.unfollow')}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleFollow}
+                                className="w-full bg-white text-pink-500 border border-pink-500 py-3 rounded-md font-medium hover:bg-pink-50 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <UserPlus className="w-5 h-5" />
+                                {t('social.follow')}
+                            </button>
+                        )}
+                    </div>
+
+                </CardContent >
+            </Card >
+        </div >
+    );
+}
 

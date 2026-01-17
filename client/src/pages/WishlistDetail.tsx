@@ -430,23 +430,22 @@ export default function WishlistDetail() {
                                     </div>
                                 </div>
 
-                                {/* Actions Column */}
-                                <div className="flex flex-col gap-2 justify-center border-l pl-3 ml-1">
+                                {/* Actions Column - More compact */}
+                                <div className="flex flex-col gap-1 justify-center border-l pl-2 ml-1">
                                     {isOwner ? (
                                         <>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => openDetail(item)}>
-                                                <Info className="w-5 h-5 font-bold" />
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)}>
+                                                <Info className="w-5 h-5" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
                                                 {item.isHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
                                                 <Trash2 className="w-5 h-5" />
                                             </Button>
                                         </>
                                     ) : (
                                         <>
-                                            {/* Visitor Actions: Clone (+), Info (i), Watch (Eye) */}
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>

@@ -263,6 +263,7 @@ const translations: Record<string, Record<string, string>> = {
         'common.saved': '已儲存！',
         'common.language': '語言',
         'common.languageDesc': '選擇您偏好的顯示語言',
+        'detail.itemLabel': '貼上商品連結 (自動填寫)',
 
         // Dashboard
         'dashboard.emptyTitle': '開啟您的願望之旅',

@@ -301,18 +301,17 @@ export default function WishlistDetail() {
                             <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Title" />
                             <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description" />
 
-                            <div className="flex items-center space-x-2">
+                            <label className="flex items-center gap-3 p-3 border rounded-lg border-dashed hover:bg-gray-50 cursor-pointer transition-colors">
                                 <input
                                     type="checkbox"
-                                    id="isPublic"
                                     checked={editIsPublic}
                                     onChange={(e) => setEditIsPublic(e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
+                                    className="h-5 w-5 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
                                 />
-                                <label htmlFor="isPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                <span className="text-sm font-medium text-gray-700 select-none flex-1">
                                     {t('dashboard.publicLabel')}
-                                </label>
-                            </div>
+                                </span>
+                            </label>
 
                             <div className="flex gap-2">
                                 <Button onClick={handleUpdateWishlist} size="sm">{t('common.save')}</Button>

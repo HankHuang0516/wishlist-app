@@ -1,4 +1,8 @@
 export const getUserLocale = (): string => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem('user-locale');
+        if (saved) return saved;
+    }
     if (typeof navigator !== 'undefined') {
         return navigator.language || 'en-US';
     }
@@ -224,6 +228,12 @@ const translations: Record<string, Record<string, string>> = {
         'common.confirm': '確認',
         'common.save': '儲存',
         'common.saved': '已儲存！',
+        'common.language': '語言',
+        'common.languageDesc': '選擇您偏好的顯示語言',
+
+        // Dashboard
+        'dashboard.emptyTitle': '開啟您的願望之旅',
+        'dashboard.emptyDesc': '建立第一個願望清單，開始收集您喜愛的物品！',
         'common.delete': '刪除',
         'common.edit': '編輯',
         'common.close': '關閉',
@@ -465,6 +475,12 @@ const translations: Record<string, Record<string, string>> = {
         'common.confirm': 'Confirm',
         'common.save': 'Save',
         'common.saved': 'Saved!',
+        'common.language': 'Language',
+        'common.languageDesc': 'Choose your preferred language',
+
+        // Dashboard
+        'dashboard.emptyTitle': 'Start Your Wishlist Journey',
+        'dashboard.emptyDesc': 'Create your first wishlist and start collecting items you love!',
         'common.delete': 'Delete',
         'common.edit': 'Edit',
         'common.close': 'Close',

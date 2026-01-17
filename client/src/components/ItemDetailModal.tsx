@@ -233,7 +233,15 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                 {list.title}
                             </Button>
                         ))}
-                        {myWishlists.length === 0 && <p className="text-center text-gray-500">您還沒有建立願望清單</p>}
+                        {myWishlists.length === 0 && <p className="text-center text-gray-500 py-2">您還沒有建立願望清單</p>}
+
+                        <div className="pt-2 mt-2 border-t">
+                            <Link to="/dashboard">
+                                <Button variant="ghost" className="w-full text-muji-primary">
+                                    + {t('detail.createList')}
+                                </Button>
+                            </Link>
+                        </div>
                     </CardContent>
                     <CardFooter>
                         <Button variant="ghost" onClick={() => setIsCloning(false)} className="w-full">

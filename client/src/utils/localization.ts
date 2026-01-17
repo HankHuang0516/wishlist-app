@@ -627,8 +627,6 @@ const translations: Record<string, Record<string, string>> = {
 
         'dashboard.userWishlists': '{name}\'s Public Wishlists',
         'dashboard.createTitle': 'Create New Wishlist',
-        'dashboard.userWishlists': '{name}\'s Public Wishlists',
-        'dashboard.createTitle': 'Create New Wishlist',
         'dashboard.descPlaceholder': 'Description (Optional)',
         'dashboard.publicLabel': 'Public Wishlist',
         'dashboard.public': 'Visible to everyone',

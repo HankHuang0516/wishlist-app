@@ -300,17 +300,39 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                     )}
 
                     {/* Image */}
-                    <div className="flex justify-center bg-gray-50 rounded-lg p-2">
+                    <div className="flex justify-center bg-gray-50 rounded-lg p-2 relative group cursor-zoom-in" onClick={() => setIsLightboxOpen(true)}>
                         {currentItem.imageUrl ? (
-                            <img
-                                src={getImageUrl(currentItem.imageUrl)}
-                                alt={currentItem.name}
-                                className="max-h-64 object-contain"
-                            />
+                            <>
+                                <img
+                                    src={getImageUrl(currentItem.imageUrl)}
+                                    alt={currentItem.name}
+                                    className="max-h-64 object-contain"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 rounded-lg">
+                                    <span className="bg-black/70 text-white text-xs px-2 py-1 rounded">Click to Zoom</span>
+                                </div>
+                            </>
                         ) : (
                             <div className="h-48 flex items-center justify-center text-gray-400">No Image</div>
                         )}
                     </div>
+
+                    {/* Lightbox Modal */}
+                    {isLightboxOpen && currentItem.imageUrl && (
+                        <div
+                            className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center cursor-zoom-out p-4"
+                            onClick={() => setIsLightboxOpen(false)}
+                        >
+                            <img
+                                src={getImageUrl(currentItem.imageUrl)}
+                                alt="Full View"
+                                className="max-w-full max-h-full object-contain"
+                            />
+                            <button className="absolute top-4 right-4 text-white p-2 bg-white/20 rounded-full hover:bg-white/30">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                    )}
 
                     {/* Info */}
                     <div className="space-y-3">

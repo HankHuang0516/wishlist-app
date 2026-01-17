@@ -735,8 +735,9 @@ export default function SettingsPage() {
                                                 headers: { 'Authorization': `Bearer ${token}` }
                                             });
                                             if (res.ok) {
-                                                alert("Subscription cancelled.");
-                                                window.location.reload();
+                                                // Smooth update
+                                                handleUpdate({ isPremium: false });
+                                                // Optional: Show toast or small feedback
                                             } else {
                                                 alert("Failed to cancel");
                                             }

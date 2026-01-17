@@ -154,6 +154,87 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         }
     };
 
+    // Cloning State
+    const [isCloning, setIsCloning] = useState(false);
+    const [myWishlists, setMyWishlists] = useState<any[]>([]);
+
+    const handleClone = async () => {
+        setIsCloning(true);
+        // Fetch user's wishlists
+        try {
+            const res = await fetch(`${API_URL}/wishlists`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setMyWishlists(await res.json());
+            }
+        } catch (e) {
+            console.error(e);
+            setIsCloning(false);
+        }
+    };
+
+    const executeClone = async (wishlistId: number) => {
+        try {
+            const res = await fetch(`${API_URL}/wishlists/${wishlistId}/items`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: currentItem.name,
+                    price: currentItem.price,
+                    currency: currentItem.currency,
+                    url: currentItem.link, // Note: API expects 'url' but model has 'link'
+                    notes: currentItem.notes,
+                    imageUrl: currentItem.imageUrl
+                })
+            });
+
+            if (res.ok) {
+                alert("已成功加入您的清單！");
+                setIsCloning(false);
+                onClose();
+            } else {
+                alert("加入失敗");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("發生錯誤");
+        }
+    };
+
+    if (isCloning) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <Card className="w-full max-w-sm bg-white">
+                    <CardHeader>
+                        <CardTitle>選擇要加入的清單</CardTitle>
+                    </CardHeader>
+                    <CardContent className="max-h-[60vh] overflow-y-auto space-y-2">
+                        {myWishlists.map(list => (
+                            <Button
+                                key={list.id}
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => executeClone(list.id)}
+                            >
+                                {list.title}
+                            </Button>
+                        ))}
+                        {myWishlists.length === 0 && <p className="text-center text-gray-500">您還沒有建立願望清單</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button variant="ghost" onClick={() => setIsCloning(false)} className="w-full">
+                            取消
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <Card className="w-full max-w-lg bg-white max-h-[90vh] overflow-y-auto">
@@ -303,7 +384,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                         <>
                             <Button variant="ghost" onClick={onClose}>Close</Button>
                             <div className="flex gap-2">
-                                {isOwner && (
+                                {isOwner ? (
                                     <>
                                         <Button variant="outline" onClick={() => setIsEditing(true)}>
                                             <Edit2 className="w-4 h-4 mr-2" />
@@ -313,6 +394,11 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                             <Trash className="w-4 h-4" />
                                         </Button>
                                     </>
+                                ) : (
+                                    <Button onClick={handleClone} className="bg-muji-primary text-white">
+                                        <ExternalLink className="w-4 h-4 mr-2" />
+                                        加入我的清單
+                                    </Button>
                                 )}
                             </div>
                         </>

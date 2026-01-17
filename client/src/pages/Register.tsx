@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
+import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
 import { t } from "../utils/localization";
 
@@ -11,6 +12,7 @@ export default function Register() {
     const [name, setName] = useState("");
     const [phoneNumber, setPhoneNumber] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     // Birthday State
     const [year, setYear] = useState("");
@@ -130,13 +132,23 @@ export default function Register() {
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none" htmlFor="password">{t('register.password')}</label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    className="pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                         </div>
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-4">

@@ -3,6 +3,7 @@ import { Link, Outlet } from "react-router-dom";
 import { Gift, House, Users, Settings as SettingsIcon, LogOut, LogIn, CircleHelp, Crown } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import FeedbackModal from "../components/FeedbackModal";
+import BottomNav from "../components/BottomNav";
 
 import { useAuth } from "../context/AuthContext";
 import { t } from "../utils/localization";
@@ -39,7 +40,7 @@ export default function Layout() {
 
 
                     {/* Nav Icons */}
-                    <div className="flex items-center gap-3 sm:gap-6 md:gap-8 overflow-x-auto no-scrollbar py-2 px-2">
+                    <div className="hidden sm:flex items-center gap-3 sm:gap-6 md:gap-8 overflow-x-auto no-scrollbar py-2 px-2">
                         <Link to="/">
                             <Button variant="ghost" size="icon" title={t('nav.home')} className="shrink-0">
                                 <House className="h-6 w-6" />
@@ -113,6 +114,8 @@ export default function Layout() {
                     <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>
                 </div>
             </footer>
+
+            {isAuthenticated && <BottomNav />}
         </div>
     );
 }

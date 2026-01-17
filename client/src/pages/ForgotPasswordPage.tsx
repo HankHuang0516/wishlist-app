@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
-import { ArrowLeft, KeyRound, Smartphone } from "lucide-react";
+import { ArrowLeft, KeyRound, Smartphone, Lock } from "lucide-react";
 import { t } from "../utils/localization";
 
 export default function ForgotPasswordPage() {
@@ -133,7 +133,7 @@ export default function ForgotPasswordPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium leading-none">{t('forgot.enterOtp')}</label>
                                 <div className="relative">
-                                    <KeyRound className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                                     <Input
                                         placeholder="123456"
                                         className="pl-10"

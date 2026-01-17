@@ -155,69 +155,89 @@ export default function PurchaseHistoryPage() {
                     <div className="p-3 bg-green-100 rounded-full">
                         <User className="w-8 h-8 text-green-600" />
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{t('purchase.giftsTitle')}</h1>
-                        <p className="text-gray-500">{t('purchase.giftsDesc')}</p>
-                    </div>
-                </div>
+                    {/* Purchased Items Section */}
+                    <h2 className="text-xl font-bold text-muji-primary mb-4 flex items-center gap-2">
+                        <ShoppingBag className="w-5 h-5" />
+                        {t('common.purchases') || "Purchased Items"}
+                    </h2>
 
-                {items.length === 0 ? (
-                    <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-gray-500">{t('purchase.noGifts')}</p>
-                    </div>
-                ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {items.map(item => (
-                            <Card key={item.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                                <div className="aspect-video bg-gray-100 relative">
-                                    {item.imageUrl ? (
-                                        <img src={`${API_BASE_URL}${item.imageUrl}`} alt={item.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                            <ShoppingBag className="w-12 h-12 opacity-20" />
-                                        </div>
-                                    )}
-                                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow font-medium">
-                                        {t('common.purchased')}
-                                    </div>
+                    {items.length === 0 ? (
+                        <Card className="mb-8 bg-gray-50 border-dashed">
+                            <CardContent className="flex flex-col items-center justify-center py-8 text-gray-500">
+                                <p>{t('common.noPurchases') || "No items purchased yet."}</p>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="overflow-x-auto -mx-4 md:mx-0">
+                            <div className="min-w-[600px] px-4 md:px-0">
+                                <div className="grid gap-4 mb-8">
+                                    {items.map(item => (
+                                        <Card key={item.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                                            <div className="flex flex-row">
+                                                {/* Image */}
+                                                <div className="w-24 h-24 bg-gray-100 flex-shrink-0">
+                                                    {item.imageUrl ? (
+                                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                                            <Gift className="w-8 h-8" />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Content */}
+                                                <div className="flex-1 p-4 flex flex-col justify-between">
+                                                    <div>
+                                                        <div className="flex justify-between items-start">
+                                                            <h3 className="font-bold text-lg text-muji-primary line-clamp-1">{item.name}</h3>
+                                                            {item.price && (
+                                                                <span className="font-semibold text-green-600">
+                                                                    {item.currency} {item.price}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                                                            <User className="w-3 h-3" />
+                                                            <span>From: {item.wishlist.user.nicknames || item.wishlist.user.name}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-end mt-2">
+                                                        <span className="text-xs text-gray-400">
+                                                            {new Date(item.updatedAt).toLocaleDateString()}
+                                                        </span>
+                                                        {item.link && (
+                                                            <a
+                                                                href={item.link}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-blue-500 hover:underline flex items-center gap-1 text-sm"
+                                                            >
+                                                                Visit Link <ExternalLink className="w-3 h-3" />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    ))}
                                 </div>
-                                <CardContent className="p-4 space-y-3">
-                                    <div>
-                                        <h3 className="font-semibold text-lg line-clamp-1" title={item.name}>{item.name}</h3>
-                                        {item.price && <p className="text-green-600 font-bold">{item.currency} {item.price}</p>}
-                                    </div>
-
-                                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                                        <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                                            {item.wishlist.user.avatarUrl ? (
-                                                <img src={`${API_BASE_URL}${item.wishlist.user.avatarUrl}`} alt={item.wishlist.user.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <User className="w-full h-full p-1 text-gray-400" />
-                                            )}
-                                        </div>
-                                        <div className="text-sm overflow-hidden">
-                                            <p className="font-medium truncate">{item.wishlist.user.nicknames?.split(',')[0] || item.wishlist.user.name}</p>
-                                            <p className="text-xs text-gray-400 truncate">{t('purchase.for').replace('{name}', item.wishlist.user.name)}</p>
-                                        </div>
-                                    </div>
-
-                                    {item.link && (
-                                        <a
-                                            href={item.link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center justify-center w-full mt-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded py-1 hover:bg-blue-50 transition-colors"
+                            </div>
+                        </div>
+                    )}rel="noopener noreferrer"
+                    className="flex items-center justify-center w-full mt-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded py-1 hover:bg-blue-50 transition-colors"
                                         >
-                                            <ExternalLink className="w-4 h-4 mr-1" />
-                                            {t('common.viewItem')}
-                                        </a>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    {t('common.viewItem')}
+                </a>
+            </CardContent>
+        </Card>
+    ))
+}
+                    </div >
                 )}
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

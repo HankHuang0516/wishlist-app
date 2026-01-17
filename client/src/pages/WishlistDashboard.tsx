@@ -319,7 +319,7 @@ export default function WishlistDashboard() {
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {filteredWishlists.map((list) => (
-                        <Link key={list.id} to={`/wishlists/${list.id}`}>
+                        <div key={list.id} onClick={() => navigate(`/wishlists/${list.id}`)}>
                             <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer relative group">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-lg font-bold truncate pr-6">{list.title}</CardTitle>

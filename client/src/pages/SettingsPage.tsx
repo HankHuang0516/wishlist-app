@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
 import PaymentModal from "../components/PaymentModal";
@@ -774,7 +774,9 @@ export default function SettingsPage() {
                                                     });
                                                     if (res.ok) {
                                                         logout();
-                                                        window.location.href = '/';
+                                                        navigate('/');
+                                                        // Force reload to clear any sensitive state if needed, but navigate is smoother
+                                                        // window.location.reload(); 
                                                     } else {
                                                         const data = await res.json();
                                                         alert(data.error || "Delete failed");

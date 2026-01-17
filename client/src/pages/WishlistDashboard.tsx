@@ -237,6 +237,7 @@ export default function WishlistDashboard() {
                                             onChange={(e) => setNewTitle(e.target.value)}
                                             maxLength={50}
                                             required
+                                            autoFocus
                                         />
                                         <div className="text-right text-xs text-gray-400 mt-1">
                                             {newTitle.length}/50

@@ -490,7 +490,7 @@ export default function WishlistDetail() {
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
-                                                <Info className="w-5 h-5 font-bold stroke-[3px]" />
+                                                <Info className="w-5 h-5" />
                                             </Button>
                                         </>
                                     )}

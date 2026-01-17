@@ -1,5 +1,6 @@
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/Card";
+import { t } from "../utils/localization";
 
 interface DeleteConfirmModalProps {
     isOpen: boolean;
@@ -31,10 +32,10 @@ export default function DeleteConfirmModal({
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2 bg-gray-50 rounded-b-lg">
                     <Button variant="secondary" onClick={onClose} disabled={isDeleting}>
-                        取消 (Cancel)
+                        {t('common.cancel')}
                     </Button>
                     <Button variant="destructive" onClick={onConfirm} disabled={isDeleting}>
-                        {isDeleting ? "刪除中..." : "確認刪除 (Confirm)"}
+                        {isDeleting ? t('common.processing') : t('common.delete')}
                     </Button>
                 </CardFooter>
             </Card>

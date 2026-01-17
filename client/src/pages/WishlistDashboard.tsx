@@ -312,6 +312,28 @@ export default function WishlistDashboard() {
                     <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? "Try a different keyword" : t('dashboard.createFirstDesc')}</p>
                     {!searchQuery && (
                         <Button onClick={() => setIsCreateExpanded(true)} className="animate-bounce">
+                            {t('dashboard.createNew')}
+                        </Button>
+                    )}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredWishlists.map((list) => (
+                        <div key={list.id} onClick={() => navigate(`/wishlists/${list.id}`)}>
+                            <Card className="hover:shadow-lg transition-shadow cursor-pointer group relative">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="flex justify-between items-start">
+                                        <span className="truncate pr-4">{list.title}</span>
+                                        {!list.isPublic && <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                                    </CardTitle>
+                                    <CardDescription className="line-clamp-2 h-10">
+                                        {list.description || t('dashboard.noDesc')}
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-sm text-gray-500">
+                                        {list.items?.length || 0} {t('dashboard.items')}
+                                    </p>
                                 </CardContent>
                                 <CardFooter className="flex justify-between items-center">
                                     <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -350,33 +372,33 @@ export default function WishlistDashboard() {
                                 </CardFooter>
                             </Card>
                         </div>
-    ))
-}
+                    ))
+                    }
                 </div >
             )}
 
-<DeleteConfirmModal
-    isOpen={deleteModalOpen}
-    onClose={() => setDeleteModalOpen(false)}
-    onConfirm={confirmDelete}
-    title={t('dashboard.deleteConfirmTitle')}
-    message={t('dashboard.deleteConfirmMsg')}
-    isDeleting={isDeleting}
-/>
+            <DeleteConfirmModal
+                isOpen={deleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                onConfirm={confirmDelete}
+                title={t('dashboard.deleteConfirmTitle')}
+                message={t('dashboard.deleteConfirmMsg')}
+                isDeleting={isDeleting}
+            />
 
-{
-    wishlists.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
-            <div className="bg-muji-primary/10 p-4 rounded-full">
-                <Gift className="w-12 h-12 text-muji-primary" />
-            </div>
-            <div className="space-y-1">
-                <h3 className="text-xl font-bold text-gray-900">{t('dashboard.emptyTitle')}</h3>
-                <p className="text-gray-500 max-w-sm mx-auto">{t('dashboard.emptyDesc')}</p>
-            </div>
-        </div>
-    )
-}
+            {
+                wishlists.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+                        <div className="bg-muji-primary/10 p-4 rounded-full">
+                            <Gift className="w-12 h-12 text-muji-primary" />
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="text-xl font-bold text-gray-900">{t('dashboard.emptyTitle')}</h3>
+                            <p className="text-gray-500 max-w-sm mx-auto">{t('dashboard.emptyDesc')}</p>
+                        </div>
+                    </div>
+                )
+            }
         </div >
     );
 }

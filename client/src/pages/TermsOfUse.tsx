@@ -94,7 +94,7 @@ export default function TermsOfUse() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        最後更新日期：{new Date().toISOString().split('T')[0]}
+                        最後更新日期：2026-01-18
                     </div>
                 </div>
             </div>
@@ -177,7 +177,7 @@ export default function TermsOfUse() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        Last updated: {new Date().toISOString().split('T')[0]}
+                        Last updated: 2026-01-18
                     </div>
                 </div>
             </div>

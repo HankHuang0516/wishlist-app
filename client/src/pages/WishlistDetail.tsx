@@ -358,7 +358,7 @@ export default function WishlistDetail() {
                                     {wishlist.items.length}/{wishlist.maxItems || 100}
                                 </span>
                             </div>
-                            <p className="text-muji-secondary">{wishlist.description}</p>
+                            <p className="text-muji-secondary line-clamp-3">{wishlist.description}</p>
                         </>
                     )}
                 </div>

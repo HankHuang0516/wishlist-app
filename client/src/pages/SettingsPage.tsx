@@ -385,6 +385,11 @@ export default function SettingsPage() {
                             }
                         }}
                         placeholder={t('settings.nicknamesPlaceholder')}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                            }
+                        }}
                     />
                     <div className="flex justify-between items-center mt-2">
                         <p className="text-xs text-muji-secondary">{t('settings.nicknamesPlaceholder')}</p>

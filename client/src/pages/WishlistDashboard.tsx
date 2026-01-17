@@ -368,7 +368,7 @@ export default function WishlistDashboard() {
                                     )}
                                 </CardFooter>
                             </Card>
-                        </Link>
+                        </div>
                     ))}
                 </div>
             )}

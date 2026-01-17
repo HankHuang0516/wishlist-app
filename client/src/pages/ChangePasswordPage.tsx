@@ -61,7 +61,8 @@ export default function ChangePasswordPage() {
     };
 
     return (
-        <div className="max-w-md mx-auto py-10 px-4">
+        <div className="max-w-md mx-auto mt-10 space-y-6 pb-20">
+            <h1 className="text-2xl font-bold text-center text-muji-primary">{t('settings.changePwd')}</h1>
             <Link to="/settings" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-6">
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 {t('common.back')}

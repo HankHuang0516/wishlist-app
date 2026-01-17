@@ -312,46 +312,45 @@ export default function WishlistDashboard() {
                     <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? "Try a different keyword" : t('dashboard.createFirstDesc')}</p>
                     {!searchQuery && (
                         <Button onClick={() => setIsCreateExpanded(true)} className="animate-bounce">
-                            {t('dashboard.createNew')}
-                        </Button>
-                    )}
-                </div>
-            ) : (
-                { isOwner && (
-                    <div className="flex gap-1">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                handleTogglePrivacy(list.id, list.isPublic);
-                            }}
-                            title={list.isPublic ? "Make Private" : "Make Public"}
-                        >
-                            {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDeleteClick(list.id);
-                            }}
-                            title={t('common.delete')}
-                            aria-label={t('common.delete')}
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
-                    </div >
-                )
-}
-        </CardFooter >
-                            </Card >
-                        </div >
-                    ))
+                                </CardContent>
+                                <CardFooter className="flex justify-between items-center">
+                                    <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        {list.isPublic ? t('common.public') : t('common.private')}
+                                    </span>
+                                    {isOwner && (
+                                        <div className="flex gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleTogglePrivacy(list.id, list.isPublic);
+                                                }}
+                                                title={list.isPublic ? "Make Private" : "Make Public"}
+                                            >
+                                                {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleDeleteClick(list.id);
+                                                }}
+                                                title={t('common.delete')}
+                                                aria-label={t('common.delete')}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardFooter>
+                            </Card>
+                        </div>
+    ))
 }
                 </div >
             )}

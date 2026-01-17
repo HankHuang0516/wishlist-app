@@ -42,9 +42,12 @@ export default function NotificationsSettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700 cursor-pointer" htmlFor="marketing">
-                            {t('settings.notifMarketing')}
-                        </label>
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 cursor-pointer" htmlFor="marketing">
+                                {t('settings.notifMarketing')}
+                            </label>
+                            <p className="text-xs text-gray-500 mt-0.5">Receive updates about new features and prompts.</p>
+                        </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                             <input
                                 id="marketing"
@@ -59,6 +62,7 @@ export default function NotificationsSettingsPage() {
                     <div className="flex items-center justify-between opacity-50">
                         <label className="text-sm font-medium text-gray-700">
                             {t('settings.notifSecurity')} <span className="text-xs text-red-500 ml-1">{t('settings.securityMandatory')}</span>
+                            <p className="text-xs text-gray-500 mt-0.5 font-normal">Important alerts about your account security.</p>
                         </label>
                         <input type="checkbox" className="h-5 w-5 text-muji-primary rounded focus:ring-muji-primary" defaultChecked disabled />
                     </div>

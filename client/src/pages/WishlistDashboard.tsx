@@ -195,19 +195,40 @@ export default function WishlistDashboard() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-muji-primary">
-                                <div className="text-2xl font-bold text-muji-primary">
-                                    {totalItems} <span className="text-sm text-gray-400 font-normal">/ {user?.isPremium ? '∞' : maxCapacity} ({t('dashboard.perList')})</span>
-                                </div>
+                                {totalItems} <span className="text-sm text-gray-400 font-normal">/ {user?.isPremium ? '∞' : maxCapacity} ({t('dashboard.perList')})</span>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
             )}
 
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-muji-primary">
-                    {isOwner ? t('dashboard.myWishlists') : t('dashboard.userWishlists').replace('{name}', targetUserName)}
-                </h1>
+            <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-center">
+                    <h1 className="text-3xl font-bold text-muji-primary">
+                        {isOwner ? t('dashboard.myWishlists') : t('dashboard.userWishlists').replace('{name}', targetUserName)}
+                    </h1>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                        placeholder={t('dashboard.searchPlaceholder') || "Search wishlists..."}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 pr-9"
+                    />
+                    {searchQuery && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1 h-8 w-8 hover:bg-transparent"
+                            onClick={() => setSearchQuery("")}
+                        >
+                            <X className="h-4 w-4 text-gray-400" />
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {isOwner && (
@@ -278,20 +299,22 @@ export default function WishlistDashboard() {
                 </div>
             )}
 
-            {wishlists.length === 0 && !creating && !loading ? (
+            {filteredWishlists.length === 0 && !creating && !loading ? (
                 <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-200">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Gift className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">{t('dashboard.noWishlists')}</h3>
-                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">{t('dashboard.createFirstDesc')}</p>
-                    <Button onClick={() => setIsCreateExpanded(true)} className="animate-bounce">
-                        {t('dashboard.createNew')}
-                    </Button>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">{searchQuery ? "No results found" : t('dashboard.noWishlists')}</h3>
+                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? "Try a different keyword" : t('dashboard.createFirstDesc')}</p>
+                    {!searchQuery && (
+                        <Button onClick={() => setIsCreateExpanded(true)} className="animate-bounce">
+                            {t('dashboard.createNew')}
+                        </Button>
+                    )}
                 </div>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {wishlists.map((list) => (
+                    {filteredWishlists.map((list) => (
                         <Link key={list.id} to={`/wishlists/${list.id}`}>
                             <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer relative group">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

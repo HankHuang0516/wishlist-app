@@ -345,13 +345,12 @@ export default function WishlistDetail() {
                                             }
                                         }
                                     }}
-                                    className="text-gray-400 hover:text-muji-primary transition-colors p-1"
                                     title={t('wishlist.share')}
                                 >
-                                    <span id="share-btn-text" className="text-sm font-medium border rounded px-2 py-1 flex items-center gap-1">
-                                        <LinkIcon className="w-3 h-3" />
+                                    <Button variant="outline" size="sm" id="share-btn-text" className="gap-2">
+                                        <LinkIcon className="w-4 h-4" />
                                         {t('wishlist.share')}
-                                    </span>
+                                    </Button>
                                 </button>
                                 <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
                                     {wishlist.items.length}/{wishlist.maxItems || 100}

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/Card";
-import { ExternalLink, Info, Trash, Edit2, Save, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/Dialog";
+import { X, Edit2, Trash, Save, ExternalLink, Bot, Check } from "lucide-react";
 import { API_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
@@ -157,6 +157,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     // Cloning State
     const [isCloning, setIsCloning] = useState(false);
     const [myWishlists, setMyWishlists] = useState<any[]>([]);
+    const [cloneSuccess, setCloneSuccess] = useState(false);
 
     const handleClone = async () => {
         setIsCloning(true);
@@ -193,11 +194,15 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             });
 
             if (res.ok) {
-                alert("已成功加入您的清單！");
-                setIsCloning(false);
-                onClose();
+                // Show inline success
+                setCloneSuccess(true);
+                setTimeout(() => {
+                    setCloneSuccess(false);
+                    setIsCloning(false);
+                    onClose();
+                }, 1500);
             } else {
-                alert("加入失敗");
+                console.error("Clone failed");
             }
         } catch (e) {
             console.error(e);

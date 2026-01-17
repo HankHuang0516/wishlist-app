@@ -324,14 +324,26 @@ export default function WishlistDetail() {
                             <div className="flex items-center gap-2">
                                 <h1 className="text-3xl font-bold text-muji-primary">{wishlist.title}</h1>
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         const url = window.location.href;
-                                        navigator.clipboard.writeText(url);
-                                        const btn = document.getElementById('share-btn-text');
-                                        if (btn) {
-                                            const original = btn.innerText;
-                                            btn.innerText = t('detail.copied');
-                                            setTimeout(() => btn.innerText = original, 2000);
+                                        if (navigator.share) {
+                                            try {
+                                                await navigator.share({
+                                                    title: wishlist.title,
+                                                    text: t('wishlist.shareText'),
+                                                    url: url
+                                                });
+                                            } catch (err) {
+                                                console.log('Share canceled', err);
+                                            }
+                                        } else {
+                                            navigator.clipboard.writeText(url);
+                                            const btn = document.getElementById('share-btn-text');
+                                            if (btn) {
+                                                const original = btn.innerText;
+                                                btn.innerText = t('detail.copied');
+                                                setTimeout(() => btn.innerText = original, 2000);
+                                            }
                                         }
                                     }}
                                     className="text-gray-400 hover:text-muji-primary transition-colors p-1"

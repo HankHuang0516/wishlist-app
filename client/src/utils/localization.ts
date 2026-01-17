@@ -155,6 +155,8 @@ const translations: Record<string, Record<string, string>> = {
         // Wishlist Detail
         'wishlist.emptyOwner': '此清單目前是空的。點擊 + 新增項目！',
         'wishlist.emptyVisitor': '此願望清單目前是空的。',
+        'wishlist.shareText': '來看看我在 Wishlist.ai 上的願望清單！',
+        'item.cloned': '已加入您的清單！',
         'login.phoneNumber': '手機號碼',
         'login.password': '密碼',
         'login.forgotPassword': '忘記密碼？',
@@ -467,6 +469,10 @@ const translations: Record<string, Record<string, string>> = {
         'dashboard.createFirst': 'Create your first wishlist',
 
         // Wishlist Detail
+        'wishlist.emptyOwner': 'This list is empty. Tap + to add items!',
+        'wishlist.emptyVisitor': 'This wishlist is empty.',
+        'wishlist.shareText': 'Check out my wishlist on Wishlist.ai!',
+        'item.cloned': 'Added to your wishlist!',
         'wishlist.addItem': 'Add Item',
         'wishlist.empty': 'This list is empty',
         'wishlist.addFirst': 'Add your first wish',

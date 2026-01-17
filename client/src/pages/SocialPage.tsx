@@ -144,28 +144,34 @@ export default function SocialPage() {
 
             {activeTab === 'search' && (
                 <div className="space-y-4">
-                    <div className="flex space-x-2">
+                    <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="flex space-x-2">
                         <div className="relative flex-1">
                             <Input
                                 placeholder={t('social.searchPlaceholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                                className="pr-8" // Make room for X button
+                                className="pl-10"
                             />
                             {searchQuery && (
                                 <button
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                                    type="button"
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                                 >
                                     <X className="w-4 h-4" />
                                 </button>
                             )}
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                         </div>
-                        <Button onClick={handleSearch} disabled={loading}>
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        <Button type="submit" disabled={loading}>
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('social.search')}
                         </Button>
-                    </div>
+                    </form>
+                    {searchResults.length === 0 && hasSearched && !loading && searchQuery && (
+                        <div className="text-center text-gray-500 py-8">
+                            <p>{t('social.noUserFoundVia', { query: searchQuery })}</p>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         {searchResults.map((user, index) => (

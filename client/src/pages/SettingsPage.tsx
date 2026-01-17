@@ -323,10 +323,21 @@ export default function SettingsPage() {
                         onBlur={(e) => {
                             // Save on blur
                             handleUpdate({ nicknames: e.target.value });
+                            const el = document.getElementById('nickname-saved');
+                            if (el) {
+                                el.style.opacity = '1';
+                                setTimeout(() => el.style.opacity = '0', 2000);
+                            }
                         }}
                         placeholder={t('settings.nicknamesPlaceholder')}
                     />
-                    <p className="text-xs text-muji-secondary mt-2">{t('settings.nicknamesPlaceholder')}</p>
+                    <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-muji-secondary">{t('settings.nicknamesPlaceholder')}</p>
+                        {/* Simple Saved Indicator - using a key to force re-render animation if needed, or just conditional */}
+                        <span id="nickname-saved" className="text-xs text-green-600 font-medium opacity-0 transition-opacity duration-500">
+                            {t('common.saved')}
+                        </span>
+                    </div>
                 </CardContent>
             </Card>
 

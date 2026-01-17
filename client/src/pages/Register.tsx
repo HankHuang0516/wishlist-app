@@ -22,11 +22,7 @@ export default function Register() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // Date Arrays
-    const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: 100 }, (_, i) => currentYear - i);
-    const months = Array.from({ length: 12 }, (_, i) => i + 1);
-    const days = Array.from({ length: 31 }, (_, i) => i + 1);
+
 
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();

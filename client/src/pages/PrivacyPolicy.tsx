@@ -5,7 +5,7 @@ export default function PrivacyPolicy() {
 
     if (isZh) {
         return (
-            <div className="max-w-4xl mx-auto py-8">
+            <div className="max-w-4xl mx-auto py-8 px-4">
                 <h1 className="text-3xl font-bold mb-6 text-muji-primary">隱私權政策 (Privacy Policy)</h1>
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
@@ -79,14 +79,14 @@ export default function PrivacyPolicy() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        最後更新日期：{new Date().toISOString().split('T')[0]}
+                        最後更新日期：2026-01-18
                     </div>
                 </div>
             </div>
         );
     } else {
         return (
-            <div className="max-w-4xl mx-auto py-8">
+            <div className="max-w-4xl mx-auto py-8 px-4">
                 <h1 className="text-3xl font-bold mb-6 text-muji-primary">Privacy Policy</h1>
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
@@ -160,7 +160,7 @@ export default function PrivacyPolicy() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        Last updated: {new Date().toISOString().split('T')[0]}
+                        Last updated: 2026-01-18
                     </div>
                 </div>
             </div>

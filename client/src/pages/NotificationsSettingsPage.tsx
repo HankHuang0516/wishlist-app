@@ -45,13 +45,16 @@ export default function NotificationsSettingsPage() {
                         <label className="text-sm font-medium text-gray-700 cursor-pointer" htmlFor="marketing">
                             {t('settings.notifMarketing')}
                         </label>
-                        <input
-                            id="marketing"
-                            type="checkbox"
-                            className="h-5 w-5 text-muji-primary rounded focus:ring-muji-primary cursor-pointer"
-                            checked={marketingEnabled}
-                            onChange={(e) => handleToggle(e.target.checked)}
-                        />
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                id="marketing"
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={marketingEnabled}
+                                onChange={(e) => handleToggle(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-muji-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-muji-primary"></div>
+                        </label>
                     </div>
                     <div className="flex items-center justify-between opacity-50">
                         <label className="text-sm font-medium text-gray-700">

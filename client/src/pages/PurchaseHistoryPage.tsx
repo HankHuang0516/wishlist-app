@@ -91,31 +91,56 @@ export default function PurchaseHistoryPage() {
                         <p className="text-gray-400">{t('purchase.noAccount')}</p>
                     </div>
                 ) : (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <table className="w-full text-left bg-white">
-                            <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-4">{t('common.item')}</th>
-                                    <th className="px-6 py-4">{t('common.date')}</th>
-                                    <th className="px-6 py-4 text-right">{t('common.amount')}</th>
-                                    <th className="px-6 py-4 text-center">{t('common.status')}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {transactions.map(tx => (
-                                    <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 font-medium text-gray-900">{getTypeName(tx.type)}</td>
-                                        <td className="px-6 py-4 text-gray-500 text-sm">{new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}</td>
-                                        <td className="px-6 py-4 text-right font-mono font-medium">{tx.currency} {tx.amount}</td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold border border-green-200">
+                    <div className="space-y-4">
+                        {/* Mobile View: Cards */}
+                        <div className="md:hidden space-y-4">
+                            {transactions.map(tx => (
+                                <Card key={tx.id} className="bg-white">
+                                    <CardContent className="p-4 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-medium text-gray-900">{getTypeName(tx.type)}</p>
+                                            <p className="text-xs text-gray-500">
+                                                {new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-mono font-medium text-gray-900">{tx.currency} {tx.amount}</p>
+                                            <span className="inline-block px-2 py-0.5 mt-1 rounded-full bg-green-100 text-green-700 text-[10px] font-bold border border-green-200">
                                                 {tx.status}
                                             </span>
-                                        </td>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+
+                        {/* Desktop View: Table */}
+                        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <table className="w-full text-left bg-white">
+                                <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-6 py-4">{t('common.item')}</th>
+                                        <th className="px-6 py-4">{t('common.date')}</th>
+                                        <th className="px-6 py-4 text-right">{t('common.amount')}</th>
+                                        <th className="px-6 py-4 text-center">{t('common.status')}</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {transactions.map(tx => (
+                                        <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-gray-900">{getTypeName(tx.type)}</td>
+                                            <td className="px-6 py-4 text-gray-500 text-sm">{new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}</td>
+                                            <td className="px-6 py-4 text-right font-mono font-medium">{tx.currency} {tx.amount}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold border border-green-200">
+                                                    {tx.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>

@@ -236,6 +236,38 @@ export default function SettingsPage() {
         <div className="max-w-2xl mx-auto space-y-6">
             <h1 className="text-3xl font-bold text-muji-primary">{t('settings.profile')}</h1>
 
+            {/* Language Section */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle>{t('common.language')}</CardTitle>
+                    <CardDescription>{t('common.languageDesc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex gap-2">
+                        <Button
+                            variant={getUserLocale().startsWith('zh') ? "default" : "outline"}
+                            onClick={() => {
+                                localStorage.setItem('user-locale', 'zh-TW');
+                                window.location.reload();
+                            }}
+                            className="flex-1"
+                        >
+                            繁體中文
+                        </Button>
+                        <Button
+                            variant={!getUserLocale().startsWith('zh') ? "default" : "outline"}
+                            onClick={() => {
+                                localStorage.setItem('user-locale', 'en-US');
+                                window.location.reload();
+                            }}
+                            className="flex-1"
+                        >
+                            English
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Avatar Section */}
             <Card>
                 <CardHeader>

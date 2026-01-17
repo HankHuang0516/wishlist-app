@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
-import { Search, UserMinus, Users, Eye, Info, X } from "lucide-react";
+import { Search, UserMinus, Users, Eye, Info, X, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { API_URL, API_BASE_URL } from '../config';
@@ -150,7 +150,7 @@ export default function SocialPage() {
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         />
                         <Button onClick={handleSearch} disabled={loading}>
-                            <Search className="w-4 h-4" />
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                         </Button>
                     </div>
 

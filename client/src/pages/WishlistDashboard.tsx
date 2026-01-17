@@ -6,7 +6,9 @@ import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button"; // Added Button
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
-import { Eye, EyeOff, Trash2 } from "lucide-react"; // Added Icons
+import {
+    Plus, Share2, Trash2, Edit2, Eye, EyeOff, Search, Gift
+} from "lucide-react"; // Added Icons
 
 
 import { t } from "../utils/localization";
@@ -320,8 +322,14 @@ export default function WishlistDashboard() {
 
             {
                 wishlists.length === 0 && (
-                    <div className="text-center text-muji-secondary py-10">
-                        {isOwner ? t('dashboard.emptyOwner') : t('dashboard.emptyVisitor')}
+                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+                        <div className="bg-muji-primary/10 p-4 rounded-full">
+                            <Gift className="w-12 h-12 text-muji-primary" />
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="text-xl font-bold text-gray-900">{t('dashboard.emptyTitle')}</h3>
+                            <p className="text-gray-500 max-w-sm mx-auto">{t('dashboard.emptyDesc')}</p>
+                        </div>
                     </div>
                 )
             }

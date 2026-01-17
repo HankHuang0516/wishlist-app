@@ -97,9 +97,13 @@ export default function WishlistDetail() {
     const fetchWishlist = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
-            const res = await fetch(`${API_URL}/wishlists/${id}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const headers: HeadersInit = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const res = await fetch(`${API_URL}/wishlists/${id}`, { headers });
+
             if (res.ok) {
                 const data = await res.json();
                 setWishlist(data);
@@ -109,7 +113,14 @@ export default function WishlistDetail() {
                     setEditIsPublic(data.isPublic);
                 }
             } else {
-                if (!silent) navigate('/dashboard');
+                if (!silent) {
+                    // Don'tredirect guests immediately, show error state instead
+                    // Only redirect if it's clearly a navigation error for a verified user
+                    console.error("Failed to fetch wishlist", res.status);
+                    if (res.status === 404) {
+                        setWishlist(null); // Will render empty/not found state
+                    }
+                }
             }
         } catch (error) {
             console.error(error);

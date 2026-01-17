@@ -91,6 +91,7 @@ export default function ChangePasswordPage() {
                                 value={currentPassword}
                                 onChange={(e) => setCurrentPassword(e.target.value)}
                                 required
+                                autoComplete="current-password"
                             />
                         </div>
                         <div className="space-y-2">
@@ -100,6 +101,7 @@ export default function ChangePasswordPage() {
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 required
+                                autoComplete="new-password"
                             />
                         </div>
                         <div className="space-y-2">
@@ -109,6 +111,7 @@ export default function ChangePasswordPage() {
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
+                                autoComplete="new-password"
                             />
                         </div>
                         <Button className="w-full" type="submit" disabled={loading}>

@@ -65,9 +65,9 @@ export default function Login() {
                     <CardTitle className="text-2xl">{t('login.title')}</CardTitle>
                     <p className="text-sm text-muji-secondary">{t('login.subtitle')}</p>
                 </CardHeader>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className={error ? "animate-shake" : ""}>
                     <CardContent className="space-y-4">
-                        {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+                        {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded">{error}</div>}
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">{t('login.phoneNumber')}</label>
                             <Input
@@ -93,7 +93,7 @@ export default function Login() {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-gray-600 flex items-center justify-center"
+                                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-gray-600 flex items-center justify-center min-w-[44px]"
                                     aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

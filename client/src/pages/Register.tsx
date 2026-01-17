@@ -137,22 +137,27 @@ export default function Register() {
                                     required
                                     className="pr-10"
                                 />
-                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">{t('register.passwordHint')}</p>
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">{t('register.passwordHint')}</p>
-                    </div>
-                </CardContent>
-                <CardFooter className="flex flex-col space-y-4">
-                    <Button className="w-full" disabled={loading}>
-                        {loading ? t('register.creatingAccount') : t('register.createAccount')}
-                    </Button>
-                    <div className="text-center text-sm text-muji-secondary">
-                        {t('register.hasAccount')} <Link to="/login" className="underline cursor-pointer hover:text-muji-primary">{t('register.signIn')}</Link>
-                    </div>
-                </CardFooter>
-            </form>
-        </Card>
+                    </CardContent>
+                    <CardFooter className="flex flex-col space-y-4">
+                        <Button className="w-full" disabled={loading}>
+                            {loading ? t('register.creatingAccount') : t('register.createAccount')}
+                        </Button>
+                        <div className="text-center text-sm text-muji-secondary">
+                            {t('register.hasAccount')} <Link to="/login" className="underline cursor-pointer hover:text-muji-primary">{t('register.signIn')}</Link>
+                        </div>
+                    </CardFooter>
+                </form>
+            </Card>
         </div >
     );
 }

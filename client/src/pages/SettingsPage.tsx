@@ -279,14 +279,18 @@ export default function SettingsPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                         <span>{t('settings.avatar')}</span>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleUpdate({ isAvatarVisible: !profile.isAvatarVisible })}
-                            title={profile.isAvatarVisible ? t('settings.public') : t('settings.hidden')}
-                        >
-                            {profile.isAvatarVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="avatar-toggle" className="text-sm font-normal text-gray-600 cursor-pointer select-none">
+                                {profile.isAvatarVisible ? t('settings.public') : t('settings.hidden')}
+                            </label>
+                            <input
+                                id="avatar-toggle"
+                                type="checkbox"
+                                className="h-5 w-5 rounded border-gray-300 text-muji-primary focus:ring-muji-primary cursor-pointer"
+                                checked={profile.isAvatarVisible}
+                                onChange={(e) => handleUpdate({ isAvatarVisible: e.target.checked })}
+                            />
+                        </div>
                     </CardTitle>
                     <CardDescription>
                         {profile.isAvatarVisible

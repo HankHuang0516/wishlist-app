@@ -313,17 +313,20 @@ export default function WishlistDetail() {
                             <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Title" />
                             <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description" />
 
-                            <label className="flex items-center gap-3 p-3 border rounded-lg border-dashed hover:bg-gray-50 cursor-pointer transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={editIsPublic}
-                                    onChange={(e) => setEditIsPublic(e.target.checked)}
-                                    className="h-5 w-5 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
-                                />
-                                <span className="text-sm font-medium text-gray-700 select-none flex-1">
-                                    {t('dashboard.publicLabel')}
+                            <div className="flex items-center gap-3 p-3 border rounded-lg border-dashed hover:bg-gray-50 transition-colors">
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={editIsPublic}
+                                        onChange={(e) => setEditIsPublic(e.target.checked)}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-muji-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-muji-primary"></div>
+                                </label>
+                                <span className="text-sm font-medium text-gray-700 select-none flex-1 cursor-pointer" onClick={() => setEditIsPublic(!editIsPublic)}>
+                                    {t('dashboard.publicLabel')} - {editIsPublic ? t('dashboard.public') : t('dashboard.private')}
                                 </span>
-                            </label>
+                            </div>
 
                             <div className="flex gap-2">
                                 <Button onClick={handleUpdateWishlist} size="sm">{t('common.save')}</Button>

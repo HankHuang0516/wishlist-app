@@ -283,7 +283,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                         </div>
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 max-h-[60vh] overflow-y-auto overscroll-contain">
                     {/* Error Feedback */}
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm mb-4">

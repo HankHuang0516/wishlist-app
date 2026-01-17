@@ -215,6 +215,13 @@ const translations: Record<string, Record<string, string>> = {
         'common.next': '下一步',
         'common.done': '完成',
         'common.add': '新增',
+        'common.processing': '處理中...',
+
+        // AI Status
+        'ai.complete': 'AI 識別完成',
+        'ai.failed': 'AI 識別失敗',
+        'ai.analyzing': 'AI 分析中',
+        'ai.skipped': '傳統模式',
 
         // Settings - Deep Content
         'settings.avatar': '大頭照',
@@ -438,6 +445,13 @@ const translations: Record<string, Record<string, string>> = {
         'common.next': 'Next',
         'common.done': 'Done',
         'common.add': 'Add',
+        'common.processing': 'Processing...',
+
+        // AI Status
+        'ai.complete': 'AI Complete',
+        'ai.failed': 'AI Failed',
+        'ai.analyzing': 'AI Analyzing',
+        'ai.skipped': 'Manual Mode',
 
         // Settings - Deep Content
         'settings.avatar': 'Profile Picture',

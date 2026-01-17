@@ -13,16 +13,10 @@ export default function Register() {
     const [phoneNumber, setPhoneNumber] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-
-    // Birthday State
-    const [year, setYear] = useState("");
-    const [month, setMonth] = useState("");
-    const [day, setDay] = useState("");
+    const [birthday, setBirthday] = useState("");
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-
-
 
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
@@ -39,8 +33,6 @@ export default function Register() {
         setLoading(true);
 
         try {
-            const birthday = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-
             const res = await fetch(`${API_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -85,35 +77,13 @@ export default function Register() {
                         {/* Birthday Field */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none">{t('register.birthday')}</label>
-                            <div className="flex gap-2">
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={year}
-                                    onChange={(e) => setYear(e.target.value)}
-                                    required
-                                >
-                                    <option value="">{t('register.year')}</option>
-                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={month}
-                                    onChange={(e) => setMonth(e.target.value)}
-                                    required
-                                >
-                                    <option value="">{t('register.month')}</option>
-                                    {months.map(m => <option key={m} value={m}>{m}月</option>)}
-                                </select>
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={day}
-                                    onChange={(e) => setDay(e.target.value)}
-                                    required
-                                >
-                                    <option value="">{t('register.day')}</option>
-                                    {days.map(d => <option key={d} value={d}>{d}日</option>)}
-                                </select>
-                            </div>
+                            <Input
+                                type="date"
+                                value={birthday}
+                                onChange={(e) => setBirthday(e.target.value)}
+                                required
+                                max={new Date().toISOString().split('T')[0]} // updated to allow selection up to today
+                            />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">{t('register.phoneNumber')}</label>

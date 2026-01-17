@@ -141,7 +141,7 @@ export default function Home() {
             <div id="features" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
                 {/* Feature 1: AI Photo */}
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-pink-50 to-white">
-                    <div className="h-48 overflow-hidden">
+                    <div className="h-32 md:h-48 overflow-hidden">
                         <img
                             src="/features/feature1.png"
                             alt={t('home.feature1.title')}
@@ -158,7 +158,7 @@ export default function Home() {
 
                 {/* Feature 2: Share with Friends */}
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-purple-50 to-white">
-                    <div className="h-48 overflow-hidden">
+                    <div className="h-32 md:h-48 overflow-hidden">
                         <img
                             src="/features/feature2.png"
                             alt={t('home.feature2.title')}
@@ -175,7 +175,7 @@ export default function Home() {
 
                 {/* Feature 3: Organize */}
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-green-50 to-white">
-                    <div className="h-48 overflow-hidden">
+                    <div className="h-32 md:h-48 overflow-hidden">
                         <img
                             src="/features/feature3.png"
                             alt={t('home.feature3.title')}
@@ -192,7 +192,7 @@ export default function Home() {
 
                 {/* Feature 4: Couple Gift */}
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-red-50 to-white">
-                    <div className="h-48 overflow-hidden">
+                    <div className="h-32 md:h-48 overflow-hidden">
                         <img
                             src="/features/feature4.png"
                             alt={t('home.feature4.title')}

@@ -575,6 +575,9 @@ const translations: Record<string, Record<string, string>> = {
         'settings.installApp': 'Install App',
         'settings.installDesc': 'Get a smoother app experience',
         'settings.installBtn': 'Install Now',
+        'settings.deleteAccount': 'Delete Account',
+        'settings.deleteAccountDesc': 'Permanently remove your account and all data',
+        'settings.deleteConfirm': 'Are you sure? This action cannot be undone. All your wishlists and data will be lost forever.',
 
         // Social - Extra
         'social.findFriends': 'Find Friends',
@@ -624,7 +627,8 @@ const translations: Record<string, Record<string, string>> = {
 
         'dashboard.userWishlists': '{name}\'s Public Wishlists',
         'dashboard.createTitle': 'Create New Wishlist',
-        'dashboard.titlePlaceholder': 'Wishlist Title (e.g. Birthday 2024)',
+        'dashboard.userWishlists': '{name}\'s Public Wishlists',
+        'dashboard.createTitle': 'Create New Wishlist',
         'dashboard.descPlaceholder': 'Description (Optional)',
         'dashboard.publicLabel': 'Public Wishlist',
         'dashboard.public': 'Visible to everyone',

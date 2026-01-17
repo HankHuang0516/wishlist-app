@@ -32,6 +32,7 @@ export default function SettingsPage() {
     const { token } = useAuth();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
+    const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Modal State
@@ -102,6 +103,7 @@ export default function SettingsPage() {
     useEffect(() => {
         if (token) {
             fetchProfile();
+            fetchAiUsage();
         }
     }, [token]);
 
@@ -131,6 +133,20 @@ export default function SettingsPage() {
             if (token) {
                 setLoading(false);
             }
+        }
+    };
+
+    const fetchAiUsage = async () => {
+        try {
+            const res = await fetch(`${API_URL}/users/me/ai-usage`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setAiUsage(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch AI usage:', error);
         }
     };
 
@@ -519,6 +535,49 @@ export default function SettingsPage() {
             {/* Monetization Section */}
             <div className="space-y-4 pb-12">
                 <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.monetizationTitle')}</h2>
+
+                {/* AI Usage Card */}
+                <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
+                    <CardHeader>
+                        <CardTitle>AI 辨識額度</CardTitle>
+                        <CardDescription>
+                            {aiUsage?.isUnlimited
+                                ? '訂閱會員享有無限 AI 辨識次數'
+                                : '免費用戶每日可使用 5 次 AI 辨識'}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {aiUsage?.isUnlimited ? (
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl">∞</span>
+                                <span className="text-green-600 font-medium">無限次數</span>
+                            </div>
+                        ) : aiUsage ? (
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span>今日已使用</span>
+                                    <span className={aiUsage.used >= aiUsage.limit ? 'text-red-500 font-bold' : 'text-gray-600'}>
+                                        {aiUsage.used} / {aiUsage.limit}
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div
+                                        className={`h-2.5 rounded-full ${aiUsage.used >= aiUsage.limit ? 'bg-red-500' : 'bg-purple-500'}`}
+                                        style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}
+                                    ></div>
+                                </div>
+                                {aiUsage.used >= aiUsage.limit && (
+                                    <p className="text-xs text-red-500 mt-2">
+                                        額度已用完，新增商品將使用傳統模式（需手動編輯）
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="text-gray-400">載入中...</span>
+                        )}
+                    </CardContent>
+                </Card>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Micro Transaction */}
                     <Card className="border-l-4 border-l-blue-500">

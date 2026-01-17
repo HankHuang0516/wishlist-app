@@ -1,12 +1,13 @@
 import { getUserLocale } from "../utils/localization";
+import Header from "../components/Header";
 
 export default function PrivacyPolicy() {
     const isZh = getUserLocale().startsWith('zh');
 
     if (isZh) {
         return (
-            <div className="max-w-4xl mx-auto py-8 px-4">
-                <h1 className="text-3xl font-bold mb-6 text-muji-primary">隱私權政策 (Privacy Policy)</h1>
+            <div className="container mx-auto px-4 py-8 pb-24">
+                <Header title="隱私權政策 (Privacy Policy)" />
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. 簡介</h2>

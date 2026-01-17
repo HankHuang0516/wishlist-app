@@ -18,9 +18,9 @@ export default function TermsOfUse() {
 
     if (isZh) {
         return (
-            <div className="max-w-4xl mx-auto pb-8">
+            <div className="container mx-auto px-4 py-8 pb-24">
                 <Header title="使用者條款 (Terms of Use)" />
-                <div className="px-4 prose prose-slate max-w-none text-muji-secondary space-y-6">
+                <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. 同意條款</h2>
                         <p>

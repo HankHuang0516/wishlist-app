@@ -340,584 +340,566 @@ export default function SettingsPage() {
 
                                 <input
                                     type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={handleAvatarUpload}
-                                />
-                                <div className="mt-4">
-                                    {isUploading && (
-                                        <div className="flex items-center gap-2 text-sm text-muji-primary justify-center">
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            {t('settings.uploading')}
-                                        </div>
-                                    )}
-                                </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Nicknames Section - Always Visible */}
-                    <Card>
                         <CardHeader>
-                            <CardTitle>{t('settings.nicknames')}</CardTitle>
-                            <CardDescription>
-                                {t('settings.nicknamesDesc')}
-                                <span className={`ml-2 text-xs ${nicknameCount > 5 ? 'text-red-500' : 'text-gray-400'}`}>
-                                    {nicknameCount}/5
-                                </span>
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Input
-                                value={profile.nicknames || ""}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    // Update local state first for typing
-                                    setProfile({ ...profile, nicknames: val });
-                                }}
-                                onBlur={(e) => {
-                                    // Save on blur
-                                    handleUpdate({ nicknames: e.target.value });
-                                    const el = document.getElementById('nickname-saved');
-                                    if (el) {
-                                        el.style.opacity = '1';
-                                        setTimeout(() => el.style.opacity = '0', 2000);
-                                    }
-                                }}
-                                placeholder={t('settings.nicknamesPlaceholder')}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.currentTarget.blur();
-                                    }
-                                }}
-                            />
-                            <div className="flex justify-between items-center mt-2">
-                                <p className="text-xs text-muji-secondary">{t('settings.nicknamesPlaceholder')}</p>
-                                <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'nicknames' ? 'opacity-100' : 'opacity-0'}`}>
-                                    {t('common.saved')}
-                                </span>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Notification Settings */}
-                    <Link to="/settings/notifications" className="block">
-                        <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-muji-secondary">
-                            <CardHeader className="flex flex-row items-center justify-between py-4">
-                                <div className="space-y-1">
-                                    <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
-                                    <CardDescription>{t('settings.emailNotifs')}</CardDescription>
-                                </div>
-                                <div className="text-muji-secondary">
-                                    <i className="fas fa-chevron-right"></i> {/* Or just chevron icon */}
-                                    <span className="text-2xl">›</span>
-                                </div>
-                            </CardHeader>
-                        </Card>
-                    </Link>
-
-                    {/* Private Info Section */}
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.privacyTitle')}</h2>
-
-                        {/* Real Name */}
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-end justify-between gap-4">
-                                    <div className="flex-1 space-y-2">
-                                        <label className="text-sm font-medium">{t('settings.realName')}</label>
-                                        <Input
-                                            value={profile.realName || ""}
-                                            onChange={(e) => setProfile({ ...profile, realName: e.target.value })}
-                                            onBlur={(e) => handleUpdate({ realName: e.target.value })}
-                                            placeholder={t('settings.realName')}
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleUpdate({ isRealNameVisible: !profile.isRealNameVisible })}
-                                        title={profile.isRealNameVisible ? t('settings.public') : t('settings.hidden')}
-                                    >
-                                        {profile.isRealNameVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                                    </Button>
-                                </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <p className="text-xs text-muji-secondary">
-                                        {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                                    </p>
-                                    <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'realName' ? 'opacity-100' : 'opacity-0'}`}>
-                                        {t('common.saved')}
-                                    </span>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Birthday */}
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-end justify-between gap-4">
-                                    <div className="flex-1 space-y-2">
-                                        <label className="text-sm font-medium">Birthday</label>
-                                        <Input
-                                            type="date"
-                                            value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
-                                            onChange={(e) => setProfile({ ...profile, birthday: e.target.value })}
-                                            onBlur={(e) => handleUpdate({ birthday: e.target.value })}
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
-                                        title={profile.isBirthdayVisible ? t('settings.public') : t('settings.hidden')}
-                                    >
-                                        {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                                    </Button>
-                                </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <p className="text-xs text-muji-secondary">
-                                        {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                                    </p>
-                                    <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'birthday' ? 'opacity-100' : 'opacity-0'}`}>
-                                        {t('common.saved')}
-                                    </span>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Address */}
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-end justify-between gap-4">
-                                    <div className="flex-1 space-y-2">
-                                        <label className="text-sm font-medium">{t('settings.address')}</label>
-                                        <Input
-                                            value={profile.address || ""}
-                                            onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                                            onBlur={(e) => handleUpdate({ address: e.target.value })}
-                                            placeholder={t('settings.address')}
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleUpdate({ isAddressVisible: !profile.isAddressVisible })}
-                                    >
-                                        {profile.isAddressVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                                    </Button>
-                                </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <p className="text-xs text-muji-secondary">
-                                        {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                                    </p>
-                                    <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'address' ? 'opacity-100' : 'opacity-0'}`}>
-                                        {t('common.saved')}
-                                    </span>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Phone (Read Only) */}
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-end justify-between gap-4">
-                                    <div className="flex-1 space-y-2">
-                                        <label className="text-sm font-medium">{t('settings.phone')}</label>
-                                        <Input
-                                            value={profile.phoneNumber}
-                                            disabled
-                                            className="bg-gray-100 text-gray-500 cursor-not-allowed"
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleUpdate({ isPhoneVisible: !profile.isPhoneVisible })}
-                                    >
-                                        {profile.isPhoneVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muji-secondary mt-2">
-                                    {profile.isPhoneVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        {/* Birthday (Read Only) */}
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-end justify-between gap-4">
-                                    <div className="flex-1 space-y-2">
-                                        <label className="text-sm font-medium">{t('settings.birthday')}</label>
-                                        <Input
-                                            value={profile.birthday ? new Date(profile.birthday).toLocaleDateString() : "Not set"}
-                                            disabled
-                                            className="bg-gray-100 text-gray-500 cursor-not-allowed"
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
-                                    >
-                                        {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muji-secondary mt-2">
-                                    {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHiddenBirthday')}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-
-
-
-                    {/* App Installation Section - Only visible if installable or on mobile not installed */}
-
-                    {/* 1. Native Install Button (Android/Desktop when event fires) */}
-                    {
-                        deferredPrompt && (
-                            <div className="space-y-4">
-                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
-                                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
-                                    <CardContent className="pt-6 flex items-center justify-between">
-                                        <div>
-                                            <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
-                                            <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
-                                        </div>
-                                        <Button
-                                            onClick={handleInstallClick}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
-                                        >
-                                            <Download className="w-4 h-4 mr-2" />
-                                            {t('settings.installBtn')}
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )
-                    }
-
-                    {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
-                    {
-                        (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                            <div className="space-y-4">
-                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
-                                <Card className="bg-gray-50 border-gray-200">
-                                    <CardContent className="pt-6">
-                                        <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
-                                        <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                            <li>Tap <span className="font-bold">Share</span> button</li>
-                                            <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
-                                            <li>Tap <span className="font-bold">Add</span></li>
-                                        </ol>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )
-                    }
-
-                    {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
-                    {/* 3. Android Manual Instructions (Fallback) */}
-                    {
-                        (!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                            <div className="space-y-4">
-                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.android')})</h2>
-                                <Card className="bg-gray-50 border-gray-200">
-                                    <CardContent className="pt-6">
-                                        <h3 className="font-medium text-lg text-gray-900">{t('pwa.noButton')}</h3>
-                                        <p className="text-sm text-gray-600 mb-3">{t('pwa.manual')}</p>
-                                        <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                            <li><strong>{t('pwa.step1')}</strong></li>
-                                            <li><strong>{t('pwa.step2')}</strong></li>
-                                            <li><strong>{t('pwa.step3')}</strong></li>
-                                        </ol>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )
-                    }
-
-                    {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
-                    {
-                        (!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                            <div className="space-y-4">
-                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.desktop')})</h2>
-                                <Card className="bg-gray-50 border-gray-200">
-                                    <CardContent className="pt-6">
-                                        <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
-                                        <p className="text-sm text-gray-600 mb-3">{t('pwa.desktopDesc')} <Download className="inline w-4 h-4 mx-1" /></p>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )
-                    }
-
-                    {/* Security Section */}
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.securityTitle')}</h2>
-                        <Card>
-                            <CardContent className="pt-6 space-y-4">
-                                <p className="text-sm text-gray-500">{t('settings.securityDesc')}</p>
-                                <Link to="/change-password">
-                                    <Button variant="outline" className="w-full">
-                                        {t('settings.changePassword')}
-                                    </Button>
-                                </Link>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Monetization Section */}
-                    <div className="space-y-4 pb-12">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.monetizationTitle')}</h2>
-
-                        {/* AI Usage Card */}
-                        <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
-                            <CardHeader>
-                                <CardTitle>AI 辨識額度</CardTitle>
-                                <CardDescription>
-                                    {aiUsage?.isUnlimited
-                                        ? '訂閱會員享有無限 AI 辨識次數'
-                                        : '免費用戶每日可使用 5 次 AI 辨識'}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {aiUsage?.isUnlimited ? (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-2xl">∞</span>
-                                        <span className="text-green-600 font-medium">無限次數</span>
-                                    </div>
-                                ) : aiUsage ? (
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-sm">
-                                            <span>今日已使用</span>
-                                            <span className={aiUsage.used >= aiUsage.limit ? 'text-red-500 font-bold' : 'text-gray-600'}>
-                                                {aiUsage.used} / {aiUsage.limit}
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                            <div
-                                                className={`h-2.5 rounded-full ${aiUsage.used >= aiUsage.limit ? 'bg-red-500' : 'bg-purple-500'}`}
-                                                style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}
-                                            ></div>
-                                        </div>
-                                        {aiUsage.used >= aiUsage.limit && (
-                                            <p className="text-xs text-red-500 mt-2">
-                                                額度已用完，新增商品將使用傳統模式（需手動編輯）
-                                            </p>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <span className="text-gray-400">載入中...</span>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Micro Transaction */}
-                            <Card className="border-l-4 border-l-blue-500">
-                                <CardHeader>
-                                    <CardTitle>{t('settings.expandList')}</CardTitle>
-                                    <CardDescription>{t('settings.expandListDesc')}</CardDescription>
+                                    <CardTitle>{t('settings.nicknames')}</CardTitle>
+                                    <CardDescription>
+                                        {t('settings.nicknamesDesc')}
+                                        <span className={`ml-2 text-xs ${nicknameCount > 5 ? 'text-red-500' : 'text-gray-400'}`}>
+                                            {nicknameCount}/5
+                                        </span>
+                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
-
-                                    <div className="mb-4">
-                                        <label className="text-sm text-gray-500 mb-1 block">Type</label>
-                                        <select
-                                            className="w-full border rounded p-2 text-sm"
-                                            id="expansion-type-select"
-                                        >
-                                            <option value="wishlists">{t('dashboard.myWishlists')}</option>
-                                            <option value="following">{t('social.following')}</option>
-                                        </select>
-                                    </div>
-
-                                    <Button className="w-full" variant="outline" onClick={() => {
-                                        const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
-                                        if (!select) return;
-                                        const targetType = select.value;
-                                        openPaymentModal(30, targetType === 'following' ? "Following Expansion (+10)" : "Wishlist Expansion (+10)", { purchaseType: 'limit', target: targetType });
-                                    }}>
-                                        {t('settings.buyNow')}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-
-                            {/* Subscription */}
-                            <Card className="border-l-4 border-l-amber-500 bg-amber-50/30">
-                                <CardHeader>
-                                    <CardTitle>{t('settings.premiumTitle')}</CardTitle>
-                                    <CardDescription>{t('settings.premiumDesc')}</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/mo (3 USD)</span></p>
-
-                                    {profile.isPremium ? (
-                                        <div className="space-y-3">
-                                            <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
-                                                {t('settings.isPremium')}
-                                            </div>
-                                            <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
-                                                openModal(
-                                                    t('settings.cancelSubscription'),
-                                                    "Are you sure you want to cancel? \n\nYour limit will revert to default (100).",
-                                                    async () => {
-                                                        try {
-                                                            const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
-                                                                method: 'POST',
-                                                                headers: { 'Authorization': `Bearer ${token}` }
-                                                            });
-                                                            if (res.ok) {
-                                                                // Smooth update
-                                                                handleUpdate({ isPremium: false });
-                                                                // Optional: Show toast or small feedback
-                                                            } else {
-                                                                alert("Failed to cancel");
-                                                            }
-                                                        } catch (e) { console.error(e); }
-                                                    },
-                                                    "destructive",
-                                                    t('common.confirm')
-                                                );
-                                            }}>
-                                                {t('settings.cancelSubscription')}
-                                            </Button>
-                                        </div>
-                                    ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                                        openPaymentModal(90, "Premium Subscription", { purchaseType: 'PREMIUM' });
-                                    }}>
-                                        {t('settings.subscribe')} (NT$ 90)
-                                    </Button>
-                                    }
-
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        {/* Danger Zone */}
-                        <div className="mt-8">
-                            <h2 className="text-xl font-semibold mb-4 text-red-600 font-serif">Danger Zone</h2>
-                            <Card className="border-red-100 bg-red-50/30">
-                                <CardContent className="pt-6">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h3 className="font-medium text-lg text-red-900">{t('settings.deleteAccount')}</h3>
-                                            <p className="text-sm text-red-700 mt-1">{t('settings.deleteAccountDesc')}</p>
-                                        </div>
-                                        <Button
-                                            variant="destructive"
-                                            onClick={() => {
-                                                openModal(
-                                                    t('settings.deleteAccount'),
-                                                    t('settings.deleteConfirm'),
-                                                    async () => {
-                                                        try {
-                                                            const res = await fetch(`${API_URL}/users/me`, {
-                                                                method: 'DELETE',
-                                                                headers: { 'Authorization': `Bearer ${token}` }
-                                                            });
-                                                            if (res.ok) {
-                                                                logout();
-                                                                navigate('/');
-                                                                // Force reload to clear any sensitive state if needed, but navigate is smoother
-                                                                // window.location.reload(); 
-                                                            } else {
-                                                                const data = await res.json();
-                                                                console.error(data.error);
-                                                                // Ideally show toast here
-                                                            }
-                                                        } catch (e) {
-                                                            console.error(e);
-                                                            alert("Connection error");
-                                                        }
-                                                    },
-                                                    "destructive",
-                                                    t('common.delete')
-                                                );
-                                            }}
-                                        >
-                                            {t('settings.deleteAccount')}
-                                        </Button>
+                                    <Input
+                                        value={profile.nicknames || ""}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            // Update local state first for typing
+                                            setProfile({ ...profile, nicknames: val });
+                                        }}
+                                        onBlur={(e) => {
+                                            // Save on blur
+                                            handleUpdate({ nicknames: e.target.value });
+                                            const el = document.getElementById('nickname-saved');
+                                            if (el) {
+                                                el.style.opacity = '1';
+                                                setTimeout(() => el.style.opacity = '0', 2000);
+                                            }
+                                        }}
+                                        placeholder={t('settings.nicknamesPlaceholder')}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.currentTarget.blur();
+                                            }
+                                        }}
+                                    />
+                                    <div className="flex justify-between items-center mt-2">
+                                        <p className="text-xs text-muji-secondary">{t('settings.nicknamesPlaceholder')}</p>
+                                        <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'nicknames' ? 'opacity-100' : 'opacity-0'}`}>
+                                            {t('common.saved')}
+                                        </span>
                                     </div>
                                 </CardContent>
                             </Card>
-                        </div>
 
-                        {/* Debug Tools Section - Admin Only */}
-                        {profile.phoneNumber === '0935065876' && (
-                            <div className="mt-8 pt-6 border-t border-gray-200">
-                                <h2 className="text-xl font-semibold mb-4 text-gray-700">System Diagnostics (Admin Only)</h2>
+                            {/* Notification Settings */}
+                            <Link to="/settings/notifications" className="block">
+                                <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-muji-secondary">
+                                    <CardHeader className="flex flex-row items-center justify-between py-4">
+                                        <div className="space-y-1">
+                                            <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
+                                            <CardDescription>{t('settings.emailNotifs')}</CardDescription>
+                                        </div>
+                                        <div className="text-muji-secondary">
+                                            <i className="fas fa-chevron-right"></i> {/* Or just chevron icon */}
+                                            <span className="text-2xl">›</span>
+                                        </div>
+                                    </CardHeader>
+                                </Card>
+                            </Link>
+
+                            {/* Private Info Section */}
+                            <div className="space-y-4">
+                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.privacyTitle')}</h2>
+
+                                {/* Real Name */}
                                 <Card>
                                     <CardContent className="pt-6">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h3 className="font-medium text-lg">Test Email</h3>
-                                                <p className="text-sm text-gray-500">
-                                                    Internal system integrity check.
-                                                </p>
+                                        <div className="flex items-end justify-between gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-sm font-medium">{t('settings.realName')}</label>
+                                                <Input
+                                                    value={profile.realName || ""}
+                                                    onChange={(e) => setProfile({ ...profile, realName: e.target.value })}
+                                                    onBlur={(e) => handleUpdate({ realName: e.target.value })}
+                                                    placeholder={t('settings.realName')}
+                                                />
                                             </div>
                                             <Button
-                                                variant="outline"
-                                                onClick={async () => {
-                                                    const btn = document.getElementById('debug-email-btn');
-                                                    if (btn) btn.innerText = "Testing...";
-                                                    try {
-                                                        const res = await fetch(`${API_URL}/feedback/test`, {
-                                                            method: 'POST',
-                                                            headers: { 'Authorization': `Bearer ${token}` }
-                                                        });
-                                                        const json = await res.json();
-                                                        alert("Test Result:\n" + JSON.stringify(json, null, 2));
-                                                    } catch (e: any) {
-                                                        alert("Connection Failed: " + e.message);
-                                                    } finally {
-                                                        if (btn) btn.innerText = "Send Test Email";
-                                                    }
-                                                }}
-                                                id="debug-email-btn"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleUpdate({ isRealNameVisible: !profile.isRealNameVisible })}
+                                                title={profile.isRealNameVisible ? t('settings.public') : t('settings.hidden')}
                                             >
-                                                Send Test Email
+                                                {profile.isRealNameVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                                             </Button>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <p className="text-xs text-muji-secondary">
+                                                {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                                            </p>
+                                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'realName' ? 'opacity-100' : 'opacity-0'}`}>
+                                                {t('common.saved')}
+                                            </span>
                                         </div>
                                     </CardContent>
                                 </Card>
-                            </div>
-                        )}
 
-                        {/* Purchase History Link */}
-                        <div className="mt-6 pt-6 border-t">
-                            <h3 className="text-lg font-medium mb-2">{t('settings.historyTitle')}</h3>
-                            <Link to="/purchase-history">
-                                <Button variant="outline" className="w-full md:w-auto">
-                                    {t('settings.viewHistory')}
-                                </Button>
-                            </Link>
-                        </div>
-                        <ActionConfirmModal
-                            isOpen={modalConfig.isOpen}
-                            onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                            onConfirm={modalConfig.onConfirm}
-                            title={modalConfig.title}
-                            message={modalConfig.message}
-                            confirmText={modalConfig.confirmText}
-                            variant={modalConfig.variant}
-                            isProcessing={modalConfig.isProcessing}
-                        />
-                        <PaymentModal
-                            isOpen={paymentModalConfig.isOpen}
-                            onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
-                            amount={paymentModalConfig.amount}
-                            itemName={paymentModalConfig.itemName}
-                            onPaymentSuccess={handlePaymentSuccess}
-                            extraPayload={paymentModalConfig.extraPayload}
-                        />
+                                {/* Birthday */}
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-end justify-between gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-sm font-medium">Birthday</label>
+                                                <Input
+                                                    type="date"
+                                                    value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
+                                                    onChange={(e) => setProfile({ ...profile, birthday: e.target.value })}
+                                                    onBlur={(e) => handleUpdate({ birthday: e.target.value })}
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
+                                                title={profile.isBirthdayVisible ? t('settings.public') : t('settings.hidden')}
+                                            >
+                                                {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                                            </Button>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <p className="text-xs text-muji-secondary">
+                                                {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                                            </p>
+                                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'birthday' ? 'opacity-100' : 'opacity-0'}`}>
+                                                {t('common.saved')}
+                                            </span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Address */}
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-end justify-between gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-sm font-medium">{t('settings.address')}</label>
+                                                <Input
+                                                    value={profile.address || ""}
+                                                    onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                                                    onBlur={(e) => handleUpdate({ address: e.target.value })}
+                                                    placeholder={t('settings.address')}
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleUpdate({ isAddressVisible: !profile.isAddressVisible })}
+                                            >
+                                                {profile.isAddressVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                                            </Button>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <p className="text-xs text-muji-secondary">
+                                                {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                                            </p>
+                                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'address' ? 'opacity-100' : 'opacity-0'}`}>
+                                                {t('common.saved')}
+                                            </span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Phone (Read Only) */}
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-end justify-between gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-sm font-medium">{t('settings.phone')}</label>
+                                                <Input
+                                                    value={profile.phoneNumber}
+                                                    disabled
+                                                    className="bg-gray-100 text-gray-500 cursor-not-allowed"
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleUpdate({ isPhoneVisible: !profile.isPhoneVisible })}
+                                            >
+                                                {profile.isPhoneVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muji-secondary mt-2">
+                                            {profile.isPhoneVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                                        </p>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Birthday (Read Only) */}
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-end justify-between gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-sm font-medium">{t('settings.birthday')}</label>
+                                                <Input
+                                                    value={profile.birthday ? new Date(profile.birthday).toLocaleDateString() : "Not set"}
+                                                    disabled
+                                                    className="bg-gray-100 text-gray-500 cursor-not-allowed"
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
+                                            >
+                                                {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muji-secondary mt-2">
+                                            {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHiddenBirthday')}
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+
+
+
+                            {/* App Installation Section - Only visible if installable or on mobile not installed */}
+
+                            {/* 1. Native Install Button (Android/Desktop when event fires) */}
+                            {
+                                deferredPrompt && (
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
+                                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                                            <CardContent className="pt-6 flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
+                                                    <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
+                                                </div>
+                                                <Button
+                                                    onClick={handleInstallClick}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
+                                                >
+                                                    <Download className="w-4 h-4 mr-2" />
+                                                    {t('settings.installBtn')}
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )
+                            }
+
+                            {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
+                            {
+                                (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
+                                        <Card className="bg-gray-50 border-gray-200">
+                                            <CardContent className="pt-6">
+                                                <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
+                                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                                    <li>Tap <span className="font-bold">Share</span> button</li>
+                                                    <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
+                                                    <li>Tap <span className="font-bold">Add</span></li>
+                                                </ol>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )
+                            }
+
+                            {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
+                            {/* 3. Android Manual Instructions (Fallback) */}
+                            {
+                                (!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.android')})</h2>
+                                        <Card className="bg-gray-50 border-gray-200">
+                                            <CardContent className="pt-6">
+                                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.noButton')}</h3>
+                                                <p className="text-sm text-gray-600 mb-3">{t('pwa.manual')}</p>
+                                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
+                                                    <li><strong>{t('pwa.step1')}</strong></li>
+                                                    <li><strong>{t('pwa.step2')}</strong></li>
+                                                    <li><strong>{t('pwa.step3')}</strong></li>
+                                                </ol>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )
+                            }
+
+                            {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
+                            {
+                                (!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.desktop')})</h2>
+                                        <Card className="bg-gray-50 border-gray-200">
+                                            <CardContent className="pt-6">
+                                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
+                                                <p className="text-sm text-gray-600 mb-3">{t('pwa.desktopDesc')} <Download className="inline w-4 h-4 mx-1" /></p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )
+                            }
+
+                            {/* Security Section */}
+                            <div className="space-y-4">
+                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.securityTitle')}</h2>
+                                <Card>
+                                    <CardContent className="pt-6 space-y-4">
+                                        <p className="text-sm text-gray-500">{t('settings.securityDesc')}</p>
+                                        <Link to="/change-password">
+                                            <Button variant="outline" className="w-full">
+                                                {t('settings.changePassword')}
+                                            </Button>
+                                        </Link>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* Monetization Section */}
+                            <div className="space-y-4 pb-12">
+                                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.monetizationTitle')}</h2>
+
+                                {/* AI Usage Card */}
+                                <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
+                                    <CardHeader>
+                                        <CardTitle>AI 辨識額度</CardTitle>
+                                        <CardDescription>
+                                            {aiUsage?.isUnlimited
+                                                ? '訂閱會員享有無限 AI 辨識次數'
+                                                : '免費用戶每日可使用 5 次 AI 辨識'}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {aiUsage?.isUnlimited ? (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-2xl">∞</span>
+                                                <span className="text-green-600 font-medium">無限次數</span>
+                                            </div>
+                                        ) : aiUsage ? (
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between text-sm">
+                                                    <span>今日已使用</span>
+                                                    <span className={aiUsage.used >= aiUsage.limit ? 'text-red-500 font-bold' : 'text-gray-600'}>
+                                                        {aiUsage.used} / {aiUsage.limit}
+                                                    </span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                                    <div
+                                                        className={`h-2.5 rounded-full ${aiUsage.used >= aiUsage.limit ? 'bg-red-500' : 'bg-purple-500'}`}
+                                                        style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}
+                                                    ></div>
+                                                </div>
+                                                {aiUsage.used >= aiUsage.limit && (
+                                                    <p className="text-xs text-red-500 mt-2">
+                                                        額度已用完，新增商品將使用傳統模式（需手動編輯）
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400">載入中...</span>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Micro Transaction */}
+                                    <Card className="border-l-4 border-l-blue-500">
+                                        <CardHeader>
+                                            <CardTitle>{t('settings.expandList')}</CardTitle>
+                                            <CardDescription>{t('settings.expandListDesc')}</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
+
+                                            <div className="mb-4">
+                                                <label className="text-sm text-gray-500 mb-1 block">Type</label>
+                                                <select
+                                                    className="w-full border rounded p-2 text-sm"
+                                                    id="expansion-type-select"
+                                                >
+                                                    <option value="wishlists">{t('dashboard.myWishlists')}</option>
+                                                    <option value="following">{t('social.following')}</option>
+                                                </select>
+                                            </div>
+
+                                            <Button className="w-full" variant="outline" onClick={() => {
+                                                const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
+                                                if (!select) return;
+                                                const targetType = select.value;
+                                                openPaymentModal(30, targetType === 'following' ? "Following Expansion (+10)" : "Wishlist Expansion (+10)", { purchaseType: 'limit', target: targetType });
+                                            }}>
+                                                {t('settings.buyNow')}
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Subscription */}
+                                    <Card className="border-l-4 border-l-amber-500 bg-amber-50/30">
+                                        <CardHeader>
+                                            <CardTitle>{t('settings.premiumTitle')}</CardTitle>
+                                            <CardDescription>{t('settings.premiumDesc')}</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/mo (3 USD)</span></p>
+
+                                            {profile.isPremium ? (
+                                                <div className="space-y-3">
+                                                    <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
+                                                        {t('settings.isPremium')}
+                                                    </div>
+                                                    <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
+                                                        openModal(
+                                                            t('settings.cancelSubscription'),
+                                                            "Are you sure you want to cancel? \n\nYour limit will revert to default (100).",
+                                                            async () => {
+                                                                try {
+                                                                    const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
+                                                                        method: 'POST',
+                                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                                    });
+                                                                    if (res.ok) {
+                                                                        // Smooth update
+                                                                        handleUpdate({ isPremium: false });
+                                                                        // Optional: Show toast or small feedback
+                                                                    } else {
+                                                                        alert("Failed to cancel");
+                                                                    }
+                                                                } catch (e) { console.error(e); }
+                                                            },
+                                                            "destructive",
+                                                            t('common.confirm')
+                                                        );
+                                                    }}>
+                                                        {t('settings.cancelSubscription')}
+                                                    </Button>
+                                                </div>
+                                            ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                                                openPaymentModal(90, "Premium Subscription", { purchaseType: 'PREMIUM' });
+                                            }}>
+                                                {t('settings.subscribe')} (NT$ 90)
+                                            </Button>
+                                            }
+
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* Danger Zone */}
+                                <div className="mt-8">
+                                    <h2 className="text-xl font-semibold mb-4 text-red-600 font-serif">Danger Zone</h2>
+                                    <Card className="border-red-100 bg-red-50/30">
+                                        <CardContent className="pt-6">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="font-medium text-lg text-red-900">{t('settings.deleteAccount')}</h3>
+                                                    <p className="text-sm text-red-700 mt-1">{t('settings.deleteAccountDesc')}</p>
+                                                </div>
+                                                <Button
+                                                    variant="destructive"
+                                                    onClick={() => {
+                                                        openModal(
+                                                            t('settings.deleteAccount'),
+                                                            t('settings.deleteConfirm'),
+                                                            async () => {
+                                                                try {
+                                                                    const res = await fetch(`${API_URL}/users/me`, {
+                                                                        method: 'DELETE',
+                                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                                    });
+                                                                    if (res.ok) {
+                                                                        logout();
+                                                                        navigate('/');
+                                                                        // Force reload to clear any sensitive state if needed, but navigate is smoother
+                                                                        // window.location.reload(); 
+                                                                    } else {
+                                                                        const data = await res.json();
+                                                                        console.error(data.error);
+                                                                        // Ideally show toast here
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.error(e);
+                                                                    alert("Connection error");
+                                                                }
+                                                            },
+                                                            "destructive",
+                                                            t('common.delete')
+                                                        );
+                                                    }}
+                                                >
+                                                    {t('settings.deleteAccount')}
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* Debug Tools Section - Admin Only */}
+                                {profile.phoneNumber === '0935065876' && (
+                                    <div className="mt-8 pt-6 border-t border-gray-200">
+                                        <h2 className="text-xl font-semibold mb-4 text-gray-700">System Diagnostics (Admin Only)</h2>
+                                        <Card>
+                                            <CardContent className="pt-6">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <h3 className="font-medium text-lg">Test Email</h3>
+                                                        <p className="text-sm text-gray-500">
+                                                            Internal system integrity check.
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={async () => {
+                                                            const btn = document.getElementById('debug-email-btn');
+                                                            if (btn) btn.innerText = "Testing...";
+                                                            try {
+                                                                const res = await fetch(`${API_URL}/feedback/test`, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                                });
+                                                                const json = await res.json();
+                                                                alert("Test Result:\n" + JSON.stringify(json, null, 2));
+                                                            } catch (e: any) {
+                                                                alert("Connection Failed: " + e.message);
+                                                            } finally {
+                                                                if (btn) btn.innerText = "Send Test Email";
+                                                            }
+                                                        }}
+                                                        id="debug-email-btn"
+                                                    >
+                                                        Send Test Email
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )}
+
+                                {/* Purchase History Link */}
+                                <div className="mt-6 pt-6 border-t">
+                                    <h3 className="text-lg font-medium mb-2">{t('settings.historyTitle')}</h3>
+                                    <Link to="/purchase-history">
+                                        <Button variant="outline" className="w-full md:w-auto">
+                                            {t('settings.viewHistory')}
+                                        </Button>
+                                    </Link>
+                                </div>
+                                <ActionConfirmModal
+                                    isOpen={modalConfig.isOpen}
+                                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                                    onConfirm={modalConfig.onConfirm}
+                                    title={modalConfig.title}
+                                    message={modalConfig.message}
+                                    confirmText={modalConfig.confirmText}
+                                    variant={modalConfig.variant}
+                                    isProcessing={modalConfig.isProcessing}
+                                />
+                                <PaymentModal
+                                    isOpen={paymentModalConfig.isOpen}
+                                    onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
+                                    amount={paymentModalConfig.amount}
+                                    itemName={paymentModalConfig.itemName}
+                                    onPaymentSuccess={handlePaymentSuccess}
+                                    extraPayload={paymentModalConfig.extraPayload}
+                                />
+                            </div>
                     </div>
                 </div>
-        </div>
-    );
+                );
 }

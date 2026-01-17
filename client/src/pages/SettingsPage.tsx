@@ -345,15 +345,14 @@ export default function SettingsPage() {
                                     accept="image/*"
                                     onChange={handleAvatarUpload}
                                 />
-                            </label>
-                            <p className="text-sm text-muji-secondary mb-4">{t('settings.avatarHint')}</p>
-
-                            {isUploading && (
-                                <div className="flex items-center gap-2 text-sm text-muji-primary">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    {t('settings.uploading')}
+                                <div className="mt-4">
+                                    {isUploading && (
+                                        <div className="flex items-center gap-2 text-sm text-muji-primary justify-center">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            {t('settings.uploading')}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
                         </CardContent>
                     </Card>
 
@@ -918,6 +917,7 @@ export default function SettingsPage() {
                             extraPayload={paymentModalConfig.extraPayload}
                         />
                     </div>
-                </div >
-                );
+                </div>
+        </div>
+    );
 }

@@ -278,60 +278,73 @@ export default function WishlistDashboard() {
                 </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {wishlists.map((list) => (
-                    <Link key={list.id} to={`/wishlists/${list.id}`}>
-                        <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer relative group">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-lg font-bold truncate pr-6">{list.title}</CardTitle>
-                                <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-muji-primary rounded-full">
-                                    {list.items?.length || 0}
-                                </span>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muji-secondary text-sm line-clamp-2">
-                                    {list.description || "No description"}
-                                </p>
-                            </CardContent>
-                            <CardFooter className="flex justify-between items-center">
-                                <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                    {list.isPublic ? t('common.public') : t('common.private')}
-                                </span>
-                                {isOwner && (
-                                    <div className="flex gap-1">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                handleTogglePrivacy(list.id, list.isPublic);
-                                            }}
-                                            title={list.isPublic ? "Make Private" : "Make Public"}
-                                        >
-                                            {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleDeleteClick(list.id);
-                                            }}
-                                            title={t('common.delete')}
-                                            aria-label={t('common.delete')}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardFooter>
-                        </Card>
-                    </Link>
-                ))}
-            </div>
+            {wishlists.length === 0 && !creating && !loading ? (
+                <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-200">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Gift className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">{t('dashboard.noWishlists')}</h3>
+                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">{t('dashboard.createFirstDesc')}</p>
+                    <Button onClick={() => setIsCreateExpanded(true)} className="animate-bounce">
+                        {t('dashboard.createNew')}
+                    </Button>
+                </div>
+            ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {wishlists.map((list) => (
+                        <Link key={list.id} to={`/wishlists/${list.id}`}>
+                            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer relative group">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-lg font-bold truncate pr-6">{list.title}</CardTitle>
+                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-muji-primary rounded-full">
+                                        {list.items?.length || 0}
+                                    </span>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-muji-secondary text-sm line-clamp-2">
+                                        {list.description || "No description"}
+                                    </p>
+                                </CardContent>
+                                <CardFooter className="flex justify-between items-center">
+                                    <span className={`text-xs px-2 py-1 rounded ${list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        {list.isPublic ? t('common.public') : t('common.private')}
+                                    </span>
+                                    {isOwner && (
+                                        <div className="flex gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleTogglePrivacy(list.id, list.isPublic);
+                                                }}
+                                                title={list.isPublic ? "Make Private" : "Make Public"}
+                                            >
+                                                {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleDeleteClick(list.id);
+                                                }}
+                                                title={t('common.delete')}
+                                                aria-label={t('common.delete')}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardFooter>
+                            </Card>
+                        </Link>
+                    ))}
+                </div>
+            )}
 
             <DeleteConfirmModal
                 isOpen={deleteModalOpen}

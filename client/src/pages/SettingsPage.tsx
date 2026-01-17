@@ -151,12 +151,9 @@ export default function SettingsPage() {
     };
 
 
+    const [savedField, setSavedField] = useState<string | null>(null);
 
-    const handleUpdate = async (updatedFields: Partial<UserProfile>) => {
-        if (!profile) return;
-        const newState = { ...profile, ...updatedFields };
-        setProfile(newState); // Optimistic update
-
+    const handleUpdate = async (updates: any) => {
         try {
             const res = await fetch(`${API_URL}/users/me`, {
                 method: 'PUT',
@@ -164,12 +161,21 @@ export default function SettingsPage() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(updatedFields)
+                body: JSON.stringify(updates)
             });
-            if (!res.ok) fetchProfile(); // Revert on error
-        } catch (error) {
-            console.error(error);
-        }
+            if (res.ok) {
+                const data = await res.json();
+                setProfile(data);
+                // Trigger saved feedback logic
+                const key = Object.keys(updates)[0];
+                if (['nicknames', 'realName', 'address'].includes(key)) {
+                    setSavedField(key);
+                    setTimeout(() => setSavedField(null), 2000);
+                }
+            } else {
+                alert("更新失敗");
+            }
+        } catch (error) { console.error(error); }
     };
 
     const [isUploading, setIsUploading] = useState(false);
@@ -370,8 +376,7 @@ export default function SettingsPage() {
                     />
                     <div className="flex justify-between items-center mt-2">
                         <p className="text-xs text-muji-secondary">{t('settings.nicknamesPlaceholder')}</p>
-                        {/* Simple Saved Indicator - using a key to force re-render animation if needed, or just conditional */}
-                        <span id="nickname-saved" className="text-xs text-green-600 font-medium opacity-0 transition-opacity duration-500">
+                        <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'nicknames' ? 'opacity-100' : 'opacity-0'}`}>
                             {t('common.saved')}
                         </span>
                     </div>
@@ -420,9 +425,14 @@ export default function SettingsPage() {
                                 {profile.isRealNameVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
                         </div>
-                        <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                        </p>
+                        <div className="flex justify-between items-center mt-2">
+                            <p className="text-xs text-muji-secondary">
+                                {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                            </p>
+                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'realName' ? 'opacity-100' : 'opacity-0'}`}>
+                                {t('common.saved')}
+                            </span>
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -447,9 +457,14 @@ export default function SettingsPage() {
                                 {profile.isAddressVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
                         </div>
-                        <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
-                        </p>
+                        <div className="flex justify-between items-center mt-2">
+                            <p className="text-xs text-muji-secondary">
+                                {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                            </p>
+                            <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'address' ? 'opacity-100' : 'opacity-0'}`}>
+                                {t('common.saved')}
+                            </span>
+                        </div>
                     </CardContent>
                 </Card>
 

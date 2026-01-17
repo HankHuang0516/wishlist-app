@@ -18,7 +18,7 @@ interface Item {
     aiLink?: string;  // AI-generated shopping link
     imageUrl?: string;
     notes?: string;
-    aiStatus: string; // PENDING, COMPLETED, FAILED
+    aiStatus: string; // PENDING, COMPLETED, FAILED, SKIPPED
     aiError?: string;
     tags?: string[];
 }
@@ -171,10 +171,12 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                         )}
                         <div className={`text-xs px-2 py-1 rounded shrink-0 ${currentItem.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
                             currentItem.aiStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-red-100 text-red-700'
+                                currentItem.aiStatus === 'SKIPPED' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-red-100 text-red-700'
                             }`}>
                             {currentItem.aiStatus === 'PENDING' ? 'AI 識別中...' :
-                                currentItem.aiStatus === 'COMPLETED' ? 'AI 識別完成' : '識別失敗'}
+                                currentItem.aiStatus === 'COMPLETED' ? 'AI 識別完成' :
+                                    currentItem.aiStatus === 'SKIPPED' ? '傳統模式' : '識別失敗'}
                         </div>
                     </CardTitle>
                 </CardHeader>

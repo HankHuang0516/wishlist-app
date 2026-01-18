@@ -323,6 +323,14 @@ const translations: Record<string, Record<string, string>> = {
         'settings.installApp': '安裝應用程式',
         'settings.installDesc': '獲得更流暢的 App 體驗',
         'settings.installBtn': '立即安裝',
+        'settings.loginName': '登入名稱',
+        'settings.type': '類型',
+        'ai.usageTitle': 'AI 辨識額度',
+        'ai.unlimitedDesc': '訂閱會員享有無限 AI 辨識次數',
+        'ai.freeDesc': '免費用戶每日可使用 5 次 AI 辨識',
+        'ai.unlimited': '無限次數',
+        'ai.usedToday': '今日已使用',
+        'ai.limitReached': '額度已用完，新增商品將使用傳統模式（需手動編輯）',
 
         // Social - Extra
         'social.findFriends': '尋找朋友',
@@ -390,6 +398,7 @@ const translations: Record<string, Record<string, string>> = {
         'dashboard.deleteConfirmMsg': '您確定要刪除整個願望清單嗎？包含其中的所有物品。此操作無法復原。',
         'dashboard.emptyOwner': '您還沒有建立任何清單。在上方建立一個吧！',
         'dashboard.emptyVisitor': '此用戶尚未建立任何公開清單。',
+        'detail.linkCopied': '連結已複製！',
 
 
     },
@@ -583,6 +592,14 @@ const translations: Record<string, Record<string, string>> = {
         'settings.installApp': 'Install App',
         'settings.installDesc': 'Get a smoother app experience',
         'settings.installBtn': 'Install Now',
+        'settings.loginName': 'Login Name',
+        'settings.type': 'Type',
+        'ai.usageTitle': 'AI Credits',
+        'ai.unlimitedDesc': 'Unlimited AI credits for Premium members',
+        'ai.freeDesc': '5 free AI credits per day',
+        'ai.unlimited': 'Unlimited',
+        'ai.usedToday': 'Used Today',
+        'ai.limitReached': 'Limit reached. Adding/Editing items will switch to manual mode.',
         'settings.deleteAccount': 'Delete Account',
         'settings.deleteAccountDesc': 'Permanently remove your account and all data',
         'settings.deleteConfirm': 'Are you sure? This action cannot be undone. All your wishlists and data will be lost forever.',
@@ -653,6 +670,7 @@ const translations: Record<string, Record<string, string>> = {
         'dashboard.deleteConfirmMsg': 'Are you sure you want to delete this wishlist? This cannot be undone.',
         'dashboard.emptyOwner': 'You don\'t have any wishlists yet. Create one above!',
         'dashboard.emptyVisitor': 'This user hasn\'t created any public wishlists.',
+        'detail.linkCopied': 'Link copied!',
 
 
     }

@@ -175,8 +175,8 @@ export default function WishlistDashboard() {
         list.title.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => {
         if (sortBy === 'name') return a.title.localeCompare(b.title);
-        if (sortBy === 'oldest') return a.id - b.id;
-        return b.id - a.id; // newest
+        if (sortBy === 'oldest') return Number(a.id) - Number(b.id);
+        return Number(b.id) - Number(a.id); // newest
     });
 
     if (loading) {

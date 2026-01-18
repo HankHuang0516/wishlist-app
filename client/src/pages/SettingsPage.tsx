@@ -308,7 +308,7 @@ export default function SettingsPage() {
                     </CardDescription>
                     {/* Read-Only Name Display */}
                     <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-100 flex flex-col gap-1">
-                        <span className="text-xs text-muji-secondary font-medium">{t('register.name')} (Login Name)</span>
+                        <span className="text-xs text-muji-secondary font-medium">{t('register.name')} ({t('settings.loginName')})</span>
                         <span className="text-sm text-muji-primary font-semibold">{profile.name}</span>
                     </div>
                 </CardHeader>
@@ -435,7 +435,7 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">Birthday</label>
+                                <label className="text-sm font-medium">{t('settings.birthday')}</label>
                                 <Input
                                     type="date"
                                     value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
@@ -584,7 +584,7 @@ export default function SettingsPage() {
                         <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
                         <Card className="bg-gray-50 border-gray-200">
                             <CardContent className="pt-6">
-                                <h3 className="font-medium text-lg text-gray-900">How to install?</h3>
+                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
                                 <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
                                     <li>Tap <span className="font-bold">Share</span> button</li>
                                     <li>Scroll down and tap <span className="font-bold">Add to Home Screen</span></li>
@@ -654,23 +654,23 @@ export default function SettingsPage() {
                 {/* AI Usage Card */}
                 <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
                     <CardHeader>
-                        <CardTitle>AI 辨識額度</CardTitle>
+                        <CardTitle>{t('ai.usageTitle')}</CardTitle>
                         <CardDescription>
                             {aiUsage?.isUnlimited
-                                ? '訂閱會員享有無限 AI 辨識次數'
-                                : '免費用戶每日可使用 5 次 AI 辨識'}
+                                ? t('ai.unlimitedDesc')
+                                : t('ai.freeDesc')}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {aiUsage?.isUnlimited ? (
                             <div className="flex items-center gap-2">
                                 <span className="text-2xl">∞</span>
-                                <span className="text-green-600 font-medium">無限次數</span>
+                                <span className="text-green-600 font-medium">{t('ai.unlimited')}</span>
                             </div>
                         ) : aiUsage ? (
                             <div className="space-y-2">
                                 <div className="flex justify-between text-sm">
-                                    <span>今日已使用</span>
+                                    <span>{t('ai.usedToday')}</span>
                                     <span className={aiUsage.used >= aiUsage.limit ? 'text-red-500 font-bold' : 'text-gray-600'}>
                                         {aiUsage.used} / {aiUsage.limit}
                                     </span>
@@ -683,12 +683,12 @@ export default function SettingsPage() {
                                 </div>
                                 {aiUsage.used >= aiUsage.limit && (
                                     <p className="text-xs text-red-500 mt-2">
-                                        額度已用完，新增商品將使用傳統模式（需手動編輯）
+                                        {t('ai.limitReached')}
                                     </p>
                                 )}
                             </div>
                         ) : (
-                            <span className="text-gray-400">載入中...</span>
+                            <span className="text-gray-400">{t('common.loading')}</span>
                         )}
                     </CardContent>
                 </Card>
@@ -704,7 +704,7 @@ export default function SettingsPage() {
                             <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
 
                             <div className="mb-4">
-                                <label className="text-sm text-gray-500 mb-1 block">Type</label>
+                                <label className="text-sm text-gray-500 mb-1 block">{t('settings.type')}</label>
                                 <select
                                     className="w-full border rounded p-2 text-sm"
                                     id="expansion-type-select"

@@ -372,6 +372,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                             onChange={e => setFormData({ ...formData, price: e.target.value })}
                                             placeholder={t('detail.price')}
                                             className="flex-1"
+                                            type="number"
                                             inputMode="decimal"
                                         />
                                     </div>
@@ -389,6 +390,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                         value={formData.link}
                                         onChange={e => setFormData({ ...formData, link: e.target.value })}
                                         placeholder={t('detail.link')}
+                                        type="url"
+                                        inputMode="url"
                                     />
                                 ) : (
                                     <div className="flex flex-col gap-2 mt-1">

@@ -52,3 +52,28 @@ Based on the task type, read the corresponding documentation as specified in `.c
 - **After pushing:**
     - Monitor Railway build logs. If build fails, **ROLLBACK or FIX IMMEDIATELY**.
 
+## 7. 🔴 POST-DEPLOYMENT VERIFICATION (CRITICAL)
+After deployment, verify these critical endpoints:
+
+### Version Check
+```
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
+```
+- Compare `uptime` value (should be < 120s for fresh deploy)
+- If version doesn't match expected, wait 2 minutes and recheck
+- **Ask user to hard refresh browser (Ctrl+Shift+R) if they see old version**
+
+### AI Guide Endpoint
+```
+read_url_content https://wishlist-app-production.up.railway.app/api/ai-guide
+```
+- Must return JSON with `meta.title` = "Wishlist.ai API Guide for AI Agents"
+- If 404: Check if route defined BEFORE catch-all in `server/src/index.ts`
+- **Root cause of 404 (2026-01-19)**: `sendFile()` path issues in Railway - use `res.json()` inline instead
+
+### Common Issues
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| Version not updating | Browser cache | Ctrl+Shift+R |
+| 404 on /api/* routes | Catch-all before route | Move route before `app.get(/.*/, ...)` |
+| sendFile 404 | Railway path resolution | Use inline `res.json()` instead |

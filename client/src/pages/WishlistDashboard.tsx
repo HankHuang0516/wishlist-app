@@ -53,9 +53,10 @@ export default function WishlistDashboard() {
         if (!deleteId) return;
         setIsDeleting(true);
         try {
-            const res = await fetch(`${ API_URL } /wishlists/${ deleteId } `, {
+            const url = API_URL + '/wishlists/' + deleteId;
+            const res = await fetch(url, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${ token } ` }
+                headers: { 'Authorization': 'Bearer ' + token }
             });
             if (res.ok) {
                 setWishlists(prev => prev.filter(w => w.id !== deleteId));

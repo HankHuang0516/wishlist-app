@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
 
             if (res.ok) {
                 setSent(true);
-                setSuccessMessage(data.message || 'Reset link sent! Check your email.');
+                setSuccessMessage(data.message || t('forgot.defaultSuccess'));
             } else {
                 setError(data.error || t('common.error'));
             }
@@ -87,7 +87,7 @@ export default function ForgotPasswordPage() {
                                     <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                                     <Input
                                         type="email"
-                                        placeholder="name@example.com"
+                                        placeholder={t('forgot.emailPlaceholder')}
                                         className="pl-10"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}

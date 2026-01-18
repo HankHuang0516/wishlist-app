@@ -697,18 +697,26 @@ export default function SettingsPage() {
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.aiIntegration') || 'AI Integration'}</h2>
                 <Card>
-                    <CardContent className="pt-6">
-                        <p className="text-sm text-gray-600 mb-4">
-                            {t('settings.aiGuideDesc') || 'Share this guide with AI assistants to let them help manage your wishlists.'}
-                        </p>
+                    <CardContent className="pt-6 space-y-4">
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <p className="text-sm text-blue-800 font-medium mb-2">
+                                🤖 {t('settings.aiGuideHow') || '如何讓 AI 幫你管理願望清單？'}
+                            </p>
+                            <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
+                                <li>{t('settings.aiStep1') || '點擊下方按鈕開啟 AI 指南'}</li>
+                                <li>{t('settings.aiStep2') || '複製整頁內容（Ctrl+A → Ctrl+C）'}</li>
+                                <li>{t('settings.aiStep3') || '貼到 ChatGPT 或 Claude'}</li>
+                                <li>{t('settings.aiStep4') || '告訴 AI 你的帳號密碼，它會自動登入'}</li>
+                            </ol>
+                        </div>
                         <a
                             href={`${API_URL}/ai-guide`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
                         >
                             <span>📖</span>
-                            {t('settings.viewAiGuide') || 'View AI Guide'}
+                            {t('settings.viewAiGuide') || '開啟 AI 指南'}
                         </a>
                     </CardContent>
                 </Card>

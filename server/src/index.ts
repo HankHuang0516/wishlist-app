@@ -69,51 +69,55 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
   res.json({
     meta: {
       title: "Wishlist.ai API Guide for AI Agents",
-      version: "2.0.0",
-      description: "This guide enables AI agents to autonomously authenticate and interact with the Wishlist.ai API.",
-      instructions_for_ai: "Follow the authentication_flow to obtain API access. The user will provide their phone number and password."
+      version: "2.1.0",
+      user_instructions: "👋 複製這整頁 JSON 內容給你的 AI 助手（如 ChatGPT、Claude），然後告訴 AI 你的手機號碼和密碼，AI 就能幫你管理願望清單了！",
+      ai_instructions: "你是用戶的 Wishlist.ai 助手。請先向用戶詢問他們的 Wishlist.ai 帳號（手機號碼）和密碼，然後按照 authentication_flow 步驟登入並取得 API Key。不要使用範例中的 placeholder 值！"
     },
     authentication_flow: {
-      overview: "AI agents should authenticate by logging in with user credentials, then generating an API key.",
-      step_1_login: {
-        description: "Login with user credentials to get a JWT token",
+      important: "⚠️ AI 必須先詢問用戶的真實帳密，不可使用以下範例值！",
+      step_1_ask_user: {
+        action: "詢問用戶",
+        prompt: "請提供您的 Wishlist.ai 帳號（手機號碼）和密碼，我會幫您登入並取得 API 金鑰。"
+      },
+      step_2_login: {
+        description: "用用戶提供的帳密登入",
         method: "POST",
         url: "https://wishlist-app-production.up.railway.app/api/auth/login",
-        body: { phoneNumber: "string", password: "string" },
-        response: { token: "JWT token" }
+        body: { phoneNumber: "用戶的手機號碼", password: "用戶的密碼" },
+        example: { phoneNumber: "0912345678", password: "user_password" },
+        response: { token: "JWT token (有效期 7 天)" }
       },
-      step_2_generate_api_key: {
-        description: "Generate an API key for persistent access",
+      step_3_generate_api_key: {
+        description: "使用 JWT 產生持久的 API Key",
         method: "POST",
         url: "https://wishlist-app-production.up.railway.app/api/users/me/apikey",
-        headers: { Authorization: "Bearer <jwt_token>" },
-        response: { apiKey: "sk_live_..." }
+        headers: { Authorization: "Bearer <step_2的token>" },
+        response: { apiKey: "sk_live_... (永久有效，直到重新產生)" }
       },
-      step_3_use_api_key: {
-        description: "Use the API key for all subsequent requests",
-        header: "x-api-key: <your_api_key>"
+      step_4_use_api_key: {
+        description: "之後所有請求使用此 header",
+        header: "x-api-key: <step_3的apiKey>"
       }
     },
     base_url: "https://wishlist-app-production.up.railway.app/api",
-    endpoints: {
+    available_actions: {
       wishlists: {
-        list: { method: "GET", path: "/wishlists" },
-        create: { method: "POST", path: "/wishlists", body: { title: "string" } },
-        get: { method: "GET", path: "/wishlists/{id}" },
-        update: { method: "PUT", path: "/wishlists/{id}" },
-        delete: { method: "DELETE", path: "/wishlists/{id}" }
+        list_all: "GET /wishlists - 取得所有願望清單",
+        create: "POST /wishlists - 建立新清單 (body: {title})",
+        get_one: "GET /wishlists/{id}",
+        update: "PUT /wishlists/{id}",
+        delete: "DELETE /wishlists/{id}"
       },
       items: {
-        add: { method: "POST", path: "/wishlists/{id}/items", content_type: "multipart/form-data", body: { name: "string", image: "file" } },
-        add_from_url: { method: "POST", path: "/wishlists/{id}/items/url", body: { url: "string" } },
-        get: { method: "GET", path: "/items/{id}" },
-        update: { method: "PUT", path: "/items/{id}" },
-        delete: { method: "DELETE", path: "/items/{id}" }
+        add_by_name: "POST /wishlists/{id}/items - 新增項目 (body: {name, price?, notes?})",
+        add_by_url: "POST /wishlists/{id}/items/url - 網址自動抓取 (body: {url})",
+        add_with_image: "POST /wishlists/{id}/items - multipart/form-data (name + image file)",
+        update: "PUT /items/{id}",
+        delete: "DELETE /items/{id}"
       },
       user: {
-        get_profile: { method: "GET", path: "/users/me" },
-        update_profile: { method: "PUT", path: "/users/me" },
-        get_delivery_info: { method: "GET", path: "/users/{id}/delivery-info", note: "Requires mutual friendship" }
+        profile: "GET /users/me, PUT /users/me",
+        delivery_info: "GET /users/{id}/delivery-info (需互相追蹤)"
       }
     }
   });
@@ -124,7 +128,8 @@ const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
 // SPA fallback - EXCLUDE /api/* routes to prevent API interception
-app.get('*', (req: Request, res: Response) => {
+// Note: Express 5+ requires '/*' instead of '*' for catch-all routes
+app.get('/{*splat}', (req: Request, res: Response) => {
   // If the path starts with /api, return 404 (API route not found)
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });

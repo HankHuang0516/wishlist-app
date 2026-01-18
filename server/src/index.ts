@@ -64,7 +64,10 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/uploads', express.static('public/uploads'));
 
-
+// Serve AI Guide JSON for external AI agents
+app.get('/api/ai-guide', (req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, '../public/ai-guide.json'));
+});
 
 // Serve static files from the client build directory
 const clientBuildPath = path.join(__dirname, '../../client/dist');

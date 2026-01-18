@@ -15,6 +15,7 @@ interface UserProfile {
     id: number;
     name: string; // Used as display name if RealName hidden? Or separate?
     phoneNumber: string;
+    email?: string; // User's email
     realName?: string;
     address?: string;
     nicknames: string; // Stored as comma separated string
@@ -23,6 +24,7 @@ interface UserProfile {
     isPhoneVisible: boolean;
     isRealNameVisible: boolean;
     isAddressVisible: boolean;
+    isEmailVisible: boolean; // Email visibility toggle
     birthday?: string; // New
     isBirthdayVisible: boolean; // New
     isPremium: boolean; // New
@@ -544,6 +546,38 @@ export default function SettingsPage() {
                         <p className="text-xs text-muji-secondary mt-2">
                             {profile.isPhoneVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                         </p>
+                    </CardContent>
+                </Card>
+
+                {/* Email (Read Only unless NULL) */}
+                <Card>
+                    <CardContent className="pt-6">
+                        <div className="flex items-end justify-between gap-4">
+                            <div className="flex-1 space-y-2">
+                                <label className="text-sm font-medium">{t('settings.email')}</label>
+                                <Input
+                                    value={profile.email || ""}
+                                    disabled={!!profile.email}
+                                    className={profile.email ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
+                                    placeholder={t('settings.emailPlaceholder')}
+                                    onChange={(e) => !profile.email && setProfile({ ...profile, email: e.target.value })}
+                                    onBlur={(e) => !profile.email && e.target.value && handleUpdate({ email: e.target.value })}
+                                />
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleUpdate({ isEmailVisible: !profile.isEmailVisible })}
+                            >
+                                {profile.isEmailVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muji-secondary mt-2">
+                            {profile.isEmailVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
+                        </p>
+                        {profile.email && (
+                            <p className="text-xs text-gray-400 mt-1">{t('settings.emailReadOnly')}</p>
+                        )}
                     </CardContent>
                 </Card>
 

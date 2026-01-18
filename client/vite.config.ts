@@ -37,6 +37,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],  // Don't serve index.html for /api/* routes
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === 'image',

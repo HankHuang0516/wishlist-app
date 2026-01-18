@@ -32,6 +32,7 @@ model User {
   otpExpires        DateTime?
 
   email                    String?   @unique // New: Optional for backward compatibility, required for new
+  isEmailVisible           Boolean   @default(false) // Privacy toggle for email
   isEmailVerified          Boolean   @default(false)
   emailVerificationToken   String?
   emailVerificationExpires DateTime?

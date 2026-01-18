@@ -398,7 +398,7 @@ export default function WishlistDetail() {
                                     onClick={handleShare}
                                     title={t('wishlist.share')}
                                 >
-                                    <Button variant="outline" size="sm" className={`gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200' : ''}`}>
+                                    <Button variant="outline" size="sm" className={`gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200 font-medium' : ''}`}>
                                         {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
                                         {copied ? t('detail.linkCopied') : t('wishlist.share')}
                                     </Button>
@@ -588,6 +588,8 @@ export default function WishlistDetail() {
                                             required
                                             autoFocus
                                             className="h-11"
+                                            type="url"
+                                            inputMode="url"
                                         />
                                         <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex gap-3 items-start">
                                             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />

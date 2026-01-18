@@ -141,28 +141,49 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                     onChange={(e) => setPreviewData({ ...previewData!, name: e.target.value })}
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">{t('item.price')}</label>
+                                    <Label htmlFor="price">{t('detail.price')} ({t('common.optional')})</Label>
                                     <Input
-                                        value={previewData?.price || ""}
-                                        onChange={(e) => setPreviewData({ ...previewData!, price: e.target.value })}
+                                        id="price"
+                                        type="number"
                                         inputMode="decimal"
+                                        step="0.01"
+                                        value={previewData?.price || ''}
+                                        onChange={(e) => setPreviewData({ ...previewData!, price: e.target.value })}
+                                        placeholder="0.00"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">{t('item.currency')}</label>
+                                    <Label htmlFor="currency">{t('detail.currency')}</Label>
                                     <Input
-                                        value={previewData?.currency || "USD"}
+                                        id="currency"
+                                        value={previewData?.currency || 'TWD'}
                                         onChange={(e) => setPreviewData({ ...previewData!, currency: e.target.value })}
+                                        maxLength={3}
                                     />
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">{t('item.link')}</label>
+                                <Label htmlFor="link">{t('detail.link')} ({t('common.optional')})</Label>
                                 <Input
-                                    value={previewData?.shoppingLink || ""}
+                                    id="link"
+                                    type="url"
+                                    inputMode="url"
+                                    value={previewData?.shoppingLink || ''}
                                     onChange={(e) => setPreviewData({ ...previewData!, shoppingLink: e.target.value })}
+                                    placeholder="https://example.com/item"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="imageUrl">{t('detail.imageUrl')} ({t('common.optional')})</Label>
+                                <Input
+                                    id="imageUrl"
+                                    type="url"
+                                    inputMode="url"
+                                    value={previewData?.imageUrl || ''}
+                                    onChange={(e) => setPreviewData({ ...previewData!, imageUrl: e.target.value })}
+                                    placeholder="https://example.com/image.jpg"
                                 />
                             </div>
                             {previewData?.tags && (

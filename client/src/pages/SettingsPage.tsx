@@ -691,7 +691,7 @@ export default function SettingsPage() {
                             </Button>
 
                             <a
-                                href={`${API_BASE_URL}/ai-guide`}
+                                href={`${API_URL}/ai-guide`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:underline text-sm flex items-center"

@@ -26,6 +26,7 @@
     "flickr-sdk": "^7.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "mailersend": "^2.6.0",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.12",
     "prisma": "^5.22.0",

@@ -1,54 +1,56 @@
+import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 
-import { Resend } from 'resend';
-
-console.log('[EmailService] Initializing Resend...');
+console.log('[EmailService] Initializing MailerSend...');
 
 // Check for API Key (Warn only, don't crash)
-if (!process.env.RESEND_API_KEY) {
-    console.warn('[EmailService] RESEND_API_KEY is MISSING');
+if (!process.env.MAILERSEND_API_KEY) {
+    console.warn('[EmailService] MAILERSEND_API_KEY is MISSING');
 } else {
-    // Show first 4 chars for debug safety
-    const key = process.env.RESEND_API_KEY;
-    console.log(`[EmailService] RESEND_API_KEY is SET (Starts with: ${key.substring(0, 4)}...)`);
+    const key = process.env.MAILERSEND_API_KEY;
+    console.log(`[EmailService] MAILERSEND_API_KEY is SET (Starts with: ${key.substring(0, 8)}...)`);
 }
 
-// Initialize Resend Client
-// Initialize Resend Client (Use mock key if missing to prevent crash)
-const resend = new Resend(process.env.RESEND_API_KEY || 're_123456789');
+// Initialize MailerSend Client
+const mailerSend = new MailerSend({
+    apiKey: process.env.MAILERSEND_API_KEY || '',
+});
+
+// Default sender - Update this with your verified MailerSend domain
+const DEFAULT_FROM_EMAIL = process.env.MAILERSEND_FROM_EMAIL || 'noreply@trial-jy7zpl9jxp345vx6.mlsender.net';
+const DEFAULT_FROM_NAME = process.env.MAILERSEND_FROM_NAME || 'Wishlist App';
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {
     console.log(`[EmailService] Request to send email to: ${to}`);
 
-    const apiKey = process.env.RESEND_API_KEY?.trim();
+    const apiKey = process.env.MAILERSEND_API_KEY?.trim();
 
     if (!apiKey) {
-        console.warn('⚠️ [Email Service] RESEND_API_KEY missing. Skipping real send.');
-        return { success: false, error: 'RESEND_API_KEY missing', log: 'API Key Missing' };
+        console.warn('⚠️ [Email Service] MAILERSEND_API_KEY missing. Skipping real send.');
+        return { success: false, error: 'MAILERSEND_API_KEY missing', log: 'API Key Missing' };
     }
 
     try {
-        console.log('[EmailService] Sending via Resend API...');
+        console.log('[EmailService] Sending via MailerSend API...');
 
-        const data = await resend.emails.send({
-            from: 'Wishlist App <onboarding@resend.dev>', // Default testing domain
-            to: [to], // Resend expects an array
-            subject: subject,
-            html: html,
-        });
+        const sentFrom = new Sender(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
+        const recipients = [new Recipient(to)];
 
-        if (data.error) {
-            console.error('❌ [Email Service] Resend API Error:', data.error);
-            return { success: false, error: data.error.message, log: JSON.stringify(data.error) };
-        }
+        const emailParams = new EmailParams()
+            .setFrom(sentFrom)
+            .setTo(recipients)
+            .setSubject(subject)
+            .setHtml(html);
 
-        console.log(`✅ [Email Service] Email sent successfully! ID: ${data.data?.id}`);
-        return { success: true, log: `Sent OK. ID: ${data.data?.id}` };
+        const response = await mailerSend.email.send(emailParams);
+
+        console.log(`✅ [Email Service] Email sent successfully!`, response);
+        return { success: true, log: `Sent OK` };
 
     } catch (error: any) {
         console.error('❌ [Email Service] FATAL ERROR:', error);
         return {
             success: false,
-            error: error.message || 'Unknown Resend Error',
+            error: error.message || 'Unknown MailerSend Error',
             log: `Error: ${JSON.stringify(error)}`
         };
     }

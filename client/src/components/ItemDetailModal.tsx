@@ -179,10 +179,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         // Do not use finally to set state, as onClose() inside try block might unmount the component
     };
 
-    // Cloning State
-    const [isCloning, setIsCloning] = useState(false);
-    const [myWishlists, setMyWishlists] = useState<any[]>([]);
-    const [cloneSuccess, setCloneSuccess] = useState(false);
+
 
     const handleClone = async () => {
         setIsCloning(true);

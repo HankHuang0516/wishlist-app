@@ -884,6 +884,19 @@ export default function SettingsPage() {
                                 </Button>
                             </Link>
                         </div>
+
+                        {/* Logout Button (Mobile Access) */}
+                        <div className="pt-6 border-t border-gray-200">
+                            <Button
+                                variant="outline"
+                                className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+                                onClick={logout}
+                            >
+                                <LogOut className="w-4 h-4 mr-2" />
+                                {t('nav.logout')}
+                            </Button>
+                        </div>
+
                         <ActionConfirmModal
                             isOpen={modalConfig.isOpen}
                             onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}

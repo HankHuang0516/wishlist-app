@@ -169,7 +169,7 @@ export default function SocialPage() {
                     </form>
                     {searchResults.length === 0 && hasSearched && !loading && searchQuery && (
                         <div className="text-center text-gray-500 py-8">
-                            <p>{t('social.noUserFoundVia', { query: searchQuery })}</p>
+                            <p>{t('social.noUsers')}</p>
                         </div>
                     )}
 

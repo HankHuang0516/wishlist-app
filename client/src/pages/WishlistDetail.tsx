@@ -25,6 +25,7 @@ interface Item {
     notes?: string;
     uploadStatus: string; // PENDING, UPLOADING, COMPLETED, FAILED
     aiStatus: string; // PENDING, COMPLETED, FAILED, SKIPPED
+    status?: string; // PURCHASED, AVAILABLE
     aiError?: string;
     isHidden: boolean;
     originalUser?: {
@@ -491,7 +492,8 @@ export default function WishlistDetail() {
                                         </>
                                     ) : (
                                         <>
-                                            <Button variant="ghost" size="icon" className={`h-8 w-8 ${item.status === 'PURCHASED' ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-green-600'}`} onClick={() => handleToggleStatus(item)} title={item.status === 'PURCHASED' ? "Mark as Available" : "Mark as Purchased"}>
+                                            <div title={item.aiStatus} className={`w-3 h-3 rounded-full ${item.aiStatus === 'COMPLETED' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            <Button variant="ghost" size="icon" className={`h-8 w-8 ${item.aiStatus === 'COMPLETED' ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-green-600'}`} onClick={() => handleToggleStatus(item)} title={item.aiStatus === 'COMPLETED' ? "Mark as Available" : "Mark as Purchased"}>
                                                 <Gift className="w-5 h-5 font-bold" />
                                             </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
@@ -688,7 +690,7 @@ export default function WishlistDetail() {
                 onClose={() => setDeleteModalOpen(false)}
                 onConfirm={executeDelete}
                 title={deleteTarget?.type === 'wishlist' ? t('detail.deleteWishlistTitle') : t('detail.deleteItemTitle')}
-                description={deleteTarget?.type === 'wishlist' ? t('detail.deleteWishlistDesc') : t('detail.deleteItemDesc')}
+                message={deleteTarget?.type === 'item' ? t('detail.deleteItemConfirm') : t('dashboard.deleteConfirmMsg')}
                 isDeleting={isDeleting}
             />
 

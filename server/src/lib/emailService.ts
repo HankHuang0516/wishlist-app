@@ -16,7 +16,7 @@ const mailerSend = new MailerSend({
 });
 
 // Default sender - Update this with your verified MailerSend domain
-const DEFAULT_FROM_EMAIL = process.env.MAILERSEND_FROM_EMAIL || 'noreply@test-pzkmgq7q1xnl059v.mlsender.net';
+const DEFAULT_FROM_EMAIL = process.env.MAILERSEND_FROM_EMAIL || 'MS_XHh8Fw@test-pzkmgq7q1xnl059v.mlsender.net';
 const DEFAULT_FROM_NAME = process.env.MAILERSEND_FROM_NAME || 'Wishlist App';
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {

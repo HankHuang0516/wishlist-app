@@ -193,8 +193,12 @@ const translations: Record<string, Record<string, string>> = {
         // Forgot Password
         'forgot.title': '忘記密碼',
         'forgot.subtitle': '輸入手機號碼重設密碼',
+        'forgot.description': '輸入您的電子信箱以接收重設密碼連結。',
+        'forgot.emailLabel': '電子信箱',
         'forgot.sendCode': '發送驗證碼',
         'forgot.sending': '發送中...',
+        'forgot.submitButton': '發送重設連結',
+        'forgot.checkInbox': '請檢查您的收件匣（及垃圾郵件夾）以獲取重設連結。',
         'forgot.otpSent': '驗證碼已發送',
         'forgot.enterOtp': '輸入驗證碼',
         'forgot.newPassword': '新密碼',

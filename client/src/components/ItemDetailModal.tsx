@@ -432,7 +432,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                 <textarea
                                     value={formData.notes}
                                     onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                    className="w-full min-h-[100px] border rounded-md p-2 text-sm focus:ring-muji-primary focus:border-muji-primary"
+                                    className="w-full min-h-[100px] border rounded-md p-2 text-base md:text-sm focus:ring-muji-primary focus:border-muji-primary"
                                     placeholder={t('detail.notes')}
                                 />
                             ) : (

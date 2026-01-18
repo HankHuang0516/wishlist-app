@@ -132,6 +132,38 @@ railway deployments
 railway logs > debug.txt
 ```
 
+---
+
+## 4. Deployment Protocol (IMPORTANT)
+
+### 🚀 Standard Deployment Steps
+**When deploying to Railway, ALWAYS follow this protocol:**
+
+1. **Print Git Version First** - Before running `railway up`, always print the current git commit as the first line of debug output:
+   ```bash
+   # Step 1: Print git version for debugging
+   echo "=== Deploying Git Version ===" && git log -1 --oneline
+
+   # Step 2: Deploy to Railway
+   railway up
+   ```
+
+2. **Report Format** - When reporting deployment status, always include:
+   ```markdown
+   ## 🚀 Deployment Status
+   - **Git Version**: `abc1234 commit message here`
+   - **Build Logs**: [Railway Link]
+   - **Health Check**: ok / failed
+   - **Uptime**: X seconds
+   ```
+
+### Example Deployment Command (Copy-Paste Ready)
+```bash
+echo "=== Deploying Git Version ===" && git log -1 --oneline && railway up
+```
+
+This ensures every deployment is traceable to a specific git commit for debugging purposes.
+
 ### Common Error Patterns
 | Error | Meaning |
 |-------|---------|
@@ -142,5 +174,5 @@ railway logs > debug.txt
 | `prisma generate` failed | DB schema out of sync |
 
 ---
-**Last Updated**: 2026-01-18
-**Context**: Emergency Build Fix for Wishlist App
+**Last Updated**: 2026-01-19
+**Context**: Emergency Build Fix for Wishlist App + Deployment Protocol

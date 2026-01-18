@@ -106,6 +106,11 @@ export default function SettingsPage() {
         if (token) {
             fetchProfile();
             fetchAiUsage();
+        } else {
+            setLoading(false);
+            // Use navigate to avoid full reload, but window.location is safer for clean state if needed. 
+            // Sticking to navigate for SPA feel unless auth context requires reload.
+            navigate('/login');
         }
     }, [token]);
 

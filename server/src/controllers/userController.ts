@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { flickrService } from '../lib/flickr';
 import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
+import { generateApiKey } from '../lib/apiKey';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -369,5 +370,103 @@ export const getAiUsage = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Get AI Usage Error:', error);
         res.status(500).json({ error: 'Failed to fetch AI usage' });
+    }
+};
+
+// Generate API Key
+export const generateUserApiKey = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user.id;
+        const newApiKey = generateApiKey();
+
+        // Check if user already has one? We will overwrite it (regenerate).
+        // Since it's unique, we just update.
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { apiKey: newApiKey }
+        });
+
+        res.json({ apiKey: newApiKey });
+    } catch (error) {
+        console.error('Generate API Key Error:', error);
+        res.status(500).json({ error: 'Failed to generate API Key' });
+    }
+};
+
+// Get API Key
+export const getUserApiKey = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user.id;
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { apiKey: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        res.json({ apiKey: user.apiKey });
+    } catch (error) {
+        console.error('Get API Key Error:', error);
+        res.status(500).json({ error: 'Failed to fetch API Key' });
+    }
+};
+
+// Get Delivery Info (Mutual Friends Only - for Gift Sending)
+export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
+    try {
+        const currentUserId = req.user.id;
+        const targetUserId = Number(req.params.id);
+
+        if (currentUserId === targetUserId) {
+            return res.status(400).json({ error: 'Cannot request your own delivery info via this endpoint' });
+        }
+
+        // Check mutual friendship (both follow each other)
+        const [iFollow, theyFollow] = await Promise.all([
+            prisma.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUserId,
+                        followingId: targetUserId
+                    }
+                }
+            }),
+            prisma.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: targetUserId,
+                        followingId: currentUserId
+                    }
+                }
+            })
+        ]);
+
+        if (!iFollow || !theyFollow) {
+            return res.status(403).json({ error: 'Access denied. You must be mutual friends to access delivery information.' });
+        }
+
+        // Mutual friends confirmed, fetch delivery info
+        const targetUser = await prisma.user.findUnique({
+            where: { id: targetUserId },
+            select: {
+                realName: true,
+                phoneNumber: true,
+                address: true
+            }
+        });
+
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            realName: targetUser.realName,
+            phoneNumber: targetUser.phoneNumber,
+            address: targetUser.address
+        });
+    } catch (error) {
+        console.error('Get Delivery Info Error:', error);
+        res.status(500).json({ error: 'Failed to fetch delivery info' });
     }
 };

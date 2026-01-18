@@ -1,0 +1,164 @@
+{
+    "meta": {
+        "title": "Wishlist.ai API Guide for AI Agents",
+        "version": "1.0.0",
+        "description": "This guide helps AI agents understand how to authenticate and interact with the Wishlist.ai API.",
+        "instructions_for_ai": "Read this guide completely. Use the authentication section to learn how to get and use an API key. Use the endpoints section to understand all available operations."
+    },
+    "authentication": {
+        "overview": "All API calls require authentication. You can use either a JWT token (from user login) or an API Key.",
+        "how_to_get_api_key": {
+            "step_1": "User must be logged in to the Wishlist.ai app.",
+            "step_2": "Navigate to Settings page.",
+            "step_3": "Find the 'API Key' section.",
+            "step_4": "Click 'Generate API Key' button.",
+            "step_5": "Copy the generated key (starts with 'sk_live_...').",
+            "note": "Regenerating a key will invalidate the previous one."
+        },
+        "how_to_use_api_key": {
+            "header_name": "x-api-key",
+            "example": "x-api-key: sk_live_abc123def456..."
+        },
+        "alternative_jwt": {
+            "header_name": "Authorization",
+            "format": "Bearer <jwt_token>",
+            "example": "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+    },
+    "base_url": "https://wishlist-app-production.up.railway.app/api",
+    "endpoints": {
+        "user": {
+            "get_my_profile": {
+                "method": "GET",
+                "path": "/users/me",
+                "description": "Get the authenticated user's full profile."
+            },
+            "update_my_profile": {
+                "method": "PUT",
+                "path": "/users/me",
+                "description": "Update the authenticated user's profile.",
+                "body": {
+                    "name": "string (optional)",
+                    "realName": "string (optional)",
+                    "address": "string (optional)",
+                    "nicknames": "array of strings, max 5 (optional)"
+                }
+            },
+            "get_api_key": {
+                "method": "GET",
+                "path": "/users/me/apikey",
+                "description": "Get the current API key for the authenticated user."
+            },
+            "generate_api_key": {
+                "method": "POST",
+                "path": "/users/me/apikey",
+                "description": "Generate or regenerate an API key. Returns the new key."
+            },
+            "get_delivery_info": {
+                "method": "GET",
+                "path": "/users/{userId}/delivery-info",
+                "description": "Get delivery information (name, phone, address) of another user for gift sending. REQUIRES mutual friendship (both users follow each other).",
+                "parameters": {
+                    "userId": "integer - Target user's ID"
+                },
+                "errors": {
+                    "403": "Access denied if not mutual friends."
+                }
+            }
+        },
+        "wishlists": {
+            "list_wishlists": {
+                "method": "GET",
+                "path": "/wishlists",
+                "description": "Get all wishlists for the authenticated user."
+            },
+            "create_wishlist": {
+                "method": "POST",
+                "path": "/wishlists",
+                "description": "Create a new wishlist.",
+                "body": {
+                    "title": "string (required)",
+                    "description": "string (optional)",
+                    "isPublic": "boolean (default: false)"
+                }
+            },
+            "get_wishlist": {
+                "method": "GET",
+                "path": "/wishlists/{id}",
+                "description": "Get a specific wishlist by ID."
+            },
+            "update_wishlist": {
+                "method": "PUT",
+                "path": "/wishlists/{id}",
+                "description": "Update a wishlist."
+            },
+            "delete_wishlist": {
+                "method": "DELETE",
+                "path": "/wishlists/{id}",
+                "description": "Delete a wishlist."
+            }
+        },
+        "items": {
+            "add_item": {
+                "method": "POST",
+                "path": "/wishlists/{wishlistId}/items",
+                "description": "Add an item to a wishlist. Supports image upload.",
+                "content_type": "multipart/form-data",
+                "body": {
+                    "image": "file (optional)",
+                    "name": "string (required)",
+                    "price": "string (optional)",
+                    "link": "string (optional)",
+                    "notes": "string (optional)"
+                }
+            },
+            "add_item_from_url": {
+                "method": "POST",
+                "path": "/wishlists/{wishlistId}/items/url",
+                "description": "Add an item by providing a product URL. The system will crawl and extract info.",
+                "body": {
+                    "url": "string (required) - Product page URL"
+                }
+            },
+            "get_item": {
+                "method": "GET",
+                "path": "/items/{id}",
+                "description": "Get details of a specific item."
+            },
+            "update_item": {
+                "method": "PUT",
+                "path": "/items/{id}",
+                "description": "Update an item."
+            },
+            "delete_item": {
+                "method": "DELETE",
+                "path": "/items/{id}",
+                "description": "Delete an item."
+            }
+        },
+        "ai": {
+            "analyze_image": {
+                "method": "POST",
+                "path": "/ai/analyze-image",
+                "description": "Analyze an uploaded image to extract product information using AI.",
+                "content_type": "multipart/form-data",
+                "body": {
+                    "image": "file (required)"
+                }
+            },
+            "validate_image_url": {
+                "method": "POST",
+                "path": "/ai/validate-image",
+                "description": "Check if an image URL is accessible.",
+                "body": {
+                    "url": "string (required)"
+                }
+            }
+        }
+    },
+    "usage_notes": {
+        "rate_limits": "Some endpoints may have rate limits. Handle 429 errors gracefully.",
+        "error_format": "Errors return JSON with an 'error' field: { \"error\": \"message\" }",
+        "mutual_friends": "For gift delivery info, both users must follow each other."
+    }
+}

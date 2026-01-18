@@ -1,6 +1,5 @@
 import { ArrowLeft, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
@@ -10,6 +9,8 @@ export default function NotificationsSettingsPage() {
     const navigate = useNavigate();
     const [marketingEnabled, setMarketingEnabled] = useState(false);
     const [securityEnabled, setSecurityEnabled] = useState(true);
+    const [loading, setLoading] = useState(true);
+    const [saved, setSaved] = useState(false);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
 
     // Mock fetch initial settings

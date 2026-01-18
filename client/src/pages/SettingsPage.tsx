@@ -253,7 +253,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <Button
-                        variant={getUserLocale().startsWith('zh') ? "default" : "outline"}
+                        variant={getUserLocale().startsWith('zh') ? "primary" : "outline"}
                         onClick={() => {
                             if (changingLang) return;
                             setChangingLang(true);
@@ -267,7 +267,7 @@ export default function SettingsPage() {
                         繁體中文
                     </Button>
                     <Button
-                        variant={!getUserLocale().startsWith('zh') ? "default" : "outline"}
+                        variant={!getUserLocale().startsWith('zh') ? "primary" : "outline"}
                         onClick={() => {
                             if (changingLang) return;
                             setChangingLang(true);

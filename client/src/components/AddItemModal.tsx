@@ -143,7 +143,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="price">{t('detail.price')} ({t('common.optional')})</Label>
+                                    <label className="text-sm font-medium leading-none">{t('detail.price')} ({t('common.optional')})</label>
                                     <Input
                                         id="price"
                                         type="number"
@@ -155,7 +155,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="currency">{t('detail.currency')}</Label>
+                                    <label className="text-sm font-medium leading-none">{t('detail.currency')}</label>
                                     <Input
                                         id="currency"
                                         value={previewData?.currency || 'TWD'}
@@ -165,7 +165,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="link">{t('detail.link')} ({t('common.optional')})</Label>
+                                <label className="text-sm font-medium leading-none">{t('detail.link')} ({t('common.optional')})</label>
                                 <Input
                                     id="link"
                                     type="url"
@@ -176,7 +176,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="imageUrl">{t('detail.imageUrl')} ({t('common.optional')})</Label>
+                                <label className="text-sm font-medium leading-none">{t('detail.imageUrl')} ({t('common.optional')})</label>
                                 <Input
                                     id="imageUrl"
                                     type="url"

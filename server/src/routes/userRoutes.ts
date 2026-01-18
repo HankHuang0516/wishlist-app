@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage } from '../controllers/userController';
+import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo } from '../controllers/userController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
@@ -31,5 +31,13 @@ router.post('/me/avatar', authenticateToken, upload.single('avatar'), uploadAvat
 
 // Public routes (or semi-public, but usually viewed by logged in users)
 router.get('/:id', authenticateToken, getUserProfile);
+
+// API Key Management
+router.post('/me/apikey', authenticateToken, generateUserApiKey);
+router.get('/me/apikey', authenticateToken, getUserApiKey);
+
+// Gift Delivery (Mutual Friends Only)
+router.get('/:id/delivery-info', authenticateToken, getDeliveryInfo);
+
 
 export default router;

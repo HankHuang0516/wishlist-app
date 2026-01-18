@@ -245,11 +245,7 @@ export default function SocialPage() {
                                 </CardContent>
                             </Card>
                         ))}
-                        {searchResults.length === 0 && hasSearched && !loading && (
-                            <div className="text-center py-10 bg-gray-50 rounded-lg">
-                                <p className="text-gray-400">{t('social.noUsers')}</p>
-                            </div>
-                        )}
+
                     </div>
                 </div>
             )}

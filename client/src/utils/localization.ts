@@ -130,6 +130,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Login Page
         'login.title': '歡迎回來',
+        'login.subtitle': '輸入手機號碼以登入',
         'feedback.title': '意見回饋',
         'feedback.placeholder': '遇到問題？有功能建議？或只是想聊天？',
         'feedback.submit': '送出',
@@ -183,6 +184,7 @@ const translations: Record<string, Record<string, string>> = {
         'register.day': '日',
         'register.phoneNumber': '手機號碼',
         'register.password': '密碼',
+        'register.passwordHint': '密碼長度至少需 6 個字元',
         'register.createAccount': '建立帳號',
         'register.creatingAccount': '建立中...',
         'register.hasAccount': '已有帳號？',

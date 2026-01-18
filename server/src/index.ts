@@ -32,7 +32,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "http:", "*"], // Allow images from any source
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Required for some inline scripts
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com"], // Required for some inline scripts
       connectSrc: ["'self'", "https:", "http:"], // Allow connecting to APIs
     },
   },

@@ -116,10 +116,8 @@ export default function SettingsPage() {
 
     const fetchProfile = async () => {
         try {
-            if (!token) {
-                // Token not yet loaded, keep showing loading state
-                return;
-            }
+            if (!token) return;
+
             const res = await fetch(`${API_URL}/users/me`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -128,7 +126,6 @@ export default function SettingsPage() {
                 setProfile(data);
             } else {
                 console.error("Failed to fetch profile:", res.status);
-                // Redirect if 401/403
                 if (res.status === 401 || res.status === 403) {
                     window.location.href = '/login';
                 }
@@ -136,10 +133,7 @@ export default function SettingsPage() {
         } catch (error) {
             console.error(error);
         } finally {
-            // Only set loading to false if we actually attempted the fetch
-            if (token) {
-                setLoading(false);
-            }
+            setLoading(false);
         }
     };
 

@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
                         </CardTitle>
                     </div>
                     <CardDescription>
-                        Enter your email address to receive a password reset link.
+                        {t('forgot.description')}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -73,16 +73,16 @@ export default function ForgotPasswordPage() {
                             </div>
                             <p className="text-lg font-medium">{successMessage}</p>
                             <p className="text-sm text-gray-500">
-                                Please check your inbox (and spam folder) for the reset link.
+                                {t('forgot.checkInbox')}
                             </p>
                             <Button variant="outline" onClick={() => navigate('/login')} className="mt-4">
-                                Back to Login
+                                {t('forgot.backToLogin')}
                             </Button>
                         </div>
                     ) : (
                         <form onSubmit={handleSendResetLink} className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Email</label>
+                                <label className="text-sm font-medium leading-none">{t('forgot.emailLabel')}</label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                                     <Input
@@ -96,7 +96,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                             </div>
                             <Button className="w-full" type="submit" disabled={loading}>
-                                {loading ? t('common.processing') : 'Send Reset Link'}
+                                {loading ? t('common.processing') : t('forgot.submitButton')}
                             </Button>
                         </form>
                     )}

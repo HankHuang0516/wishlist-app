@@ -34,6 +34,8 @@ model User {
   isEmailVerified          Boolean   @default(false)
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
+  passwordResetToken       String?
+  passwordResetExpires     DateTime?
 
   lastFeedbackAt  DateTime?
   aiUsageCount    Int          @default(0)

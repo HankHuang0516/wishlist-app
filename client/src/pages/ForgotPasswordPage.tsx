@@ -5,20 +5,18 @@ import { Button } from "../components/ui/Button";
 import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
-import { ArrowLeft, Smartphone, Lock } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
 import { t } from "../utils/localization";
 
 export default function ForgotPasswordPage() {
     const navigate = useNavigate();
-    const [step, setStep] = useState<"phone" | "reset">("phone");
-    const [phoneNumber, setPhoneNumber] = useState("");
-    const [otp, setOtp] = useState("");
-    const [newPassword, setNewPassword] = useState("");
+    const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
     const [error, setError] = useState("");
+    const [sent, setSent] = useState(false);
 
-    const handleSendOtp = async (e: React.FormEvent) => {
+    const handleSendResetLink = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
         setSuccessMessage("");
@@ -28,43 +26,13 @@ export default function ForgotPasswordPage() {
             const res = await fetch(`${API_URL}/auth/forgot-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber })
+                body: JSON.stringify({ email })
             });
             const data = await res.json();
 
             if (res.ok) {
-                setSuccessMessage(t('auth.codeSent'));
-                setTimeout(() => {
-                    setStep("reset");
-                    setSuccessMessage("");
-                }, 1500);
-            } else {
-                setError(data.error || t('common.error'));
-            }
-        } catch (e) {
-            setError(t('common.error'));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleResetPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-        setSuccessMessage("");
-        setLoading(true);
-
-        try {
-            const res = await fetch(`${API_URL}/auth/reset-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber, otp, newPassword })
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                setSuccessMessage(t('auth.resetSuccess'));
-                setTimeout(() => navigate('/login'), 2000);
+                setSent(true);
+                setSuccessMessage(data.message || 'Reset link sent! Check your email.');
             } else {
                 setError(data.error || t('common.error'));
             }
@@ -84,13 +52,11 @@ export default function ForgotPasswordPage() {
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                         <CardTitle className="text-2xl font-bold text-muji-primary">
-                            {step === "phone" ? t('forgot.title') : t('forgot.resetPassword')}
+                            {t('forgot.title')}
                         </CardTitle>
                     </div>
                     <CardDescription>
-                        {step === "phone"
-                            ? t('forgot.subtitle')
-                            : t('forgot.enterOtpDesc')}
+                        Enter your email address to receive a password reset link.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -99,75 +65,38 @@ export default function ForgotPasswordPage() {
                             {error}
                         </div>
                     )}
-                    {successMessage && (
-                        <div className="bg-green-50 text-green-600 p-3 rounded mb-4 text-sm font-medium border border-green-200 animate-in fade-in slide-in-from-top-2">
-                            {successMessage}
+
+                    {sent ? (
+                        <div className="flex flex-col items-center gap-4 py-8 text-center">
+                            <div className="bg-green-100 p-3 rounded-full">
+                                <CheckCircle className="w-10 h-10 text-green-600" />
+                            </div>
+                            <p className="text-lg font-medium">{successMessage}</p>
+                            <p className="text-sm text-gray-500">
+                                Please check your inbox (and spam folder) for the reset link.
+                            </p>
+                            <Button variant="outline" onClick={() => navigate('/login')} className="mt-4">
+                                Back to Login
+                            </Button>
                         </div>
-                    )}
-
-                    {step === "phone" ? (
-                        <form onSubmit={handleSendOtp} className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">{t('login.phoneNumber')}</label>
-                                <div className="relative">
-                                    <Smartphone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                                    <Input
-                                        placeholder="0912345678"
-                                        className="pl-10"
-                                        value={phoneNumber}
-                                        onChange={(e) => setPhoneNumber(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <Button className="w-full" type="submit" disabled={loading}>
-                                {loading ? t('common.processing') : t('forgot.sendCode')}
-                            </Button>
-                        </form>
                     ) : (
-                        <form onSubmit={handleResetPassword} className="space-y-4">
+                        <form onSubmit={handleSendResetLink} className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">{t('login.phoneNumber')}</label>
-                                <Input value={phoneNumber} disabled className="bg-gray-100" />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">{t('forgot.enterOtp')}</label>
+                                <label className="text-sm font-medium leading-none">Email</label>
                                 <div className="relative">
-                                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                                    <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                                     <Input
-                                        placeholder="123456"
+                                        type="email"
+                                        placeholder="name@example.com"
                                         className="pl-10"
-                                        value={otp}
-                                        onChange={(e) => setOtp(e.target.value)}
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
                                         required
                                     />
                                 </div>
                             </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">{t('forgot.newPassword')}</label>
-                                <Input
-                                    type="password"
-                                    placeholder={t('forgot.newPassword')}
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    required
-                                    minLength={6}
-                                />
-                            </div>
-
                             <Button className="w-full" type="submit" disabled={loading}>
-                                {loading ? t('forgot.resetting') : t('forgot.resetPassword')}
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="w-full text-sm text-gray-500"
-                                onClick={() => setStep("phone")}
-                            >
-                                {t('common.back')}
+                                {loading ? t('common.processing') : 'Send Reset Link'}
                             </Button>
                         </form>
                     )}

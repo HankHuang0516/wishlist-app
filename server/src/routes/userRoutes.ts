@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo } from '../controllers/userController';
+import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo, generateAiPrompt } from '../controllers/userController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
@@ -35,6 +35,9 @@ router.get('/:id', authenticateToken, getUserProfile);
 // API Key Management
 router.post('/me/apikey', authenticateToken, generateUserApiKey);
 router.get('/me/apikey', authenticateToken, getUserApiKey);
+
+// AI Prompt (One-click copy for AI assistants)
+router.post('/me/ai-prompt', authenticateToken, generateAiPrompt);
 
 // Gift Delivery (Mutual Friends Only)
 router.get('/:id/delivery-info', authenticateToken, getDeliveryInfo);

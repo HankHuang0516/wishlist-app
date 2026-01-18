@@ -17,6 +17,7 @@ import EmailVerification from "./pages/EmailVerification";
 import ResetPassword from "./pages/ResetPassword";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ApiDocsPage from "./pages/ApiDocsPage";
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -41,6 +42,7 @@ function App() {
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="api-docs" element={<ApiDocsPage />} />
             <Route path="settings/notifications" element={<NotificationsSettingsPage />} />
             <Route path="change-password" element={<ChangePasswordPage />} />
             <Route path="purchase-history" element={<PurchaseHistoryPage />} />

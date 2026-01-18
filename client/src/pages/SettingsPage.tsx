@@ -698,26 +698,48 @@ export default function SettingsPage() {
                 <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.aiIntegration') || 'AI Integration'}</h2>
                 <Card>
                     <CardContent className="pt-6 space-y-4">
-                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100">
                             <p className="text-sm text-blue-800 font-medium mb-2">
-                                🤖 {t('settings.aiGuideHow') || '如何讓 AI 幫你管理願望清單？'}
+                                🤖 {t('settings.aiGuideHow') || '讓 AI 幫你管理願望清單'}
                             </p>
-                            <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-                                <li>{t('settings.aiStep1') || '點擊下方按鈕開啟 AI 指南'}</li>
-                                <li>{t('settings.aiStep2') || '複製整頁內容（Ctrl+A → Ctrl+C）'}</li>
-                                <li>{t('settings.aiStep3') || '貼到 ChatGPT 或 Claude'}</li>
-                                <li>{t('settings.aiStep4') || '告訴 AI 你的帳號密碼，它會自動登入'}</li>
-                            </ol>
+                            <p className="text-sm text-blue-700">
+                                {t('settings.aiGuideSimple') || '點擊下方按鈕複製指令，然後貼到 ChatGPT 或 Claude 即可開始！'}
+                            </p>
                         </div>
-                        <a
-                            href={`${API_URL}/ai-guide`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
-                        >
-                            <span>📖</span>
-                            {t('settings.viewAiGuide') || '開啟 AI 指南'}
-                        </a>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Button
+                                onClick={async () => {
+                                    try {
+                                        const response = await fetch(`${API_URL}/users/me/ai-prompt`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                                'Content-Type': 'application/json'
+                                            }
+                                        });
+                                        if (!response.ok) throw new Error('Failed to generate prompt');
+                                        const data = await response.json();
+                                        await navigator.clipboard.writeText(data.prompt);
+                                        setFeedback({ message: '✅ 已複製！請貼到 ChatGPT 或 Claude', type: 'success' });
+                                        setTimeout(() => setFeedback(null), 3000);
+                                    } catch (error) {
+                                        console.error('Copy AI prompt error:', error);
+                                        setFeedback({ message: '複製失敗，請重試', type: 'error' });
+                                        setTimeout(() => setFeedback(null), 3000);
+                                    }
+                                }}
+                                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-medium"
+                            >
+                                <span className="mr-2">📋</span>
+                                {t('settings.copyAiPrompt') || '一鍵複製 AI 指令'}
+                            </Button>
+                            <Link to="/api-docs" className="flex-1">
+                                <Button variant="outline" className="w-full">
+                                    <span className="mr-2">📖</span>
+                                    {t('settings.viewApiDocs') || '查看 API 文件'}
+                                </Button>
+                            </Link>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -485,3 +485,73 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ error: 'Failed to fetch delivery info' });
     }
 };
+
+// Generate AI Prompt with API Key for one-click copy
+export const generateAiPrompt = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user.id;
+
+        // Get user and their API key
+        let user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, apiKey: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Auto-generate API key if not exists
+        let apiKey = user.apiKey;
+        if (!apiKey) {
+            apiKey = generateApiKey();
+            await prisma.user.update({
+                where: { id: userId },
+                data: { apiKey }
+            });
+        }
+
+        const prompt = `你是 Wishlist.ai 助手，幫助用戶管理願望清單。
+
+我的 API Key: ${apiKey}
+
+所有 API 請求都需要加上 header: x-api-key: ${apiKey}
+Base URL: https://wishlist-app-production.up.railway.app/api
+
+可用的 API：
+
+【願望清單】
+- GET /wishlists - 取得所有清單
+- POST /wishlists - 建立新清單 (body: {"title": "清單名稱"})
+- GET /wishlists/{id} - 取得單一清單
+- PUT /wishlists/{id} - 更新清單
+- DELETE /wishlists/{id} - 刪除清單
+
+【項目】
+- POST /wishlists/{id}/items - 新增項目 (body: {"name": "物品名稱", "price": "價格", "notes": "備註"})
+- POST /wishlists/{id}/items/url - 從網址自動抓取 (body: {"url": "商品頁網址"})
+- GET /items/{id} - 取得項目詳情
+- PUT /items/{id} - 更新項目
+- DELETE /items/{id} - 刪除項目
+
+【用戶】
+- GET /users/me - 我的資料
+- PUT /users/me - 更新資料
+
+【社交】
+- GET /users/search?q=關鍵字 - 搜尋用戶
+- POST /users/{id}/follow - 追蹤用戶
+- DELETE /users/{id}/follow - 取消追蹤
+- GET /users/{id}/wishlists - 查看他人公開清單
+- GET /users/{id}/delivery-info - 取得寄送資訊（需互相追蹤）
+
+現在開始協助我管理願望清單吧！`;
+
+        res.json({
+            prompt,
+            apiKey,
+            userName: user.name || '用戶'
+        });
+    } catch (error) {
+        console.error('Generate AI Prompt Error:', error);
+        res.status(500).json({ error: 'Failed to generate AI prompt' });
+    }
+};

@@ -123,7 +123,13 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
-app.get(/.*/, (req: Request, res: Response) => {
+// SPA fallback - EXCLUDE /api/* routes to prevent API interception
+app.get('*', (req: Request, res: Response) => {
+  // If the path starts with /api, return 404 (API route not found)
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  // Otherwise, serve the SPA
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 

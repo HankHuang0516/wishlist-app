@@ -64,7 +64,7 @@ export const register = async (req: Request, res: Response) => {
         });
 
         // Send verification email
-        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
         const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
 
         await sendEmail(email, 'Verify your Wishlist Account', `

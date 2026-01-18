@@ -66,7 +66,57 @@ app.use('/uploads', express.static('public/uploads'));
 
 // Serve AI Guide JSON for external AI agents
 app.get('/api/ai-guide', (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, '../public/ai-guide.json'));
+  res.json({
+    meta: {
+      title: "Wishlist.ai API Guide for AI Agents",
+      version: "2.0.0",
+      description: "This guide enables AI agents to autonomously authenticate and interact with the Wishlist.ai API.",
+      instructions_for_ai: "Follow the authentication_flow to obtain API access. The user will provide their phone number and password."
+    },
+    authentication_flow: {
+      overview: "AI agents should authenticate by logging in with user credentials, then generating an API key.",
+      step_1_login: {
+        description: "Login with user credentials to get a JWT token",
+        method: "POST",
+        url: "https://wishlist-app-production.up.railway.app/api/auth/login",
+        body: { phoneNumber: "string", password: "string" },
+        response: { token: "JWT token" }
+      },
+      step_2_generate_api_key: {
+        description: "Generate an API key for persistent access",
+        method: "POST",
+        url: "https://wishlist-app-production.up.railway.app/api/users/me/apikey",
+        headers: { Authorization: "Bearer <jwt_token>" },
+        response: { apiKey: "sk_live_..." }
+      },
+      step_3_use_api_key: {
+        description: "Use the API key for all subsequent requests",
+        header: "x-api-key: <your_api_key>"
+      }
+    },
+    base_url: "https://wishlist-app-production.up.railway.app/api",
+    endpoints: {
+      wishlists: {
+        list: { method: "GET", path: "/wishlists" },
+        create: { method: "POST", path: "/wishlists", body: { title: "string" } },
+        get: { method: "GET", path: "/wishlists/{id}" },
+        update: { method: "PUT", path: "/wishlists/{id}" },
+        delete: { method: "DELETE", path: "/wishlists/{id}" }
+      },
+      items: {
+        add: { method: "POST", path: "/wishlists/{id}/items", content_type: "multipart/form-data", body: { name: "string", image: "file" } },
+        add_from_url: { method: "POST", path: "/wishlists/{id}/items/url", body: { url: "string" } },
+        get: { method: "GET", path: "/items/{id}" },
+        update: { method: "PUT", path: "/items/{id}" },
+        delete: { method: "DELETE", path: "/items/{id}" }
+      },
+      user: {
+        get_profile: { method: "GET", path: "/users/me" },
+        update_profile: { method: "PUT", path: "/users/me" },
+        get_delivery_info: { method: "GET", path: "/users/{id}/delivery-info", note: "Requires mutual friendship" }
+      }
+    }
+  });
 });
 
 // Serve static files from the client build directory

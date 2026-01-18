@@ -5,12 +5,16 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_default';
 
+
+import { sendEmail } from '../lib/emailService';
+import crypto from 'crypto';
+
 export const register = async (req: Request, res: Response) => {
     try {
-        const { phoneNumber, password, name, birthday } = req.body; // birthday: YYYY-MM-DD string
+        const { phoneNumber, password, name, birthday, email } = req.body; // birthday: YYYY-MM-DD string
 
-        if (!phoneNumber || !password) {
-            return res.status(400).json({ error: 'Phone number and password are required' });
+        if (!phoneNumber || !password || !email) {
+            return res.status(400).json({ error: 'Phone number, email, and password are required' });
         }
 
         // Enforce strong password
@@ -19,9 +23,17 @@ export const register = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Password must be at least 8 characters long and contain both letters and numbers.' });
         }
 
-        const existingUser = await prisma.user.findUnique({ where: { phoneNumber } });
+        const existingUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { phoneNumber },
+                    { email }
+                ]
+            }
+        });
+
         if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' });
+            return res.status(400).json({ error: 'User with this phone or email already exists' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -35,23 +47,79 @@ export const register = async (req: Request, res: Response) => {
             }
         }
 
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
         const user = await prisma.user.create({
             data: {
                 phoneNumber,
+                email,
                 password: hashedPassword,
                 name,
-                birthday: birthdayDate
+                birthday: birthdayDate,
+                isEmailVerified: false,
+                emailVerificationToken: verificationToken,
+                emailVerificationExpires: verificationExpires
             },
         });
 
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        // Send verification email
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
 
-        res.status(201).json({ token, user: { id: user.id, phoneNumber: user.phoneNumber, name: user.name } });
+        await sendEmail(email, 'Verify your Wishlist Account', `
+           <h1>Welcome to Wishlist!</h1>
+           <p>Please click the link below to verify your email address:</p>
+           <a href="${verifyLink}">${verifyLink}</a>
+       `);
+
+        res.status(201).json({ message: 'Registration successful. Please check your email to verify your account.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+export const verifyEmail = async (req: Request, res: Response) => {
+    try {
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({ error: 'Verification token is required' });
+        }
+
+        const user = await prisma.user.findFirst({
+            where: {
+                emailVerificationToken: token,
+                emailVerificationExpires: {
+                    gt: new Date()
+                }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid or expired verification token' });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                isEmailVerified: true,
+                emailVerificationToken: null,
+                emailVerificationExpires: null
+            }
+        });
+
+        const jwtToken = jwt.sign({ id: updatedUser.id }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({ token: jwtToken, user: { id: updatedUser.id, phoneNumber: updatedUser.phoneNumber, name: updatedUser.name } });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 
 export const login = async (req: Request, res: Response) => {
     try {
@@ -60,6 +128,12 @@ export const login = async (req: Request, res: Response) => {
         const user = await prisma.user.findUnique({ where: { phoneNumber } });
         if (!user) {
             return res.status(400).json({ error: 'Invalid credentials' });
+        }
+
+        // Bypass for old users (no email) or specific override
+        // logic: if user HAS email, they MUST be verified. If no email (legacy), allow.
+        if (user.email && !user.isEmailVerified) {
+            return res.status(403).json({ error: 'Please verify your email address before logging in.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);

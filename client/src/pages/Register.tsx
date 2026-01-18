@@ -10,6 +10,7 @@ import { t } from "../utils/localization";
 
 export default function Register() {
     const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
     const [phoneNumber, setPhoneNumber] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -17,6 +18,7 @@ export default function Register() {
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [successProfile, setSuccessProfile] = useState<{ email: string } | null>(null);
 
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
@@ -36,7 +38,7 @@ export default function Register() {
             const res = await fetch(`${API_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, phoneNumber, password, birthday }),
+                body: JSON.stringify({ name, email, phoneNumber, password, birthday }),
             });
 
             const data = await res.json();
@@ -45,13 +47,43 @@ export default function Register() {
                 throw new Error(data.error || 'Registration failed');
             }
 
-            login(data.token, data.user);
+            // Success - show verification message
+            setSuccessProfile({ email });
+
         } catch (err: any) {
             setError(err.message);
         } finally {
             setLoading(false);
         }
     };
+
+    if (successProfile) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh] pb-10">
+                <Card className="w-full max-w-md text-center">
+                    <CardHeader>
+                        <div className="mx-auto bg-green-100 p-3 rounded-full mb-4">
+                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        </div>
+                        <CardTitle className="text-2xl">Verify your email</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-gray-600">
+                            We've sent a verification link to <span className="font-semibold text-gray-900">{successProfile.email}</span>.
+                        </p>
+                        <p className="text-sm text-gray-500">
+                            Please check your inbox (and spam folder) and click the link to verify your account.
+                        </p>
+                    </CardContent>
+                    <CardFooter className="justify-center">
+                        <Button variant="outline" onClick={() => navigate('/login')}>
+                            Back to Login
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center justify-center min-h-[60vh] pb-10">
@@ -87,6 +119,20 @@ export default function Register() {
                                 className="text-base md:text-sm"
                             />
                         </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium leading-none" htmlFor="email">Email</label>
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="name@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="text-base md:text-sm"
+                            />
+                        </div>
+
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">{t('register.phoneNumber')}</label>
                             <Input

@@ -8,67 +8,56 @@ datasource db {
 }
 
 model User {
-  id               Int       @id @default(autoincrement())
-  phoneNumber      String    @unique
-  password         String
-  name             String?
-  nicknames        String?   // New: Comma separated nicknames
-  realName         String?   // New: Real name
-  address          String?   // New: Address
-  birthday         DateTime? // New: Birthday
-  avatarUrl        String?   // New: URL to avatar image
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                Int       @id @default(autoincrement())
+  phoneNumber       String    @unique
+  password          String
+  name              String?
+  nicknames         String?
+  realName          String?
+  address           String?
+  birthday          DateTime?
+  avatarUrl         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  isAvatarVisible   Boolean   @default(true)
+  isPhoneVisible    Boolean   @default(false)
+  isRealNameVisible Boolean   @default(false)
+  isAddressVisible  Boolean   @default(false)
+  isBirthdayVisible Boolean   @default(false)
+  isPremium         Boolean   @default(false)
+  maxWishlistItems  Int       @default(100)
+  maxFollowing      Int       @default(100)
+  otp               String?
+  otpExpires        DateTime?
 
-  // Privacy Settings
-  isAvatarVisible   Boolean @default(true)
-  isPhoneVisible    Boolean @default(false)
-  isRealNameVisible Boolean @default(false)
-  isAddressVisible  Boolean @default(false)
-  isBirthdayVisible Boolean @default(false) // New
+  email                    String?   @unique // New: Optional for backward compatibility, required for new
+  isEmailVerified          Boolean   @default(false)
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
 
-  // Monetization
-  isPremium         Boolean @default(false) // New: Subscription status
-  maxWishlistItems  Int     @default(100)   // New: Global limit per wishlist
-  maxFollowing      Int     @default(100)   // New: Limit for following users
-
-  // AI Usage Limits (Free users: 5/day)
-  aiUsageCount      Int      @default(0)
-  lastAiUsageDate   DateTime @default(now())
-
-  wishlists   Wishlist[]
-  itemWatches ItemWatch[] // Users watching items
-
-  // Social: Friends/Follows
-  following Follow[] @relation("UserFollowing")
-  followedBy Follow[] @relation("UserFollowers")
-
-  
-  // Auth
-  otp             String?
-  otpExpires      DateTime?
-
-  // Feedback
   lastFeedbackAt  DateTime?
+  aiUsageCount    Int          @default(0)
+  lastAiUsageDate DateTime     @default(now())
+  crawlerLogs     CrawlerLog[]
   feedbacks       Feedback[]
-
-  // Purchase History
-  // Purchase History
-  purchasedItems  Item[]   @relation("PurchasedBy")
-  originalWishes  Item[]   @relation("OriginalWisher")
-  purchases       Purchase[] // History of account purchases (Premium, Limits)
-  crawlerLogs     CrawlerLog[] // Crawler failure logs
+  following       Follow[]     @relation("UserFollowing")
+  followedBy      Follow[]     @relation("UserFollowers")
+  originalWishes  Item[]       @relation("OriginalWisher")
+  purchasedItems  Item[]       @relation("PurchasedBy")
+  itemWatches     ItemWatch[]
+  purchases       Purchase[]
+  wishlists       Wishlist[]
 }
 
 model Purchase {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  type      String   // 'PREMIUM', 'LIMIT_WISHLIST', 'LIMIT_FOLLOWING'
+  type      String
   amount    Float
   currency  String   @default("TWD")
   status    String   @default("COMPLETED")
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Wishlist {
@@ -79,72 +68,63 @@ model Wishlist {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      Int
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items       Item[]
-  
   maxItems    Int      @default(100)
+  items       Item[]
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Item {
-  id          Int      @id @default(autoincrement())
-  name        String
-  price       String?
-  currency    String?  @default("USD")
-  link        String?
-  aiLink      String?  // AI-generated shopping link (separate from user link)
-  imageUrl    String?
-  notes       String?
-  priority    Int      @default(0)
-  isPurchased Boolean  @default(false)
-  isHidden    Boolean  @default(false)
-  uploadStatus String  @default("COMPLETED") // PENDING, UPLOADING, COMPLETED, FAILED - Default COMPLETED for legacy items
-  aiStatus    String   @default("PENDING") // PENDING, COMPLETED, FAILED
-  aiError     String?
-  
-  wishlistId  Int
-  wishlist    Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  
-  watchedBy   ItemWatch[]
-  
-  // Purchase History
-  purchasedById Int?
-  purchasedBy   User?    @relation("PurchasedBy", fields: [purchasedById], references: [id])
-  
+  id             Int         @id @default(autoincrement())
+  name           String
+  price          String?
+  currency       String?     @default("USD")
+  link           String?
+  imageUrl       String?
+  notes          String?
+  priority       Int         @default(0)
+  isPurchased    Boolean     @default(false)
+  isHidden       Boolean     @default(false)
+  aiStatus       String      @default("PENDING")
+  aiError        String?
+  wishlistId     Int
+  purchasedById  Int?
   originalUserId Int?
-  originalUser   User?   @relation("OriginalWisher", fields: [originalUserId], references: [id])
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  aiLink         String?
+  uploadStatus   String      @default("COMPLETED")
+  originalUser   User?       @relation("OriginalWisher", fields: [originalUserId], references: [id])
+  purchasedBy    User?       @relation("PurchasedBy", fields: [purchasedById], references: [id])
+  wishlist       Wishlist    @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  watchedBy      ItemWatch[]
 }
 
 model ItemWatch {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   itemId    Int
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, itemId])
 }
 
-
-
 model Feedback {
-  id        Int      @id @default(autoincrement())
-  content   String
+  id         Int      @id @default(autoincrement())
+  content    String
   aiResponse String?
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  userId     Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
 }
 
 model Follow {
-  followerId Int
+  followerId  Int
   followingId Int
-  follower   User @relation("UserFollowing", fields: [followerId], references: [id])
-  following  User @relation("UserFollowers", fields: [followingId], references: [id])
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id])
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id])
 
   @@id([followerId, followingId])
 }
@@ -156,6 +136,5 @@ model CrawlerLog {
   errorMessage String
   debugMessage String?
   createdAt    DateTime @default(now())
-  
   user         User     @relation(fields: [userId], references: [id])
 }

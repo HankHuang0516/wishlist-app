@@ -68,7 +68,11 @@ export default function WishlistDetail() {
         try {
             await navigator.clipboard.writeText(window.location.href);
             setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            setFeedbackMessage(t('detail.linkCopied'));
+            setTimeout(() => {
+                setCopied(false);
+                setFeedbackMessage(null);
+            }, 2000);
         } catch (err) {
             console.error('Failed to copy', err);
         }
@@ -212,7 +216,8 @@ export default function WishlistDetail() {
                 setIsUrlModalOpen(false);
                 setUrlInput("");
             } else {
-                alert(t('common.error'));
+                setFeedbackMessage(t('common.error'));
+                setTimeout(() => setFeedbackMessage(null), 3000);
             }
         } catch (err) { console.error(err); }
         finally { setIsSubmittingUrl(false); }
@@ -261,7 +266,8 @@ export default function WishlistDetail() {
                 if (res.ok) {
                     navigate('/dashboard');
                 } else {
-                    alert(t('common.error'));
+                    setFeedbackMessage(t('common.error'));
+                    setTimeout(() => setFeedbackMessage(null), 3000);
                 }
             } else if (deleteTarget.type === 'item' && deleteTarget.id) {
                 const res = await fetch(`${API_URL}/items/${deleteTarget.id}`, {
@@ -273,11 +279,13 @@ export default function WishlistDetail() {
                     setDeleteModalOpen(false);
                 } else {
                     const data = await res.json();
-                    alert(`Delete failed: ${data.error || res.statusText}`);
+                    setFeedbackMessage(`Delete failed: ${data.error || res.statusText}`);
+                    setTimeout(() => setFeedbackMessage(null), 3000);
                 }
             }
         } catch (error: any) {
-            alert("Error executing delete: " + error.message);
+            setFeedbackMessage("Error executing delete: " + error.message);
+            setTimeout(() => setFeedbackMessage(null), 3000);
         } finally {
             setIsDeleting(false);
         }
@@ -340,12 +348,14 @@ export default function WishlistDetail() {
                 body: JSON.stringify({ targetWishlistId: selectedTargetWishlistId })
             });
             if (res.ok) {
-                alert(t('detail.cloneSuccess'));
+                setFeedbackMessage(t('detail.cloneSuccess'));
+                setTimeout(() => setFeedbackMessage(null), 3000);
                 setIsCloneModalOpen(false);
                 setItemToClone(null);
             } else {
                 const data = await res.json();
-                alert(data.error || t('common.error'));
+                setFeedbackMessage(data.error || t('common.error'));
+                setTimeout(() => setFeedbackMessage(null), 3000);
             }
         } catch (err) { console.error(err); }
     };

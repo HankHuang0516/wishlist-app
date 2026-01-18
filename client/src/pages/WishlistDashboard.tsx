@@ -35,6 +35,7 @@ export default function WishlistDashboard() {
     const [newIsPublic, setNewIsPublic] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState("newest"); // newest, oldest, name
+    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
     // Delete State
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -60,7 +61,8 @@ export default function WishlistDashboard() {
                 setWishlists(prev => prev.filter(w => w.id !== deleteId));
                 setDeleteModalOpen(false);
             } else {
-                alert(t('common.error'));
+                setFeedbackMessage(t('common.error'));
+                setTimeout(() => setFeedbackMessage(null), 3000);
             }
         } catch (error) { console.error(error); }
         finally { setIsDeleting(false); }
@@ -80,6 +82,8 @@ export default function WishlistDashboard() {
                 setWishlists(prev => prev.map(w =>
                     w.id === id ? { ...w, isPublic: !currentStatus } : w
                 ));
+                setFeedbackMessage(currentStatus ? t('common.private') : t('common.public'));
+                setTimeout(() => setFeedbackMessage(null), 2000);
             }
         } catch (err) { console.error(err); }
     };
@@ -433,7 +437,18 @@ export default function WishlistDashboard() {
                 >
                     <Plus className="h-6 w-6 text-white" />
                 </Button>
-            )}
+                </Button>
+    )
+}
+
+{/* Feedback Toast */ }
+{
+    feedbackMessage && (
+        <div className="fixed bottom-24 md:bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
+            {feedbackMessage}
+        </div>
+    )
+}
         </div >
     );
 }

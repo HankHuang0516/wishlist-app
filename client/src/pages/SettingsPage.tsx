@@ -98,8 +98,8 @@ export default function SettingsPage() {
     };
 
     const handlePaymentSuccess = (data: any) => {
-        alert(`Payment Successful! Transaction ID: ${data.transactionId}`);
-        window.location.reload();
+        setFeedback({ message: `Payment Successful! Transaction ID: ${data.transactionId}`, type: 'success' });
+        setTimeout(() => window.location.reload(), 2000);
     };
 
     useEffect(() => {
@@ -176,7 +176,8 @@ export default function SettingsPage() {
                     setTimeout(() => setSavedField(null), 2000);
                 }
             } else {
-                alert("更新失敗");
+                setFeedback({ message: "更新失敗", type: 'error' });
+                setTimeout(() => setFeedback(null), 3000);
             }
         } catch (error) { console.error(error); }
     };
@@ -220,13 +221,15 @@ export default function SettingsPage() {
                 if (res.ok) {
                     const data = await res.json();
                     setProfile(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
-                    alert(t('settings.uploaded') || 'Avatar updated successfully!');
+                    setFeedback({ message: t('settings.uploaded') || 'Avatar updated successfully!', type: 'success' });
+                    setTimeout(() => setFeedback(null), 3000);
                 } else {
                     throw new Error('Upload failed');
                 }
             } catch (error) {
                 console.error(error);
-                alert(t('common.error') || 'Update failed, please try again.');
+                setFeedback({ message: t('common.error') || 'Update failed, please try again.', type: 'error' });
+                setTimeout(() => setFeedback(null), 3000);
             } finally {
                 setIsUploading(false);
                 // Reset input value to allow re-uploading the same file if needed in future, 
@@ -242,7 +245,12 @@ export default function SettingsPage() {
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6 pb-24">
+        <div className="max-w-2xl mx-auto space-y-6 pb-24 relative">
+            {feedback && (
+                <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full shadow-lg z-50 text-sm font-medium animate-fade-in-down ${feedback.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                    {feedback.message}
+                </div>
+            )}
             <h1 className="text-3xl font-bold text-muji-primary">{t('settings.profile')}</h1>
 
             {/* Language Section */}
@@ -754,7 +762,8 @@ export default function SettingsPage() {
                                                         handleUpdate({ isPremium: false });
                                                         // Optional: Show toast or small feedback
                                                     } else {
-                                                        alert("Failed to cancel");
+                                                        setFeedback({ message: "Failed to cancel", type: 'error' });
+                                                        setTimeout(() => setFeedback(null), 3000);
                                                     }
                                                 } catch (e) { console.error(e); }
                                             },
@@ -801,13 +810,11 @@ export default function SettingsPage() {
                                                     if (res.ok) {
                                                         logout();
                                                         navigate('/');
-                                                        // Force reload to clear any sensitive state if needed, but navigate is smoother
-                                                        // window.location.reload(); 
                                                     } else {
-                                                        const data = await res.json();
-                                                        console.error(data.error);
-                                                        // Ideally show toast here
+                                                        setFeedback({ message: t('common.error'), type: 'error' });
+                                                        setTimeout(() => setFeedback(null), 3000);
                                                     }
+
                                                 } catch (e) {
                                                     console.error(e);
                                                     alert("Connection error");

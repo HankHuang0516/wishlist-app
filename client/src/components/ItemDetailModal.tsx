@@ -9,7 +9,9 @@ import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
+import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
+import DeleteConfirmModal from "./DeleteConfirmModal";
 
 interface Item {
     id: number;
@@ -39,6 +41,8 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     const { token } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // D8 Fix logic: Local display state to handle immediate updates
     // D8 Fix logic: Local display state to handle immediate updates
@@ -145,8 +149,12 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
         }
     };
 
-    const handleDelete = async () => {
-        if (!confirm("確定要刪除此物品嗎？")) return;
+    const handleDeleteClick = () => {
+        setIsDeleteConfirmOpen(true);
+    };
+
+    const executeDelete = async () => {
+        setIsDeleting(true);
         try {
             const res = await fetch(`${API_URL}/items/${currentItem.id}`, {
                 method: 'DELETE',
@@ -155,13 +163,15 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
             if (res.ok) {
                 onUpdate();
                 onClose();
-                onClose();
             } else {
                 setError("刪除失敗");
             }
         } catch (e) {
             console.error(e);
             setError("刪除發生錯誤");
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmOpen(false);
         }
     };
 
@@ -449,7 +459,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                                             <Edit2 className="w-4 h-4 mr-2" />
                                             編輯
                                         </Button>
-                                        <Button variant="destructive" onClick={handleDelete} size="icon">
+                                        <Button variant="destructive" onClick={handleDeleteClick} size="icon">
                                             <Trash className="w-4 h-4" />
                                         </Button>
                                     </>
@@ -464,6 +474,15 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                     )}
                 </CardFooter>
             </Card>
+
+            <DeleteConfirmModal
+                isOpen={isDeleteConfirmOpen}
+                onClose={() => setIsDeleteConfirmOpen(false)}
+                onConfirm={executeDelete}
+                title={t('detail.deleteItemTitle')}
+                message={t('detail.deleteItemConfirm')}
+                isDeleting={isDeleting}
+            />
         </div>
     );
 }

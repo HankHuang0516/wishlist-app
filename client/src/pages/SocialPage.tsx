@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
 import { Search, UserMinus, Users, Eye, Info, X, Loader2 } from "lucide-react";
+import ActionConfirmModal from "../components/ActionConfirmModal";
 import { Link } from "react-router-dom";
 
 import { API_URL, API_BASE_URL } from '../config';
@@ -29,6 +30,20 @@ export default function SocialPage() {
     const [followingList, setFollowingList] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
+    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+    // Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        onConfirm: () => { }
+    });
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
@@ -101,7 +116,8 @@ export default function SocialPage() {
             } else {
                 // Determine error reason (e.g. limit reached)
                 const err = await res.json();
-                alert(`${t('social.unfollowErr')}: ${err.error || 'Unknown error'}`);
+                setFeedbackMessage(`${t('social.unfollowErr')}: ${err.error || 'Unknown error'}`);
+                setTimeout(() => setFeedbackMessage(null), 3000);
             }
         } catch (err) {
             console.error(err);
@@ -306,9 +322,15 @@ export default function SocialPage() {
                                             className="text-red-500 hover:bg-red-50 hover:text-red-600"
                                             title={t('social.unfollow')}
                                             onClick={() => {
-                                                if (confirm(t('social.confirmUnfollow').replace('{name}', user.name))) {
-                                                    handleUnfollow(user.id);
-                                                }
+                                                setConfirmModal({
+                                                    isOpen: true,
+                                                    title: t('social.unfollow'),
+                                                    message: t('social.confirmUnfollow').replace('{name}', user.name),
+                                                    onConfirm: () => {
+                                                        handleUnfollow(user.id);
+                                                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                                    }
+                                                });
                                             }}
                                         >
                                             <X className="w-6 h-6 stroke-[3px]" />
@@ -325,6 +347,26 @@ export default function SocialPage() {
                     </div>
                 </div>
             )}
-        </div>
+
+            <ActionConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                variant="destructive"
+            />
+
+            {/* Feedback Toast */}
+            {
+                feedbackMessage && (
+                    <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-stone-800 text-white px-4 py-2 rounded-full shadow-lg z-50 text-sm font-medium animate-fade-in-up">
+                        {feedbackMessage}
+                    </div>
+                )
+            }
+        </div >
     );
 }

@@ -551,7 +551,7 @@ export default function WishlistDetail() {
             {/* FAB & Menu */}
             {
                 isOwner && (
-                    <div className="fixed bottom-8 right-8 z-20 flex flex-col items-end gap-3">
+                    <div className="fixed bottom-24 md:bottom-8 right-8 z-20 flex flex-col items-end gap-3">
                         {/* Menu Options */}
                         {isFabOpen && (
                             <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-5 fade-in duration-200">

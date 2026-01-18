@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { API_URL } from '../config';
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
-import { ArrowLeft, KeyRound, Smartphone, Lock } from "lucide-react";
+import { ArrowLeft, Smartphone, Lock } from "lucide-react";
 import { t } from "../utils/localization";
 
 export default function ForgotPasswordPage() {
@@ -16,6 +16,7 @@ export default function ForgotPasswordPage() {
     const [newPassword, setNewPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
+    const [error, setError] = useState("");
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault();

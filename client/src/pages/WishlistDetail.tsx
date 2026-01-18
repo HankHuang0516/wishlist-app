@@ -4,7 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
-import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/Dialog";
+import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon, Gift, AlertCircle, UserPlus, Check, Share2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import ItemDetailModal from "../components/ItemDetailModal";
 import { API_URL } from '../config';
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
@@ -60,6 +62,16 @@ export default function WishlistDetail() {
     const [editIsPublic, setEditIsPublic] = useState(false);
     const [copied, setCopied] = useState(false);
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+    const handleShare = async () => {
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy', err);
+        }
+    };
 
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'item' | 'wishlist', id?: number } | null>(null);
@@ -661,7 +673,7 @@ export default function WishlistDetail() {
                         </div>
                         <div className="flex items-center justify-between">
                             <label className="text-sm font-medium">Public Visibility</label>
-                            <Switch checked={editIsPublic} onCheckedChange={setEditIsPublic} />
+                            <input type="checkbox" checked={editIsPublic} onChange={(e) => setEditIsPublic(e.target.checked)} className="h-5 w-5" />
                         </div>
                         <Button className="w-full" onClick={handleUpdateWishlist}>
                             Save Changes

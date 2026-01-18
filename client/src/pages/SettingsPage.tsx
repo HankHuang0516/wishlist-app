@@ -659,6 +659,26 @@ export default function SettingsPage() {
             }
 
 
+            {/* AI Integration */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.aiIntegration') || 'AI Integration'}</h2>
+                <Card>
+                    <CardContent className="pt-6">
+                        <p className="text-sm text-gray-600 mb-4">
+                            {t('settings.aiGuideDesc') || 'Share this guide with AI assistants to let them help manage your wishlists.'}
+                        </p>
+                        <a
+                            href={`${API_URL}/ai-guide`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                            <span>📖</span>
+                            {t('settings.viewAiGuide') || 'View AI Guide'}
+                        </a>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Security Section */}
             <div className="space-y-4">

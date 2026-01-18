@@ -19,10 +19,10 @@ export const searchUsers = async (req: Request, res: Response) => {
                     { id: { not: currentUserId } }, // Exclude self
                     {
                         OR: [
-                            { name: { contains: query } },
-                            { phoneNumber: query }, // Strict exact match for privacy
-                            { nicknames: { contains: query } },
-                            { realName: { contains: query } }
+                            { name: { contains: query, mode: 'insensitive' } },
+                            { phoneNumber: { contains: query } },
+                            { nicknames: { contains: query, mode: 'insensitive' } },
+                            { realName: { contains: query, mode: 'insensitive' } }
                         ]
                     }
                 ]

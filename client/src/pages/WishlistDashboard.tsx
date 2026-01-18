@@ -34,6 +34,7 @@ export default function WishlistDashboard() {
     const [newDescription, setNewDescription] = useState("");
     const [newIsPublic, setNewIsPublic] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortBy, setSortBy] = useState("newest"); // newest, oldest, name
 
     // Delete State
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -172,7 +173,11 @@ export default function WishlistDashboard() {
 
     const filteredWishlists = wishlists.filter(list =>
         list.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    ).sort((a, b) => {
+        if (sortBy === 'name') return a.title.localeCompare(b.title);
+        if (sortBy === 'oldest') return a.id - b.id;
+        return b.id - a.id; // newest
+    });
 
     if (loading) {
         return (
@@ -215,25 +220,36 @@ export default function WishlistDashboard() {
                     </h1>
                 </div>
 
-                {/* Search Bar */}
-                <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                        placeholder={t('dashboard.searchPlaceholder') || "Search wishlists..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 pr-9 text-base md:text-sm"
-                    />
-                    {searchQuery && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-1 top-1 h-8 w-8 hover:bg-transparent"
-                            onClick={() => setSearchQuery("")}
-                        >
-                            <X className="h-4 w-4 text-gray-400" />
-                        </Button>
-                    )}
+                {/* Search & Sort */}
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Input
+                            placeholder={t('dashboard.searchPlaceholder') || "Search..."}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9 pr-9 text-base md:text-sm"
+                        />
+                        {searchQuery && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1 h-8 w-8 hover:bg-transparent"
+                                onClick={() => setSearchQuery("")}
+                            >
+                                <X className="h-4 w-4 text-gray-400" />
+                            </Button>
+                        )}
+                    </div>
+                    <select
+                        className="h-10 rounded-md border border-muji-border bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-muji-primary"
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                    >
+                        <option value="newest">Latest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="name">Name</option>
+                    </select>
                 </div>
             </div>
 

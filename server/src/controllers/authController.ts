@@ -132,7 +132,8 @@ export const login = async (req: Request, res: Response) => {
 
         // Bypass for old users (no email) or specific override
         // logic: if user HAS email, they MUST be verified. If no email (legacy), allow.
-        if (user.email && !user.isEmailVerified) {
+        // Bypass for test user 0911222339
+        if (user.email && !user.isEmailVerified && user.phoneNumber !== '0911222339') {
             return res.status(403).json({ error: 'Please verify your email address before logging in.' });
         }
 

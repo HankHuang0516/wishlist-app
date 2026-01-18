@@ -9,7 +9,6 @@ import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
-import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
 import DeleteConfirmModal from "./DeleteConfirmModal";
 

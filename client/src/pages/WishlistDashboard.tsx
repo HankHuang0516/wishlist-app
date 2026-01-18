@@ -437,18 +437,14 @@ export default function WishlistDashboard() {
                 >
                     <Plus className="h-6 w-6 text-white" />
                 </Button>
-                </Button>
-    )
-}
+            )}
 
-{/* Feedback Toast */ }
-{
-    feedbackMessage && (
-        <div className="fixed bottom-24 md:bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
-            {feedbackMessage}
+            {/* Feedback Toast */}
+            {feedbackMessage && (
+                <div className="fixed bottom-24 md:bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
+                    {feedbackMessage}
+                </div>
+            )}
         </div>
-    )
-}
-        </div >
     );
 }

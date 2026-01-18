@@ -658,50 +658,7 @@ export default function SettingsPage() {
                 )
             }
 
-            {/* Developer Settings (API Key) */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">Developer Settings</h2>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>API Key</CardTitle>
-                        <CardDescription>Use this key to access the Wishlist API programmatically.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {profile.apiKey ? (
-                            <div className="p-3 bg-gray-100 rounded break-all font-mono text-sm relative group">
-                                {profile.apiKey}
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(profile.apiKey || '');
-                                        setFeedback({ message: 'Copied!', type: 'success' });
-                                        setTimeout(() => setFeedback(null), 2000);
-                                    }}
-                                >Copy</Button>
-                            </div>
-                        ) : (
-                            <p className="text-sm text-gray-500">No API Key generated yet.</p>
-                        )}
 
-                        <div className="flex gap-4 items-center">
-                            <Button onClick={handleGenerateApiKey} variant={profile.apiKey ? "outline" : "primary"}>
-                                {profile.apiKey ? "Regenerate Key" : "Generate API Key"}
-                            </Button>
-
-                            <a
-                                href={`${API_URL}/ai-guide`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline text-sm flex items-center"
-                            >
-                                View AI Guide (JSON) <i className="fas fa-external-link-alt ml-1"></i>
-                            </a>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
 
             {/* Security Section */}
             <div className="space-y-4">

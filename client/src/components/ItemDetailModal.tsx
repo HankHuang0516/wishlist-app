@@ -59,6 +59,11 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
     const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
 
+    // Cloning State (Moved to top to prevent Hook Error)
+    const [isCloning, setIsCloning] = useState(false);
+    const [myWishlists, setMyWishlists] = useState<any[]>([]);
+    const [cloneSuccess, setCloneSuccess] = useState(false);
+
     useEffect(() => {
         if (item) {
             // Check if incoming item is stale compared to what we just saved

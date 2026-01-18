@@ -161,18 +161,23 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
+                // First update local state/UI while still mounted
+                setIsDeleting(false);
+                setIsDeleteConfirmOpen(false);
+
+                // Then trigger parent updates and close (which might unmount this component)
                 onUpdate();
                 onClose();
             } else {
                 setError("刪除失敗");
+                setIsDeleting(false);
             }
         } catch (e) {
             console.error(e);
             setError("刪除發生錯誤");
-        } finally {
             setIsDeleting(false);
-            setIsDeleteConfirmOpen(false);
         }
+        // Do not use finally to set state, as onClose() inside try block might unmount the component
     };
 
     // Cloning State

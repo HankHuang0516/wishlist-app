@@ -205,6 +205,8 @@ const translations: Record<string, Record<string, string>> = {
         'forgot.resetPassword': '重設密碼',
         'forgot.resetting': '重設中...',
         'forgot.backToLogin': '返回登入',
+        'forgot.emailPlaceholder': 'name@example.com',
+        'forgot.defaultSuccess': '重設連結已發送！請檢查您的信箱。',
 
         // Settings
         'settings.title': '設定',
@@ -469,6 +471,8 @@ const translations: Record<string, Record<string, string>> = {
         'forgot.resetPassword': 'Reset Password',
         'forgot.resetting': 'Resetting...',
         'forgot.backToLogin': 'Back to Login',
+        'forgot.emailPlaceholder': 'name@example.com',
+        'forgot.defaultSuccess': 'Reset link sent! Check your email.',
 
         // Settings
         'settings.title': 'Settings',

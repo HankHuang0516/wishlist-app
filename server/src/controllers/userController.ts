@@ -39,11 +39,13 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
             realName,
             address,
             nicknames,
+            email, // Allow setting email only if currently NULL
             isAvatarVisible,
             isPhoneVisible,
             isRealNameVisible,
             isAddressVisible,
-            isBirthdayVisible // New
+            isEmailVisible, // New: email visibility toggle
+            isBirthdayVisible
         } = req.body;
 
         // Validation for nicknames (Max 5)
@@ -55,6 +57,17 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
             processedNicknames = nicknames.join(',');
         }
 
+        // Email update logic: only allow if current email is NULL
+        let emailUpdate = undefined;
+        if (email !== undefined) {
+            const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+            if (currentUser && !currentUser.email) {
+                // Allow setting email only if it's currently null
+                emailUpdate = email;
+            }
+            // If user already has an email, ignore the update (don't overwrite)
+        }
+
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: {
@@ -63,10 +76,12 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
                 realName,
                 address,
                 nicknames: processedNicknames,
+                ...(emailUpdate !== undefined && { email: emailUpdate }),
                 isAvatarVisible,
                 isPhoneVisible,
                 isRealNameVisible,
                 isAddressVisible,
+                isEmailVisible,
                 isBirthdayVisible
             }
         });

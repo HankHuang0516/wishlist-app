@@ -152,25 +152,43 @@ export const login = async (req: Request, res: Response) => {
 
 export const forgotPassword = async (req: Request, res: Response) => {
     try {
-        const { phoneNumber } = req.body;
-        const user = await prisma.user.findUnique({ where: { phoneNumber } });
+        const { email } = req.body;
 
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        const user = await prisma.user.findFirst({ where: { email } });
+
+        if (!user) {
+            // Don't reveal if user exists for security
+            return res.json({ message: 'If this email exists, a reset link has been sent.' });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
         await prisma.user.update({
             where: { id: user.id },
-            data: { otp, otpExpires }
+            data: {
+                passwordResetToken: resetToken,
+                passwordResetExpires: resetExpires
+            }
         });
 
-        // Mock SMS sending
-        console.log(`[MOCK SMS] Sending OTP ${otp} to ${phoneNumber}`);
+        // Send password reset email
+        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
+        const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
 
-        res.json({ message: 'OTP sent' });
+        await sendEmail(email, 'Reset your Wishlist Password', `
+            <h1>Password Reset Request</h1>
+            <p>You requested to reset your password. Click the link below to set a new password:</p>
+            <a href="${resetLink}">${resetLink}</a>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+        `);
+
+        res.json({ message: 'If this email exists, a reset link has been sent.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
@@ -195,11 +213,23 @@ export const verifyOtp = async (req: Request, res: Response) => {
 
 export const resetPassword = async (req: Request, res: Response) => {
     try {
-        const { phoneNumber, otp, newPassword } = req.body;
-        const user = await prisma.user.findUnique({ where: { phoneNumber } });
+        const { token, newPassword } = req.body;
 
-        if (!user || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
-            return res.status(400).json({ error: 'Invalid or expired OTP' });
+        if (!token || !newPassword) {
+            return res.status(400).json({ error: 'Token and new password are required' });
+        }
+
+        const user = await prisma.user.findFirst({
+            where: {
+                passwordResetToken: token,
+                passwordResetExpires: {
+                    gt: new Date()
+                }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
         }
 
         // Enforce strong password
@@ -214,14 +244,15 @@ export const resetPassword = async (req: Request, res: Response) => {
             where: { id: user.id },
             data: {
                 password: hashedPassword,
-                otp: null,
-                otpExpires: null
+                passwordResetToken: null,
+                passwordResetExpires: null
             }
         });
 
-        res.json({ message: 'Password reset successful' });
+        res.json({ message: 'Password reset successful. You can now login with your new password.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+

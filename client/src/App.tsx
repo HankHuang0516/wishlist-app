@@ -14,6 +14,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PurchaseHistoryPage from "./pages/PurchaseHistoryPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import EmailVerification from "./pages/EmailVerification";
+import ResetPassword from "./pages/ResetPassword";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import { AuthProvider } from "./context/AuthContext";
@@ -35,6 +36,7 @@ function App() {
             <Route path="privacy" element={<PrivacyPolicy />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="verify-email" element={<EmailVerification />} />
+            <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

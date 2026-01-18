@@ -29,6 +29,7 @@
 - **Input Sizes**: Confirmed inputs in critical modals have appropriate styling to prevent auto-zoom on iOS.
 
 ## 5. 🛠️ Fixes Implemented
-- **WishlistDashboard**: Added auth guard redirect.
-- **Email/Password**: (Verified from previous round) Full email-based reset flow is in place.
+- [x] **WishlistDashboard**: Added auth guard redirect.
+- [x] **Email/Password**: (Verified from previous round) Full email-based reset flow is in place.
+- [x] **Mobile UX**: Updated `ItemDetailModal` inputs to `text-base` to prevent iOS zoom.
 

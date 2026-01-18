@@ -65,6 +65,24 @@ export default function WishlistDetail() {
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
     const handleShare = async () => {
+        const shareData = {
+            title: `Wishlist: ${wishlist?.title || 'Check this out'}`,
+            text: `Check out my wishlist on Wishlist App!`,
+            url: window.location.href
+        };
+
+        // Try Native Share First (Mobile friendly)
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+            try {
+                await navigator.share(shareData);
+                return; // Success, no need to copy
+            } catch (err) {
+                console.log('Error sharing:', err);
+                // Fallback to clipboard if user cancelled or failed
+            }
+        }
+
+        // Fallback to Clipboard
         try {
             await navigator.clipboard.writeText(window.location.href);
             setCopied(true);
@@ -75,6 +93,7 @@ export default function WishlistDetail() {
             }, 2000);
         } catch (err) {
             console.error('Failed to copy', err);
+            setFeedbackMessage(t('common.error'));
         }
     };
 

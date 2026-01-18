@@ -24,7 +24,16 @@ export default function WishlistDashboard() {
     const { token, user } = useAuth();
     const { userId } = useParams();
     const navigate = useNavigate();
+    // Logic: If userId is present, we are viewing someone else's profile (public).
+    // If userId is missing, we are viewing our own dashboard (private).
     const isOwner = !userId;
+
+    // Redirect to login if trying to view private dashboard without auth
+    useEffect(() => {
+        if (isOwner && !token) {
+            navigate('/login');
+        }
+    }, [isOwner, token, navigate]);
 
     const [wishlists, setWishlists] = useState<Wishlist[]>([]);
     const [targetUserName, setTargetUserName] = useState("User");

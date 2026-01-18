@@ -13,6 +13,9 @@ export const searchUsers = async (req: Request, res: Response) => {
     }
 
     try {
+        // Check if query looks like an email (contains @)
+        const isEmailQuery = query.includes('@');
+
         const users = await prisma.user.findMany({
             where: {
                 AND: [
@@ -22,7 +25,9 @@ export const searchUsers = async (req: Request, res: Response) => {
                             { name: { contains: query, mode: 'insensitive' } },
                             { phoneNumber: { contains: query } },
                             { nicknames: { contains: query, mode: 'insensitive' } },
-                            { realName: { contains: query, mode: 'insensitive' } }
+                            { realName: { contains: query, mode: 'insensitive' } },
+                            // Email search: exact match only for security (prevent email harvesting)
+                            ...(isEmailQuery ? [{ email: { equals: query, mode: 'insensitive' as const } }] : [])
                         ]
                     }
                 ]

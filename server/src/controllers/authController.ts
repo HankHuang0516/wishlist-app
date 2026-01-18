@@ -125,7 +125,17 @@ export const login = async (req: Request, res: Response) => {
     try {
         const { phoneNumber, password } = req.body;
 
-        const user = await prisma.user.findUnique({ where: { phoneNumber } });
+        // Support login with phone number OR email
+        // Determine if input is email (contains @) or phone number
+        const isEmail = phoneNumber && phoneNumber.includes('@');
+
+        let user;
+        if (isEmail) {
+            user = await prisma.user.findFirst({ where: { email: phoneNumber } });
+        } else {
+            user = await prisma.user.findUnique({ where: { phoneNumber } });
+        }
+
         if (!user) {
             return res.status(400).json({ error: 'Invalid credentials' });
         }

@@ -130,7 +130,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Login Page
         'login.title': '歡迎回來',
-        'login.subtitle': '輸入手機號碼以登入',
+        'login.subtitle': '輸入手機號碼或電子信箱以登入',
         'feedback.title': '意見回饋',
         'feedback.placeholder': '遇到問題？有功能建議？或只是想聊天？',
         'feedback.submit': '送出',
@@ -166,6 +166,8 @@ const translations: Record<string, Record<string, string>> = {
         'auth.resetSuccess': '密碼已成功重設！',
         'auth.pwdUpdated': '密碼已更新！',
         'login.phoneNumber': '手機號碼',
+        'login.phoneOrEmail': '手機號碼或電子信箱',
+        'login.phoneOrEmailPlaceholder': '0912345678 或 name@example.com',
         'login.password': '密碼',
         'login.forgotPassword': '忘記密碼？',
         'login.signIn': '登入',
@@ -222,7 +224,7 @@ const translations: Record<string, Record<string, string>> = {
         // Social
         'social.title': '朋友',
         'social.search': '搜尋使用者',
-        'social.searchPlaceholder': '輸入姓名或手機號碼',
+        'social.searchPlaceholder': '姓名、手機號碼或電子信箱',
         'social.following': '追蹤中',
         'social.followers': '追蹤者',
         'social.follow': '追蹤',
@@ -435,8 +437,10 @@ const translations: Record<string, Record<string, string>> = {
 
         // Login Page
         'login.title': 'Welcome back',
-        'login.subtitle': 'Enter your phone number to sign in',
+        'login.subtitle': 'Enter your phone number or email to sign in',
         'login.phoneNumber': 'Phone Number',
+        'login.phoneOrEmail': 'Phone Number or Email',
+        'login.phoneOrEmailPlaceholder': '0912345678 or name@example.com',
         'login.password': 'Password',
         'login.forgotPassword': 'Forgot password?',
         'login.signIn': 'Sign In',
@@ -488,7 +492,7 @@ const translations: Record<string, Record<string, string>> = {
         // Social
         'social.title': 'Social',
         'social.search': 'Search Users',
-        'social.searchPlaceholder': 'Enter name or phone number',
+        'social.searchPlaceholder': 'Name, phone number, or email',
         'social.following': 'Following',
         'social.followers': 'Followers',
         'social.follow': 'Follow',

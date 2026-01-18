@@ -10,7 +10,7 @@ import { t } from "../utils/localization";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
-    const [phoneNumber, setPhoneNumber] = useState("");
+    const [identifier, setIdentifier] = useState(""); // phone or email
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
@@ -33,7 +33,7 @@ export default function Login() {
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber, password }),
+                body: JSON.stringify({ phoneNumber: identifier, password }),
             });
 
             // Safely parse response - handle non-JSON responses
@@ -69,13 +69,13 @@ export default function Login() {
                     <CardContent className="space-y-4">
                         {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded">{error}</div>}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="phoneNumber">{t('login.phoneNumber')}</label>
+                            <label className="text-sm font-medium leading-none" htmlFor="identifier">{t('login.phoneOrEmail')}</label>
                             <Input
-                                id="phoneNumber"
-                                placeholder="0912345678"
-                                type="tel"
-                                value={phoneNumber}
-                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                id="identifier"
+                                placeholder={t('login.phoneOrEmailPlaceholder')}
+                                type="text"
+                                value={identifier}
+                                onChange={(e) => setIdentifier(e.target.value)}
                                 required
                             />
                         </div>

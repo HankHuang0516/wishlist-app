@@ -13,6 +13,7 @@ import FriendProfilePage from "./pages/FriendProfilePage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PurchaseHistoryPage from "./pages/PurchaseHistoryPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import EmailVerification from "./pages/EmailVerification";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import { AuthProvider } from "./context/AuthContext";
@@ -33,6 +34,7 @@ function App() {
             <Route path="terms" element={<TermsOfUse />} />
             <Route path="privacy" element={<PrivacyPolicy />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="verify-email" element={<EmailVerification />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

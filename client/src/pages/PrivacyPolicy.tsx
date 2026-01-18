@@ -1,8 +1,20 @@
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "../components/ui/Button";
 import { getUserLocale } from "../utils/localization";
-import Header from "../components/Header";
 
 export default function PrivacyPolicy() {
     const isZh = getUserLocale().startsWith('zh');
+    const navigate = useNavigate();
+
+    const Header = ({ title }: { title: string }) => (
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b mb-6 px-4 py-3 flex items-center shadow-sm">
+            <Button variant="ghost" className="p-0 mr-4 h-auto hover:bg-transparent" onClick={() => navigate(-1)}>
+                <ArrowLeft className="w-6 h-6 text-gray-600" />
+            </Button>
+            <h1 className="text-lg font-bold text-muji-primary truncate">{title}</h1>
+        </div>
+    );
 
     if (isZh) {
         return (

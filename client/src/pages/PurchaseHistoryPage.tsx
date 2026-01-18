@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent } from "../components/ui/Card";
-import { ExternalLink, ShoppingBag, User } from "lucide-react";
+import { ExternalLink, ShoppingBag, User, Gift } from "lucide-react";
 import { t } from "../utils/localization";
 
 interface PurchasedItem {
@@ -225,19 +225,10 @@ export default function PurchaseHistoryPage() {
                                 </div>
                             </div>
                         </div>
-                    )}rel="noopener noreferrer"
-                    className="flex items-center justify-center w-full mt-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded py-1 hover:bg-blue-50 transition-colors"
-                                        >
-                    <ExternalLink className="w-4 h-4 mr-1" />
-                    {t('common.viewItem')}
-                </a>
-            </CardContent>
-        </Card>
-    ))
-}
-                    </div >
-                )}
-            </div >
-        </div >
+
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }

@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/Dialog";
-import { X, Edit2, Trash, Save, ExternalLink, Bot, Check } from "lucide-react";
+import { Card, CardContent, CardHeader, CardFooter } from "./ui/Card";
+import { X, Edit2, Trash, Save, ExternalLink, Bot, Check, Maximize2, Info, Loader2 } from "lucide-react";
 import { API_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Link } from 'react-router-dom';
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
+import { t } from "../utils/localization";
 
 interface Item {
     id: number;
@@ -36,6 +38,7 @@ interface ItemDetailModalProps {
 export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wisherName, wisherId, isOwner }: ItemDetailModalProps) {
     const { token } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
+    const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
     // D8 Fix logic: Local display state to handle immediate updates
     // D8 Fix logic: Local display state to handle immediate updates

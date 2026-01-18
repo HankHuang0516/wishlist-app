@@ -4,10 +4,9 @@ import { API_URL, API_BASE_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff } from "lucide-react";
+import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { t } from "../utils/localization";
-import Header from "../components/Header";
 
 interface PublicProfile {
     id: number;

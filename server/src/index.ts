@@ -32,8 +32,11 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "http:", "*"], // Allow images from any source
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com"], // Required for some inline scripts
-      connectSrc: ["'self'", "https:", "http:", "https://js.tappaysdk.com"], // Allow connecting to APIs
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com", "https://*.tappaysdk.com"], // TapPay SDK
+      styleSrc: ["'self'", "'unsafe-inline'"], // Required for TapPay inline styles
+      connectSrc: ["'self'", "https:", "http:", "https://*.tappaysdk.com"], // Allow connecting to TapPay APIs
+      frameSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay iframes for credit card fields
+      childSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay child frames
     },
   },
 }));

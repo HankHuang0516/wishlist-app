@@ -1,6 +1,6 @@
 import prisma from './prisma';
 
-const FREE_AI_LIMIT = 5;
+const FREE_AI_LIMIT = 10;
 
 /**
  * Check if user can use AI and increment count if allowed.

@@ -102,7 +102,7 @@ export default function Layout() {
             </main>
 
             {/* Footer */}
-            <footer className="border-t border-muji-border bg-white py-6">
+            <footer className="border-t border-muji-border bg-white py-6 pb-20 sm:pb-6">
                 <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-muji-secondary gap-4">
                     <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
                         <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>

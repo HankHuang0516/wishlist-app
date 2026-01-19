@@ -159,70 +159,72 @@ export default function PaymentModal({ isOpen, onClose, onPaymentSuccess, amount
                     </DialogDescription>
                 </DialogHeader>
 
-                {!sdkReady && !error ? (
+                {/* Loading overlay - shown on top of content while initializing */}
+                {!sdkReady && !error && (
                     <div className="py-12 text-center text-gray-500">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
                         <p>正在連線至支付系統...</p>
                     </div>
-                ) : (
-                    <>
-                        <Tabs defaultValue="credit_card" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="credit_card">信用卡</TabsTrigger>
-                                <TabsTrigger value="line_pay">LINE Pay</TabsTrigger>
-                            </TabsList>
+                )}
 
-                            <TabsContent value="credit_card" className="space-y-4 pt-4">
-                                <div className="space-y-4 border p-4 rounded-md">
+                {/* Payment content - always rendered, hidden via opacity during loading to allow TapPay to find DOM elements */}
+                <div style={!sdkReady && !error ? { opacity: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' } : {}}>
+                    <Tabs defaultValue="credit_card" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="credit_card">信用卡</TabsTrigger>
+                            <TabsTrigger value="line_pay">LINE Pay</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="credit_card" className="space-y-4 pt-4">
+                            <div className="space-y-4 border p-4 rounded-md">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">卡號</label>
+                                    <div id="card-number" className="h-10 border rounded px-3 py-2"></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">卡號</label>
-                                        <div id="card-number" className="h-10 border rounded px-3 py-2"></div>
+                                        <label className="text-sm font-medium">有效期限</label>
+                                        <div id="card-expiration-date" className="h-10 border rounded px-3 py-2"></div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">有效期限</label>
-                                            <div id="card-expiration-date" className="h-10 border rounded px-3 py-2"></div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">CCV</label>
-                                            <div id="card-ccv" className="h-10 border rounded px-3 py-2"></div>
-                                        </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">CCV</label>
+                                        <div id="card-ccv" className="h-10 border rounded px-3 py-2"></div>
                                     </div>
                                 </div>
-
-                                <Button onClick={onSubmitCC} disabled={loading} className="w-full">
-                                    {loading ? "處理中..." : `確認支付 NT$ ${amount}`}
-                                </Button>
-                            </TabsContent>
-
-                            <TabsContent value="line_pay" className="pt-4 text-center">
-                                <p className="text-sm text-gray-500 mb-4">使用 LINE Pay 快速結帳 (Sandbox)</p>
-                                <Button
-                                    className="w-full bg-[#00C300] hover:bg-[#00B900] text-white"
-                                    onClick={onLinePay}
-                                    disabled={loading}
-                                >
-                                    <Smartphone className="w-4 h-4 mr-2" />
-                                    使用 LINE Pay 付款
-                                </Button>
-                            </TabsContent>
-                        </Tabs>
-
-                        {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
-
-                        <div className="mt-4 bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100">
-                            <p className="font-bold flex items-center gap-2">
-                                <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded">TEST</span>
-                                Sandbox Credit Card
-                            </p>
-                            <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs">
-                                <p>Card: 4311-9522-2222-2222</p>
-                                <p>CCV: 123</p>
-                                <p>Date: MM/YY (Future)</p>
                             </div>
+
+                            <Button onClick={onSubmitCC} disabled={loading} className="w-full">
+                                {loading ? "處理中..." : `確認支付 NT$ ${amount}`}
+                            </Button>
+                        </TabsContent>
+
+                        <TabsContent value="line_pay" className="pt-4 text-center">
+                            <p className="text-sm text-gray-500 mb-4">使用 LINE Pay 快速結帳 (Sandbox)</p>
+                            <Button
+                                className="w-full bg-[#00C300] hover:bg-[#00B900] text-white"
+                                onClick={onLinePay}
+                                disabled={loading}
+                            >
+                                <Smartphone className="w-4 h-4 mr-2" />
+                                使用 LINE Pay 付款
+                            </Button>
+                        </TabsContent>
+                    </Tabs>
+
+                    {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+
+                    <div className="mt-4 bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100">
+                        <p className="font-bold flex items-center gap-2">
+                            <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded">TEST</span>
+                            Sandbox Credit Card
+                        </p>
+                        <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs">
+                            <p>Card: 4311-9522-2222-2222</p>
+                            <p>CCV: 123</p>
+                            <p>Date: MM/YY (Future)</p>
                         </div>
-                    </>
-                )}
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
     );

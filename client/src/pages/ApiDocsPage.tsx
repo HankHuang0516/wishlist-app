@@ -3,9 +3,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { t } from '../utils/localization';
 
+interface ApiItem {
+    method: string;
+    path: string;
+    desc: string;
+    body?: string;
+    auth?: boolean;
+}
+
+interface ApiSection {
+    title: string;
+    apis: ApiItem[];
+}
+
 const ApiDocsPage = () => {
 
-    const apiSections = [
+    const apiSections: ApiSection[] = [
         {
             title: '🔐 認證 (Authentication)',
             apis: [

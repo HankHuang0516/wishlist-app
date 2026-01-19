@@ -35,7 +35,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentSuccess, amount
 
             if (typeof TPDirect !== 'undefined') {
                 try {
-                    TPDirect.setupSDK(12348, 'app_pa1pQcKoY22IlnSXq5m5WP5jFKzoRG58VEXpT7wU62ud7mMbDOGzCYIlzzLF', 'sandbox');
+                    TPDirect.setupSDK(166632, 'app_eLtyNlnXhUY9PkZoJUw8wjU0o7Ts0iCe14YW6CND4AqYmi5hq8KR4PhKL9DA', 'sandbox');
 
                     // Wait for DOM
                     setTimeout(() => {

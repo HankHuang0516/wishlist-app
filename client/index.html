@@ -3,9 +3,12 @@
 
 <head>
   <meta charset="UTF-8" />
+  <!-- Content Security Policy for TapPay SDK -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.tappaysdk.com https://*.tappaysdk.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https: http: https://*.tappaysdk.com; img-src 'self' data: https: http: *; frame-src 'self' https://*.tappaysdk.com; child-src 'self' https://*.tappaysdk.com;" />
   <link rel="icon" type="image/png" href="/logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
+
   <!-- Primary Meta Tags -->
   <title>Wishlist.ai - AI 智慧許願清單</title>
   <meta name="title" content="Wishlist.ai - AI 智慧許願清單" />
@@ -13,7 +16,7 @@
   <meta name="keywords" content="許願清單, 願望清單, AI, 智慧購物, 禮物清單, 蝦皮, Momo, PChome, wishlist, gift list" />
   <meta name="author" content="Wishlist.ai" />
   <meta name="robots" content="index, follow" />
-  
+
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://wishlist-app-production.up.railway.app/" />
@@ -24,18 +27,18 @@
   <meta property="og:image:height" content="630" />
   <meta property="og:locale" content="zh_TW" />
   <meta property="og:site_name" content="Wishlist.ai" />
-  
+
   <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image" />
   <meta property="twitter:url" content="https://wishlist-app-production.up.railway.app/" />
   <meta property="twitter:title" content="Wishlist.ai - AI 智慧許願清單" />
   <meta property="twitter:description" content="用 AI 自動識別商品，輕鬆建立許願清單。支援蝦皮、Momo、PChome 等電商平台！" />
   <meta property="twitter:image" content="https://wishlist-app-production.up.railway.app/og-image.png" />
-  
+
   <!-- Theme Color -->
   <meta name="theme-color" content="#78716c" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  
+
   <!-- TapPay SDK (Sandbox) -->
   <script src="https://js.tappaysdk.com/sdk/tpdirect/v5.18.0"></script>
   <script>

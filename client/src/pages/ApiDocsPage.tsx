@@ -90,7 +90,7 @@ const ApiDocsPage = () => {
     return (
         <div className="max-w-4xl mx-auto p-4 pb-24">
             <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold">{t('apiDocs.title') || 'API 文件'}</h1>
+                <h1 className="text-2xl font-bold">API 文件</h1>
                 <Link to="/settings">
                     <Button variant="outline" size="sm">← 返回設定</Button>
                 </Link>
@@ -110,9 +110,12 @@ const ApiDocsPage = () => {
 
             <div className="bg-gray-50 border rounded-lg p-4 mb-6">
                 <h3 className="font-medium mb-2">🌐 Base URL</h3>
-                <code className="block bg-white p-2 rounded text-sm">
+                <code className="block bg-white p-2 rounded text-sm select-all">
                     https://wishlist-app-production.up.railway.app/api
                 </code>
+                <p className="text-xs text-gray-500 mt-2">
+                    ⚠️ 這是 API 路徑的前綴，需搭配下方具體端點使用（例如 /api/auth/login）
+                </p>
             </div>
 
             <div className="space-y-6">

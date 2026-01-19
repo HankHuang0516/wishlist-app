@@ -695,15 +695,15 @@ export default function SettingsPage() {
 
             {/* AI Integration */}
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.aiIntegration') || 'AI Integration'}</h2>
+                <h2 className="text-xl font-semibold mt-8 mb-4">AI 整合</h2>
                 <Card>
                     <CardContent className="pt-6 space-y-4">
                         <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100">
                             <p className="text-sm text-blue-800 font-medium mb-2">
-                                🤖 {t('settings.aiGuideHow') || '讓 AI 幫你管理願望清單'}
+                                🤖 讓 AI 幫你管理願望清單
                             </p>
                             <p className="text-sm text-blue-700">
-                                {t('settings.aiGuideSimple') || '點擊下方按鈕複製指令，然後貼到 ChatGPT 或 Claude 即可開始！'}
+                                點擊下方按鈕複製指令，然後貼到 ChatGPT 或 Claude 即可開始！
                             </p>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
@@ -731,12 +731,12 @@ export default function SettingsPage() {
                                 className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-medium"
                             >
                                 <span className="mr-2">📋</span>
-                                {t('settings.copyAiPrompt') || '一鍵複製 AI 指令'}
+                                一鍵複製 AI 指令
                             </Button>
                             <Link to="/api-docs" className="flex-1">
                                 <Button variant="outline" className="w-full">
                                     <span className="mr-2">📖</span>
-                                    {t('settings.viewApiDocs') || '查看 API 文件'}
+                                    查看 API 文件
                                 </Button>
                             </Link>
                         </div>

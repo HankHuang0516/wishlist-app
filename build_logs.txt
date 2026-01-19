@@ -1,0 +1,232 @@
+
+[35m[Region: us-west1][0m
+
+[38;2;125;86;243m?凌???????????????????[0m
+[38;2;125;86;243m??[0m Railpack 0.16.0 [38;2;125;86;243m??[0m
+[38;2;125;86;243m?售???????????????????[0m
+
+[97m??Detected Node[0m
+[97m??Using npm package manager[0m
+
+[1mPackages[0m
+[38;5;238m??????????[0m
+[95mnode[0m  [38;5;238m??[0m  [96m20.20.0[0m  [38;5;238m??[0m  package.json > engines > node (>=20.0.0)
+
+[1mSteps[0m
+[38;5;238m??????????[0m
+[95m??install[0m
+[38;5;245m$[0m [1mnpm ci[0m
+
+[95m??build[0m
+[38;5;245m$[0m [1mnpm run build[0m
+
+[1mDeploy[0m
+[38;5;238m??????????[0m
+[38;5;245m$[0m [1mnpm run start[0m
+
+
+Successfully prepared Railpack plan for build
+
+
+context: q0f6-GSwa
+[internal] load build definition from railpack-plan.json
+[internal] load build definition from railpack-plan.json
+[internal] load build definition from railpack-plan.json
+[internal] load build definition from railpack-plan.json
+resolve image config for docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0
+resolve image config for docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0
+docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0@sha256:a4936435346c482ab90f6b2a8e73d3f0e0490408553f889fbebcd6fae08103f2
+docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0@sha256:a4936435346c482ab90f6b2a8e73d3f0e0490408553f889fbebcd6fae08103f2
+docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0@sha256:a4936435346c482ab90f6b2a8e73d3f0e0490408553f889fbebcd6fae08103f2
+docker-image://ghcr.io/railwayapp/railpack-frontend:v0.16.0@sha256:a4936435346c482ab90f6b2a8e73d3f0e0490408553f889fbebcd6fae08103f2
+load build definition from railpack-plan.json
+load build definition from railpack-plan.json
+load build definition from railpack-plan.json
+load build definition from railpack-plan.json
+loading .
+copy /root/.local/state/mise
+copy /mise/installs
+copy /mise/shims
+[railpack] hash used secrets
+[railpack] loading secrets
+[railpack] copy secrets hash
+create mise config
+mkdir /etc/mise
+docker-image://ghcr.io/railwayapp/railpack-builder:latest
+install apt packages: libatomic1
+copy / /app
+[railpack] secrets hash
+install mise packages: node
+copy /etc/mise/config.toml
+docker-image://ghcr.io/railwayapp/railpack-runtime:latest
+copy /usr/local/bin/mise
+[railpack] merge $packages:apt:runtime, $packages:mise, $build, $build
+copy /app
+copy /root/.cache
+copy /app/node_modules
+npm run build
+copy / /app
+npm ci
+mkdir -p /app/node_modules/.cache
+[railpack] copy used secrets hash
+docker-image://ghcr.io/railwayapp/railpack-runtime:latest
+[railpack] loading secrets
+[railpack] secrets hash
+docker-image://ghcr.io/railwayapp/railpack-builder:latest
+loading .
+[auth] library/alpine:pull token for registry-1.docker.io
+[auth] library/alpine:pull token for registry-1.docker.io
+docker-image://ghcr.io/railwayapp/railpack-builder:latest
+[railpack] secrets hash
+loading .
+[railpack] secrets hash
+loading .
+mkdir /etc/mise
+create mise config
+install mise packages: node
+copy / /app
+copy / /app
+[railpack] loading secrets
+[railpack] loading secrets
+[railpack] copy secrets hash
+[railpack] copy secrets hash
+[railpack] hash used secrets
+[railpack] hash used secrets
+[railpack] copy used secrets hash
+mkdir -p /app/node_modules/.cache
+mkdir -p /app/node_modules/.cache
+npm ci
+npm warn config production Use `--omit=dev` instead.
+
+
+> wishlist-app-root@1.0.0 postinstall
+> npm install --prefix client && npm install --prefix server
+
+
+npm warn config production Use `--omit=dev` instead.
+
+npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+
+npm warn deprecated source-map@0.8.0-beta.0: The work that was done in this beta branch won't be included in future versions
+
+
+added 623 packages, and audited 624 packages in 6s
+
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+
+npm warn config production Use `--omit=dev` instead.
+
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+
+
+added 321 packages, and audited 322 packages in 5s
+
+
+4 vulnerabilities (3 low, 1 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+
+up to date, audited 1 package in 11s
+
+
+found 0 vulnerabilities
+
+npm ci
+copy / /app
+copy / /app
+npm run build
+npm warn config production Use `--omit=dev` instead.
+
+
+> wishlist-app-root@1.0.0 build
+> npm run build --prefix client && npm run build --prefix server
+
+
+npm warn config production Use `--omit=dev` instead.
+
+
+> client@0.0.191 build
+> tsc -b && vite build
+
+
+[36mvite v7.3.0 [32mbuilding client environment for production...[36m[39m
+
+transforming...
+
+[32m??[39m 1751 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+[2mdist/[22m[32mregisterSW.js              [39m[1m[2m  0.13 kB[22m[1m[22m
+
+[2mdist/[22m[32mmanifest.webmanifest       [39m[1m[2m  0.34 kB[22m[1m[22m
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  2.81 kB[22m[1m[22m[2m ??gzip:   1.09 kB[22m
+
+[2mdist/[22m[2massets/[22m[35mindex-59cyFyVq.css  [39m[1m[2m 43.17 kB[22m[1m[22m[2m ??gzip:   7.73 kB[22m
+
+[2mdist/[22m[2massets/[22m[36mindex-Dc0FVkjy.js   [39m[1m[2m430.59 kB[22m[1m[22m[2m ??gzip: 126.34 kB[22m
+
+[32m??built in 3.98s[39m
+
+
+PWA v1.2.0
+mode      generateSW
+precache  13 entries (3816.93 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-66610c77.js
+
+npm warn config production Use `--omit=dev` instead.
+
+
+> server@1.0.0 build
+> prisma generate && tsc
+
+
+Prisma schema loaded from prisma/schema.prisma
+
+
+??Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 139ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+
+npm run build
+copy /root/.cache
+copy /root/.cache
+copy /mise/shims
+copy /mise/installs
+copy /usr/local/bin/mise
+copy /etc/mise/config.toml
+copy /root/.local/state/mise
+install apt packages: libatomic1
+install apt packages: libatomic1
+copy /app/node_modules
+copy /app
+copy /app
+[railpack] merge $packages:apt:runtime, $packages:mise, $build, $build
+[railpack] merge $packages:apt:runtime, $packages:mise, $build, $build
+exporting to docker image format
+exporting to image
+importing to docker
+[auth] sharing credentials for production-us-west2.railway-registry.com
+[auth] sharing credentials for production-us-west2.railway-registry.com
+importing to docker
+[92mBuild time: 102.36 seconds[0m

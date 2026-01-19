@@ -23,7 +23,13 @@
       "Bash(npx prisma db push)",
       "Bash(npx prisma generate:*)",
       "Bash(railway up:*)",
-      "Bash(railway logs:*)"
+      "Bash(railway logs:*)",
+      "Bash(timeout:*)",
+      "Bash(git -C \"c:\\\\Hank\\\\Other\\\\project\\\\wishlist-app\" log -1 --oneline)",
+      "Bash(railway:*)",
+      "Bash(pushd:*)",
+      "Bash(popd)",
+      "Bash(ping:*)"
     ]
   }
 }

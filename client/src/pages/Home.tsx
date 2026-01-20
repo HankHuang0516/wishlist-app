@@ -207,6 +207,27 @@ export default function Home() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* AI Integration CTA */}
+            <div className="w-full max-w-4xl mt-8">
+                <Link to="/api-showcase">
+                    <Card className="overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-0 bg-gradient-to-r from-blue-500 to-purple-600 cursor-pointer">
+                        <CardContent className="p-6 md:p-8 text-center text-white">
+                            <div className="flex items-center justify-center gap-3 mb-3">
+                                <span className="text-3xl">🤖</span>
+                                <h3 className="font-bold text-xl md:text-2xl">AI 整合 · 公開 API</h3>
+                            </div>
+                            <p className="text-white/80 text-sm md:text-base">
+                                讓 AI Agent（ChatGPT、Claude）幫你管理願望清單，送禮不用猜！
+
+                            </p>
+                            <Button className="mt-4 bg-white text-blue-600 hover:bg-gray-100 font-semibold">
+                                查看 API 文件 →
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </Link>
+            </div>
         </div>
     );
 }

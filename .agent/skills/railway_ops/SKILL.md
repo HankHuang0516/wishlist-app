@@ -187,7 +187,8 @@ The Postgres service crashes repeatedly with `P1001: Can't reach database server
 3.  **Deployment History**: Shows a `railway up` deployment (CLI) replacing the Docker image.
 
 ### ⚠️ Root Cause
-Running `railway up` while linked to the **Postgres service** instead of the **App service**. This overwrites the database container with your Node.js application code.
+Running `railway up` while linked to the **Postgres service** instead of the **App service**. 
+*   **Note**: This can happen if the local environment was previously linked to Postgres for debugging, and then `railway up` is run (by user or Agent) without switching back.
 
 ### ✅ Solution (Browser Rollback)
 1.  Go to **Railway Dashboard** -> **Postgres** Service.
@@ -196,9 +197,9 @@ Running `railway up` while linked to the **Postgres service** instead of the **A
 4.  Click **Three Dots (⋮)** -> **Redeploy**.
 
 ### 🛡️ Prevention
--   Always check `railway status` before `railway up`.
--   Ensure you are linked to the **wishlist-app** service, not Postgres.
--   Use `railway link` to re-link if unsure.
+-   **CRITICAL**: Always run `railway status` **IMMEDIATELY BEFORE** `railway up`.
+-   Verify the output says `Service: wishlist-app` (or your app name).
+-   If it says `Service: Postgres`, run `railway link` to switch.
 
 ---
 **Last Updated**: 2026-01-20

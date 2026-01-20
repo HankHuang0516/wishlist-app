@@ -733,7 +733,7 @@ export default function SettingsPage() {
                                 <span className="mr-2">📋</span>
                                 一鍵複製 AI 指令
                             </Button>
-                            <Link to="/api-docs" className="flex-1">
+                            <Link to="/api-showcase" className="flex-1">
                                 <Button variant="outline" className="w-full">
                                     <span className="mr-2">📖</span>
                                     查看 API 文件

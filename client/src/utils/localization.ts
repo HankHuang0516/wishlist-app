@@ -174,6 +174,11 @@ const translations: Record<string, Record<string, string>> = {
         'login.signingIn': '登入中...',
         'login.noAccount': '還沒有帳號？',
         'login.signUp': '註冊',
+        'login.resendVerification': '重新發送驗證信',
+        'login.sendingVerification': '發送中...',
+        'login.verificationSent': '驗證信已發送，請查收信箱。',
+        'login.resendFailed': '發送失敗，請稍後再試。',
+        'login.enterEmailToResend': '請使用電子信箱登入以重新發送驗證信。',
 
         // Register Page
         'register.title': '建立帳號',
@@ -450,6 +455,11 @@ const translations: Record<string, Record<string, string>> = {
         'login.signingIn': 'Signing In...',
         'login.noAccount': 'Don\'t have an account?',
         'login.signUp': 'Sign up',
+        'login.resendVerification': 'Resend verification email',
+        'login.sendingVerification': 'Sending...',
+        'login.verificationSent': 'Verification email sent. Please check your inbox.',
+        'login.resendFailed': 'Failed to send. Please try again later.',
+        'login.enterEmailToResend': 'Please use your email to login to resend verification.',
 
         // Register Page
         'register.title': 'Create an account',

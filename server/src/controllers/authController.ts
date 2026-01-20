@@ -238,6 +238,55 @@ export const verifyOtp = async (req: Request, res: Response) => {
     }
 };
 
+export const resendVerificationEmail = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const user = await prisma.user.findFirst({ where: { email } });
+
+        if (!user) {
+            // Don't reveal if user exists for security
+            return res.json({ message: 'If this email exists and is unverified, a new verification link has been sent.' });
+        }
+
+        if (user.isEmailVerified) {
+            return res.status(400).json({ error: 'Email is already verified. You can login directly.' });
+        }
+
+        // Generate new token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                emailVerificationToken: verificationToken,
+                emailVerificationExpires: verificationExpires
+            }
+        });
+
+        // Send verification email
+        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
+        const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
+
+        await sendEmail(email, 'Verify your Wishlist Account', `
+            <h1>Email Verification</h1>
+            <p>Please click the link below to verify your email address:</p>
+            <a href="${verifyLink}">${verifyLink}</a>
+            <p>This link will expire in 24 hours.</p>
+        `);
+
+        res.json({ message: 'If this email exists and is unverified, a new verification link has been sent.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 export const resetPassword = async (req: Request, res: Response) => {
     try {
         const { token, newPassword } = req.body;

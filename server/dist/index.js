@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const dns_1 = __importDefault(require("dns"));
 // Force IPV4 to prevent IPv6 connectivity issues with Gmail SMTP on Railway
 dns_1.default.setDefaultResultOrder('ipv4first');
@@ -120,7 +121,15 @@ app.get('/api/ai-guide', (req, res) => {
     });
 });
 app.get('/api/swagger.json', (req, res) => {
-    res.sendFile(path_1.default.join(__dirname, '../swagger.json'));
+    try {
+        const swaggerPath = path_1.default.join(__dirname, '../swagger.json');
+        const swaggerContent = fs_1.default.readFileSync(swaggerPath, 'utf8');
+        res.json(JSON.parse(swaggerContent));
+    }
+    catch (error) {
+        console.error('Error serving swagger.json:', error);
+        res.status(500).json({ error: 'Failed to load API documentation' });
+    }
 });
 // Serve static files from the client build directory
 const clientBuildPath = path_1.default.join(__dirname, '../../client/dist');

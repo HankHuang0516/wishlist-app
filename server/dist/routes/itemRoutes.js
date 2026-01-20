@@ -7,6 +7,9 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
 const itemController_1 = require("../controllers/itemController");
 const router = express_1.default.Router();
+// Public Routes (No Auth)
+router.get('/public', itemController_1.getPublicItems);
+// Protected Routes
 router.use(auth_1.authenticateToken);
 router.get('/:id', itemController_1.getItem);
 router.put('/:id', itemController_1.updateItem);

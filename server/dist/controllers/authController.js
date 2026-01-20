@@ -72,7 +72,13 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
            <p>Please click the link below to verify your email address:</p>
            <a href="${verifyLink}">${verifyLink}</a>
        `);
-        res.status(201).json({ message: 'Registration successful. Please check your email to verify your account.' });
+        // Return JWT token immediately for AI agent access (User can still verify email later)
+        const token = jsonwebtoken_1.default.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        res.status(201).json({
+            message: 'Registration successful. Please check your email to verify your account.',
+            token,
+            user: { id: user.id, phoneNumber: user.phoneNumber, name: user.name }
+        });
     }
     catch (error) {
         console.error(error);

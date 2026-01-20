@@ -777,11 +777,53 @@ export const getItem = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const item = await prisma.item.findUnique({
-            where: { id: Number(id) }
+            where: { id: Number(id) },
+            include: {
+                wishlist: {
+                    include: {
+                        user: {
+                            select: {
+                                name: true,
+                                avatarUrl: true
+                            }
+                        }
+                    }
+                }
+            }
         });
-        if (!item) return res.status(404).json({ error: 'Item not found' });
+
+        if (!item) {
+            return res.status(404).json({ error: 'Item not found' });
+        }
+
         res.json(item);
     } catch (error) {
-        res.status(500).json({ error: 'Error fetching item' });
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const getPublicItems = async (req: Request, res: Response) => {
+    try {
+        const items = await prisma.item.findMany({
+            take: 20,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                wishlist: {
+                    include: {
+                        user: {
+                            select: {
+                                name: true,
+                                avatarUrl: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        res.json(items);
+    } catch (error) {
+        console.error('Error fetching public items:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };

@@ -73,7 +73,14 @@ export const register = async (req: Request, res: Response) => {
            <a href="${verifyLink}">${verifyLink}</a>
        `);
 
-        res.status(201).json({ message: 'Registration successful. Please check your email to verify your account.' });
+        // Return JWT token immediately for AI agent access (User can still verify email later)
+        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.status(201).json({
+            message: 'Registration successful. Please check your email to verify your account.',
+            token,
+            user: { id: user.id, phoneNumber: user.phoneNumber, name: user.name }
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });

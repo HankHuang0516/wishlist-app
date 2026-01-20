@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getItem = exports.watchItem = exports.cloneItem = exports.createItemFromUrl = exports.updateItem = exports.deleteItem = exports.createItem = void 0;
+exports.getPublicItems = exports.getItem = exports.watchItem = exports.cloneItem = exports.createItemFromUrl = exports.updateItem = exports.deleteItem = exports.createItem = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const aiController_1 = require("./aiController");
 const fs_1 = __importDefault(require("fs"));
@@ -740,14 +740,54 @@ const getItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
         const item = yield prisma_1.default.item.findUnique({
-            where: { id: Number(id) }
+            where: { id: Number(id) },
+            include: {
+                wishlist: {
+                    include: {
+                        user: {
+                            select: {
+                                name: true,
+                                avatarUrl: true
+                            }
+                        }
+                    }
+                }
+            }
         });
-        if (!item)
+        if (!item) {
             return res.status(404).json({ error: 'Item not found' });
+        }
         res.json(item);
     }
     catch (error) {
-        res.status(500).json({ error: 'Error fetching item' });
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 exports.getItem = getItem;
+const getPublicItems = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const items = yield prisma_1.default.item.findMany({
+            take: 20,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                wishlist: {
+                    include: {
+                        user: {
+                            select: {
+                                name: true,
+                                avatarUrl: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        res.json(items);
+    }
+    catch (error) {
+        console.error('Error fetching public items:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+exports.getPublicItems = getPublicItems;

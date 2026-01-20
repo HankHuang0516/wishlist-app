@@ -130,11 +130,17 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
+// Redirect /api to /api-showcase for user-friendly access
+app.get('/api', (req: Request, res: Response) => {
+  res.redirect('/api-showcase');
+});
+
 // SPA fallback - EXCLUDE /api/* routes to prevent API interception
 // Note: Express 5+ requires '/*' instead of '*' for catch-all routes
 app.get('/{*splat}', (req: Request, res: Response) => {
-  // If the path starts with /api, return 404 (API route not found)
-  if (req.path.startsWith('/api')) {
+  // Only block actual API routes (paths starting with /api/ - note the trailing slash)
+  // This allows /api-showcase and other frontend routes starting with /api-* to work
+  if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
   // Otherwise, serve the SPA

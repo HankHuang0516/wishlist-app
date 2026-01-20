@@ -1,5 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import dns from 'dns';
 
 // Force IPV4 to prevent IPv6 connectivity issues with Gmail SMTP on Railway
@@ -127,7 +128,14 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
 });
 
 app.get('/api/swagger.json', (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, '../swagger.json'));
+  try {
+    const swaggerPath = path.join(__dirname, '../swagger.json');
+    const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
+    res.json(JSON.parse(swaggerContent));
+  } catch (error) {
+    console.error('Error serving swagger.json:', error);
+    res.status(500).json({ error: 'Failed to load API documentation' });
+  }
 });
 
 // Serve static files from the client build directory

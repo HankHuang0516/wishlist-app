@@ -15,6 +15,9 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [showResendOption, setShowResendOption] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState("");
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
 
@@ -27,6 +30,8 @@ export default function Login() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setShowResendOption(false);
+        setResendSuccess("");
         setLoading(true);
 
         try {
@@ -47,6 +52,10 @@ export default function Login() {
             }
 
             if (!res.ok) {
+                // Check if it's email verification error
+                if (res.status === 403 && data.error?.includes('verify your email')) {
+                    setShowResendOption(true);
+                }
                 throw new Error(data.error || 'Login failed');
             }
 
@@ -55,6 +64,36 @@ export default function Login() {
             setError(err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        // Use identifier as email if it contains @, otherwise show message
+        const email = identifier.includes('@') ? identifier : '';
+        if (!email) {
+            setError(t('login.enterEmailToResend'));
+            return;
+        }
+
+        setResendLoading(true);
+        setResendSuccess("");
+        try {
+            const res = await fetch(`${API_URL}/auth/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setResendSuccess(t('login.verificationSent'));
+                setError("");
+            } else {
+                setError(data.error || t('login.resendFailed'));
+            }
+        } catch {
+            setError(t('login.resendFailed'));
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -68,6 +107,19 @@ export default function Login() {
                 <form onSubmit={handleSubmit} className={error ? "animate-shake" : ""}>
                     <CardContent className="space-y-4">
                         {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded">{error}</div>}
+                        {resendSuccess && <div className="text-green-600 text-sm text-center font-medium bg-green-50 p-2 rounded">{resendSuccess}</div>}
+                        {showResendOption && (
+                            <div className="text-center">
+                                <button
+                                    type="button"
+                                    onClick={handleResendVerification}
+                                    disabled={resendLoading}
+                                    className="text-sm text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                                >
+                                    {resendLoading ? t('login.sendingVerification') : t('login.resendVerification')}
+                                </button>
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none" htmlFor="identifier">{t('login.phoneOrEmail')}</label>
                             <Input

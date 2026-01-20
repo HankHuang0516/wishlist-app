@@ -174,5 +174,32 @@ This ensures every deployment is traceable to a specific git commit for debuggin
 | `prisma generate` failed | DB schema out of sync |
 
 ---
-**Last Updated**: 2026-01-19
-**Context**: Emergency Build Fix for Wishlist App + Deployment Protocol
+
+## 5. 🚨 Critical Troubleshooting: Postgres Overwritten
+**Incident Date**: 2026-01-20
+
+### 💀 The Problem
+The Postgres service crashes repeatedly with `P1001: Can't reach database server`.
+
+### 🔍 Symptoms
+1.  **Wrong Runtime**: The "Postgres" service environment shows `node@20.x` instead of Docker/Postgres.
+2.  **App Logs in DB Service**: You see `npm start` or `prisma db push` logs appearing inside the *Postgres* service logs.
+3.  **Deployment History**: Shows a `railway up` deployment (CLI) replacing the Docker image.
+
+### ⚠️ Root Cause
+Running `railway up` while linked to the **Postgres service** instead of the **App service**. This overwrites the database container with your Node.js application code.
+
+### ✅ Solution (Browser Rollback)
+1.  Go to **Railway Dashboard** -> **Postgres** Service.
+2.  Click **Deployments** tab.
+3.  Find the last stable deployment (Look for the Docker icon 🐳, usually image `ghcr.io/railwayapp-templates/postgres-ssl...`).
+4.  Click **Three Dots (⋮)** -> **Redeploy**.
+
+### 🛡️ Prevention
+-   Always check `railway status` before `railway up`.
+-   Ensure you are linked to the **wishlist-app** service, not Postgres.
+-   Use `railway link` to re-link if unsure.
+
+---
+**Last Updated**: 2026-01-20
+**Context**: Emergency Build Fix for Wishlist App + Deployment Protocol + Postgres Recovery

@@ -125,6 +125,10 @@ export const login = async (req: Request, res: Response) => {
     try {
         const { phoneNumber, password } = req.body;
 
+        if (!phoneNumber || !password) {
+            return res.status(400).json({ error: 'Phone number/Email and password are required' });
+        }
+
         // Support login with phone number OR email
         // Determine if input is email (contains @) or phone number
         const isEmail = phoneNumber && phoneNumber.includes('@');
@@ -209,6 +213,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const verifyOtp = async (req: Request, res: Response) => {
     try {
         const { phoneNumber, otp } = req.body;
+
+        if (!phoneNumber || !otp) {
+            return res.status(400).json({ error: 'Phone number and OTP are required' });
+        }
+
         const user = await prisma.user.findUnique({ where: { phoneNumber } });
 
         if (!user || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {

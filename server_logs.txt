@@ -1,0 +1,306 @@
+Mounting volume on: /var/lib/containers/railwayapp/bind-mounts/9ac23cbd-9ac2-4d14-97e9-40e992650127/vol_sjyzy86qhs7ouczk
+Starting Container
+2026-01-18 06:04:01.331 UTC [6] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-01-18 06:04:01.342 UTC [29] LOG:  database system was interrupted; last known up at 2026-01-18 06:02:56 UTC
+2026-01-18 06:04:01.771 UTC [29] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-01-18 06:04:01.782 UTC [29] LOG:  redo starts at 0/38CB0E0
+2026-01-18 06:04:01.782 UTC [29] LOG:  invalid record length at 0/38CB220: expected at least 24, got 0
+2026-01-18 06:04:01.782 UTC [29] LOG:  redo done at 0/38CB1E8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-01-18 06:04:01.804 UTC [27] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-01-18 06:04:01.869 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.010 s, sync=0.016 s, total=0.072 s; sync files=3, longest=0.008 s, average=0.006 s; distance=0 kB, estimate=0 kB; lsn=0/38CB220, redo lsn=0/38CB220
+Certificate will not expire
+
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+
+2026-01-18 06:04:01.326 UTC [6] LOG:  starting PostgreSQL 17.7 (Debian 17.7-3.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-01-18 06:04:01.326 UTC [6] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-01-18 06:04:01.326 UTC [6] LOG:  listening on IPv6 address "::", port 5432
+2026-01-18 06:04:01.878 UTC [6] LOG:  database system is ready to accept connections
+2026-01-18 06:05:15.542 UTC [82] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:05:15.702 UTC [83] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:09:01.968 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:09:02.632 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.615 s, sync=0.011 s, total=0.664 s; sync files=6, longest=0.006 s, average=0.002 s; distance=5 kB, estimate=5 kB; lsn=0/38CC768, redo lsn=0/38CC710
+2026-01-18 06:13:31.577 UTC [84] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:13:35.184 UTC [145] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:13:35.305 UTC [146] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:14:01.732 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:14:02.114 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.308 s, sync=0.028 s, total=0.382 s; sync files=3, longest=0.015 s, average=0.010 s; distance=5 kB, estimate=5 kB; lsn=0/38CDC78, redo lsn=0/38CDBE8
+2026-01-18 06:16:04.142 UTC [150] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:16:04.285 UTC [151] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:19:01.212 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:19:01.860 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.612 s, sync=0.011 s, total=0.649 s; sync files=6, longest=0.008 s, average=0.002 s; distance=6 kB, estimate=6 kB; lsn=0/38CF558, redo lsn=0/38CF500
+2026-01-18 06:24:01.958 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:24:02.567 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.512 s, sync=0.018 s, total=0.609 s; sync files=6, longest=0.016 s, average=0.003 s; distance=5 kB, estimate=6 kB; lsn=0/38D0A68, redo lsn=0/38D0A10
+2026-01-18 06:25:16.437 UTC [283] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:25:27.575 UTC [284] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:27:28.515 UTC [262] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:27:28.515 UTC [276] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:27:28.515 UTC [152] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:27:32.058 UTC [287] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:27:32.182 UTC [288] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:29:01.689 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:29:02.342 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.611 s, sync=0.007 s, total=0.654 s; sync files=5, longest=0.005 s, average=0.002 s; distance=25 kB, estimate=25 kB; lsn=0/38D7260, redo lsn=0/38D7208
+2026-01-18 06:33:52.578 UTC [298] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:33:48.237 UTC [291] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:33:52.427 UTC [297] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:33:48.237 UTC [290] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:39:01.683 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.107 s, sync=0.007 s, total=0.142 s; sync files=2, longest=0.005 s, average=0.004 s; distance=3 kB, estimate=23 kB; lsn=0/38D8258, redo lsn=0/38D8200
+2026-01-18 06:39:01.542 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 06:43:02.077 UTC [303] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:43:02.077 UTC [301] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:43:02.077 UTC [302] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:43:05.791 UTC [312] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:43:05.943 UTC [313] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:52:38.479 UTC [323] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 06:52:38.610 UTC [324] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 07:09:02.277 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 07:09:02.413 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.105 s, sync=0.014 s, total=0.137 s; sync files=2, longest=0.011 s, average=0.007 s; distance=1 kB, estimate=21 kB; lsn=0/38D8968, redo lsn=0/38D8910
+2026-01-18 07:24:02.710 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 07:24:02.838 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.106 s, sync=0.006 s, total=0.129 s; sync files=2, longest=0.004 s, average=0.003 s; distance=1 kB, estimate=19 kB; lsn=0/38D9148, redo lsn=0/38D90F0
+2026-01-18 07:29:02.938 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 07:29:03.372 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.405 s, sync=0.014 s, total=0.434 s; sync files=5, longest=0.013 s, average=0.003 s; distance=6 kB, estimate=18 kB; lsn=0/38DA9A0, redo lsn=0/38DA948
+2026-01-18 07:49:02.767 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 07:49:03.307 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.505 s, sync=0.016 s, total=0.540 s; sync files=6, longest=0.013 s, average=0.003 s; distance=5 kB, estimate=16 kB; lsn=0/38DBF28, redo lsn=0/38DBED0
+2026-01-18 08:03:36.474 UTC [379] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:03:36.474 UTC [369] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:03:36.474 UTC [400] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:03:36.474 UTC [380] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:03:40.220 UTC [406] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:03:40.353 UTC [407] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:09:02.705 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:09:03.772 UTC [27] LOG:  checkpoint complete: wrote 11 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.016 s, sync=0.008 s, total=1.067 s; sync files=10, longest=0.006 s, average=0.001 s; distance=29 kB, estimate=29 kB; lsn=0/38E33E8, redo lsn=0/38E3390
+2026-01-18 08:14:02.871 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:14:03.495 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.544 s, sync=0.031 s, total=0.624 s; sync files=5, longest=0.029 s, average=0.006 s; distance=22 kB, estimate=28 kB; lsn=0/38E8DB8, redo lsn=0/38E8D60
+2026-01-18 08:24:02.693 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:24:02.831 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.105 s, sync=0.005 s, total=0.138 s; sync files=2, longest=0.004 s, average=0.003 s; distance=3 kB, estimate=26 kB; lsn=0/38E9CD0, redo lsn=0/38E9C78
+2026-01-18 08:26:06.864 UTC [428] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:26:06.864 UTC [429] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:26:06.864 UTC [430] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:26:10.447 UTC [436] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:26:10.631 UTC [437] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:28:49.361 UTC [439] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:28:53.160 UTC [441] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:28:53.299 UTC [442] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:29:03.198 UTC [27] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.205 s, sync=0.027 s, total=0.268 s; sync files=3, longest=0.020 s, average=0.009 s; distance=3 kB, estimate=23 kB; lsn=0/38EAC50, redo lsn=0/38EABF8
+2026-01-18 08:29:02.930 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:33:39.065 UTC [443] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:33:42.826 UTC [449] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:33:42.987 UTC [450] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:34:02.297 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:34:02.840 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.506 s, sync=0.008 s, total=0.543 s; sync files=6, longest=0.006 s, average=0.002 s; distance=5 kB, estimate=22 kB; lsn=0/38EC3B0, redo lsn=0/38EC358
+2026-01-18 08:39:02.937 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:39:04.063 UTC [27] LOG:  checkpoint complete: wrote 11 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.020 s, sync=0.022 s, total=1.126 s; sync files=9, longest=0.017 s, average=0.003 s; distance=26 kB, estimate=26 kB; lsn=0/38F2F80, redo lsn=0/38F2F28
+2026-01-18 08:44:02.161 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 08:44:02.620 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.409 s, sync=0.015 s, total=0.459 s; sync files=5, longest=0.011 s, average=0.003 s; distance=11 kB, estimate=25 kB; lsn=0/38F5C80, redo lsn=0/38F5C28
+2026-01-18 08:53:19.772 UTC [479] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:53:19.772 UTC [477] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:53:19.772 UTC [476] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:53:23.544 UTC [481] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:53:23.672 UTC [482] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:58:55.697 UTC [488] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 08:58:55.834 UTC [489] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 09:57:34.480 UTC [549] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 09:57:34.632 UTC [550] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:19:12.311 UTC [876] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:19:16.045 UTC [877] ERROR:  relation "_prisma_migrations" does not exist at character 126
+2026-01-18 15:19:16.045 UTC [877] STATEMENT:  SELECT "id", "checksum", "finished_at", "migration_name", "logs", "rolled_back_at", "started_at", "applied_steps_count" FROM "_prisma_migrations" ORDER BY "started_at" ASC
+2026-01-18 15:19:28.969 UTC [878] FATAL:  terminating connection due to administrator command
+2026-01-18 15:19:29.078 UTC [27] LOG:  checkpoint starting: immediate force wait
+2026-01-18 15:19:29.152 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.010 s, sync=0.014 s, total=0.074 s; sync files=4, longest=0.009 s, average=0.004 s; distance=4268 kB, estimate=4268 kB; lsn=0/3D20FC8, redo lsn=0/3D20F70
+2026-01-18 15:19:48.288 UTC [880] FATAL:  terminating connection due to administrator command
+2026-01-18 15:19:48.391 UTC [27] LOG:  checkpoint starting: immediate force wait
+2026-01-18 15:19:48.481 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 1 recycled; write=0.033 s, sync=0.012 s, total=0.091 s; sync files=4, longest=0.007 s, average=0.003 s; distance=4269 kB, estimate=4269 kB; lsn=0/414C450, redo lsn=0/414C3F8
+2026-01-18 15:20:14.667 UTC [877] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:26.715 UTC [788] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:26.715 UTC [787] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:30.901 UTC [882] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:31.069 UTC [883] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:33.594 UTC [881] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:20:48.645 UTC [884] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:24:48.582 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 15:24:50.926 UTC [27] LOG:  checkpoint complete: wrote 24 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.317 s, sync=0.010 s, total=2.345 s; sync files=21, longest=0.005 s, average=0.001 s; distance=74 kB, estimate=3849 kB; lsn=0/415F020, redo lsn=0/415EFC8
+2026-01-18 15:31:32.792 UTC [892] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:31:32.792 UTC [890] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:31:32.792 UTC [891] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:31:37.040 UTC [901] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:31:37.190 UTC [902] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:35:36.165 UTC [907] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:35:36.326 UTC [908] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:47:18.223 UTC [914] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:47:22.442 UTC [922] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:47:22.598 UTC [923] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:47:18.223 UTC [917] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 15:54:49.525 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 15:54:50.245 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.607 s, sync=0.021 s, total=0.721 s; sync files=7, longest=0.019 s, average=0.003 s; distance=12 kB, estimate=3466 kB; lsn=0/41622A8, redo lsn=0/4162250
+2026-01-18 16:18:55.663 UTC [956] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:18:55.663 UTC [953] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:18:55.663 UTC [954] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:18:59.921 UTC [987] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:19:00.140 UTC [988] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:19:49.736 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 16:19:50.449 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.630 s, sync=0.026 s, total=0.714 s; sync files=6, longest=0.015 s, average=0.005 s; distance=13 kB, estimate=3120 kB; lsn=0/41657F8, redo lsn=0/41657A0
+2026-01-18 16:24:49.547 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 16:24:50.148 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.554 s, sync=0.021 s, total=0.602 s; sync files=6, longest=0.018 s, average=0.004 s; distance=20 kB, estimate=2810 kB; lsn=0/416ABA0, redo lsn=0/416AB48
+2026-01-18 16:28:47.266 UTC [993] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:28:47.266 UTC [994] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:28:47.266 UTC [995] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:28:51.681 UTC [1003] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:29:49.248 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 16:29:49.798 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.510 s, sync=0.007 s, total=0.551 s; sync files=6, longest=0.005 s, average=0.002 s; distance=23 kB, estimate=2532 kB; lsn=0/4170B48, redo lsn=0/4170AF0
+2026-01-18 16:34:18.199 UTC [1011] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:18.199 UTC [1005] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:18.199 UTC [1008] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:18.199 UTC [1004] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:18.199 UTC [1006] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:22.516 UTC [1014] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:34:22.666 UTC [1015] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:31.202 UTC [1018] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:31.202 UTC [1020] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:31.202 UTC [1019] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:31.202 UTC [1023] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:31.202 UTC [1017] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:35.253 UTC [1026] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:39:35.449 UTC [1027] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:45:15.917 UTC [1032] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:45:15.917 UTC [1031] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:45:15.917 UTC [1029] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:45:20.635 UTC [1037] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:45:20.765 UTC [1038] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:49:19.545 UTC [1041] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:49:19.545 UTC [1040] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:49:24.526 UTC [1045] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:49:24.689 UTC [1046] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:51:50.855 UTC [1048] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:51:54.915 UTC [1052] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:51:55.079 UTC [1053] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:51:50.855 UTC [1049] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:07.244 UTC [1065] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:07.391 UTC [1066] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:02.677 UTC [1054] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:02.677 UTC [1063] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:02.677 UTC [1056] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:02.677 UTC [1058] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:13.687 UTC [1067] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:13.915 UTC [1068] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:20.318 UTC [1069] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:20.466 UTC [1070] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:25.734 UTC [1071] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:25.884 UTC [1072] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:31.888 UTC [1073] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:32.045 UTC [1074] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:36.562 UTC [1075] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:36.758 UTC [1076] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:41.556 UTC [1078] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:41.684 UTC [1079] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:47.265 UTC [1080] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:47.393 UTC [1081] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:51.949 UTC [1082] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:52.108 UTC [1083] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:56.994 UTC [1084] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:58:57.129 UTC [1085] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:59:02.443 UTC [1086] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 16:59:02.569 UTC [1087] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:02.275 UTC [1091] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:02.457 UTC [1092] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:08.832 UTC [1093] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:09.058 UTC [1094] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:14.524 UTC [1095] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:14.738 UTC [1096] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:20.720 UTC [1097] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:20.892 UTC [1098] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:26.977 UTC [1099] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:27.139 UTC [1100] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:32.641 UTC [1101] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:32.793 UTC [1102] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:38.031 UTC [1103] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:38.225 UTC [1104] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:43.418 UTC [1106] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:43.572 UTC [1107] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:49.438 UTC [1108] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:49.631 UTC [1109] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:55.483 UTC [1110] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:02:55.654 UTC [1111] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:03:01.765 UTC [1112] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:03:01.938 UTC [1113] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:04:50.497 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 17:04:51.639 UTC [27] LOG:  checkpoint complete: wrote 12 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.111 s, sync=0.007 s, total=1.142 s; sync files=12, longest=0.005 s, average=0.001 s; distance=46 kB, estimate=2283 kB; lsn=0/417C6C0, redo lsn=0/417C668
+2026-01-18 17:06:48.590 UTC [1118] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:06:48.763 UTC [1119] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:05.358 UTC [1124] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:05.358 UTC [1120] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:05.358 UTC [1121] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:05.358 UTC [1130] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:09.225 UTC [1135] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 17:18:09.377 UTC [1136] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:45.698 UTC [1559] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:45.698 UTC [1560] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:45.699 UTC [1592] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:45.699 UTC [1591] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:51.285 UTC [1641] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:31:51.498 UTC [1642] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:39:56.620 UTC [1645] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:39:56.621 UTC [1647] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:39:56.622 UTC [1646] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:40:02.234 UTC [1654] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:40:02.483 UTC [1655] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:48:34.626 UTC [1657] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:48:34.626 UTC [1658] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:48:40.896 UTC [1667] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 01:48:41.203 UTC [1668] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:34.751 UTC [2264] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:34.752 UTC [2263] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:34.752 UTC [2152] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:34.752 UTC [2268] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:40.281 UTC [2273] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 11:44:40.488 UTC [2274] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:44.883 UTC [2283] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:44.883 UTC [2281] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:44.884 UTC [2280] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:44.885 UTC [2308] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:50.792 UTC [2318] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:22:51.074 UTC [2319] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:43:20.553 UTC [2332] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:43:20.553 UTC [2343] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:43:20.553 UTC [2342] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:43:26.439 UTC [2344] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:43:26.657 UTC [2345] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:58:27.268 UTC [2357] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:58:27.268 UTC [2356] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:58:34.122 UTC [2365] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 12:58:34.335 UTC [2366] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:08:39.905 UTC [2369] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:08:39.905 UTC [2368] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:08:47.010 UTC [2379] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:08:47.238 UTC [2380] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:23:39.002 UTC [2383] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:23:39.003 UTC [2382] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:23:45.162 UTC [2398] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:23:45.424 UTC [2399] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 13:30:14.937 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 13:30:15.594 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.609 s, sync=0.020 s, total=0.657 s; sync files=7, longest=0.012 s, average=0.003 s; distance=7 kB, estimate=2055 kB; lsn=0/417E510, redo lsn=0/417E4B8
+2026-01-19 14:03:03.032 UTC [2411] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 14:03:03.032 UTC [2412] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 14:03:09.896 UTC [2444] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 14:03:10.181 UTC [2445] LOG:  could not receive data from client: Connection reset by peer
+2026-01-19 14:10:15.389 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 14:10:16.446 UTC [27] LOG:  checkpoint complete: wrote 11 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.012 s, sync=0.022 s, total=1.057 s; sync files=7, longest=0.018 s, average=0.004 s; distance=26 kB, estimate=1852 kB; lsn=0/4184E18, redo lsn=0/4184DC0
+2026-01-19 14:15:15.546 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 14:15:16.498 UTC [27] LOG:  checkpoint complete: wrote 10 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.909 s, sync=0.019 s, total=0.953 s; sync files=7, longest=0.010 s, average=0.003 s; distance=24 kB, estimate=1670 kB; lsn=0/418AEC0, redo lsn=0/418AE68
+2026-01-19 14:20:15.598 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 14:20:16.523 UTC [27] LOG:  checkpoint complete: wrote 9 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.812 s, sync=0.029 s, total=0.926 s; sync files=7, longest=0.022 s, average=0.005 s; distance=28 kB, estimate=1505 kB; lsn=0/4191F80, redo lsn=0/4191F28
+2026-01-19 14:30:15.721 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 14:30:16.416 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.522 s, sync=0.088 s, total=0.695 s; sync files=6, longest=0.060 s, average=0.015 s; distance=14 kB, estimate=1356 kB; lsn=0/41958B8, redo lsn=0/4195860
+2026-01-19 20:25:22.448 UTC [27] LOG:  checkpoint starting: time
+2026-01-19 20:25:23.142 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.616 s, sync=0.014 s, total=0.694 s; sync files=7, longest=0.008 s, average=0.002 s; distance=7 kB, estimate=1221 kB; lsn=0/4197738, redo lsn=0/41976E0
+2026-01-20 02:42:02.646 UTC [3316] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 02:42:02.646 UTC [3331] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 02:42:02.646 UTC [3170] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 02:42:02.646 UTC [3317] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 02:42:06.467 UTC [3335] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 02:42:06.610 UTC [3336] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:38:22.045 UTC [3341] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:38:22.045 UTC [3342] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:38:26.543 UTC [3395] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:38:26.698 UTC [3396] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:48:34.574 UTC [3407] LOG:  could not receive data from client: Connection reset by peer
+2026-01-20 03:48:34.706 UTC [3408] LOG:  could not receive data from client: Connection reset by peer

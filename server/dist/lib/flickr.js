@@ -174,8 +174,12 @@ exports.flickrService = {
                 photo_id: photoId
             });
             const sizes = sizesRes.sizes.size;
-            const targetSize = sizes.find((s) => s.label === 'Original') ||
+            // Prioritize 'Large' sizes over 'Original' to ensure public accessibility
+            // Flickr's Original size can be restricted even for public photos
+            const targetSize = sizes.find((s) => s.label === 'Large 2048') ||
+                sizes.find((s) => s.label === 'Large 1600') ||
                 sizes.find((s) => s.label === 'Large') ||
+                sizes.find((s) => s.label === 'Original') ||
                 sizes[sizes.length - 1];
             if (targetSize && targetSize.source) {
                 console.log(`[Flickr] Got URL: ${targetSize.source}`);

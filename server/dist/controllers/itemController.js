@@ -52,6 +52,7 @@ const fs_1 = __importDefault(require("fs"));
 const cheerio = __importStar(require("cheerio"));
 const path_1 = __importDefault(require("path"));
 const flickr_1 = require("../lib/flickr");
+const usageService_1 = require("../lib/usageService");
 // User-Agent Pool for rotation
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -73,9 +74,24 @@ const getRandomHeaders = () => {
     };
 };
 // Async AI Processor
-const processItemAi = (itemId, imagePathOrUrl, originalName) => __awaiter(void 0, void 0, void 0, function* () {
+const processItemAi = (itemId, imagePathOrUrl, originalName, userId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log(`[AsyncAI] Starting analysis for Item ${itemId}`);
+        // Check AI quota
+        const canUseAi = yield (0, usageService_1.checkAndIncrementAiUsage)(userId);
+        if (!canUseAi) {
+            console.log(`[AsyncAI] User ${userId} exceeded AI limit - using Traditional Mode`);
+            yield prisma_1.default.item.update({
+                where: { id: itemId },
+                data: {
+                    name: originalName.replace(/\.[^/.]+$/, '') || 'Image Item',
+                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
+                    aiStatus: 'SKIPPED',
+                    aiError: 'Daily AI limit exceeded'
+                }
+            });
+            return;
+        }
         let imageBuffer;
         // Check if it's a URL or local file path
         if (imagePathOrUrl.startsWith('http')) {
@@ -150,6 +166,56 @@ const processItemAi = (itemId, imagePathOrUrl, originalName) => __awaiter(void 0
         });
     }
 });
+// Background Upload Processor
+const processItemUpload = (itemId, filePath, filename, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log(`[AsyncUpload] Starting Flickr upload for Item ${itemId}`);
+        yield prisma_1.default.item.update({
+            where: { id: itemId },
+            data: { uploadStatus: 'UPLOADING' }
+        });
+        const imageBuffer = fs_1.default.readFileSync(filePath);
+        const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, `item_${itemId}_${Date.now()}_${filename}`, `Item ${itemId}`, 'wishlist-app');
+        if (flickrUrl) {
+            console.log(`[AsyncUpload] ✅ Flickr upload successful for Item ${itemId}: ${flickrUrl}`);
+            yield prisma_1.default.item.update({
+                where: { id: itemId },
+                data: {
+                    imageUrl: flickrUrl,
+                    uploadStatus: 'COMPLETED'
+                }
+            });
+            // Clean up local file
+            try {
+                fs_1.default.unlinkSync(filePath);
+            }
+            catch (e) {
+                console.warn(`[AsyncUpload] Failed to delete temp file:`, e);
+            }
+            // Trigger AI analysis with Flickr URL (pass userId for quota check)
+            processItemAi(itemId, flickrUrl, filename, userId);
+        }
+        else {
+            console.error(`[AsyncUpload] ❌ Flickr upload failed for Item ${itemId}`);
+            yield prisma_1.default.item.update({
+                where: { id: itemId },
+                data: { uploadStatus: 'FAILED' }
+            });
+            // Still try AI with local file
+            processItemAi(itemId, filePath, filename, userId);
+        }
+    }
+    catch (error) {
+        console.error(`[AsyncUpload] Error for Item ${itemId}:`, error);
+        yield prisma_1.default.item.update({
+            where: { id: itemId },
+            data: {
+                uploadStatus: 'FAILED',
+                aiError: error.message
+            }
+        });
+    }
+});
 const createItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user.id;
@@ -158,45 +224,20 @@ const createItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         if (!file) {
             return res.status(400).json({ error: 'Image is required' });
         }
-        // 1. Upload to Flickr immediately
-        console.log('[CreateItem] Uploading image to Flickr...');
-        const imageBuffer = fs_1.default.readFileSync(file.path);
-        const flickrUrl = yield flickr_1.flickrService.uploadImage(imageBuffer, `item_${Date.now()}_${file.originalname}`, 'New wishlist item', 'wishlist-app');
-        // Use Flickr URL or fallback to local if upload failed
-        const imageUrl = flickrUrl || `/uploads/${file.filename}`;
-        if (flickrUrl) {
-            console.log('[CreateItem] Flickr upload successful:', flickrUrl);
-            // Clean up local file since we have Flickr URL
-            try {
-                fs_1.default.unlinkSync(file.path);
-            }
-            catch (e) {
-                console.warn('[CreateItem] Failed to delete temp file:', e);
-            }
-        }
-        else {
-            console.warn('[CreateItem] Flickr upload failed, using local path');
-        }
-        // 2. Create Item with PENDING status
+        // 1. Create Item immediately with local preview
         const item = yield prisma_1.default.item.create({
             data: {
                 name: 'Analyzing...', // Placeholder
                 wishlistId: Number(wishlistId),
-                imageUrl: imageUrl, // Use Flickr URL
+                imageUrl: `/uploads/${file.filename}`, // Temporary local path
+                uploadStatus: 'PENDING',
                 aiStatus: 'PENDING'
             }
         });
-        // 3. Trigger Async AI
-        // If we have Flickr URL, pass that, otherwise pass local file path
-        if (flickrUrl) {
-            // Use Flickr URL for AI analysis
-            processItemAi(item.id, flickrUrl, file.originalname);
-        }
-        else {
-            // Fallback to local file path
-            processItemAi(item.id, file.path, file.originalname);
-        }
+        // 2. Return response immediately (100ms instead of 4000ms!)
         res.status(201).json(item);
+        // 3. Trigger background upload + AI processing (pass userId for quota check)
+        processItemUpload(item.id, file.path, file.originalname, userId);
     }
     catch (error) {
         console.error('Create Item Error:', error);
@@ -374,8 +415,8 @@ const processUrlAi = (itemId, url, userId) => __awaiter(void 0, void 0, void 0, 
                     where: { id: itemId },
                     data: { imageUrl: finalImageUrl }
                 });
-                // Trigger Image AI
-                yield processItemAi(itemId, savePath, 'url_image.jpg');
+                // Trigger Image AI (pass userId for quota check)
+                yield processItemAi(itemId, savePath, 'url_image.jpg', userId);
                 return;
             }
             else {
@@ -509,6 +550,25 @@ const downloadImage = (url, itemId) => __awaiter(void 0, void 0, void 0, functio
 const processTextAi = (itemId_1, text_1, userId_1, ...args_1) => __awaiter(void 0, [itemId_1, text_1, userId_1, ...args_1], void 0, function* (itemId, text, userId, searchContext = null, suggestedQuery = null) {
     try {
         console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
+        // Check AI quota BEFORE calling AI
+        const canUseAi = yield (0, usageService_1.checkAndIncrementAiUsage)(userId);
+        if (!canUseAi) {
+            console.log(`[AsyncText] User ${userId} exceeded AI limit - using Traditional Mode`);
+            // Traditional Mode: Use search context if available, otherwise just store the text
+            const fallbackName = (searchContext === null || searchContext === void 0 ? void 0 : searchContext.title) || text.substring(0, 100);
+            const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=random&size=200`;
+            yield prisma_1.default.item.update({
+                where: { id: itemId },
+                data: {
+                    name: fallbackName,
+                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
+                    imageUrl: fallbackImage,
+                    aiStatus: 'SKIPPED',
+                    aiError: 'Daily AI limit exceeded'
+                }
+            });
+            return;
+        }
         const result = yield (0, aiController_1.analyzeProductText)(text, 'traditional chinese', searchContext, suggestedQuery);
         // Option C: Use original image URL directly (no download)
         // Railway's ephemeral filesystem causes downloaded images to disappear on redeploy

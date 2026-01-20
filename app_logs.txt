@@ -1,0 +1,207 @@
+Mounting volume on: /var/lib/containers/railwayapp/bind-mounts/9f61e54e-21ec-4042-bc91-2979d9952384/vol_86k0tdff64xhy1lo
+Starting Container
+npm warn config production Use `--omit=dev` instead.
+
+> wishlist-app-root@1.0.0 start
+> npm start --prefix server
+
+npm warn config production Use `--omit=dev` instead.
+
+> server@1.0.0 start
+> npx prisma db push && node dist/index.js
+
+npm warn config production Use `--omit=dev` instead.
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+
+The database is already in sync with the Prisma schema.
+
+Running generate... (Use --skip-generate to skip the generators)
+[2K[1A[2K[GRunning generate... - Prisma Client
+[2K[1A[2K[G??Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 154ms
+
+?????????????????????????????????????????????????????????????? Update available 5.22.0 -> 7.2.0                       ????                                                        ???? This is a major update - please follow the guide at    ???? https://pris.ly/d/major-version-upgrade                ????                                                        ???? Run the following to update                            ????   npm i --save-dev prisma@latest                       ????   npm i @prisma/client@latest                          ??????????????????????????????????????????????????????????????[EmailService] Initializing MailerSend...
+[EmailService] MAILERSEND_API_KEY is SET (Starts with: mlsn.245...)
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ??  override existing env vars with { override: true }
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ?? prevent committing .env to code: https://dotenvx.com/precommit
+[server]: Server is running at http://0.0.0.0:8080
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation:
+
+?   following?: FollowListRelationFilter,
+{
+  where: {
+?   feedbacks?: FeedbackListRelationFilter,
+?   followedBy?: FollowListRelationFilter,
+    phoneNumber: undefined,
+?   purchases?: PurchaseListRelationFilter,
+?   id?: Int,
+?   apiKey?: String,
+?   email?: String,
+?   originalWishes?: ItemListRelationFilter,
+?   AND?: UserWhereInput | UserWhereInput[],
+?   itemWatches?: ItemWatchListRelationFilter,
+?   OR?: UserWhereInput[],
+?   purchasedItems?: ItemListRelationFilter,
+?   NOT?: UserWhereInput | UserWhereInput[],
+?   password?: StringFilter | String,
+?   name?: StringNullableFilter | String | Null,
+}
+?   nicknames?: StringNullableFilter | String | Null,
+?   realName?: StringNullableFilter | String | Null,
+
+Argument `where` of type UserWhereUniqueInput needs at least one of `id`, `phoneNumber`, `apiKey` or `email` arguments. Available options are marked with ?.
+?   address?: StringNullableFilter | String | Null,
+    at wn (/app/server/node_modules/@prisma/client/runtime/library.js:29:1363)
+?   birthday?: DateTimeNullableFilter | DateTime | Null,
+    at $n.handleRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6958)
+?   avatarUrl?: StringNullableFilter | String | Null,
+    at $n.handleAndLogRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6623)
+?   createdAt?: DateTimeFilter | DateTime,
+    at $n.request (/app/server/node_modules/@prisma/client/runtime/library.js:121:6307)
+?   updatedAt?: DateTimeFilter | DateTime,
+?   wishlists?: WishlistListRelationFilter
+?   isAvatarVisible?: BoolFilter | Boolean,
+    at async l (/app/server/node_modules/@prisma/client/runtime/library.js:130:9633) {
+  }
+  clientVersion: '5.22.0'
+?   isPhoneVisible?: BoolFilter | Boolean,
+}
+?   isRealNameVisible?: BoolFilter | Boolean,
+?   isAddressVisible?: BoolFilter | Boolean,
+?   isBirthdayVisible?: BoolFilter | Boolean,
+?   isPremium?: BoolFilter | Boolean,
+?   maxWishlistItems?: IntFilter | Int,
+?   maxFollowing?: IntFilter | Int,
+?   otp?: StringNullableFilter | String | Null,
+?   otpExpires?: DateTimeNullableFilter | DateTime | Null,
+?   isEmailVisible?: BoolFilter | Boolean,
+?   isEmailVerified?: BoolFilter | Boolean,
+?   emailVerificationToken?: StringNullableFilter | String | Null,
+?   emailVerificationExpires?: DateTimeNullableFilter | DateTime | Null,
+?   passwordResetToken?: StringNullableFilter | String | Null,
+?   passwordResetExpires?: DateTimeNullableFilter | DateTime | Null,
+?   lastFeedbackAt?: DateTimeNullableFilter | DateTime | Null,
+?   aiUsageCount?: IntFilter | Int,
+?   lastAiUsageDate?: DateTimeFilter | DateTime,
+?   crawlerLogs?: CrawlerLogListRelationFilter,
+?   isPhoneVisible?: BoolFilter | Boolean,
+PrismaClientValidationError: 
+?   isRealNameVisible?: BoolFilter | Boolean,
+Invalid `prisma.user.findUnique()` invocation:
+?   isAddressVisible?: BoolFilter | Boolean,
+
+?   isBirthdayVisible?: BoolFilter | Boolean,
+{
+  where: {
+    phoneNumber: undefined,
+?   id?: Int,
+?   apiKey?: String,
+?   email?: String,
+?   AND?: UserWhereInput | UserWhereInput[],
+?   OR?: UserWhereInput[],
+?   NOT?: UserWhereInput | UserWhereInput[],
+?   password?: StringFilter | String,
+?   name?: StringNullableFilter | String | Null,
+?   nicknames?: StringNullableFilter | String | Null,
+?   realName?: StringNullableFilter | String | Null,
+?   address?: StringNullableFilter | String | Null,
+?   birthday?: DateTimeNullableFilter | DateTime | Null,
+?   avatarUrl?: StringNullableFilter | String | Null,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   isAvatarVisible?: BoolFilter | Boolean,
+?   crawlerLogs?: CrawlerLogListRelationFilter,
+?   isEmailVerified?: BoolFilter | Boolean,
+?   feedbacks?: FeedbackListRelationFilter,
+?   emailVerificationToken?: StringNullableFilter | String | Null,
+?   maxWishlistItems?: IntFilter | Int,
+?   emailVerificationExpires?: DateTimeNullableFilter | DateTime | Null,
+?   following?: FollowListRelationFilter,
+?   maxFollowing?: IntFilter | Int,
+?   passwordResetToken?: StringNullableFilter | String | Null,
+?   otp?: StringNullableFilter | String | Null,
+?   passwordResetExpires?: DateTimeNullableFilter | DateTime | Null,
+?   lastFeedbackAt?: DateTimeNullableFilter | DateTime | Null,
+?   otpExpires?: DateTimeNullableFilter | DateTime | Null,
+?   aiUsageCount?: IntFilter | Int,
+?   lastAiUsageDate?: DateTimeFilter | DateTime,
+?   isEmailVisible?: BoolFilter | Boolean,
+?   isPremium?: BoolFilter | Boolean,
+?   followedBy?: FollowListRelationFilter,
+?   originalWishes?: ItemListRelationFilter,
+?   purchasedItems?: ItemListRelationFilter,
+?   itemWatches?: ItemWatchListRelationFilter,
+?   purchases?: PurchaseListRelationFilter,
+?   wishlists?: WishlistListRelationFilter
+  }
+}
+
+Argument `where` of type UserWhereUniqueInput needs at least one of `id`, `phoneNumber`, `apiKey` or `email` arguments. Available options are marked with ?.
+    at wn (/app/server/node_modules/@prisma/client/runtime/library.js:29:1363)
+    at $n.handleRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6958)
+    at $n.handleAndLogRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6623)
+    at $n.request (/app/server/node_modules/@prisma/client/runtime/library.js:121:6307)
+    at async l (/app/server/node_modules/@prisma/client/runtime/library.js:130:9633) {
+  clientVersion: '5.22.0'
+}
+?   isPhoneVisible?: BoolFilter | Boolean,
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation:
+
+?   isRealNameVisible?: BoolFilter | Boolean,
+{
+?   isAddressVisible?: BoolFilter | Boolean,
+?   isBirthdayVisible?: BoolFilter | Boolean,
+  where: {
+    phoneNumber: undefined,
+?   id?: Int,
+?   apiKey?: String,
+?   email?: String,
+?   AND?: UserWhereInput | UserWhereInput[],
+?   OR?: UserWhereInput[],
+?   NOT?: UserWhereInput | UserWhereInput[],
+?   password?: StringFilter | String,
+?   name?: StringNullableFilter | String | Null,
+?   nicknames?: StringNullableFilter | String | Null,
+?   realName?: StringNullableFilter | String | Null,
+?   address?: StringNullableFilter | String | Null,
+?   birthday?: DateTimeNullableFilter | DateTime | Null,
+?   avatarUrl?: StringNullableFilter | String | Null,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   isAvatarVisible?: BoolFilter | Boolean,
+?   isPremium?: BoolFilter | Boolean,
+?   originalWishes?: ItemListRelationFilter,
+?   maxWishlistItems?: IntFilter | Int,
+?   maxFollowing?: IntFilter | Int,
+?   purchasedItems?: ItemListRelationFilter,
+?   otp?: StringNullableFilter | String | Null,
+?   otpExpires?: DateTimeNullableFilter | DateTime | Null,
+?   isEmailVisible?: BoolFilter | Boolean,
+?   isEmailVerified?: BoolFilter | Boolean,
+?   emailVerificationToken?: StringNullableFilter | String | Null,
+?   emailVerificationExpires?: DateTimeNullableFilter | DateTime | Null,
+?   passwordResetToken?: StringNullableFilter | String | Null,
+?   passwordResetExpires?: DateTimeNullableFilter | DateTime | Null,
+?   lastFeedbackAt?: DateTimeNullableFilter | DateTime | Null,
+?   aiUsageCount?: IntFilter | Int,
+?   lastAiUsageDate?: DateTimeFilter | DateTime,
+?   crawlerLogs?: CrawlerLogListRelationFilter,
+?   feedbacks?: FeedbackListRelationFilter,
+?   following?: FollowListRelationFilter,
+?   followedBy?: FollowListRelationFilter,
+?   itemWatches?: ItemWatchListRelationFilter,
+?   purchases?: PurchaseListRelationFilter,
+?   wishlists?: WishlistListRelationFilter
+  }
+    at async l (/app/server/node_modules/@prisma/client/runtime/library.js:130:9633) {
+}
+  clientVersion: '5.22.0'
+
+Argument `where` of type UserWhereUniqueInput needs at least one of `id`, `phoneNumber`, `apiKey` or `email` arguments. Available options are marked with ?.
+}
+    at wn (/app/server/node_modules/@prisma/client/runtime/library.js:29:1363)
+    at $n.handleRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6958)
+    at $n.handleAndLogRequestError (/app/server/node_modules/@prisma/client/runtime/library.js:121:6623)
+    at $n.request (/app/server/node_modules/@prisma/client/runtime/library.js:121:6307)

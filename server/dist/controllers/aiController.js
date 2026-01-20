@@ -81,6 +81,7 @@ exports.analyzeLocalImage = analyzeLocalImage;
 const imageValidator_1 = require("../lib/imageValidator");
 Object.defineProperty(exports, "isImageAccessible", { enumerable: true, get: function () { return imageValidator_1.isImageAccessible; } });
 Object.defineProperty(exports, "validateImageUrl", { enumerable: true, get: function () { return imageValidator_1.validateImageUrl; } });
+const openGraphScraper_1 = require("../lib/openGraphScraper");
 // Helper: Google Custom Search for Image
 const searchGoogleImage = (query) => __awaiter(void 0, void 0, void 0, function* () {
     const cseId = process.env.GOOGLE_CSE_ID;
@@ -154,6 +155,7 @@ const searchGoogleWeb = (query) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.searchGoogleWeb = searchGoogleWeb;
 const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [productName_1, ...args_1], void 0, function* (productName, language = 'traditional chinese', searchContext = null, suggestedSearchQuery = null) {
+    var _a, _b;
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_api_key_here") {
         return {
@@ -166,16 +168,59 @@ const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [prod
             description: "Mock description for " + productName
         };
     }
-    // 1. Try to find a real image using Google Search (if configured)
-    // Only search image if we didn't get a confirmed link from searchContext
+    // Cost Optimization: Open Graph Check
+    // If input looks like a URL, try to fetch OG data first.
+    // If successful, we can SKIP the expensive Google Search.
+    const isUrl = productName.startsWith('http://') || productName.startsWith('https://');
+    let ogData = null;
+    let skipGoogleSearch = false; // Flag to skip Google Search if OG is good enough
+    if (isUrl) {
+        console.log(`[CostOptimization] Input is URL, attempting Open Graph fetch: ${productName}`);
+        ogData = yield (0, openGraphScraper_1.fetchOpenGraphData)(productName);
+        if (ogData.success && ogData.title && ogData.image) {
+            console.log(`[CostOptimization] ✅ OG Data Found! Title: "${ogData.title}", Image: Yes`);
+            // We have a title and an image, we can likely skip Google Image Search
+            skipGoogleSearch = true;
+        }
+        else {
+            console.log(`[CostOptimization] ⚠️ OG Data incomplete or failed. Falling back to Google Search.`);
+        }
+    }
+    // 1. Try to find a real image using Google Search (if configured AND NOT SKIPPED)
+    // Only search image if we didn't get a confirmed link from searchContext OR OG data
     let googleImage = null;
-    if (!searchContext || !searchContext.imageUrl) {
-        googleImage = yield searchGoogleImage((searchContext === null || searchContext === void 0 ? void 0 : searchContext.title) || productName);
+    // If we have OG Image, use it directly
+    if (ogData === null || ogData === void 0 ? void 0 : ogData.image) {
+        googleImage = ogData.image;
+        console.log(`[CostOptimization] Using Open Graph Image: ${googleImage}`);
+    }
+    // Otherwise, check searchContext or do Google Search
+    else if (!searchContext || !searchContext.imageUrl) {
+        // Only run Google Search if we didn't explicitly decide to skip it
+        if (!skipGoogleSearch) {
+            // If input is a raw URL and OG failed, we might want to search for the URL itself or do nothing?
+            // Actually, if it's a URL, searching for the URL in Google Images isn't great.
+            // But existing logic did: searchGoogleImage(searchContext?.title || productName)
+            // If productName is URL, this searches the URL string in Image Search.
+            googleImage = yield searchGoogleImage((searchContext === null || searchContext === void 0 ? void 0 : searchContext.title) || productName);
+        }
     }
     // 2. Ask Gemini for details + (optional) image url if google failed
-    // Incorporate Search Context if available
+    // Incorporate Search Context or OG Data if available
     let contextStr = "";
-    if (searchContext) {
+    if (ogData && ogData.success) {
+        contextStr = `
+        [Source: Open Graph Metadata from URL]
+        Title: "${ogData.title}"
+        Description: "${ogData.description}"
+        Site Name: "${ogData.site_name}"
+        Detected Price: "${((_a = ogData.price) === null || _a === void 0 ? void 0 : _a.amount) || 'Unknown'} ${((_b = ogData.price) === null || _b === void 0 ? void 0 : _b.currency) || ''}"
+        Original URL: "${ogData.url}"
+        
+        The user provided a direct link. TRUST this metadata as the primary source of truth.
+        `;
+    }
+    else if (searchContext) {
         contextStr = `
         Additional Context found from Google Search:
         Title: "${searchContext.title}"
@@ -190,28 +235,35 @@ const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [prod
         
         The input might be a specific **Product Name** OR a **Product URL**.
         
-        ##########################################################
+        ${skipGoogleSearch ?
+        `####################################################################
+        # COST SAVING MODE: OPEN GRAPH DATA FOUND                          #
+        # DO NOT ASK FOR SEARCH. USE THE PROVIDED OG METADATA.             #
+        ####################################################################`
+        :
+            `##########################################################
         # MANDATORY: YOU MUST USE GOOGLE SEARCH BEFORE ANSWERING #
-        ##########################################################
+        # (Unless detailed Context is provided via OG above)     #
+        ##########################################################`}
         
-        ${suggestedSearchQuery ? `1. EXECUTE THIS EXACT SEARCH: "${suggestedSearchQuery}"
+        ${suggestedSearchQuery && !skipGoogleSearch ? `1. EXECUTE THIS EXACT SEARCH: "${suggestedSearchQuery}"
         2. Read the search results carefully.
         3. Extract the REAL product name from the search results.
         4. DO NOT GUESS or HALLUCINATE the product name. If search returns no results, say "Unknown Product".` :
-        `1. SEARCH for the input (especially if it is a URL) to find the actual product page.
-        2. Read the search results to get the REAL product details.`}
+        (!skipGoogleSearch ? `1. SEARCH for the input (especially if it is a URL) to find the actual product page.
+        2. Read the search results to get the REAL product details.` : `1. Analyze the provided Metadata to extract product details.`)}
         
         IMPORTANT ANTI-HALLUCINATION RULES:
         - If the input is a Momo URL with i_code=XXXXX, the product MUST be from momoshop.com.tw
-        - NEVER return a product name that doesn't match the actual search results
+        - NEVER return a product name that doesn't match the actual search results/metadata
         - If unsure, return name as "Unknown Product from [Store Name]"
         
         Act as a shopping assistant. Language: ${language}.
         
         Instructions:
-        - If "Additional Context" is provided, PRIORITIZE it as the source of truth.
-        - If input is a URL, SEARCH for it first, then extract details from results.
-        - NEVER GUESS product names - only use information from search results.
+        - If "Additional Context" (OG Data) is provided, PRIORITIZE it as the source of truth.
+        - If input is a URL, SEARCH for it first (unless OG data provided), then extract details from results.
+        - NEVER GUESS product names - only use information from search results or metadata.
         
         Return JSON object with:
         1. name: Exact product name from search results (NOT guessed).
@@ -232,13 +284,14 @@ const analyzeProductText = (productName_1, ...args_1) => __awaiter(void 0, [prod
         const data = JSON.parse(jsonStr);
         // Ensure shopping link exists
         data.shoppingLink = `https://www.google.com/search?q=${encodeURIComponent(data.name || productName)}&tbm=shop`;
-        // Use Google Image if found, otherwise keep Gemini's or null
+        // Use Google/OG Image if found, otherwise keep Gemini's or null
         // Double Fallback: If we didn't find an image initially (e.g. because input was a URL),
         // but now we have a proper Product Name from Gemini, try searching Image again!
         if (googleImage) {
             data.imageUrl = googleImage;
         }
-        else if (!data.imageUrl && data.name) {
+        else if (!data.imageUrl && data.name && !skipGoogleSearch) {
+            // Only do secondary search if we didn't skip search earlier
             console.log(`[AI] Initial image search failed, trying again with inferred name: "${data.name}"`);
             const secondaryImage = yield searchGoogleImage(data.name);
             if (secondaryImage) {

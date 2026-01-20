@@ -12,11 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPurchaseHistory = exports.getPurchasedItems = exports.updateSubscription = exports.cancelSubscription = exports.updatePassword = exports.uploadAvatar = exports.getUserProfile = exports.updateMe = exports.getMe = void 0;
+exports.generateAiPrompt = exports.getDeliveryInfo = exports.getUserApiKey = exports.generateUserApiKey = exports.getAiUsage = exports.getPurchaseHistory = exports.getPurchasedItems = exports.updateSubscription = exports.cancelSubscription = exports.updatePassword = exports.uploadAvatar = exports.getUserProfile = exports.updateMe = exports.getMe = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const flickr_1 = require("../lib/flickr");
 const fs_1 = __importDefault(require("fs"));
+const usageService_1 = require("../lib/usageService");
+const apiKey_1 = require("../lib/apiKey");
 // Get current user's full profile (Settings page)
 const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -39,8 +41,9 @@ exports.getMe = getMe;
 const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user.id;
-        const { name, avatarUrl, realName, address, nicknames, isAvatarVisible, isPhoneVisible, isRealNameVisible, isAddressVisible, isBirthdayVisible // New
-         } = req.body;
+        const { name, avatarUrl, realName, address, nicknames, email, // Allow setting email only if currently NULL
+        isAvatarVisible, isPhoneVisible, isRealNameVisible, isAddressVisible, isEmailVisible, // New: email visibility toggle
+        isBirthdayVisible } = req.body;
         // Validation for nicknames (Max 5)
         let processedNicknames = nicknames;
         if (Array.isArray(nicknames)) {
@@ -49,20 +52,27 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             }
             processedNicknames = nicknames.join(',');
         }
+        // Email update logic: only allow if current email is NULL
+        let emailUpdate = undefined;
+        if (email !== undefined) {
+            const currentUser = yield prisma_1.default.user.findUnique({ where: { id: userId } });
+            if (currentUser && !currentUser.email) {
+                // Allow setting email only if it's currently null
+                emailUpdate = email;
+            }
+            // If user already has an email, ignore the update (don't overwrite)
+        }
         const updatedUser = yield prisma_1.default.user.update({
             where: { id: userId },
-            data: {
-                name,
+            data: Object.assign(Object.assign({ name,
                 avatarUrl,
                 realName,
-                address,
-                nicknames: processedNicknames,
-                isAvatarVisible,
+                address, nicknames: processedNicknames }, (emailUpdate !== undefined && { email: emailUpdate })), { isAvatarVisible,
                 isPhoneVisible,
                 isRealNameVisible,
                 isAddressVisible,
-                isBirthdayVisible
-            }
+                isEmailVisible,
+                isBirthdayVisible })
         });
         res.json(updatedUser);
     }
@@ -330,3 +340,175 @@ const getPurchaseHistory = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getPurchaseHistory = getPurchaseHistory;
+// Get AI Usage Info
+const getAiUsage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.id;
+        const usage = yield (0, usageService_1.getAiUsageInfo)(userId);
+        res.json(usage);
+    }
+    catch (error) {
+        console.error('Get AI Usage Error:', error);
+        res.status(500).json({ error: 'Failed to fetch AI usage' });
+    }
+});
+exports.getAiUsage = getAiUsage;
+// Generate API Key
+const generateUserApiKey = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.id;
+        const newApiKey = (0, apiKey_1.generateApiKey)();
+        // Check if user already has one? We will overwrite it (regenerate).
+        // Since it's unique, we just update.
+        yield prisma_1.default.user.update({
+            where: { id: userId },
+            data: { apiKey: newApiKey }
+        });
+        res.json({ apiKey: newApiKey });
+    }
+    catch (error) {
+        console.error('Generate API Key Error:', error);
+        res.status(500).json({ error: 'Failed to generate API Key' });
+    }
+});
+exports.generateUserApiKey = generateUserApiKey;
+// Get API Key
+const getUserApiKey = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.id;
+        const user = yield prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: { apiKey: true }
+        });
+        if (!user)
+            return res.status(404).json({ error: 'User not found' });
+        res.json({ apiKey: user.apiKey });
+    }
+    catch (error) {
+        console.error('Get API Key Error:', error);
+        res.status(500).json({ error: 'Failed to fetch API Key' });
+    }
+});
+exports.getUserApiKey = getUserApiKey;
+// Get Delivery Info (Mutual Friends Only - for Gift Sending)
+const getDeliveryInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const currentUserId = req.user.id;
+        const targetUserId = Number(req.params.id);
+        if (currentUserId === targetUserId) {
+            return res.status(400).json({ error: 'Cannot request your own delivery info via this endpoint' });
+        }
+        // Check mutual friendship (both follow each other)
+        const [iFollow, theyFollow] = yield Promise.all([
+            prisma_1.default.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUserId,
+                        followingId: targetUserId
+                    }
+                }
+            }),
+            prisma_1.default.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: targetUserId,
+                        followingId: currentUserId
+                    }
+                }
+            })
+        ]);
+        if (!iFollow || !theyFollow) {
+            return res.status(403).json({ error: 'Access denied. You must be mutual friends to access delivery information.' });
+        }
+        // Mutual friends confirmed, fetch delivery info
+        const targetUser = yield prisma_1.default.user.findUnique({
+            where: { id: targetUserId },
+            select: {
+                realName: true,
+                phoneNumber: true,
+                address: true
+            }
+        });
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({
+            realName: targetUser.realName,
+            phoneNumber: targetUser.phoneNumber,
+            address: targetUser.address
+        });
+    }
+    catch (error) {
+        console.error('Get Delivery Info Error:', error);
+        res.status(500).json({ error: 'Failed to fetch delivery info' });
+    }
+});
+exports.getDeliveryInfo = getDeliveryInfo;
+// Generate AI Prompt with API Key for one-click copy
+const generateAiPrompt = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.id;
+        // Get user and their API key
+        let user = yield prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: { name: true, apiKey: true }
+        });
+        if (!user)
+            return res.status(404).json({ error: 'User not found' });
+        // Auto-generate API key if not exists
+        let apiKey = user.apiKey;
+        if (!apiKey) {
+            apiKey = (0, apiKey_1.generateApiKey)();
+            yield prisma_1.default.user.update({
+                where: { id: userId },
+                data: { apiKey }
+            });
+        }
+        const promptData = {
+            role: "You are a Wishlist.ai assistant helping users manage their wishlists.",
+            authentication: {
+                api_key: apiKey,
+                header: `x-api-key: ${apiKey}`,
+                base_url: "https://wishlist-app-production.up.railway.app/api"
+            },
+            available_apis: {
+                wishlists: {
+                    list_all: { method: "GET", path: "/wishlists", description: "Get all wishlists" },
+                    create: { method: "POST", path: "/wishlists", body: { title: "string" }, description: "Create new wishlist" },
+                    get_one: { method: "GET", path: "/wishlists/{id}", description: "Get single wishlist" },
+                    update: { method: "PUT", path: "/wishlists/{id}", description: "Update wishlist" },
+                    delete: { method: "DELETE", path: "/wishlists/{id}", description: "Delete wishlist" }
+                },
+                items: {
+                    create: { method: "POST", path: "/wishlists/{id}/items", body: { name: "string", price: "string?", notes: "string?" }, description: "Add item to wishlist" },
+                    create_from_url: { method: "POST", path: "/wishlists/{id}/items/url", body: { url: "string" }, description: "Auto-fetch item from URL" },
+                    get: { method: "GET", path: "/items/{id}", description: "Get item details" },
+                    update: { method: "PUT", path: "/items/{id}", description: "Update item" },
+                    delete: { method: "DELETE", path: "/items/{id}", description: "Delete item" }
+                },
+                user: {
+                    get_profile: { method: "GET", path: "/users/me", description: "Get my profile" },
+                    update_profile: { method: "PUT", path: "/users/me", description: "Update my profile" }
+                },
+                social: {
+                    search_users: { method: "GET", path: "/users/search?q={keyword}", description: "Search users" },
+                    follow: { method: "POST", path: "/users/{id}/follow", description: "Follow user" },
+                    unfollow: { method: "DELETE", path: "/users/{id}/follow", description: "Unfollow user" },
+                    get_user_wishlists: { method: "GET", path: "/users/{id}/wishlists", description: "Get user public wishlists" },
+                    get_delivery_info: { method: "GET", path: "/users/{id}/delivery-info", description: "Get delivery info (mutual follow required)" }
+                }
+            },
+            instructions: "Start helping me manage my wishlists now!"
+        };
+        res.json({
+            prompt: JSON.stringify(promptData, null, 2),
+            apiKey,
+            userName: user.name || 'User'
+        });
+    }
+    catch (error) {
+        console.error('Generate AI Prompt Error:', error);
+        res.status(500).json({ error: 'Failed to generate AI prompt' });
+    }
+});
+exports.generateAiPrompt = generateAiPrompt;

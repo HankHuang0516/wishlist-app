@@ -126,6 +126,10 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
   });
 });
 
+app.get('/api/swagger.json', (req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, '../swagger.json'));
+});
+
 // Serve static files from the client build directory
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));

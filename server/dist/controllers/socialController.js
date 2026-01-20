@@ -20,16 +20,20 @@ const searchUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         return res.status(400).json({ error: 'Search query is required' });
     }
     try {
+        // Check if query looks like an email (contains @)
+        const isEmailQuery = query.includes('@');
         const users = yield prisma.user.findMany({
             where: {
                 AND: [
                     { id: { not: currentUserId } }, // Exclude self
                     {
                         OR: [
-                            { name: { contains: query } },
-                            { phoneNumber: query }, // Strict exact match for privacy
-                            { nicknames: { contains: query } },
-                            { realName: { contains: query } }
+                            { name: { contains: query, mode: 'insensitive' } },
+                            { phoneNumber: { contains: query } },
+                            { nicknames: { contains: query, mode: 'insensitive' } },
+                            { realName: { contains: query, mode: 'insensitive' } },
+                            // Email search: exact match only for security (prevent email harvesting)
+                            ...(isEmailQuery ? [{ email: { equals: query, mode: 'insensitive' } }] : [])
                         ]
                     }
                 ]

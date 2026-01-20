@@ -31,8 +31,11 @@ app.use((0, helmet_1.default)({
         directives: {
             defaultSrc: ["'self'"],
             imgSrc: ["'self'", "data:", "https:", "http:", "*"], // Allow images from any source
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Required for some inline scripts
-            connectSrc: ["'self'", "https:", "http:"], // Allow connecting to APIs
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com", "https://*.tappaysdk.com"], // TapPay SDK
+            styleSrc: ["'self'", "'unsafe-inline'"], // Required for TapPay inline styles
+            connectSrc: ["'self'", "https:", "http:", "https://*.tappaysdk.com"], // Allow connecting to TapPay APIs
+            frameSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay iframes for credit card fields
+            childSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay child frames
         },
     },
 }));
@@ -58,10 +61,83 @@ app.use('/api/feedback', feedbackRoutes_1.default);
 app.use('/api/payment', paymentRoutes_1.default);
 app.use('/api/admin', adminRoutes_1.default);
 app.use('/uploads', express_1.default.static('public/uploads'));
+// Serve AI Guide JSON for external AI agents
+app.get('/api/ai-guide', (req, res) => {
+    res.json({
+        meta: {
+            title: "Wishlist.ai API Guide for AI Agents",
+            version: "2.1.0",
+            user_instructions: "👋 複製這整頁 JSON 內容給你的 AI 助手（如 ChatGPT、Claude），然後告訴 AI 你的手機號碼和密碼，AI 就能幫你管理願望清單了！",
+            ai_instructions: "你是用戶的 Wishlist.ai 助手。請先向用戶詢問他們的 Wishlist.ai 帳號（手機號碼）和密碼，然後按照 authentication_flow 步驟登入並取得 API Key。不要使用範例中的 placeholder 值！"
+        },
+        authentication_flow: {
+            important: "⚠️ AI 必須先詢問用戶的真實帳密，不可使用以下範例值！",
+            step_1_ask_user: {
+                action: "詢問用戶",
+                prompt: "請提供您的 Wishlist.ai 帳號（手機號碼）和密碼，我會幫您登入並取得 API 金鑰。"
+            },
+            step_2_login: {
+                description: "用用戶提供的帳密登入",
+                method: "POST",
+                url: "https://wishlist-app-production.up.railway.app/api/auth/login",
+                body: { phoneNumber: "用戶的手機號碼", password: "用戶的密碼" },
+                example: { phoneNumber: "0912345678", password: "user_password" },
+                response: { token: "JWT token (有效期 7 天)" }
+            },
+            step_3_generate_api_key: {
+                description: "使用 JWT 產生持久的 API Key",
+                method: "POST",
+                url: "https://wishlist-app-production.up.railway.app/api/users/me/apikey",
+                headers: { Authorization: "Bearer <step_2的token>" },
+                response: { apiKey: "sk_live_... (永久有效，直到重新產生)" }
+            },
+            step_4_use_api_key: {
+                description: "之後所有請求使用此 header",
+                header: "x-api-key: <step_3的apiKey>"
+            }
+        },
+        base_url: "https://wishlist-app-production.up.railway.app/api",
+        available_actions: {
+            wishlists: {
+                list_all: "GET /wishlists - 取得所有願望清單",
+                create: "POST /wishlists - 建立新清單 (body: {title})",
+                get_one: "GET /wishlists/{id}",
+                update: "PUT /wishlists/{id}",
+                delete: "DELETE /wishlists/{id}"
+            },
+            items: {
+                add_by_name: "POST /wishlists/{id}/items - 新增項目 (body: {name, price?, notes?})",
+                add_by_url: "POST /wishlists/{id}/items/url - 網址自動抓取 (body: {url})",
+                add_with_image: "POST /wishlists/{id}/items - multipart/form-data (name + image file)",
+                update: "PUT /items/{id}",
+                delete: "DELETE /items/{id}"
+            },
+            user: {
+                profile: "GET /users/me, PUT /users/me",
+                delivery_info: "GET /users/{id}/delivery-info (需互相追蹤)"
+            }
+        }
+    });
+});
+app.get('/api/swagger.json', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../swagger.json'));
+});
 // Serve static files from the client build directory
 const clientBuildPath = path_1.default.join(__dirname, '../../client/dist');
 app.use(express_1.default.static(clientBuildPath));
-app.get(/.*/, (req, res) => {
+// Redirect /api to /api-showcase for user-friendly access
+app.get('/api', (req, res) => {
+    res.redirect('/api-showcase');
+});
+// SPA fallback - EXCLUDE /api/* routes to prevent API interception
+// Note: Express 5+ requires '/*' instead of '*' for catch-all routes
+app.get('/{*splat}', (req, res) => {
+    // Only block actual API routes (paths starting with /api/ - note the trailing slash)
+    // This allows /api-showcase and other frontend routes starting with /api-* to work
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    // Otherwise, serve the SPA
     res.sendFile(path_1.default.join(clientBuildPath, 'index.html'));
 });
 app.listen(port, '0.0.0.0', () => {

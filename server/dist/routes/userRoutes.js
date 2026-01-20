@@ -25,9 +25,17 @@ router.put('/me', auth_1.authenticateToken, userController_1.updateMe);
 router.put('/me/password', auth_1.authenticateToken, userController_1.updatePassword);
 router.get('/me/purchases', auth_1.authenticateToken, userController_1.getPurchasedItems);
 router.get('/me/transaction-history', auth_1.authenticateToken, userController_1.getPurchaseHistory);
+router.get('/me/ai-usage', auth_1.authenticateToken, userController_1.getAiUsage);
 router.post('/me/subscription', auth_1.authenticateToken, userController_1.updateSubscription);
 router.post('/me/subscription/cancel', auth_1.authenticateToken, userController_1.cancelSubscription);
 router.post('/me/avatar', auth_1.authenticateToken, upload.single('avatar'), userController_1.uploadAvatar);
 // Public routes (or semi-public, but usually viewed by logged in users)
 router.get('/:id', auth_1.authenticateToken, userController_1.getUserProfile);
+// API Key Management
+router.post('/me/apikey', auth_1.authenticateToken, userController_1.generateUserApiKey);
+router.get('/me/apikey', auth_1.authenticateToken, userController_1.getUserApiKey);
+// AI Prompt (One-click copy for AI assistants)
+router.post('/me/ai-prompt', auth_1.authenticateToken, userController_1.generateAiPrompt);
+// Gift Delivery (Mutual Friends Only)
+router.get('/:id/delivery-info', auth_1.authenticateToken, userController_1.getDeliveryInfo);
 exports.default = router;

@@ -2,8 +2,8 @@
     "openapi": "3.0.0",
     "info": {
         "title": "Wishlist.ai API",
-        "version": "1.0.0",
-        "description": "API for Wishlist Application. Use this API to manage wishlists, items, and AI interactions."
+        "version": "2.0.0",
+        "description": "API for Wishlist Application. Use this API to manage wishlists, items, and AI interactions.\n\n## Error Handling\nAll error responses include an `errorCode` field for programmatic handling.\n\n### Error Codes\n| Code | HTTP Status | Description |\n|------|-------------|-------------|\n| MISSING_FIELDS | 400 | Required fields are missing |\n| WEAK_PASSWORD | 400 | Password doesn't meet requirements |\n| USER_EXISTS | 400 | User already exists |\n| INVALID_CREDENTIALS | 400 | Wrong email/phone or password |\n| INVALID_TOKEN | 400 | Token is invalid |\n| TOKEN_EXPIRED | 400 | Token has expired |\n| INVALID_OTP | 400 | OTP is invalid or expired |\n| EMAIL_NOT_VERIFIED | 403 | Email verification required |\n| EMAIL_ALREADY_VERIFIED | 400 | Email is already verified |\n| INTERNAL_ERROR | 500 | Server error |\n| EMAIL_SEND_FAILED | 500 | Failed to send email |"
     },
     "servers": [
         {
@@ -22,23 +22,101 @@
                 "in": "header",
                 "name": "x-api-key"
             }
+        },
+        "schemas": {
+            "ErrorResponse": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "Human-readable error message"
+                    },
+                    "errorCode": {
+                        "type": "string",
+                        "description": "Machine-readable error code",
+                        "enum": [
+                            "MISSING_FIELDS",
+                            "WEAK_PASSWORD",
+                            "USER_EXISTS",
+                            "INVALID_CREDENTIALS",
+                            "INVALID_TOKEN",
+                            "TOKEN_EXPIRED",
+                            "INVALID_OTP",
+                            "EMAIL_NOT_VERIFIED",
+                            "EMAIL_ALREADY_VERIFIED",
+                            "INTERNAL_ERROR",
+                            "EMAIL_SEND_FAILED"
+                        ]
+                    },
+                    "hint": {
+                        "type": "string",
+                        "description": "Helpful hint for resolving the error"
+                    }
+                }
+            },
+            "EmailNotVerifiedError": {
+                "allOf": [
+                    { "$ref": "#/components/schemas/ErrorResponse" },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "email": {
+                                "type": "string",
+                                "description": "The email that needs verification"
+                            },
+                            "resendEndpoint": {
+                                "type": "string",
+                                "description": "API endpoint to resend verification email"
+                            },
+                            "resendPayload": {
+                                "type": "object",
+                                "description": "Payload to send to resendEndpoint",
+                                "properties": {
+                                    "email": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            "PasswordRequirements": {
+                "type": "object",
+                "properties": {
+                    "minLength": {
+                        "type": "integer",
+                        "example": 8
+                    },
+                    "requiresLetter": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "requiresNumber": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "allowedSpecialChars": {
+                        "type": "string",
+                        "example": "@$!%*?&"
+                    }
+                }
+            }
         }
     },
     "paths": {
         "/api/auth/register": {
             "post": {
+                "tags": ["Authentication"],
                 "summary": "Register a new user",
+                "description": "Creates a new user account and sends a verification email.",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": [
-                                    "phoneNumber",
-                                    "password",
-                                    "email"
-                                ],
+                                "required": ["phoneNumber", "password", "email"],
                                 "properties": {
                                     "phoneNumber": {
                                         "type": "string",
@@ -52,7 +130,8 @@
                                     "password": {
                                         "type": "string",
                                         "format": "password",
-                                        "example": "Password123!"
+                                        "example": "Password123",
+                                        "description": "Min 8 chars, must contain letter and number"
                                     },
                                     "name": {
                                         "type": "string",
@@ -70,37 +149,105 @@
                 },
                 "responses": {
                     "201": {
-                        "description": "User created"
+                        "description": "User created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Registration successful. Please check your email to verify your account."
+                                        },
+                                        "token": {
+                                            "type": "string",
+                                            "description": "JWT token for immediate access"
+                                        },
+                                        "user": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": { "type": "integer" },
+                                                "phoneNumber": { "type": "string" },
+                                                "name": { "type": "string" }
+                                            }
+                                        },
+                                        "emailVerification": {
+                                            "type": "object",
+                                            "properties": {
+                                                "required": { "type": "boolean", "example": true },
+                                                "sentTo": { "type": "string" },
+                                                "expiresIn": { "type": "string", "example": "24 hours" },
+                                                "resendEndpoint": { "type": "string", "example": "/api/auth/resend-verification" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
-                        "description": "Invalid input or user exists"
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "missingFields": {
+                                        "summary": "Missing required fields",
+                                        "value": {
+                                            "error": "Phone number, email, and password are required",
+                                            "errorCode": "MISSING_FIELDS",
+                                            "missingFields": ["email", "password"]
+                                        }
+                                    },
+                                    "weakPassword": {
+                                        "summary": "Password too weak",
+                                        "value": {
+                                            "error": "Password must be at least 8 characters long and contain both letters and numbers.",
+                                            "errorCode": "WEAK_PASSWORD",
+                                            "requirements": {
+                                                "minLength": 8,
+                                                "requiresLetter": true,
+                                                "requiresNumber": true,
+                                                "allowedSpecialChars": "@$!%*?&"
+                                            }
+                                        }
+                                    },
+                                    "userExists": {
+                                        "summary": "User already exists",
+                                        "value": {
+                                            "error": "User with this phone or email already exists",
+                                            "errorCode": "USER_EXISTS",
+                                            "conflictField": "email"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         },
         "/api/auth/login": {
             "post": {
+                "tags": ["Authentication"],
                 "summary": "Login user",
+                "description": "Authenticates user with phone number or email and password.",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": [
-                                    "phoneNumber",
-                                    "password"
-                                ],
+                                "required": ["phoneNumber", "password"],
                                 "properties": {
                                     "phoneNumber": {
                                         "type": "string",
-                                        "description": "Phone number or Email",
-                                        "example": "0912345678"
+                                        "description": "Phone number OR email address",
+                                        "example": "user@example.com"
                                     },
                                     "password": {
                                         "type": "string",
                                         "format": "password",
-                                        "example": "Password123!"
+                                        "example": "Password123"
                                     }
                                 }
                             }
@@ -115,12 +262,344 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        },
                                         "token": {
                                             "type": "string",
                                             "description": "JWT Token"
                                         },
                                         "user": {
-                                            "type": "object"
+                                            "type": "object",
+                                            "properties": {
+                                                "id": { "type": "integer" },
+                                                "phoneNumber": { "type": "string" },
+                                                "name": { "type": "string" },
+                                                "email": { "type": "string" },
+                                                "isEmailVerified": { "type": "boolean" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid credentials",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "example": "Invalid credentials"
+                                        },
+                                        "errorCode": {
+                                            "type": "string",
+                                            "example": "INVALID_CREDENTIALS"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Email not verified",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "example": "Please verify your email address before logging in."
+                                        },
+                                        "errorCode": {
+                                            "type": "string",
+                                            "example": "EMAIL_NOT_VERIFIED"
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "example": "user@example.com"
+                                        },
+                                        "resendEndpoint": {
+                                            "type": "string",
+                                            "example": "/api/auth/resend-verification"
+                                        },
+                                        "resendPayload": {
+                                            "type": "object",
+                                            "properties": {
+                                                "email": { "type": "string" }
+                                            }
+                                        },
+                                        "hint": {
+                                            "type": "string",
+                                            "example": "Call the resendEndpoint with the resendPayload to request a new verification email."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/verify-email": {
+            "post": {
+                "tags": ["Authentication"],
+                "summary": "Verify email address",
+                "description": "Verifies user's email using the token sent via email.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["token"],
+                                "properties": {
+                                    "token": {
+                                        "type": "string",
+                                        "description": "Verification token from email link"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Email verified successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string", "example": "Email verified successfully" },
+                                        "token": { "type": "string", "description": "JWT token" },
+                                        "user": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid or expired token",
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "invalidToken": {
+                                        "summary": "Token is invalid",
+                                        "value": {
+                                            "error": "Invalid verification token",
+                                            "errorCode": "INVALID_TOKEN",
+                                            "hint": "The token may have already been used or is invalid."
+                                        }
+                                    },
+                                    "expiredToken": {
+                                        "summary": "Token has expired",
+                                        "value": {
+                                            "error": "Verification token has expired",
+                                            "errorCode": "TOKEN_EXPIRED",
+                                            "resendEndpoint": "/api/auth/resend-verification",
+                                            "hint": "Please request a new verification email."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/resend-verification": {
+            "post": {
+                "tags": ["Authentication"],
+                "summary": "Resend verification email",
+                "description": "Sends a new verification email to the user.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["email"],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "user@example.com"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Verification email sent",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string", "example": "Verification email sent successfully." },
+                                        "sentTo": { "type": "string", "example": "user@example.com" },
+                                        "expiresIn": { "type": "string", "example": "24 hours" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Email already verified",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": { "type": "string", "example": "Email is already verified. You can login directly." },
+                                        "errorCode": { "type": "string", "example": "EMAIL_ALREADY_VERIFIED" },
+                                        "loginEndpoint": { "type": "string", "example": "/api/auth/login" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Email send failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": { "type": "string", "example": "Failed to send verification email. Please try again later." },
+                                        "errorCode": { "type": "string", "example": "EMAIL_SEND_FAILED" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/forgot-password": {
+            "post": {
+                "tags": ["Authentication"],
+                "summary": "Request password reset",
+                "description": "Sends a password reset email to the user.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["email"],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "user@example.com"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reset email sent (if user exists)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string", "example": "If this email exists, a reset link has been sent." },
+                                        "expiresIn": { "type": "string", "example": "1 hour" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/reset-password": {
+            "post": {
+                "tags": ["Authentication"],
+                "summary": "Reset password",
+                "description": "Resets user's password using the token from email.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["token", "newPassword"],
+                                "properties": {
+                                    "token": {
+                                        "type": "string",
+                                        "description": "Reset token from email"
+                                    },
+                                    "newPassword": {
+                                        "type": "string",
+                                        "description": "New password (min 8 chars, letter + number)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password reset successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string", "example": "Password reset successful. You can now login with your new password." },
+                                        "loginEndpoint": { "type": "string", "example": "/api/auth/login" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid token or weak password",
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "invalidToken": {
+                                        "summary": "Token is invalid",
+                                        "value": {
+                                            "error": "Invalid reset token",
+                                            "errorCode": "INVALID_TOKEN",
+                                            "hint": "The token may have already been used or is invalid.",
+                                            "forgotPasswordEndpoint": "/api/auth/forgot-password"
+                                        }
+                                    },
+                                    "expiredToken": {
+                                        "summary": "Token has expired",
+                                        "value": {
+                                            "error": "Reset token has expired",
+                                            "errorCode": "TOKEN_EXPIRED",
+                                            "forgotPasswordEndpoint": "/api/auth/forgot-password",
+                                            "hint": "Please request a new password reset email."
+                                        }
+                                    },
+                                    "weakPassword": {
+                                        "summary": "Password too weak",
+                                        "value": {
+                                            "error": "Password must be at least 8 characters long and contain both letters and numbers.",
+                                            "errorCode": "WEAK_PASSWORD",
+                                            "requirements": {
+                                                "minLength": 8,
+                                                "requiresLetter": true,
+                                                "requiresNumber": true,
+                                                "allowedSpecialChars": "@$!%*?&"
+                                            }
                                         }
                                     }
                                 }
@@ -132,12 +611,9 @@
         },
         "/api/users/me/apikey": {
             "post": {
+                "tags": ["Users"],
                 "summary": "Generate Persistent API Key for AI Agents",
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
+                "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": {
                         "description": "API Key generated",
@@ -160,15 +636,9 @@
         },
         "/api/wishlists": {
             "get": {
+                "tags": ["Wishlists"],
                 "summary": "Get user's wishlists",
-                "security": [
-                    {
-                        "apiKeyAuth": []
-                    },
-                    {
-                        "bearerAuth": []
-                    }
-                ],
+                "security": [{ "apiKeyAuth": [] }, { "bearerAuth": [] }],
                 "responses": {
                     "200": {
                         "description": "List of wishlists"
@@ -176,27 +646,17 @@
                 }
             },
             "post": {
+                "tags": ["Wishlists"],
                 "summary": "Create a wishlist",
-                "security": [
-                    {
-                        "apiKeyAuth": []
-                    },
-                    {
-                        "bearerAuth": []
-                    }
-                ],
+                "security": [{ "apiKeyAuth": [] }, { "bearerAuth": [] }],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "title": {
-                                        "type": "string"
-                                    },
-                                    "description": {
-                                        "type": "string"
-                                    }
+                                    "title": { "type": "string" },
+                                    "description": { "type": "string" }
                                 }
                             }
                         }
@@ -211,23 +671,15 @@
         },
         "/api/wishlists/{id}/items": {
             "post": {
+                "tags": ["Wishlists"],
                 "summary": "Add item to wishlist",
-                "security": [
-                    {
-                        "apiKeyAuth": []
-                    },
-                    {
-                        "bearerAuth": []
-                    }
-                ],
+                "security": [{ "apiKeyAuth": [] }, { "bearerAuth": [] }],
                 "parameters": [
                     {
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
+                        "schema": { "type": "integer" }
                     }
                 ],
                 "requestBody": {
@@ -235,22 +687,12 @@
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": [
-                                    "name"
-                                ],
+                                "required": ["name"],
                                 "properties": {
-                                    "name": {
-                                        "type": "string"
-                                    },
-                                    "price": {
-                                        "type": "integer"
-                                    },
-                                    "url": {
-                                        "type": "string"
-                                    },
-                                    "note": {
-                                        "type": "string"
-                                    }
+                                    "name": { "type": "string" },
+                                    "price": { "type": "integer" },
+                                    "url": { "type": "string" },
+                                    "note": { "type": "string" }
                                 }
                             }
                         }
@@ -265,15 +707,15 @@
         },
         "/api/wishlists/{id}/items/url": {
             "post": {
+                "tags": ["Wishlists"],
                 "summary": "Add item by scraping URL",
+                "security": [{ "apiKeyAuth": [] }, { "bearerAuth": [] }],
                 "parameters": [
                     {
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
+                        "schema": { "type": "integer" }
                     }
                 ],
                 "requestBody": {
@@ -281,13 +723,9 @@
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": [
-                                    "url"
-                                ],
+                                "required": ["url"],
                                 "properties": {
-                                    "url": {
-                                        "type": "string"
-                                    }
+                                    "url": { "type": "string" }
                                 }
                             }
                         }
@@ -302,26 +740,16 @@
         },
         "/api/payment/pay": {
             "post": {
+                "tags": ["Payment"],
                 "summary": "Process Payment (TapPay)",
                 "description": "Requires TapPay 'prime' token generated from frontend SDK. AI Agents typically cannot call this directly without a frontend interface to capture card details.",
-                "security": [
-                    {
-                        "apiKeyAuth": []
-                    },
-                    {
-                        "bearerAuth": []
-                    }
-                ],
+                "security": [{ "apiKeyAuth": [] }, { "bearerAuth": [] }],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": [
-                                    "prime",
-                                    "details",
-                                    "paymentMethod"
-                                ],
+                                "required": ["prime", "details", "paymentMethod"],
                                 "properties": {
                                     "prime": {
                                         "type": "string",
@@ -330,12 +758,8 @@
                                     "details": {
                                         "type": "object",
                                         "properties": {
-                                            "amount": {
-                                                "type": "integer"
-                                            },
-                                            "orderId": {
-                                                "type": "string"
-                                            }
+                                            "amount": { "type": "integer" },
+                                            "orderId": { "type": "string" }
                                         }
                                     },
                                     "paymentMethod": {

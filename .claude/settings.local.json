@@ -30,7 +30,8 @@
       "Bash(pushd:*)",
       "Bash(popd)",
       "Bash(ping:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

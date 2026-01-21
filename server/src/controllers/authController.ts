@@ -431,7 +431,8 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
         res.json({
             message: 'Verification email sent successfully.',
             sentTo: email,
-            expiresIn: '24 hours'
+            expiresIn: '24 hours',
+            messageId: emailResult.id
         });
     } catch (error) {
         console.error(error);

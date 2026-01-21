@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs');
 
 const BASE_URL = 'https://wishlist-app-production.up.railway.app/api';
+// const BASE_URL = 'http://localhost:8000/api';
 const LOG_FILE = 'server/scripts/audit_log.txt';
 
 // Utils

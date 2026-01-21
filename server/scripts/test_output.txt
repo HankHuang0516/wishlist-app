@@ -1,0 +1,8 @@
+[TEST] Starting flow for: hankhuang0516+test@gmail.com
+[TEST] Attempting Registration...
+[TEST] Register Status: 400
+[TEST] Registration Failed: {
+  error: 'User with this phone or email already exists',
+  errorCode: 'USER_EXISTS',
+  conflictField: 'email'
+}

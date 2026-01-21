@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { API_ERROR_CODES } from '../lib/errorCodes';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -26,7 +27,11 @@ export const createWishlist = async (req: AuthRequest, res: Response) => {
         const { title, description, isPublic } = req.body;
 
         if (!title) {
-            return res.status(400).json({ error: 'Title is required' });
+            return res.status(400).json({
+                error: 'Title is required',
+                errorCode: API_ERROR_CODES.MISSING_FIELDS,
+                missingFields: ['title']
+            });
         }
 
 
@@ -81,12 +86,12 @@ export const getWishlist = async (req: AuthRequest, res: Response) => {
         });
 
         if (!wishlist) {
-            return res.status(404).json({ error: 'Wishlist not found' });
+            return res.status(404).json({ error: 'Wishlist not found', errorCode: API_ERROR_CODES.WISHLIST_NOT_FOUND });
         }
 
         // Allow access if owner or if public
         if (wishlist.userId !== userId && !wishlist.isPublic) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         res.json(wishlist);
@@ -107,11 +112,11 @@ export const updateWishlist = async (req: AuthRequest, res: Response) => {
         });
 
         if (!wishlist) {
-            return res.status(404).json({ error: 'Wishlist not found' });
+            return res.status(404).json({ error: 'Wishlist not found', errorCode: API_ERROR_CODES.WISHLIST_NOT_FOUND });
         }
 
         if (wishlist.userId !== userId) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         const updatedWishlist = await prisma.wishlist.update({
@@ -140,11 +145,11 @@ export const deleteWishlist = async (req: AuthRequest, res: Response) => {
         });
 
         if (!wishlist) {
-            return res.status(404).json({ error: 'Wishlist not found' });
+            return res.status(404).json({ error: 'Wishlist not found', errorCode: API_ERROR_CODES.WISHLIST_NOT_FOUND });
         }
 
         if (wishlist.userId !== userId) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         await prisma.wishlist.delete({

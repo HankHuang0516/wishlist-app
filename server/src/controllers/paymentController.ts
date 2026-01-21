@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { API_ERROR_CODES } from '../lib/errorCodes';
 
 const TAPPAY_PARTNER_KEY = process.env.TAPPAY_PARTNER_KEY || 'partner_PHNbIt8d88834446583'; // Standard Sandbox Partner Key
 const TAPPAY_MERCHANT_ID = process.env.TAPPAY_MERCHANT_ID || 'GlobalTesting_CTBC';
@@ -13,16 +14,16 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
         const userId = req.user?.id;
 
         if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         if (!prime || !details || !details.amount) {
-            return res.status(400).json({ error: 'Missing payment information' });
+            return res.status(400).json({ error: 'Missing payment information', errorCode: API_ERROR_CODES.MISSING_FIELDS });
         }
 
         // Fetch user to get phone/name
         const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ error: 'User not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
 
         console.log(`[Payment] Processing Pay-by-Prime for User ${userId}, Amount: ${details.amount}, Method: ${paymentMethod}`);
 
@@ -49,7 +50,11 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
 
         if (tapPayData.status !== 0) {
             console.error('[Payment] TapPay Error:', tapPayData);
-            return res.status(400).json({ error: `Payment Failed: ${tapPayData.msg}`, tapPayStatus: tapPayData.status });
+            return res.status(400).json({
+                error: `Payment Failed: ${tapPayData.msg}`,
+                errorCode: API_ERROR_CODES.PAYMENT_FAILED,
+                tapPayStatus: tapPayData.status
+            });
         }
 
         console.log('[Payment] Success:', tapPayData);
@@ -114,6 +119,6 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
 
     } catch (error: any) {
         console.error('[Payment] Server Error:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Internal server error during payment' });
+        res.status(500).json({ error: 'Internal server error during payment', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

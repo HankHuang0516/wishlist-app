@@ -50,7 +50,10 @@ const limiter = rateLimit({
   max: 500, // Limit each IP to 500 requests per windowMs (increased from 100 to account for polling)
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: { error: '請求過於頻繁，請稍後再試。(Too many requests, please try again later.)' },
+  message: {
+    error: '請求過於頻繁，請稍後再試。(Too many requests, please try again later.)',
+    errorCode: 'RATE_LIMIT_EXCEEDED'
+  },
 });
 app.use(limiter); // Apply rate limiting to all requests
 
@@ -157,6 +160,20 @@ app.get('/{*splat}', (req: Request, res: Response) => {
   }
   // Otherwise, serve the SPA
   res.sendFile(path.join(clientBuildPath, 'index.html'));
+});
+
+// Global Error Handler
+app.use((err: any, req: Request, res: Response, next: express.NextFunction) => {
+  console.error('[Global Error]', err);
+
+  // Handle SyntaxError (JSON parse failed) or specific status codes
+  const status = err.status || 500;
+  const message = err.message || 'Internal server error';
+  const errorCode = err.errorCode || 'INTERNAL_ERROR';
+
+  if (!res.headersSent) {
+    res.status(status).json({ error: message, errorCode });
+  }
 });
 
 app.listen(port, '0.0.0.0', () => {

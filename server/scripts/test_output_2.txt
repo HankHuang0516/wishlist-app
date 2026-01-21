@@ -1,0 +1,19 @@
+[TEST] Starting flow for: hankhuang0516+test@gmail.com
+[TEST] Attempting Registration...
+[TEST] Register Status: 400
+[TEST] Registration Failed: {
+  error: 'User with this phone or email already exists',
+  errorCode: 'USER_EXISTS',
+  conflictField: 'email'
+}
+[TEST] User exists. Proceeding to Resend Verification...
+[TEST] Attempting Resend Verification...
+[TEST] Resend Status: 200
+[TEST] ✅ Resend Verification Successful!
+[TEST] Message ID: af3fda4e-6178-422f-bcd5-3a80a7709709
+[TEST] Full Response: {
+  message: 'Verification email sent successfully.',
+  sentTo: 'hankhuang0516+test@gmail.com',
+  expiresIn: '24 hours',
+  messageId: 'af3fda4e-6178-422f-bcd5-3a80a7709709'
+}

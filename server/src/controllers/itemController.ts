@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { API_ERROR_CODES } from '../lib/errorCodes';
 import { analyzeLocalImage, analyzeProductText, searchGoogleWeb } from './aiController';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
@@ -204,7 +205,11 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         const file = req.file;
 
         if (!file) {
-            return res.status(400).json({ error: 'Image is required' });
+            return res.status(400).json({
+                error: 'Image is required',
+                errorCode: API_ERROR_CODES.MISSING_FIELDS,
+                missingFields: ['image']
+            });
         }
 
         // 1. Create Item immediately with local preview
@@ -653,7 +658,10 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
         const { wishlistId } = req.params;
         const { url } = req.body; // 'url' is the field name from frontend, but can be text
 
-        if (!url) return res.status(400).json({ error: 'Input is required' });
+        if (!url) return res.status(400).json({
+            error: 'Input is required',
+            errorCode: API_ERROR_CODES.INVALID_INPUT
+        });
 
         const isUrl = url.trim().match(/^(http|https):\/\//);
 

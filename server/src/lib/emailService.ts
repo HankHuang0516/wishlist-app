@@ -35,15 +35,16 @@ const sendViaResend = async (to: string, subject: string, html: string): Promise
             return { success: false, error: response.error.message };
         }
 
+
         console.log(`✅ [Resend] Email sent successfully! ID: ${response.data?.id}`);
-        return { success: true };
+        return { success: true, id: response.data?.id };
     } catch (error: any) {
         console.error(`❌ [Resend] Exception:`, error);
         return { success: false, error: error.message };
     }
 };
 
-export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string }> => {
+export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string; id?: string }> => {
     console.log(`[EmailService] Request to send email to: ${to}`);
 
     // Try Resend (Sole Provider)
@@ -51,7 +52,7 @@ export const sendEmail = async (to: string, subject: string, html: string): Prom
         const result = await sendViaResend(to, subject, html);
 
         if (result.success) {
-            return { success: true, log: `Sent via Resend` };
+            return { success: true, log: `Sent via Resend (ID: ${result.id})`, id: result.id };
         }
 
         throw new Error(result.error || 'Resend failed');

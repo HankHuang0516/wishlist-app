@@ -224,43 +224,4 @@ router.get('/all-images', adminAuth, async (req: Request, res: Response) => {
     }
 });
 
-// DELETE /api/admin/users
-// Delete user by email (For testing/cleanup)
-router.delete('/users', adminAuth, async (req: Request, res: Response) => {
-    try {
-        const { email } = req.body;
-        if (!email) {
-            return res.status(400).json({ error: 'Email is required' });
-        }
-
-        const user = await prisma.user.findFirst({
-            where: { email }
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Delete related data first if necessary (Cascading should handle it, but being safe)
-        // Prisma schema should handle cascade delete usually.
-        // If not, we might need to delete Wishlists/Items manually. 
-        // Assuming cascade for now or that we only need to delete the User record.
-
-        await prisma.user.delete({
-            where: { id: user.id }
-        });
-
-        res.json({
-            message: `User ${email} deleted successfully`,
-            deletedUser: {
-                id: user.id,
-                email: user.email,
-                name: user.name
-            }
-        });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 export default router;

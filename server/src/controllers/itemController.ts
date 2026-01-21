@@ -204,30 +204,34 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         const { wishlistId } = req.params;
         const file = req.file;
 
-        if (!file) {
-            return res.status(400).json({
-                error: 'Image is required',
-                errorCode: API_ERROR_CODES.MISSING_FIELDS,
-                missingFields: ['image']
-            });
+        // Image is optional now - use placeholder if missing
+        let imageUrl = null;
+        if (file) {
+            imageUrl = `/uploads/${file.filename}`;
+        } else {
+            // Use a default placeholder for text-only items
+            imageUrl = 'https://ui-avatars.com/api/?name=Item&background=random';
         }
 
-        // 1. Create Item immediately with local preview
         const item = await prisma.item.create({
             data: {
-                name: 'Analyzing...', // Placeholder
+                name: req.body.name || 'New Item',
                 wishlistId: Number(wishlistId),
-                imageUrl: `/uploads/${file.filename}`, // Temporary local path
-                uploadStatus: 'PENDING',
-                aiStatus: 'PENDING'
+                imageUrl: imageUrl,
+                uploadStatus: file ? 'PENDING' : 'COMPLETED',
+                aiStatus: file ? 'PENDING' : 'SKIPPED',
+                notes: req.body.notes || null,
+                price: req.body.price ? String(req.body.price) : null
             }
         });
 
         // 2. Return response immediately (100ms instead of 4000ms!)
         res.status(201).json(item);
 
-        // 3. Trigger background upload + AI processing (pass userId for quota check)
-        processItemUpload(item.id, file.path, file.originalname, userId);
+        // 3. Trigger background upload + AI processing ONLY if file exists
+        if (file) {
+            processItemUpload(item.id, file.path, file.originalname, userId);
+        }
 
     } catch (error) {
         console.error('Create Item Error:', error);

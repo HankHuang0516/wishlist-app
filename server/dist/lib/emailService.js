@@ -10,50 +10,62 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendEmail = void 0;
-const mailersend_1 = require("mailersend");
-console.log('[EmailService] Initializing MailerSend...');
-// Check for API Key (Warn only, don't crash)
-if (!process.env.MAILERSEND_API_KEY) {
-    console.warn('[EmailService] MAILERSEND_API_KEY is MISSING');
+const resend_1 = require("resend");
+// Email provider configuration
+const EMAIL_PROVIDER = 'resend';
+const DEFAULT_FROM_EMAIL = process.env.EMAIL_FROM || 'noreply@twopiggyhavefun.uk';
+const DEFAULT_FROM_NAME = process.env.EMAIL_FROM_NAME || 'Wishlist App';
+console.log(`[EmailService] Initializing with provider: ${EMAIL_PROVIDER}`);
+// Initialize Resend Client
+let resend = null;
+if (process.env.RESEND_API_KEY) {
+    resend = new resend_1.Resend(process.env.RESEND_API_KEY);
+    console.log(`[EmailService] Resend configured (Key starts with: ${process.env.RESEND_API_KEY.substring(0, 8)}...)`);
 }
 else {
-    const key = process.env.MAILERSEND_API_KEY;
-    console.log(`[EmailService] MAILERSEND_API_KEY is SET (Starts with: ${key.substring(0, 8)}...)`);
+    console.warn(`[EmailService] RESEND_API_KEY is missing! Email sending will fail.`);
 }
-// Initialize MailerSend Client
-const mailerSend = new mailersend_1.MailerSend({
-    apiKey: process.env.MAILERSEND_API_KEY || '',
-});
-// Default sender - Update this with your verified MailerSend domain
-const DEFAULT_FROM_EMAIL = process.env.MAILERSEND_FROM_EMAIL || 'MS_XHh8Fw@test-pzkmgq7q1xnl059v.mlsender.net';
-const DEFAULT_FROM_NAME = process.env.MAILERSEND_FROM_NAME || 'Wishlist App';
-const sendEmail = (to, subject, html) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    console.log(`[EmailService] Request to send email to: ${to}`);
-    const apiKey = (_a = process.env.MAILERSEND_API_KEY) === null || _a === void 0 ? void 0 : _a.trim();
-    if (!apiKey) {
-        console.warn('⚠️ [Email Service] MAILERSEND_API_KEY missing. Skipping real send.');
-        return { success: false, error: 'MAILERSEND_API_KEY missing', log: 'API Key Missing' };
+// Send via Resend
+const sendViaResend = (to, subject, html) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    if (!resend || !process.env.RESEND_API_KEY) {
+        return { success: false, error: 'Resend not configured' };
     }
     try {
-        console.log('[EmailService] Sending via MailerSend API...');
-        const sentFrom = new mailersend_1.Sender(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
-        const recipients = [new mailersend_1.Recipient(to)];
-        const emailParams = new mailersend_1.EmailParams()
-            .setFrom(sentFrom)
-            .setTo(recipients)
-            .setSubject(subject)
-            .setHtml(html);
-        const response = yield mailerSend.email.send(emailParams);
-        console.log(`✅ [Email Service] Email sent successfully!`, response);
-        return { success: true, log: `Sent OK` };
+        const response = yield resend.emails.send({
+            from: `${DEFAULT_FROM_NAME} <${DEFAULT_FROM_EMAIL}>`,
+            to: [to],
+            subject: subject,
+            html: html,
+        });
+        if (response.error) {
+            console.error(`❌ [Resend] Error:`, response.error);
+            return { success: false, error: response.error.message };
+        }
+        console.log(`✅ [Resend] Email sent successfully! ID: ${(_a = response.data) === null || _a === void 0 ? void 0 : _a.id}`);
+        return { success: true, id: (_b = response.data) === null || _b === void 0 ? void 0 : _b.id };
     }
     catch (error) {
-        console.error('❌ [Email Service] FATAL ERROR:', error);
+        console.error(`❌ [Resend] Exception:`, error);
+        return { success: false, error: error.message };
+    }
+});
+const sendEmail = (to, subject, html) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log(`[EmailService] Request to send email to: ${to}`);
+    // Try Resend (Sole Provider)
+    try {
+        const result = yield sendViaResend(to, subject, html);
+        if (result.success) {
+            return { success: true, log: `Sent via Resend (ID: ${result.id})`, id: result.id };
+        }
+        throw new Error(result.error || 'Resend failed');
+    }
+    catch (error) {
+        console.error(`❌ [EmailService] Sending failed:`, error.message || error);
         return {
             success: false,
-            error: error.message || 'Unknown MailerSend Error',
-            log: `Error: ${JSON.stringify(error)}`
+            error: `Email sending failed: ${error.message || 'Unknown error'}`,
+            log: `Resend: ${error.message}`
         };
     }
 });

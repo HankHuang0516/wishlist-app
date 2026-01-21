@@ -17,7 +17,7 @@ if (process.env.RESEND_API_KEY) {
 }
 
 // Send via Resend
-const sendViaResend = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string }> => {
+const sendViaResend = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; id?: string }> => {
     if (!resend || !process.env.RESEND_API_KEY) {
         return { success: false, error: 'Resend not configured' };
     }

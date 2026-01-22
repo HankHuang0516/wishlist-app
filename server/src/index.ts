@@ -58,7 +58,7 @@ const limiter = rateLimit({
 app.use(limiter); // Apply rate limiting to all requests
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/wishlists', wishlistRoutes);
@@ -168,8 +168,16 @@ app.use((err: any, req: Request, res: Response, next: express.NextFunction) => {
 
   // Handle SyntaxError (JSON parse failed) or specific status codes
   const status = err.status || 500;
-  const message = err.message || 'Internal server error';
-  const errorCode = err.errorCode || 'INTERNAL_ERROR';
+  let message = err.message || 'Internal server error';
+
+  // Custom message for body-parser errors
+  if (err instanceof SyntaxError && status === 400 && 'body' in err) {
+    message = `Invalid JSON: ${err.message}`;
+  } else if (status === 413) {
+    message = 'Payload too large (Max 1MB)';
+  }
+
+  const errorCode = err.errorCode || (status >= 500 ? 'INTERNAL_ERROR' : 'INVALID_INPUT');
 
   if (!res.headersSent) {
     res.status(status).json({ error: message, errorCode });

@@ -102,6 +102,7 @@ export default function Layout() {
             </main>
 
             {/* Footer */}
+            {/* Footer */}
             <footer className="border-t border-muji-border bg-white py-6 pb-20 sm:pb-6">
                 <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-muji-secondary gap-4">
                     <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
@@ -109,6 +110,7 @@ export default function Layout() {
                         <div className="flex gap-4">
                             <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
                             <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
+                            <button onClick={() => setIsFeedbackOpen(true)} className="hover:text-muji-primary transition-colors text-left">意見回饋</button>
                         </div>
                     </div>
                     <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>

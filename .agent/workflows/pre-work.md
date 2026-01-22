@@ -8,6 +8,8 @@ Before starting ANY task in this project, you MUST:
 
 // turbo-all
 
+Importan: 全程用繁體中文溝通
+
 ## 0. 🔴 Auto Bug Check (Priority)
 **First**, check if there are any crawler errors in production:
 ```

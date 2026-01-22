@@ -204,6 +204,25 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         const { wishlistId } = req.params;
         const file = req.file;
 
+        // Check if wishlist exists and belongs to user
+        const wishlist = await prisma.wishlist.findUnique({
+            where: { id: Number(wishlistId) }
+        });
+
+        if (!wishlist) {
+            return res.status(404).json({
+                error: 'Wishlist not found',
+                errorCode: API_ERROR_CODES.WISHLIST_NOT_FOUND
+            });
+        }
+
+        if (wishlist.userId !== userId) {
+            return res.status(403).json({
+                error: 'Access denied: You do not own this wishlist',
+                errorCode: API_ERROR_CODES.ACCESS_DENIED
+            });
+        }
+
         // Image is optional now - use placeholder if missing
         let imageUrl = null;
         if (file) {
@@ -211,6 +230,28 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         } else {
             // Use a default placeholder for text-only items
             imageUrl = 'https://ui-avatars.com/api/?name=Item&background=random';
+        }
+
+        // Validate Price
+        let validatedPrice: string | null = null;
+        if (req.body.price) {
+            // If number or numeric string
+            if (!isNaN(Number(req.body.price))) {
+                validatedPrice = String(req.body.price);
+            } else {
+                return res.status(400).json({
+                    error: 'Price must be a number',
+                    errorCode: API_ERROR_CODES.INVALID_INPUT
+                });
+            }
+        }
+
+        const { name, notes } = req.body;
+        if (name && name.length > 200) {
+            return res.status(400).json({ error: 'Name too long (Max 200)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+        if (notes && notes.length > 1000) {
+            return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
         const item = await prisma.item.create({
@@ -221,7 +262,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
                 uploadStatus: file ? 'PENDING' : 'COMPLETED',
                 aiStatus: file ? 'PENDING' : 'SKIPPED',
                 notes: req.body.notes || null,
-                price: req.body.price ? String(req.body.price) : null
+                price: validatedPrice
             }
         });
 
@@ -235,7 +276,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
 
     } catch (error) {
         console.error('Create Item Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -243,6 +284,10 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
 
         console.log(`[DeleteItem] User ${userId} attempting to delete Item ${id}`);
 
@@ -253,12 +298,12 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
 
         if (!item) {
             console.log(`[DeleteItem] Item ${id} not found`);
-            return res.status(404).json({ error: 'Item not found' });
+            return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
         }
 
         if (item.wishlist.userId !== userId) {
             console.log(`[DeleteItem] Permission denied. Owner: ${item.wishlist.userId}, Requester: ${userId}`);
-            return res.status(403).json({ error: 'Access denied: You do not own this wishlist item' });
+            return res.status(403).json({ error: 'Access denied: You do not own this wishlist item', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         await prisma.item.delete({ where: { id: Number(id) } });
@@ -267,7 +312,7 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
         res.json({ message: 'Item deleted' });
     } catch (error) {
         console.error('Delete Item Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -275,14 +320,27 @@ export const updateItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         const { isHidden, isPurchased, name, price, notes, link } = req.body; // Add other fields if needed
+
+        if (name && name.length > 200) {
+            return res.status(400).json({ error: 'Name too long (Max 200)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
+        if (notes && notes.length > 1000) {
+            return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
 
         const item = await prisma.item.findUnique({
             where: { id: Number(id) },
             include: { wishlist: true }
         });
 
-        if (!item) return res.status(404).json({ error: 'Item not found' });
+        if (!item) return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
 
         const isOwner = item.wishlist.userId === userId;
 
@@ -290,7 +348,7 @@ export const updateItem = async (req: AuthRequest, res: Response) => {
         if (!isOwner) {
             // Non-owners can ONLY update isPurchased
             if (isHidden !== undefined || name || price || notes || link) {
-                return res.status(403).json({ error: 'Access denied: Only owner can edit details' });
+                return res.status(403).json({ error: 'Access denied: Only owner can edit details', errorCode: API_ERROR_CODES.ACCESS_DENIED });
             }
             // Ensure wishlist is public? Or accessible?
             // Assuming if they have the link/ID and it's public.
@@ -329,7 +387,7 @@ export const updateItem = async (req: AuthRequest, res: Response) => {
         res.json(updated);
     } catch (error) {
         console.error('Update Item Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -667,6 +725,10 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
             errorCode: API_ERROR_CODES.INVALID_INPUT
         });
 
+        if (url.length > 2000) {
+            return res.status(400).json({ error: 'Input too long (Max 2000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         const isUrl = url.trim().match(/^(http|https):\/\//);
 
         // 1. Create PENDING Item Immediately
@@ -692,7 +754,7 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
 
     } catch (error) {
         console.error('Create Item URL/Text Error:', error);
-        res.status(500).json({ error: 'Failed to create item' });
+        res.status(500).json({ error: 'Failed to create item', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -701,6 +763,11 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const { id } = req.params; // ID of item to clone
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         const { targetWishlistId } = req.body; // Optional target
 
         // 1. Get source item
@@ -708,7 +775,7 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
             where: { id: Number(id) },
             include: { wishlist: true } // Need wishlist to check original owner if originalUserId is null
         });
-        if (!sourceItem) return res.status(404).json({ error: 'Item not found' });
+        if (!sourceItem) return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
 
         let targetId = targetWishlistId;
 
@@ -718,7 +785,7 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
             const wishlist = await prisma.wishlist.findFirst({
                 where: { id: Number(targetId), userId: userId }
             });
-            if (!wishlist) return res.status(403).json({ error: 'Invalid target wishlist' });
+            if (!wishlist) return res.status(403).json({ error: 'Invalid target wishlist', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         } else {
             // Default to first available
             const userWishlist = await prisma.wishlist.findFirst({
@@ -726,7 +793,7 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
                 orderBy: { createdAt: 'asc' }
             });
             if (!userWishlist) {
-                return res.status(400).json({ error: 'You need to create a wishlist first' });
+                return res.status(400).json({ error: 'You need to create a wishlist first', errorCode: API_ERROR_CODES.INVALID_INPUT });
             }
             targetId = userWishlist.id;
         }
@@ -756,7 +823,7 @@ export const cloneItem = async (req: AuthRequest, res: Response) => {
         res.status(201).json(newItem);
     } catch (error) {
         console.error('Clone Item Error:', error);
-        res.status(500).json({ error: 'Failed to clone item' });
+        res.status(500).json({ error: 'Failed to clone item', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -765,6 +832,10 @@ export const watchItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const { id } = req.params; // Item ID
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
 
         await prisma.itemWatch.create({
             data: {
@@ -780,7 +851,7 @@ export const watchItem = async (req: AuthRequest, res: Response) => {
             return res.json({ message: 'Already watching' });
         }
         console.error('Watch Item Error:', error);
-        res.status(500).json({ error: 'Failed to watch item' });
+        res.status(500).json({ error: 'Failed to watch item', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -788,6 +859,11 @@ export const watchItem = async (req: AuthRequest, res: Response) => {
 export const getItem = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         const item = await prisma.item.findUnique({
             where: { id: Number(id) },
             include: {
@@ -805,13 +881,13 @@ export const getItem = async (req: Request, res: Response) => {
         });
 
         if (!item) {
-            return res.status(404).json({ error: 'Item not found' });
+            return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
         }
 
         res.json(item);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -836,6 +912,6 @@ export const getPublicItems = async (req: Request, res: Response) => {
         res.json(items);
     } catch (error) {
         console.error('Error fetching public items:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

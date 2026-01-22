@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+import { API_ERROR_CODES } from '../lib/errorCodes';
 
 // Search users by name or phone (excluding self)
 export const searchUsers = async (req: Request, res: Response) => {
@@ -62,7 +63,7 @@ export const searchUsers = async (req: Request, res: Response) => {
         res.json(results);
     } catch (error) {
         console.error('Search error:', error);
-        res.status(500).json({ error: 'Failed to search users' });
+        res.status(500).json({ error: 'Failed to search users', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -79,10 +80,13 @@ export const searchUsers = async (req: Request, res: Response) => {
 export const followUser = async (req: Request, res: Response) => {
     const { id } = req.params; // ID of user to follow
     const currentUserId = (req as any).user.id;
-    console.log(`DEBUG: followUser called. My ID: ${currentUserId}, Target ID: ${id}`);
+    const targetId = parseInt(id);
+    if (isNaN(targetId)) {
+        return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+    }
 
-    if (parseInt(id) === currentUserId) {
-        return res.status(400).json({ error: 'Cannot follow yourself' });
+    if (targetId === currentUserId) {
+        return res.status(400).json({ error: 'Cannot follow yourself', errorCode: API_ERROR_CODES.INVALID_INPUT });
     }
 
     try {
@@ -110,7 +114,7 @@ export const followUser = async (req: Request, res: Response) => {
         });
 
         if (!targetUser) {
-            return res.status(404).json({ error: 'User to follow not found' });
+            return res.status(404).json({ error: 'User to follow not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
         }
 
         // Check if already following
@@ -137,7 +141,7 @@ export const followUser = async (req: Request, res: Response) => {
         res.json({ message: 'Followed successfully' });
     } catch (error) {
         console.error('Follow error:', error);
-        res.status(500).json({ error: 'Failed to follow user' });
+        res.status(500).json({ error: 'Failed to follow user', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -145,6 +149,11 @@ export const followUser = async (req: Request, res: Response) => {
 export const unfollowUser = async (req: Request, res: Response) => {
     const { id } = req.params; // ID of user to unfollow
     const currentUserId = (req as any).user.id;
+    const targetId = parseInt(id);
+
+    if (isNaN(targetId)) {
+        return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+    }
 
     try {
         await prisma.follow.delete({
@@ -159,7 +168,7 @@ export const unfollowUser = async (req: Request, res: Response) => {
         res.json({ message: 'Unfollowed successfully' });
     } catch (error) {
         console.error('Unfollow error:', error);
-        res.status(500).json({ error: 'Failed to unfollow user' });
+        res.status(500).json({ error: 'Failed to unfollow user', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -201,7 +210,7 @@ export const getFollowing = async (req: Request, res: Response) => {
         res.json(results);
     } catch (error) {
         console.error('Get following error:', error);
-        res.status(500).json({ error: 'Failed to get following list' });
+        res.status(500).json({ error: 'Failed to get following list', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -250,18 +259,22 @@ export const getUpcomingBirthdays = async (req: Request, res: Response) => {
         res.json(upcoming);
     } catch (error) {
         console.error('Birthdays error:', error);
-        res.status(500).json({ error: 'Failed to fetch birthdays' });
+        res.status(500).json({ error: 'Failed to fetch birthdays', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
 // Get public wishlists of a specific user
 export const getUserPublicWishlists = async (req: Request, res: Response) => {
     const { id } = req.params; // Target user ID
+    const targetId = parseInt(id);
+    if (isNaN(targetId)) {
+        return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+    }
 
     try {
         const wishlists = await prisma.wishlist.findMany({
             where: {
-                userId: parseInt(id),
+                userId: targetId,
                 isPublic: true
             },
             include: {
@@ -272,6 +285,6 @@ export const getUserPublicWishlists = async (req: Request, res: Response) => {
         res.json(wishlists);
     } catch (error) {
         console.error('Get user wishlists error:', error);
-        res.status(500).json({ error: 'Failed to fetch wishlists' });
+        res.status(500).json({ error: 'Failed to fetch wishlists', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

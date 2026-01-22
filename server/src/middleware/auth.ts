@@ -8,6 +8,7 @@ export interface AuthRequest extends Request {
 }
 
 import prisma from '../lib/prisma';
+import { API_ERROR_CODES } from '../lib/errorCodes';
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'];
@@ -15,7 +16,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token && !apiKey) {
-        return res.status(401).json({ error: 'Access denied' });
+        return res.status(401).json({ error: 'Access denied', errorCode: API_ERROR_CODES.MISSING_TOKEN });
     }
 
     // API Key Authentication
@@ -26,14 +27,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             });
 
             if (!user) {
-                return res.status(401).json({ error: 'Invalid API Key' });
+                return res.status(401).json({ error: 'Invalid API Key', errorCode: API_ERROR_CODES.INVALID_TOKEN });
             }
 
             req.user = { id: user.id };
             return next();
         } catch (error) {
             console.error('API Key Auth Error:', error);
-            return res.status(500).json({ error: 'Internal server error during authentication' });
+            return res.status(500).json({ error: 'Internal server error during authentication', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
         }
     }
 
@@ -44,7 +45,46 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             req.user = verified as { id: number };
             next();
         } catch (error) {
-            res.status(400).json({ error: 'Invalid token' });
+            res.status(400).json({ error: 'Invalid token', errorCode: API_ERROR_CODES.INVALID_TOKEN });
         }
+    }
+};
+// Optional Authentication (for public endpoints that can be personalized)
+export const optionalAuthenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    const apiKey = req.headers['x-api-key'] as string;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token && !apiKey) {
+        return next(); // Proceed without user
+    }
+
+    // API Key Authentication
+    if (apiKey) {
+        try {
+            const user = await prisma.user.findUnique({
+                where: { apiKey: apiKey }
+            });
+
+            if (user) {
+                req.user = { id: user.id };
+            }
+        } catch (error) {
+            console.warn('Optional Auth - API Key Error:', error);
+        }
+        return next();
+    }
+
+    // JWT Authentication
+    if (token) {
+        if (token === 'null' || token === 'undefined') return next();
+
+        try {
+            const verified = jwt.verify(token, process.env.JWT_SECRET || 'secret_key_default');
+            req.user = verified as { id: number };
+        } catch (error) {
+            // Ignore invalid tokens in optional auth
+        }
+        next();
     }
 };

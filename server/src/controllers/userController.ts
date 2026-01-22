@@ -7,6 +7,8 @@ import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
 import { generateApiKey } from '../lib/apiKey';
 
+import { API_ERROR_CODES } from '../lib/errorCodes';
+
 interface AuthRequest extends Request {
     user?: any;
 }
@@ -19,13 +21,13 @@ export const getMe = async (req: AuthRequest, res: Response) => {
             where: { id: userId }
         });
 
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ error: 'User not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
 
         // Return everything for the owner
         res.json(user);
     } catch (error) {
         console.error('Get Me Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -45,16 +47,36 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
             isRealNameVisible,
             isAddressVisible,
             isEmailVisible, // New: email visibility toggle
-            isBirthdayVisible
+            isBirthdayVisible,
+            birthday // Added for validation
         } = req.body;
+
+        // Validation for name (Max 50)
+        if (name && name.length > 50) {
+            return res.status(400).json({ error: 'Name too long (Max 50)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
 
         // Validation for nicknames (Max 5)
         let processedNicknames = nicknames;
-        if (Array.isArray(nicknames)) {
-            if (nicknames.length > 5) {
-                return res.status(400).json({ error: 'Maximum 5 nicknames allowed' });
+        if (nicknames !== undefined) {
+            if (Array.isArray(nicknames)) {
+                if (nicknames.length > 5) {
+                    return res.status(400).json({ error: 'Maximum 5 nicknames allowed', errorCode: API_ERROR_CODES.INVALID_INPUT });
+                }
+                processedNicknames = nicknames.join(',');
+            } else if (typeof nicknames !== 'string' && nicknames !== null) {
+                return res.status(400).json({ error: 'Nicknames must be an array or string', errorCode: API_ERROR_CODES.INVALID_INPUT });
             }
-            processedNicknames = nicknames.join(',');
+        }
+
+        // Birthday validation
+        let validatedBirthday = undefined;
+        if (birthday) {
+            const date = new Date(birthday);
+            if (isNaN(date.getTime())) {
+                return res.status(400).json({ error: 'Invalid birthday format', errorCode: API_ERROR_CODES.INVALID_INPUT });
+            }
+            validatedBirthday = date;
         }
 
         // Email update logic: only allow if current email is NULL
@@ -62,34 +84,43 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
         if (email !== undefined) {
             const currentUser = await prisma.user.findUnique({ where: { id: userId } });
             if (currentUser && !currentUser.email) {
-                // Allow setting email only if it's currently null
+                // Basic email format check
+                if (email && !email.includes('@')) {
+                    return res.status(400).json({ error: 'Invalid email format', errorCode: API_ERROR_CODES.INVALID_INPUT });
+                }
                 emailUpdate = email;
             }
-            // If user already has an email, ignore the update (don't overwrite)
         }
+
+        const data: any = {
+            name,
+            avatarUrl,
+            realName,
+            address,
+            nicknames: processedNicknames,
+            isAvatarVisible,
+            isPhoneVisible,
+            isRealNameVisible,
+            isAddressVisible,
+            isEmailVisible,
+            isBirthdayVisible,
+            birthday: validatedBirthday
+        };
+
+        // Remove undefined values
+        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
+
+        if (emailUpdate !== undefined) data.email = emailUpdate;
 
         const updatedUser = await prisma.user.update({
             where: { id: userId },
-            data: {
-                name,
-                avatarUrl,
-                realName,
-                address,
-                nicknames: processedNicknames,
-                ...(emailUpdate !== undefined && { email: emailUpdate }),
-                isAvatarVisible,
-                isPhoneVisible,
-                isRealNameVisible,
-                isAddressVisible,
-                isEmailVisible,
-                isBirthdayVisible
-            }
+            data
         });
 
         res.json(updatedUser);
     } catch (error) {
         console.error('Update Me Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -97,6 +128,11 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
 export const getUserProfile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+
+        if (isNaN(Number(id))) {
+            return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: Number(id) }
         });
@@ -138,7 +174,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
         res.json(publicProfile);
     } catch (error) {
         console.error('Get User Profile Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -149,7 +185,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response) => {
         const file = req.file;
 
         if (!file) {
-            return res.status(400).json({ error: 'No file uploaded' });
+            return res.status(400).json({ error: 'No file uploaded', errorCode: API_ERROR_CODES.FILE_UPLOAD_FAILED });
         }
 
         let avatarUrl = `/uploads/${file.filename}`;
@@ -176,7 +212,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response) => {
         res.json({ avatarUrl: updatedUser.avatarUrl });
     } catch (error) {
         console.error('Upload Avatar Error:', error);
-        res.status(500).json({ error: 'Failed to upload avatar' });
+        res.status(500).json({ error: 'Failed to upload avatar', errorCode: API_ERROR_CODES.FILE_UPLOAD_FAILED });
     }
 };
 
@@ -189,7 +225,7 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) return res.status(400).json({ error: 'Incorrect current password' });
+        if (!isMatch) return res.status(400).json({ error: 'Incorrect current password', errorCode: API_ERROR_CODES.INVALID_CREDENTIALS });
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
@@ -200,7 +236,7 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
 
         res.json({ message: 'Password updated successfully' });
     } catch (error) {
-        res.status(500).json({ error: 'Failed to update password' });
+        res.status(500).json({ error: 'Failed to update password', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -239,7 +275,7 @@ export const cancelSubscription = async (req: AuthRequest, res: Response) => {
         res.json({ message: 'Subscription cancelled. Limits reverted to 100.' });
     } catch (error) {
         console.error('Cancel Subscription Error:', error);
-        res.status(500).json({ error: 'Failed to cancel subscription' });
+        res.status(500).json({ error: 'Failed to cancel subscription', errorCode: API_ERROR_CODES.PAYMENT_FAILED });
     }
 };
 
@@ -331,10 +367,10 @@ export const updateSubscription = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        return res.status(400).json({ error: 'Invalid type' });
+        return res.status(400).json({ error: 'Invalid type', errorCode: API_ERROR_CODES.INVALID_INPUT });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Transaction failed' });
+        res.status(500).json({ error: 'Transaction failed', errorCode: API_ERROR_CODES.PAYMENT_FAILED });
     }
 };
 
@@ -357,7 +393,7 @@ export const getPurchasedItems = async (req: AuthRequest, res: Response) => {
         });
         res.json(items);
     } catch (error) {
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -372,7 +408,7 @@ export const getPurchaseHistory = async (req: AuthRequest, res: Response) => {
         res.json(history);
     } catch (error) {
         console.error('Fetch History Error:', error);
-        res.status(500).json({ error: 'Failed to fetch history' });
+        res.status(500).json({ error: 'Failed to fetch history', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -384,7 +420,7 @@ export const getAiUsage = async (req: AuthRequest, res: Response) => {
         res.json(usage);
     } catch (error) {
         console.error('Get AI Usage Error:', error);
-        res.status(500).json({ error: 'Failed to fetch AI usage' });
+        res.status(500).json({ error: 'Failed to fetch AI usage', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -405,7 +441,7 @@ export const generateUserApiKey = async (req: AuthRequest, res: Response) => {
         res.json({ apiKey: newApiKey });
     } catch (error) {
         console.error('Generate API Key Error:', error);
-        res.status(500).json({ error: 'Failed to generate API Key' });
+        res.status(500).json({ error: 'Failed to generate API Key', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -423,7 +459,7 @@ export const getUserApiKey = async (req: AuthRequest, res: Response) => {
         res.json({ apiKey: user.apiKey });
     } catch (error) {
         console.error('Get API Key Error:', error);
-        res.status(500).json({ error: 'Failed to fetch API Key' });
+        res.status(500).json({ error: 'Failed to fetch API Key', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -433,8 +469,12 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
         const currentUserId = req.user.id;
         const targetUserId = Number(req.params.id);
 
+        if (isNaN(targetUserId)) {
+            return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         if (currentUserId === targetUserId) {
-            return res.status(400).json({ error: 'Cannot request your own delivery info via this endpoint' });
+            return res.status(400).json({ error: 'Cannot request your own delivery info via this endpoint', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
         // Check mutual friendship (both follow each other)
@@ -458,7 +498,7 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
         ]);
 
         if (!iFollow || !theyFollow) {
-            return res.status(403).json({ error: 'Access denied. You must be mutual friends to access delivery information.' });
+            return res.status(403).json({ error: 'Access denied. You must be mutual friends to access delivery information.', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
         // Mutual friends confirmed, fetch delivery info
@@ -472,7 +512,7 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
         });
 
         if (!targetUser) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: 'User not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
         }
 
         res.json({
@@ -482,7 +522,7 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
         });
     } catch (error) {
         console.error('Get Delivery Info Error:', error);
-        res.status(500).json({ error: 'Failed to fetch delivery info' });
+        res.status(500).json({ error: 'Failed to fetch delivery info', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
@@ -553,6 +593,6 @@ export const generateAiPrompt = async (req: AuthRequest, res: Response) => {
         });
     } catch (error) {
         console.error('Generate AI Prompt Error:', error);
-        res.status(500).json({ error: 'Failed to generate AI prompt' });
+        res.status(500).json({ error: 'Failed to generate AI prompt', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

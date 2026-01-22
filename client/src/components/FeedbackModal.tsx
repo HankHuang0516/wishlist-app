@@ -10,8 +10,9 @@ interface FeedbackModalProps {
 }
 
 export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
-    const { token } = useAuth();
+    const { token, isAuthenticated } = useAuth();
     const [content, setContent] = useState("");
+    const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{ message: string, aiAnalysis: string } | null>(null);
     const [error, setError] = useState("");
@@ -20,6 +21,11 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
 
     const handleSubmit = async () => {
         if (!content.trim()) return;
+        if (!isAuthenticated && !email.trim()) {
+            setError(t('login.emailRequired') || "Email is required");
+            return;
+        }
+
         setLoading(true);
         setError("");
 
@@ -28,10 +34,11 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': token ? `Bearer ${token}` : ''
                 },
                 body: JSON.stringify({
                     content,
+                    email: !isAuthenticated ? email : undefined,
                     language: getUserLocale()
                 })
             });
@@ -40,6 +47,7 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                 const data = await res.json();
                 setResult(data);
                 setContent(""); // Clear input
+                setEmail("");
             } else {
                 const data = await res.json();
                 setError(data.error || "Submission failed");
@@ -76,6 +84,19 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                         </div>
                     ) : (
                         <>
+                            {!isAuthenticated && (
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-sm font-medium text-gray-700">Email (Required for reply)</label>
+                                    <input
+                                        type="email"
+                                        className="w-full border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-muji-primary"
+                                        placeholder={t('settings.emailPlaceholder')}
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        disabled={loading}
+                                    />
+                                </div>
+                            )}
                             <textarea
                                 className="w-full border rounded-md p-3 min-h-[150px] resize-none focus:outline-none focus:ring-2 focus:ring-muji-primary"
                                 placeholder={t('feedback.placeholder')}
@@ -93,7 +114,7 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                 {!result && (
                     <CardFooter className="flex justify-end gap-2">
                         <Button variant="ghost" onClick={onClose} disabled={loading}>{t('feedback.cancel')}</Button>
-                        <Button onClick={handleSubmit} disabled={loading || !content.trim()}>
+                        <Button onClick={handleSubmit} disabled={loading || !content.trim() || (!isAuthenticated && !email.trim())}>
                             {loading ? t('feedback.submitting') : t('feedback.submit')}
                         </Button>
                     </CardFooter>

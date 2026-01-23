@@ -4,6 +4,8 @@ import path from 'path';
 
 // Wishlist App Album Name
 const ALBUM_NAME = 'Wishlist App Items';
+// User Avatars Album Name
+const AVATAR_ALBUM_NAME = 'User Avatars';
 
 // Initialize Flickr with OAuth
 // Note: This requires environment variables to be set
@@ -25,6 +27,7 @@ const createFlickrClient = () => {
 
 // Cache for photoset ID
 let cachedPhotosetId: string | null = null;
+let cachedAvatarPhotosetId: string | null = null;
 
 export const flickrService = {
     /**
@@ -103,6 +106,154 @@ export const flickrService = {
             return cachedPhotosetId;
         } catch (error: any) {
             console.error('[Flickr] Failed to create photoset:', error.message);
+            return null;
+        }
+    },
+
+    /**
+     * Find or create the User Avatars photoset (album)
+     */
+    getOrCreateAvatarPhotoset: async (): Promise<string | null> => {
+        const client = createFlickrClient();
+        if (!client) return null;
+
+        // Return cached ID if available
+        if (cachedAvatarPhotosetId) {
+            return cachedAvatarPhotosetId;
+        }
+
+        try {
+            // Search for existing photoset
+            const photosetsRes = await client.flickr('flickr.photosets.getList', {
+                user_id: process.env.FLICKR_USER_ID || 'me'
+            });
+
+            const photosets = photosetsRes.photosets?.photoset || [];
+            const existingSet = photosets.find((set: any) => set.title._content === AVATAR_ALBUM_NAME);
+
+            if (existingSet) {
+                cachedAvatarPhotosetId = existingSet.id;
+                console.log(`[Flickr] Found existing avatar photoset: ${cachedAvatarPhotosetId}`);
+                return cachedAvatarPhotosetId;
+            }
+
+            // Photoset will be created after first upload
+            console.log('[Flickr] Avatar photoset will be created on first upload');
+            return null;
+
+        } catch (error: any) {
+            console.error('[Flickr] Failed to get avatar photosets:', error.message);
+            return null;
+        }
+    },
+
+    /**
+     * Create a new avatar photoset with a primary photo
+     */
+    createAvatarPhotoset: async (primaryPhotoId: string): Promise<string | null> => {
+        const client = createFlickrClient();
+        if (!client) return null;
+
+        try {
+            const result = await client.flickr('flickr.photosets.create', {
+                title: AVATAR_ALBUM_NAME,
+                description: 'User avatars from Wishlist App',
+                primary_photo_id: primaryPhotoId
+            });
+
+            cachedAvatarPhotosetId = result.photoset.id;
+            console.log(`[Flickr] Created new avatar photoset: ${cachedAvatarPhotosetId}`);
+            return cachedAvatarPhotosetId;
+        } catch (error: any) {
+            console.error('[Flickr] Failed to create avatar photoset:', error.message);
+            return null;
+        }
+    },
+
+    /**
+     * Upload a user avatar to Flickr and return its direct URL
+     * Avatars are stored in a separate album from regular items
+     * @param imageBuffer File buffer or file path
+     * @param filename Desired filename
+     * @param userId User ID for tagging
+     */
+    uploadAvatarImage: async (imageBuffer: Buffer | string, filename: string, userId: number): Promise<string | null> => {
+        const client = createFlickrClient();
+        if (!client) {
+            console.warn('[Flickr] Missing credentials, falling back to local/null.');
+            return null;
+        }
+
+        try {
+            console.log(`[Flickr] Uploading avatar ${filename}...`);
+
+            // Handle file path input
+            let photoData: Buffer | string;
+            if (typeof imageBuffer === 'string') {
+                photoData = imageBuffer;
+            } else {
+                // Write buffer to temp file for upload
+                const tempPath = path.join('/tmp', `temp_avatar_${Date.now()}_${filename}`);
+                fs.writeFileSync(tempPath, imageBuffer);
+                photoData = tempPath;
+            }
+
+            // Upload using the SDK
+            const photoIdResult = await client.upload(photoData, {
+                title: `Avatar for User ${userId}`,
+                tags: `wishlist-app,avatar,user-${userId}`,
+                is_public: '1' as '0' | '1',
+                hidden: '2' as '1' | '2'
+            });
+
+            // Extract photo ID
+            const photoId = typeof photoIdResult === 'string'
+                ? photoIdResult
+                : (photoIdResult as any).id || String(photoIdResult);
+
+            console.log(`[Flickr] Avatar uploaded! Photo ID: ${photoId}`);
+
+            // Clean up temp file if we created one
+            if (typeof imageBuffer !== 'string' && typeof photoData === 'string') {
+                try {
+                    fs.unlinkSync(photoData);
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+            }
+
+            // Add to avatar photoset
+            let photosetId = await flickrService.getOrCreateAvatarPhotoset();
+            if (!photosetId) {
+                // Create new avatar photoset with this as primary photo
+                photosetId = await flickrService.createAvatarPhotoset(photoId);
+            } else {
+                // Add to existing avatar photoset
+                await flickrService.addPhotoToPhotoset(photoId, photosetId);
+            }
+
+            // Get photo URL
+            const sizesRes = await client.flickr('flickr.photos.getSizes', {
+                photo_id: photoId
+            });
+
+            const sizes = sizesRes.sizes.size;
+            // For avatars, prefer medium/large sizes
+            const targetSize = sizes.find((s: any) => s.label === 'Large') ||
+                sizes.find((s: any) => s.label === 'Medium 800') ||
+                sizes.find((s: any) => s.label === 'Medium') ||
+                sizes[sizes.length - 1];
+
+            if (targetSize && targetSize.source) {
+                console.log(`[Flickr] Got avatar URL: ${targetSize.source}`);
+                return targetSize.source;
+            } else {
+                console.error('[Flickr] Could not find avatar size URL');
+                return null;
+            }
+
+        } catch (error: any) {
+            console.error('[Flickr] Avatar upload failed:', error.message || error);
             return null;
         }
     },

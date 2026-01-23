@@ -192,10 +192,10 @@ export const uploadAvatar = async (req: AuthRequest, res: Response) => {
 
         try {
             const imageBuffer = fs.readFileSync(file.path);
-            const flickrUrl = await flickrService.uploadImage(
+            const flickrUrl = await flickrService.uploadAvatarImage(
                 imageBuffer,
                 `avatar_${userId}_${Date.now()}.jpg`,
-                `Avatar for User ${userId}`
+                userId
             );
             if (flickrUrl) {
                 avatarUrl = flickrUrl;

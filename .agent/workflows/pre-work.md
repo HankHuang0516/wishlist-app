@@ -1,81 +1,93 @@
+
 ---
-description: Pre-work checklist before starting any task in this project
+description: Unified Pre-work Checklist & Railway Ops Protocol
 ---
 
-# Pre-Work Checklist
+# Pre-Work & Railway Status Checklist
 
-Before starting ANY task in this project, you MUST:
+Before starting ANY task, execute this checklist sequentially.
 
 // turbo-all
 
-Importan: 全程用繁體中文溝通
+**Important**: 全程用繁體中文溝通
 
-## 0. 🔴 Auto Bug Check (Priority)
-**First**, check if there are any crawler errors in production:
-```
+## 0. 🔴 Auto Bug & Crawler Check (Priority)
+**First**, check for production errors to prevent compounding issues.
+
+```bash
+# 1. Check Crawler Logs (Stop if count > 0)
 read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-secure-admin-2026-xK9p
-```
 
-- If `count > 0`: **STOP!** Alert the user about the errors and offer to investigate/fix before proceeding with their task.
-- If `count = 0`: Continue with the normal checklist.
-
----
-
-## 1. Read Project Rules
-```
-view_file .cursorrules
-```
-
-## 2. Documentation
-Based on the task type, read the corresponding documentation as specified in `.cursorrules`.
-
-## 3. For Deployments
-- Run `npm run test -- --run` and verify all tests pass
-- Update version in `client/package.json` using `git rev-list --count HEAD` + 1
-- Avoid special characters in git commit messages
-
-## 4. For Terminal Commands
-- NEVER chain commands with `;` or `&&`
-- Execute commands sequentially in separate steps
-
-## 5. For E-commerce URL Features (8D Lesson)
-- After deployment, verify on PRODUCTION with these test URLs:
-  - Momo: `https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=14244558`
-  - PChome: `https://24h.pchome.com.tw/prod/DSAR0S-A900F7PCX`
-  - Shopee: Use any product URL with `/product/ID/ID` format
-- If any fail, check if cloud IP is blocked and add Proactive Smart Search
-- **Verify that all pages match the local language based on the device region**
-
-## 6. 🔴 STRICT DEPLOYMENT CHECK (CRITICAL)
-- **Before pushing code:**
-    - Run `npm run test -- --run` locally.
-    - **IF TESTS FAIL, DO NOT DEPLOY.** Fix the errors first.
-    - Do not rely on "it worked before". Verify **every single time**.
-- **After pushing:**
-    - Monitor Railway build logs. If build fails, **ROLLBACK or FIX IMMEDIATELY**.
-
-## 7. 🔴 POST-DEPLOYMENT VERIFICATION (CRITICAL)
-After deployment, verify these critical endpoints:
-
-### Version Check
-```
+# 2. Check System Health
 read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
 ```
-- Compare `uptime` value (should be < 120s for fresh deploy)
-- If version doesn't match expected, wait 2 minutes and recheck
-- **Ask user to hard refresh browser (Ctrl+Shift+R) if they see old version**
 
-### AI Guide Endpoint
+- **If Crawler Logs > 0**: 🛑 **STOP!** Alert user and fix errors first.
+- **If Health !ok**: investigate Railway logs using `railway logs`.
+
+## 1. 🛡️ Read Rules & Stats
+```bash
+# View Project Rules
+view_file .cursorrules
+
+# View System Stats (Users, Items) - Optional but recommended for context
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?key=wishlist-secure-admin-2026-xK9p
 ```
+
+## 2. 🛠️ Development Protocol
+- **Terminal**: NEVER chain commands with `;` or `&&` (except for the approved deploy command). Execute sequentially.
+- **Hardcoded Values**: Do not hardcode production URLs. Use `server/src/config/constants.ts` or client helpers.
+- **Paths**: Use `os.tmpdir()` instead of `/tmp`.
+
+## 3. 🚀 Strict Deployment Protocol (CRITICAL)
+
+### A. Pre-Deployment Checks
+1. **Run Tests**: `npm run test -- --run` (MUST PASS)
+2. **Bump Version**: Update `client/package.json` version.
+3. **Verify Target**: Run `railway status` to ensure you are linked to `Service: wishlist-app` (NOT Postgres).
+
+### B. Deployment Command
+**ALWAYS** use this exact format to enable debugging:
+
+```bash
+echo "=== Deploying v[VERSION] [REASON] ===" && git log -1 --oneline && railway up
+```
+*Example*: `echo "=== Deploying v1.0.6 Fix Avatar Upload ===" && git log -1 --oneline && railway up`
+
+## 4. ✅ Post-Deployment Verification
+
+### A. Critical Endpoints
+```bash
+# 1. Version Check (Compare uptime < 120s)
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
+
+# 2. AI Guide Check (Must return valid JSON with correct URLs)
 read_url_content https://wishlist-app-production.up.railway.app/api/ai-guide
 ```
-- Must return JSON with `meta.title` = "Wishlist.ai API Guide for AI Agents"
-- If 404: Check if route defined BEFORE catch-all in `server/src/index.ts`
-- **Root cause of 404 (2026-01-19)**: `sendFile()` path issues in Railway - use `res.json()` inline instead
+*If version stale: Ask user to Ctrl+Shift+R*
 
-### Common Issues
+### B. Functional Verification (New)
+```bash
+# Verify API Key Lifecycle (Register -> Token -> API Key -> Get Profile)
+npx tsx server/src/scripts/verify_prod_api_key.ts
+
+### C. UX Verification (Recent Fixes)
+1. **Avatar Upload Interaction**:
+   - **Action**: Go to [Settings](https://wishlist-app-production.up.railway.app/settings) -> Click Avatar Image.
+   - **Expectation**: File selector dialog MUST open.
+   - **Reason**: Regression test for missing `onClick` handler.
+
+### D. Feature Verification (8D Lesson)
+Verify these E-commerce URLs on Production:
+- Momo: `https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=14244558`
+- PChome: `https://24h.pchome.com.tw/prod/DSAR0S-A900F7PCX`
+
+### C. Common Fixes
 | Symptom | Cause | Solution |
 |---------|-------|----------|
-| Version not updating | Browser cache | Ctrl+Shift+R |
-| 404 on /api/* routes | Catch-all before route | Move route before `app.get(/.*/, ...)` |
-| sendFile 404 | Railway path resolution | Use inline `res.json()` instead |
+| P1001 / Postgres Crash | Overwritten by App Code | Rollback Postgres service in Railway UI |
+| 404 on API | Route ordering | Move API routes before SPA catch-all |
+| Old Version | Browser Cache | Hard Refresh (Ctrl+Shift+R) |
+
+---
+For deep debugging, refer to: `.agent/skills/railway_ops/SKILL.md`

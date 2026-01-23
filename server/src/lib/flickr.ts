@@ -1,6 +1,7 @@
 import { createFlickr } from 'flickr-sdk';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // Wishlist App Album Name
 const ALBUM_NAME = 'Wishlist App Items';
@@ -193,7 +194,8 @@ export const flickrService = {
                 photoData = imageBuffer;
             } else {
                 // Write buffer to temp file for upload
-                const tempPath = path.join('/tmp', `temp_avatar_${Date.now()}_${filename}`);
+                const tempPath = path.join(os.tmpdir(), `temp_avatar_${Date.now()}_${filename}`);
+                console.log(`[Flickr] Writing temp avatar to: ${tempPath}`);
                 fs.writeFileSync(tempPath, imageBuffer);
                 photoData = tempPath;
             }
@@ -282,7 +284,8 @@ export const flickrService = {
                 photoData = imageBuffer;
             } else {
                 // Write buffer to temp file for upload
-                const tempPath = path.join('/tmp', `temp_${Date.now()}_${filename}`);
+                const tempPath = path.join(os.tmpdir(), `temp_${Date.now()}_${filename}`);
+                console.log(`[Flickr] Writing temp file to: ${tempPath}`);
                 fs.writeFileSync(tempPath, imageBuffer);
                 photoData = tempPath;
             }

@@ -1,0 +1,6 @@
+--- VERIFYING FIX ---
+Token generated for User ID: 1
+Uploading avatar...
+Response Status: 200
+Response Data: { avatarUrl: '/uploads/avatar_1769132010986.jpg' }
+?? WARNING: Avatar uploaded but URL is NOT Flickr: /uploads/avatar_1769132010986.jpg

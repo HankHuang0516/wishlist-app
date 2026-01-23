@@ -7,6 +7,9 @@ import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
 import { generateApiKey } from '../lib/apiKey';
 
+import { APP_CONSTANTS, getApiUrl } from '../config/constants';
+// import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
+// Actually, let's wait for list_dir. But I can fix the content based on what I see.
 import { API_ERROR_CODES } from '../lib/errorCodes';
 
 interface AuthRequest extends Request {
@@ -554,7 +557,7 @@ export const generateAiPrompt = async (req: AuthRequest, res: Response) => {
             authentication: {
                 api_key: apiKey,
                 header: `x-api-key: ${apiKey}`,
-                base_url: "https://wishlist-app-production.up.railway.app/api"
+                base_url: getApiUrl()
             },
             available_apis: {
                 wishlists: {

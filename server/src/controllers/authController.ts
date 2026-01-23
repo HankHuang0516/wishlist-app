@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_default';
+import { getClientUrl } from '../config/constants';
 
 // Error codes for API consumers
 export const AUTH_ERROR_CODES = {
@@ -104,7 +105,7 @@ export const register = async (req: Request, res: Response) => {
         });
 
         // Send verification email
-        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
+        const clientUrl = getClientUrl();
         const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
 
         await sendEmail(email, 'Verify your Wishlist Account', `
@@ -309,7 +310,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
         });
 
         // Send password reset email
-        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
+        const clientUrl = getClientUrl();
         const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
 
         await sendEmail(email, 'Reset your Wishlist Password', `
@@ -410,7 +411,7 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
         });
 
         // Send verification email
-        const clientUrl = process.env.CLIENT_URL || 'https://wishlist-app-production.up.railway.app';
+        const clientUrl = getClientUrl();
         const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
 
         const emailResult = await sendEmail(email, 'Verify your Wishlist Account', `

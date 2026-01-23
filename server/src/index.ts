@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from 'express';
+import { getApiUrl, getClientUrl } from './config/constants';
 import path from 'path';
 import fs from 'fs';
 import dns from 'dns';
@@ -25,6 +26,13 @@ dotenv.config();
 
 const app: Express = express();
 const port = parseInt(process.env.PORT || '8000', 10);
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  console.log(`[Server] Creating uploads directory at: ${uploadsDir}`);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Security Middleware
 app.use(helmet({
@@ -89,7 +97,7 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
       step_2_login: {
         description: "用用戶提供的帳密登入",
         method: "POST",
-        url: "https://wishlist-app-production.up.railway.app/api/auth/login",
+        url: `${getClientUrl()}/api/auth/login`,
         body: { phoneNumber: "用戶的手機號碼", password: "用戶的密碼" },
         example: { phoneNumber: "0912345678", password: "user_password" },
         response: { token: "JWT token (有效期 7 天)" }
@@ -97,7 +105,7 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
       step_3_generate_api_key: {
         description: "使用 JWT 產生持久的 API Key",
         method: "POST",
-        url: "https://wishlist-app-production.up.railway.app/api/users/me/apikey",
+        url: `${getApiUrl()}/users/me/apikey`,
         headers: { Authorization: "Bearer <step_2的token>" },
         response: { apiKey: "sk_live_... (永久有效，直到重新產生)" }
       },
@@ -106,7 +114,7 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
         header: "x-api-key: <step_3的apiKey>"
       }
     },
-    base_url: "https://wishlist-app-production.up.railway.app/api",
+    base_url: getApiUrl(),
     available_actions: {
       wishlists: {
         list_all: "GET /wishlists - 取得所有願望清單",

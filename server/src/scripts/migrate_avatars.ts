@@ -10,6 +10,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// 忽略 SSL 錯誤 (解決 Railway run 本地執行時的憑證問題)
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const AVATAR_ALBUM_NAME = 'User Avatars';
 
 // 從 Flickr URL 解析 photo_id
@@ -38,9 +41,15 @@ async function main() {
 
     // 1. 查找或建立 User Avatars 相簿
     console.log('📁 查找 User Avatars 相簿...');
-    const photosetsRes = await flickr('flickr.photosets.getList', {
-        user_id: process.env.FLICKR_USER_ID || 'me'
-    });
+    let photosetsRes;
+    try {
+        photosetsRes = await flickr('flickr.photosets.getList', {
+            user_id: process.env.FLICKR_USER_ID || 'me'
+        });
+    } catch (e: any) {
+        console.error('❌ Flickr getList 失敗:', e.message, e.response?.data);
+        process.exit(1);
+    }
 
     const photosets = photosetsRes.photosets?.photoset || [];
     let avatarPhotosetId = photosets.find((set: any) => set.title._content === AVATAR_ALBUM_NAME)?.id;

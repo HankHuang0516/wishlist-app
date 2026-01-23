@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Copy, Check, Gift, Heart, ShoppingCart, Sparkles, ArrowRight } from 'lucide-react';
+import { getFullApiUrl } from '../config';
 
 const ApiShowcasePage = () => {
     const [copied, setCopied] = useState(false);
-    const apiUrl = 'wishlist-app-production.up.railway.app/api';
+    const apiUrl = getFullApiUrl().replace(/^https?:\/\//, '');
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(`https://${apiUrl}`);
@@ -76,8 +77,8 @@ const ApiShowcasePage = () => {
                                 <Button
                                     onClick={handleCopy}
                                     className={`shrink-0 transition-all duration-300 ${copied
-                                            ? 'bg-green-500 hover:bg-green-600'
-                                            : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600'
+                                        ? 'bg-green-500 hover:bg-green-600'
+                                        : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600'
                                         } text-white`}
                                 >
                                     {copied ? (

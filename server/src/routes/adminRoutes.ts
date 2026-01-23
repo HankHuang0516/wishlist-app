@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { flickrService } from '../lib/flickr';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -23,6 +24,8 @@ const adminAuth = (req: Request, res: Response, next: Function) => {
     next();
 };
 
+// GET /api/admin/crawler-logs
+// Returns recent crawler failures
 // GET /api/admin/crawler-logs
 // Returns recent crawler failures
 router.get('/crawler-logs', adminAuth, async (req: Request, res: Response) => {
@@ -49,6 +52,21 @@ router.get('/crawler-logs', adminAuth, async (req: Request, res: Response) => {
                 debugMessage: log.debugMessage,
                 createdAt: log.createdAt
             }))
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// DELETE /api/admin/crawler-logs
+// Clear all crawler logs
+router.delete('/crawler-logs', adminAuth, async (req: Request, res: Response) => {
+    try {
+        const { count } = await prisma.crawlerLog.deleteMany({});
+        res.json({
+            message: 'Crawler logs cleared',
+            deletedCount: count,
+            timestamp: new Date().toISOString()
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -220,6 +238,96 @@ router.get('/all-images', adminAuth, async (req: Request, res: Response) => {
             timestamp: new Date().toISOString()
         });
     } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/admin/migrate-avatars
+// Migrate existing Flickr avatars to the dedicated User Avatars album
+router.post('/migrate-avatars', adminAuth, async (req: Request, res: Response) => {
+    try {
+        console.log('[Admin] Starting avatar migration...');
+
+        // 1. Get or create the album
+        let photosetId = await flickrService.getOrCreateAvatarPhotoset();
+        if (!photosetId) {
+            console.log('[Admin] Avatar photoset not found, will attempt to create during migration.');
+        }
+
+        // 2. Find users with Flickr avatars
+        const users = await prisma.user.findMany({
+            where: {
+                avatarUrl: {
+                    startsWith: 'https://live.staticflickr.com'
+                }
+            },
+            select: { id: true, name: true, avatarUrl: true }
+        });
+
+        const results = {
+            total: users.length,
+            success: 0,
+            failed: 0,
+            alreadyInSet: 0,
+            details: [] as string[]
+        };
+
+        // Helper to extract photo ID
+        const extractPhotoId = (url: string): string | null => {
+            const match = url.match(/\/(\d+)_[a-f0-9]+_\w+\.(jpg|png|gif)/i);
+            return match ? match[1] : null;
+        };
+
+        // 3. Migrate each user
+        for (const user of users) {
+            if (!user.avatarUrl) continue;
+            const photoId = extractPhotoId(user.avatarUrl);
+
+            if (!photoId) {
+                results.failed++;
+                results.details.push(`User ${user.id}: Invalid URL format`);
+                continue;
+            }
+
+            // If we don't have a photoset yet, create it with this photo
+            if (!photosetId) {
+                try {
+                    console.log(`[Admin] Creating Avatar Photoset with photo ${photoId}...`);
+                    photosetId = await flickrService.createAvatarPhotoset(photoId);
+                    if (!photosetId) {
+                        throw new Error('Created photoset ID is null');
+                    }
+                    results.details.push(`Created new album: ${photosetId}`);
+                } catch (e: any) {
+                    results.failed++;
+                    results.details.push(`User ${user.id}: Failed to create album with photo ${photoId}: ${e.message}`);
+                    continue; // Cannot proceed without album
+                }
+            }
+
+            // Add via service (it logs errors but returns boolean)
+            // flickrService.addPhotoToPhotoset returns boolean
+            const success = await flickrService.addPhotoToPhotoset(photoId, photosetId);
+
+            if (success) {
+                results.success++;
+            } else {
+                // It might fail if already in set (service doesn't distinguish currently)
+                // But for now we count as failed or check logs.
+                // We'll verify migration by checking album count later.
+                results.failed++;
+                results.details.push(`User ${user.id}: Add to set failed`);
+            }
+        }
+
+        res.json({
+            message: 'Migration completed',
+            results,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error: any) {
+        console.error('[Admin] Migration failed:', error);
         res.status(500).json({ error: error.message });
     }
 });

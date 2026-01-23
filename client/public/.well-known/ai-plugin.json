@@ -1,0 +1,18 @@
+{
+    "schema_version": "v1",
+    "name_for_human": "Wishlist.ai",
+    "name_for_model": "wishlist_ai",
+    "description_for_human": "Manage your wishlists and gift ideas. Add items from URLs, track prices, and share wishlists with friends.",
+    "description_for_model": "Use this API to manage a user's wishlists. Allows creating wishlists, adding items by name or URL, viewing wishlists, and modifying items. Authentication is required via a user-specific API Key.",
+    "auth": {
+        "type": "user_http",
+        "authorization_type": "bearer"
+    },
+    "api": {
+        "type": "openapi",
+        "url": "https://wishlist-app-production.up.railway.app/api/swagger.json"
+    },
+    "logo_url": "https://wishlist-app-production.up.railway.app/favicon.ico",
+    "contact_email": "support@wishlist.ai",
+    "legal_info_url": "https://wishlist-app-production.up.railway.app/terms"
+}

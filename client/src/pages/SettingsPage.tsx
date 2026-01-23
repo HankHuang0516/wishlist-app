@@ -342,7 +342,10 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col md:flex-row items-center gap-6 pt-6">
                     {/* Avatar Image & Overlay */}
-                    <div className="relative group cursor-pointer w-24 h-24">
+                    <div
+                        className="relative group cursor-pointer w-24 h-24"
+                        onClick={() => fileInputRef.current?.click()}
+                    >
                         <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
                             {profile.avatarUrl ? (
                                 <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />

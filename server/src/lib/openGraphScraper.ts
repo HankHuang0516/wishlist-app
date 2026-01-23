@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { APP_CONSTANTS } from '../config/constants';
 import * as cheerio from 'cheerio';
 
 export interface OpenGraphData {
@@ -25,7 +26,7 @@ export const fetchOpenGraphData = async (url: string): Promise<OpenGraphData> =>
         const response = await axios.get(url, {
             timeout: 4000, // 4 seconds max
             headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; WishlistAI-Bot/1.0; +https://wishlist-app-production.up.railway.app/)'
+                'User-Agent': APP_CONSTANTS.USER_AGENT
             },
             maxRedirects: 3
         });

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { t } from '../utils/localization';
+import { getFullApiUrl } from '../config';
 
 interface ApiItem {
     method: string;
@@ -111,7 +112,7 @@ const ApiDocsPage = () => {
             <div className="bg-gray-50 border rounded-lg p-4 mb-6">
                 <h3 className="font-medium mb-2">🌐 Base URL</h3>
                 <code className="block bg-white p-2 rounded text-sm select-all">
-                    https://wishlist-app-production.up.railway.app/api
+                    {getFullApiUrl()}
                 </code>
                 <p className="text-xs text-gray-500 mt-2">
                     ⚠️ 這是 API 路徑的前綴，需搭配下方具體端點使用（例如 /api/auth/login）

@@ -1,0 +1,12 @@
+# Wishlist.ai robots.txt
+# Allow AI agents and search engines to discover the API
+
+User-agent: *
+Allow: /
+
+# Allow discovery of AI plugin manifest
+Allow: /.well-known/ai-plugin.json
+
+# Allow access to API documentation
+Allow: /api/swagger.json
+Allow: /api/ai-guide

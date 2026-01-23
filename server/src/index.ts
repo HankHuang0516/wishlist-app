@@ -153,6 +153,10 @@ app.get('/api/swagger.json', (req: Request, res: Response) => {
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
+// Serve .well-known directory explicitly for AI agent discovery
+// This must be before SPA fallback to prevent interception
+app.use('/.well-known', express.static(path.join(clientBuildPath, '.well-known')));
+
 // Redirect /api to /api-showcase for user-friendly access
 app.get('/api', (req: Request, res: Response) => {
   res.redirect('/api-showcase');

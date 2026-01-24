@@ -6,10 +6,9 @@
     },
     {
       "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.vitest.json"
     }
-  ],
-  "exclude": [
-    "src/__tests__",
-    "**/*.test.tsx"
   ]
 }

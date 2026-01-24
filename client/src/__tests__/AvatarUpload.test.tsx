@@ -64,9 +64,8 @@ describe('Avatar Upload Interaction', () => {
         // and check its parent, or find the user icon/camera icon.
 
         // Find hidden input
-        // Note: hidden inputs are not "visible", need hidden:true
-        const fileInput = screen.getByLabelText(/settings.avatar/i, { selector: 'input[type="file"]' })
-            || document.querySelector('input[type="file"]');
+        // Note: hidden inputs are not "visible", use querySelector instead
+        const fileInput = document.querySelector('input[type="file"]');
 
         expect(fileInput).toBeTruthy();
 

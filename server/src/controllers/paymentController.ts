@@ -83,7 +83,29 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
             purchaseType = req.body.purchaseType;
             const target = req.body.target;
 
-            if (purchaseType === 'PREMIUM') {
+            if (purchaseType === 'SUBSCRIPTION') {
+                // Calculate expiry: Now + 30 days. 
+                // If already active and not expired, extend from existing expiry? 
+                // For simplicity: Always extend from NOW or from Expiry if future.
+                const now = new Date();
+                let newExpiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+                if (user.subscriptionExpiresAt && user.subscriptionExpiresAt > now) {
+                    // Extend existing
+                    newExpiry = new Date(user.subscriptionExpiresAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+                }
+
+                await prisma.user.update({
+                    where: { id: userId },
+                    data: {
+                        isPremium: true,
+                        subscriptionStatus: 'ACTIVE',
+                        subscriptionExpiresAt: newExpiry,
+                        autoRenew: true // Assumed true for subscription start
+                    }
+                });
+
+            } else if (purchaseType === 'PREMIUM') {
                 await prisma.user.update({ where: { id: userId }, data: { isPremium: true } });
             } else if (purchaseType === 'limit') {
                 // Check target
@@ -99,6 +121,7 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
         } else {
             // Fallback by amount logic if needed
             if (details.amount === 90) {
+                // Legacy Premium
                 await prisma.user.update({ where: { id: userId }, data: { isPremium: true } });
                 purchaseType = 'PREMIUM';
             }
@@ -120,5 +143,34 @@ export const payByPrime = async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error('[Payment] Server Error:', error.response?.data || error.message);
         res.status(500).json({ error: 'Internal server error during payment', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
+    }
+};
+
+export const cancelSubscription = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.ACCESS_DENIED });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                autoRenew: false,
+                subscriptionStatus: 'CANCELED'
+                // We do NOT clear subscriptionExpiresAt, user keeps access until then.
+            }
+        });
+
+        res.json({ success: true, message: 'Subscription canceled. Benefits remain until expiry.' });
+
+    } catch (error) {
+        console.error('[Payment] Cancel Error:', error);
+        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

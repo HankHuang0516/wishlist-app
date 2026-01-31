@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
 import { t } from "../utils/localization";
+import { Analytics } from "../utils/analytics";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
@@ -60,6 +61,7 @@ export default function Login() {
             }
 
             login(data.token, data.user);
+            Analytics.logLogin(identifier.includes('@') ? 'email' : 'phone');
         } catch (err: any) {
             setError(err.message);
         } finally {

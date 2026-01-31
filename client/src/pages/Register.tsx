@@ -7,6 +7,7 @@ import { Input } from "../components/ui/Input";
 import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
 import { t } from "../utils/localization";
+import { Analytics } from "../utils/analytics";
 
 export default function Register() {
     const [name, setName] = useState("");
@@ -49,6 +50,7 @@ export default function Register() {
 
             // Success - show verification message
             setSuccessProfile({ email });
+            Analytics.logSignUp('email');
 
         } catch (err: any) {
             setError(err.message);

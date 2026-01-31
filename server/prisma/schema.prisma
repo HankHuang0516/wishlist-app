@@ -38,6 +38,11 @@ model User {
   emailVerificationExpires DateTime?
   passwordResetToken       String?
   passwordResetExpires     DateTime?
+  
+  // Subscription Fields
+  subscriptionStatus      String?   // 'ACTIVE', 'CANCELED', 'EXPIRED'
+  subscriptionExpiresAt   DateTime?
+  autoRenew               Boolean   @default(false)
 
   lastFeedbackAt  DateTime?
   aiUsageCount    Int          @default(0)

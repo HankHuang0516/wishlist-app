@@ -242,6 +242,41 @@ router.get('/all-images', adminAuth, async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/admin/purchases
+// Returns purchase history
+router.get('/purchases', adminAuth, async (req: Request, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 100;
+        const purchases = await prisma.purchase.findMany({
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            include: {
+                user: {
+                    select: { id: true, name: true, phoneNumber: true, email: true }
+                }
+            }
+        });
+
+        res.json({
+            count: purchases.length,
+            purchases: purchases.map(p => ({
+                id: p.id,
+                userId: p.userId,
+                userName: p.user?.name || p.user?.phoneNumber,
+                userEmail: p.user?.email,
+                type: p.type,
+                amount: p.amount,
+                currency: p.currency,
+                status: p.status,
+                createdAt: p.createdAt
+            })),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // POST /api/admin/migrate-avatars
 // Migrate existing Flickr avatars to the dedicated User Avatars album
 router.post('/migrate-avatars', adminAuth, async (req: Request, res: Response) => {

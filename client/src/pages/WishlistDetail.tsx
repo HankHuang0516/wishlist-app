@@ -13,6 +13,7 @@ import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
+import { Analytics } from "../utils/analytics";
 
 interface Item {
     id: number;
@@ -75,6 +76,7 @@ export default function WishlistDetail() {
         if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
             try {
                 await navigator.share(shareData);
+                Analytics.logShare('wishlist', wishlist?.id.toString());
                 return; // Success, no need to copy
             } catch (err) {
                 console.log('Error sharing:', err);
@@ -85,6 +87,7 @@ export default function WishlistDetail() {
         // Fallback to Clipboard
         try {
             await navigator.clipboard.writeText(window.location.href);
+            Analytics.logShare('wishlist', wishlist?.id.toString());
             setCopied(true);
             setFeedbackMessage(t('detail.linkCopied'));
             setTimeout(() => {
@@ -151,6 +154,7 @@ export default function WishlistDetail() {
                     setEditTitle(data.title);
                     setEditDesc(data.description || "");
                     setEditIsPublic(data.isPublic);
+                    Analytics.logViewItemList(data.id.toString(), data.title);
                 }
             } else {
                 if (!silent) {
@@ -213,7 +217,10 @@ export default function WishlistDetail() {
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
-                if (res.ok) fetchWishlist();
+                if (res.ok) {
+                    fetchWishlist();
+                    Analytics.logAddToWishlist('TWD', 0, [{ item_id: 'new_image_item', item_name: 'Image Upload Item' }]);
+                }
             } catch (err) { console.error(err); }
         }
     };
@@ -232,6 +239,7 @@ export default function WishlistDetail() {
             });
             if (res.ok) {
                 fetchWishlist();
+                Analytics.logAddToWishlist('TWD', 0, [{ item_id: 'new_url_item', item_name: urlInput }]);
                 setIsUrlModalOpen(false);
                 setUrlInput("");
             } else {

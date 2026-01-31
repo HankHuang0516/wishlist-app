@@ -31,7 +31,12 @@
       "Bash(popd)",
       "Bash(ping:*)",
       "Bash(tree:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(echo:*)",
+      "Bash(RAILWAY_SERVICE=bc7f7b6a-e7ae-46f8-8f19-277eacdc0487 railway up:*)"
     ]
   }
 }

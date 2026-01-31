@@ -40,10 +40,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:", "http:", "*"], // Allow images from any source
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com", "https://*.tappaysdk.com"], // TapPay SDK
+      imgSrc: ["'self'", "data:", "https:", "http:", "*", "https://*.google-analytics.com", "https://*.googletagmanager.com"], // Allow images from any source and GA
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com", "https://*.tappaysdk.com", "https://www.googletagmanager.com", "https://*.googletagmanager.com", "https://*.google-analytics.com"], // TapPay SDK and Google Analytics
       styleSrc: ["'self'", "'unsafe-inline'"], // Required for TapPay inline styles
-      connectSrc: ["'self'", "https:", "http:", "https://*.tappaysdk.com"], // Allow connecting to TapPay APIs
+      connectSrc: ["'self'", "https:", "http:", "https://*.tappaysdk.com", "https://www.google-analytics.com", "https://*.google-analytics.com", "https://*.analytics.google.com", "https://*.googletagmanager.com", "https://*.g.doubleclick.net"], // Allow connecting to TapPay APIs and Google Analytics
       frameSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay iframes for credit card fields
       childSrc: ["'self'", "https://*.tappaysdk.com"], // Allow TapPay child frames
     },

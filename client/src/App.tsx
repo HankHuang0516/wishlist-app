@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./layouts/Layout";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -24,9 +25,26 @@ import { AuthProvider } from "./context/AuthContext";
 import NotFound from "./pages/NotFound";
 import OfflineBanner from "./components/OfflineBanner";
 
+// Separate component to handle route changes
+function RouteTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window.gtag === 'function') {
+      window.gtag('config', 'G-3E3LMNH9JR', {
+        page_path: location.pathname + location.search,
+      });
+      console.log(`[GA] Tracked page view: ${location.pathname}${location.search}`);
+    }
+  }, [location]);
+
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <RouteTracker />
       <AuthProvider>
         <OfflineBanner />
         <Routes>

@@ -1,3 +1,6 @@
+---
+description: 
+---
 
 ---
 description: Unified Pre-work Checklist & Railway Ops Protocol
@@ -53,6 +56,19 @@ read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?
 echo "=== Deploying v[VERSION] [REASON] ===" && git log -1 --oneline && railway up
 ```
 *Example*: `echo "=== Deploying v1.0.6 Fix Avatar Upload ===" && git log -1 --oneline && railway up`
+
+> [!NOTE] 關於自動連結原理
+> Agent 能夠直接執行 `railway up` 且不需重新連結，是因為先執行了 `railway status`。
+> 1. `railway status` 檢查當前環境的 Token 與專案連結狀態。
+> 2. 如果狀態回傳正確 (Linked to: wishlist-app)，Agent 即可沿用既有的 credentials 進行部署。
+
+PS C:\Hank\Other\project\wishlist-app> railway link
+> Select a workspace hankhuang0516's Projects
+> Select a project thorough-presence
+> Select an environment production
+> Select a service <esc to skip> wishlist-app
+
+Project thorough-presence linked successfully! 🎉
 
 ## 4. ✅ Post-Deployment Verification
 

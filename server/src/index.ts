@@ -94,6 +94,11 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
         action: "詢問用戶",
         prompt: "請提供您的 Wishlist.ai 帳號（手機號碼）和密碼，我會幫您登入並取得 API 金鑰。"
       },
+      merchant_authentication: {
+        description: "合作商（Merchants）可使用專屬 API Key 進行認證。適用於 Origin 驗證及代理終端用戶場景。",
+        header: "x-merchant-api-key: <merchant_apiKey>",
+        notes: "當使用 Merchant Auth 時，建議在 body 中帶入 proxy_end_user_id 以區分不同終端用戶。"
+      },
       step_2_login: {
         description: "用用戶提供的帳密登入",
         method: "POST",
@@ -124,9 +129,9 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
         delete: "DELETE /wishlists/{id}"
       },
       items: {
-        add_by_name: "POST /wishlists/{id}/items - 新增項目 (body: {name, price?, notes?})",
-        add_by_url: "POST /wishlists/{id}/items/url - 網址自動抓取 (body: {url})",
-        add_with_image: "POST /wishlists/{id}/items - multipart/form-data (name + image file)",
+        add_by_name: "POST /wishlists/{id}/items - 新增項目 (body: {name, price?, notes?, proxy_end_user_id?})",
+        add_by_url: "POST /wishlists/{id}/items/url - 網址自動抓取 (body: {url, proxy_end_user_id?})",
+        add_with_image: "POST /wishlists/{id}/items - multipart/form-data (name + image file + proxy_end_user_id?)",
         update: "PUT /items/{id}",
         delete: "DELETE /items/{id}"
       },

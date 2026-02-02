@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, authenticateUserOrMerchant } from '../middleware/auth';
 import {
     getWishlists,
     createWishlist,
@@ -9,15 +9,6 @@ import {
 } from '../controllers/wishlistController';
 
 const router = express.Router();
-
-// All routes require authentication
-router.use(authenticateToken);
-
-router.get('/', getWishlists);
-router.post('/', createWishlist);
-router.get('/:id', getWishlist);
-router.put('/:id', updateWishlist);
-router.delete('/:id', deleteWishlist);
 
 // Item routes nested under wishlist
 import { createItem, createItemFromUrl } from '../controllers/itemController';
@@ -35,8 +26,22 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Merchant can create items, but maybe not manage wishlists?
+// The task says "Merchant 認證機制", implying they can use the API.
+// Let's allow create items to use either.
 
-router.post('/:wishlistId/items', upload.single('image'), createItem);
-router.post('/:wishlistId/items/url', createItemFromUrl);
+router.post('/:wishlistId/items', authenticateUserOrMerchant, upload.single('image'), createItem);
+router.post('/:wishlistId/items/url', authenticateUserOrMerchant, createItemFromUrl);
+
+// Other routes still require user token for now
+router.use(authenticateToken);
+
+router.get('/', getWishlists);
+router.post('/', createWishlist);
+router.get('/:id', getWishlist);
+router.put('/:id', updateWishlist);
+router.delete('/:id', deleteWishlist);
+
+export default router;
 
 export default router;

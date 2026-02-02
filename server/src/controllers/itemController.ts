@@ -200,11 +200,18 @@ const processItemUpload = async (itemId: number, filePath: string, filename: str
 
 export const createItem = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user?.id;
+        const merchantId = req.merchant?.id;
+
+        if (!userId && !merchantId) {
+            return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.MISSING_TOKEN });
+        }
+
         const { wishlistId } = req.params;
+        const { proxy_end_user_id } = req.body;
         const file = req.file;
 
-        // Check if wishlist exists and belongs to user
+        // Check if wishlist exists
         const wishlist = await prisma.wishlist.findUnique({
             where: { id: Number(wishlistId) }
         });
@@ -216,7 +223,11 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        if (wishlist.userId !== userId) {
+        // Ownership check: If User auth, must be owner. If Merchant, maybe bypass?
+        // For now, let's assume merchants can add to any wishlist if they have the ID, 
+        // OR we should check if the merchant is authorized for this user.
+        // Simplest: If User is logged in, check ownership. If ONLY Merchant, bypass ownership but require wishlistId.
+        if (userId && wishlist.userId !== userId) {
             return res.status(403).json({
                 error: 'Access denied: You do not own this wishlist',
                 errorCode: API_ERROR_CODES.ACCESS_DENIED
@@ -262,7 +273,8 @@ export const createItem = async (req: AuthRequest, res: Response) => {
                 uploadStatus: file ? 'PENDING' : 'COMPLETED',
                 aiStatus: file ? 'PENDING' : 'SKIPPED',
                 notes: req.body.notes || null,
-                price: validatedPrice
+                price: validatedPrice,
+                proxy_end_user_id: proxy_end_user_id || null
             }
         });
 
@@ -270,8 +282,8 @@ export const createItem = async (req: AuthRequest, res: Response) => {
         res.status(201).json(item);
 
         // 3. Trigger background upload + AI processing ONLY if file exists
-        if (file) {
-            processItemUpload(item.id, file.path, file.originalname, userId);
+        if (file && (userId || wishlist.userId)) {
+            processItemUpload(item.id, file.path, file.originalname, userId || wishlist.userId);
         }
 
     } catch (error) {
@@ -716,9 +728,15 @@ const processTextAi = async (itemId: number, text: string, userId: number, searc
 
 export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user?.id;
+        const merchantId = req.merchant?.id;
+
+        if (!userId && !merchantId) {
+            return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.MISSING_TOKEN });
+        }
+
         const { wishlistId } = req.params;
-        const { url } = req.body; // 'url' is the field name from frontend, but can be text
+        const { url, proxy_end_user_id } = req.body; // 'url' is the field name from frontend, but can be text
 
         if (!url) return res.status(400).json({
             error: 'Input is required',
@@ -727,6 +745,25 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
 
         if (url.length > 2000) {
             return res.status(400).json({ error: 'Input too long (Max 2000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
+        // Check if wishlist exists
+        const wishlist = await prisma.wishlist.findUnique({
+            where: { id: Number(wishlistId) }
+        });
+
+        if (!wishlist) {
+            return res.status(404).json({
+                error: 'Wishlist not found',
+                errorCode: API_ERROR_CODES.WISHLIST_NOT_FOUND
+            });
+        }
+
+        if (userId && wishlist.userId !== userId) {
+            return res.status(403).json({
+                error: 'Access denied: You do not own this wishlist',
+                errorCode: API_ERROR_CODES.ACCESS_DENIED
+            });
         }
 
         const isUrl = url.trim().match(/^(http|https):\/\//);
@@ -738,7 +775,8 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
                 wishlistId: Number(wishlistId),
                 link: isUrl ? url : null,
                 imageUrl: null,
-                aiStatus: 'PENDING'
+                aiStatus: 'PENDING',
+                proxy_end_user_id: proxy_end_user_id || null
             }
         });
 
@@ -746,10 +784,11 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
         res.status(201).json(item);
 
         // 3. Trigger Async Processing
+        const targetUserId = userId || wishlist.userId;
         if (isUrl) {
-            processUrlAi(item.id, url, userId);
+            processUrlAi(item.id, url, targetUserId);
         } else {
-            processTextAi(item.id, url, userId);
+            processTextAi(item.id, url, targetUserId);
         }
 
     } catch (error) {

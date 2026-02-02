@@ -43,5 +43,3 @@ router.put('/:id', updateWishlist);
 router.delete('/:id', deleteWishlist);
 
 export default router;
-
-export default router;

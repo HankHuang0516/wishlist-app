@@ -10,6 +10,7 @@ import { checkAndIncrementAiUsage } from '../lib/usageService';
 
 interface AuthRequest extends Request {
     user?: any;
+    merchant?: any;
 }
 
 // User-Agent Pool for rotation

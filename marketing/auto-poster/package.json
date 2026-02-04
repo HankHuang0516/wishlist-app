@@ -1,0 +1,10 @@
+{
+    "name": "wishlist-auto-poster",
+    "version": "1.0.0",
+    "description": "Automated X poster for Wishlist App",
+    "main": "publish.js",
+    "dependencies": {
+        "puppeteer": "^22.0.0",
+        "chalk": "^4.1.2"
+    }
+}

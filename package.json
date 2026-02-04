@@ -17,6 +17,10 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "puppeteer": "^24.36.0"
+    "puppeteer": "^24.36.1"
+  },
+  "dependencies": {
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }

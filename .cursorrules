@@ -164,3 +164,10 @@ wishlist-app/
   2. **Missing Keys**: `GOOGLE_API_KEY` 或 `GOOGLE_CSE_ID` 未設定或無效
   3. **No Results**: 搜尋關鍵字找不到相關圖片
 - **檢查方式**：查看 `railway logs` 搜尋 "Google Image Search failed"
+
+### Issue D13: Email Sender Configuration (2026-02-01)
+- **問題**：修改程式碼中的 `DEFAULT_FROM_EMAIL` 無法立即改變寄件人名稱
+- **原因**：Resend SDK 或編譯快取可能導致程式碼變更未即時生效，或者環境變數優先級問題
+- **解決方案**：**使用 Railway 環境變數強制覆寫**
+  - 設定 `EMAIL_FROM` (例如: `support@twopiggyhavefun.uk`)
+  - 這比修改程式碼更可靠且不需要重新部署代碼即可生效 (Railway 會自動 Redeploy)

@@ -39,3 +39,8 @@ Thumbs.db
 
 # Scripts with API keys
 server/scripts/run_flickr_oauth.ps1
+
+# Generated Content
+marketing/chrome_data/
+marketing/pomelli-output/
+server/dist/

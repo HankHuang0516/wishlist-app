@@ -40,19 +40,21 @@ Verify `package.json` includes:
 cd "c:\Hank\Other\project\wishlist-app"
 git push origin main
 ```
+*This triggers the GitHub Actions workflow.*
 
-### Step 2: Wait for Deployment
+### Step 2: Monitor GitHub Actions & Railway
 
-1. Go to Railway Dashboard
-2. Watch the deployment progress
-3. Wait for "Success" status (usually 2-5 minutes)
+1.  **Go to GitHub**: Check the "Actions" tab. Wait for all checks to pass.
+2.  **Go to Railway**: Once GitHub Actions complete, the deployment starts automatically.
+    -   Watch for "Building" -> "Deploying" -> "Success".
+    -   Wait for "Success" status (usually 2-5 minutes).
 
-### Step 3: Check Deployment Logs
+### Step 3: Check Deployment Logs (If Needed)
 
-1. Click on your service in Railway
-2. Go to "Deployments" tab
-3. Click on the latest deployment
-4. Click "View Logs"
+1.  Click on your service in Railway
+2.  Go to "Deployments" tab
+3.  Click on the latest deployment
+4.  Click "View Logs"
 
 ---
 

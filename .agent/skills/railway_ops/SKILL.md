@@ -94,75 +94,38 @@ Before declaring "Fixed":
 
 ---
 
-## 3. Railway CLI Commands (Terminal)
 
-### ⚠️ First Time Setup: Link Project
-Before using any CLI commands, you must link the project:
+<!-- Section 3 Removed: Railway CLI is no longer used for deployment. -->
 
-```bash
-railway link
-# Select: hankhuang0516's Projects
-# Select: thorough-presence
-# Select: production
-# Select: wishlist-app
-```
-
-Once linked, you'll see: `Project thorough-presence linked successfully! 🎉`
-
-### Available Commands
-Use these commands in the terminal when you need detailed deploy logs.
-
-```bash
-# Check deployment logs (most recent)
-railway logs
-
-# Filter for errors only
-railway logs | grep -i "error"
-
-# Filter for failed items
-railway logs | grep -i "failed"
-
-# Deploy and watch build output in real-time (best for debugging)
-railway up
-
-# List all deployments (to see FAILED status)
-railway deployments
-
-# Export logs to file for detailed analysis
-railway logs > debug.txt
-```
 
 ---
 
-## 4. Deployment Protocol (IMPORTANT)
+## 4. Automated Deployment Protocol
 
-### 🚀 Standard Deployment Steps
-**When deploying to Railway, ALWAYS follow this protocol:**
+### 🚀 Deployment Flow
+**Deployment is now fully automated via GitHub Actions.**
 
-1. **Print Git Version First** - Before running `railway up`, always print the current git commit as the first line of debug output:
-   ```bash
-   # Step 1: Print git version for debugging
-   echo "=== Deploying Git Version ===" && git log -1 --oneline
+1.  **Commit & Push**:
+    ```bash
+    git add .
+    git commit -m "feat: description of changes"
+    git push origin main
+    ```
 
-   # Step 2: Deploy to Railway
-   railway up
-   ```
+2.  **GitHub Actions**:
+    -   A workflow is triggered automatically on push.
+    -   It runs tests and verification checks.
+    -   **Only if all checks pass**, the deployment is triggered on Railway.
 
-2. **Report Format** - When reporting deployment status, always include:
-   ```markdown
-   ## 🚀 Deployment Status
-   - **Git Version**: `abc1234 commit message here`
-   - **Build Logs**: [Railway Link]
-   - **Health Check**: ok / failed
-   - **Uptime**: X seconds
-   ```
+3.  **Monitor Deployment**:
+    -   **GitHub**: Check the "Actions" tab in your repository to see if the workflow succeeded.
+    -   **Railway**: If GitHub Actions pass, check the Railway dashboard for the deployment status.
 
-### Example Deployment Command (Copy-Paste Ready)
-```bash
-echo "=== Deploying Git Version ===" && git log -1 --oneline && railway up
-```
+### ⚠️ Manual Deployment (Emergency Only)
+If the automated flow fails or you need to bypass checks (NOT RECOMMENDED):
+1.  Go to Railway Dashboard.
+2.  Click "Deploy" manually on the specific commit.
 
-This ensures every deployment is traceable to a specific git commit for debugging purposes.
 
 ### Common Error Patterns
 | Error | Meaning |
@@ -184,7 +147,7 @@ The Postgres service crashes repeatedly with `P1001: Can't reach database server
 ### 🔍 Symptoms
 1.  **Wrong Runtime**: The "Postgres" service environment shows `node@20.x` instead of Docker/Postgres.
 2.  **App Logs in DB Service**: You see `npm start` or `prisma db push` logs appearing inside the *Postgres* service logs.
-3.  **Deployment History**: Shows a `railway up` deployment (CLI) replacing the Docker image.
+3.  **Deployment History**: Shows a `railway up` deployment (manual CLI) representing the mistake.
 
 ### ⚠️ Root Cause
 Running `railway up` while linked to the **Postgres service** instead of the **App service**. 
@@ -197,9 +160,8 @@ Running `railway up` while linked to the **Postgres service** instead of the **A
 4.  Click **Three Dots (⋮)** -> **Redeploy**.
 
 ### 🛡️ Prevention
--   **CRITICAL**: Always run `railway status` **IMMEDIATELY BEFORE** `railway up`.
--   Verify the output says `Service: wishlist-app` (or your app name).
--   If it says `Service: Postgres`, run `railway link` to switch.
+-   **CRITICAL**: Avoid running `railway up` manually. Rely on the automated pipeline.
+-   If you MUST use CLI for some reason, verify `railway status` first.
 
 ---
 **Last Updated**: 2026-01-20

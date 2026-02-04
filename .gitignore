@@ -46,3 +46,6 @@ marketing/pomelli-output/
 server/dist/
 server/scripts/audit_log.txt
 server/verify/naive_audit_log.txt
+server/scripts/naive_audit_log.txt
+server/scripts/god_token.txt
+server/otp.txt

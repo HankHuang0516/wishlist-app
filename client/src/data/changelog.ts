@@ -13,6 +13,18 @@ export interface ChangelogEntry {
 
 export const changelogData: ChangelogEntry[] = [
     {
+        version: "1.1.0",
+        date: "2026-02-04",
+        title: "MCP Integration Phase 2",
+        type: "Backend",
+        items: [
+            { type: "New", content: "Implemented MCP Tools: create_wishlist and add_item." },
+            { type: "Enhancement", content: "Updated SKILL.md with new tool documentation." }
+        ],
+        verificationCase: "server/src/mcp/index.ts",
+        details: "AI agents can now create wishlists and add items directly via MCP tools, improving agentic capabilities."
+    },
+    {
         version: "1.0.1",
         date: "2026-02-04",
         title: "Deployment Automation & Changelog Feature",

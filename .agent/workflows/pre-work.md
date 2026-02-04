@@ -45,17 +45,11 @@ read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?
 ## 3. 🚀 Strict Deployment Protocol (CRITICAL)
 
 ### A. Pre-Deployment Checks
-1. **Run Tests**: `npm run test -- --run` (MUST PASS)
-2. **Bump Version**: Update `client/package.json` version.
-3. **Update Changelog**: Add new entry to `client/src/data/changelog.ts`.
-   - **Format**:
-     - `version`: Version number (e.g., "1.0.1")
-     - `title`: Short summary
-     - `type`: Frontend / Backend / Fullstack
-     - `items`: List of changes ({ type: 'Fix'|'Enhancement'|'New', content: '...' })
-     - `verificationCase`: Key file or test case
-     - `details`: Detailed explanation
-4. **Verify Target**: Run `railway status` to ensure you are linked to `Service: wishlist-app` (NOT Postgres).
+1. **Mandatory Validation**: Run `./scripts/validate-before-push.sh` (MUST PASS with all green).
+2. **Run Tests**: `npm run test -- --run` (Already included in validation script).
+3. **Bump Version**: Update `client/package.json` version.
+4. **Update Changelog**: Add new entry to `client/src/data/changelog.ts`.
+5. **Verify Target**: Run `railway status` to ensure you are linked to `Service: wishlist-app` (NOT Postgres).
 
 ### B. Deployment Command
 **ALWAYS** use this exact format to enable debugging:

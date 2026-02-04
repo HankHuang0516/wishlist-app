@@ -47,7 +47,15 @@ read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?
 ### A. Pre-Deployment Checks
 1. **Run Tests**: `npm run test -- --run` (MUST PASS)
 2. **Bump Version**: Update `client/package.json` version.
-3. **Verify Target**: Run `railway status` to ensure you are linked to `Service: wishlist-app` (NOT Postgres).
+3. **Update Changelog**: Add new entry to `client/src/data/changelog.ts`.
+   - **Format**:
+     - `version`: Version number (e.g., "1.0.1")
+     - `title`: Short summary
+     - `type`: Frontend / Backend / Fullstack
+     - `items`: List of changes ({ type: 'Fix'|'Enhancement'|'New', content: '...' })
+     - `verificationCase`: Key file or test case
+     - `details`: Detailed explanation
+4. **Verify Target**: Run `railway status` to ensure you are linked to `Service: wishlist-app` (NOT Postgres).
 
 ### B. Deployment Command
 **ALWAYS** use this exact format to enable debugging:

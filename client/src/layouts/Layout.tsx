@@ -110,6 +110,7 @@ export default function Layout() {
                         <div className="flex gap-4">
                             <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
                             <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
+                            <Link to="/changelog" className="hover:text-muji-primary transition-colors">進版日誌</Link>
                             <button onClick={() => setIsFeedbackOpen(true)} className="hover:text-muji-primary transition-colors text-left">意見回饋</button>
                         </div>
                     </div>

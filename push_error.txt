@@ -1,0 +1,77 @@
+remote: error: GH013: Repository rule violations found for refs/heads/main.        
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   ??       
+remote:     Resolve the following violations before pushing again        
+remote: 
+remote:     - Push cannot contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a blocked push        
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push        
+remote:             
+remote:             
+remote:       ??Highnote SK Live Key ??       
+remote:        locations:        
+remote:          - commit: 74aa9e6d1df2224db81a0f8c04f83c30fd385a40        
+remote:            path: server/scripts/audit_log.txt:9        
+remote:          - commit: 74aa9e6d1df2224db81a0f8c04f83c30fd385a40        
+remote:            path: server/scripts/audit_log.txt:10        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/HankHuang0516/wishlist-app/security/secret-scanning/unblock-secret/39BggCx5JLRMj9MbNoDzGI7PAcc        
+remote:             
+remote:             
+remote:       ??Stripe API Key ??       
+remote:        locations:        
+remote:          - commit: 74aa9e6d1df2224db81a0f8c04f83c30fd385a40        
+remote:            path: server/scripts/audit_log.txt:9        
+remote:          - commit: 74aa9e6d1df2224db81a0f8c04f83c30fd385a40        
+remote:            path: server/scripts/audit_log.txt:10        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/HankHuang0516/wishlist-app/security/secret-scanning/unblock-secret/39BggET1tpUimrYEKvrdOpcLtY9        
+remote:             
+remote:             
+remote:       ??Highnote SK Live Key ??       
+remote:        locations:        
+remote:          - commit: 7c045c085502e2dfd09e56570607b0eb27287b2b        
+remote:            path: server/scripts/audit_log.txt:9        
+remote:          - commit: 7c045c085502e2dfd09e56570607b0eb27287b2b        
+remote:            path: server/scripts/audit_log.txt:10        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/HankHuang0516/wishlist-app/security/secret-scanning/unblock-secret/39BgzWcXiTPtZYfJ5u1JV37h9vx        
+remote:             
+remote:             
+remote:       ??Stripe API Key ??       
+remote:        locations:        
+remote:          - commit: 7c045c085502e2dfd09e56570607b0eb27287b2b        
+remote:            path: server/scripts/audit_log.txt:9        
+remote:          - commit: 7c045c085502e2dfd09e56570607b0eb27287b2b        
+remote:            path: server/scripts/audit_log.txt:10        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/HankHuang0516/wishlist-app/security/secret-scanning/unblock-secret/39BggBOj4E9cj2fGvuBZuxioLmu        
+remote:             
+remote:             
+remote:       ??Highnote SK Live Key ??       
+remote:        locations:        
+remote:          - commit: 1d24aacab80c497c996621897fbee79513fe507d        
+remote:            path: server/scripts/audit_log.txt:9        
+remote:          - commit: 1d24aacab80c497c996621897fbee79513fe507d        
+remote:            path: server/scripts/audit_log.txt:10        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/HankHuang0516/wishlist-app/security/secret-scanning/unblock-secret/39BggAmmmxgWZyzArlaU5d5fGqz        
+remote:             
+remote:             
+remote:     ? WARNING ]??       
+remote:      3 more secrets detected. Remove each secret from your commit history to view more detections.        
+remote:      https://docs.github.com/code-security/secret-scanning/using-advanced-secret-scanning-and-push-protection-features/excluding-folders-and-files-from-secret-scanning        
+remote:     ??       
+remote: 
+remote: 
+To https://github.com/HankHuang0516/wishlist-app
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/HankHuang0516/wishlist-app'

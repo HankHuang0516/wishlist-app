@@ -242,6 +242,39 @@ router.get('/all-images', adminAuth, async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/admin/users
+// Returns list of users to identify test accounts
+router.get('/users', adminAuth, async (req: Request, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 500;
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                name: true,
+                phoneNumber: true,
+                email: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        wishlists: true,
+                        items: true
+                    }
+                }
+            },
+            take: limit,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({
+            count: users.length,
+            users,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // GET /api/admin/purchases
 // Returns purchase history
 router.get('/purchases', adminAuth, async (req: Request, res: Response) => {

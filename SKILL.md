@@ -64,3 +64,25 @@ Full API documentation: [/api/swagger.json](https://wishlist-app-production.up.r
 - Momo (momo購物網)
 - PChome
 - And any URL with Open Graph metadata
+
+## 🛠️ 開發與品質守則 (Mandatory)
+
+**所有 AI 代理（包含 Claude CLI）在執行任何代碼修改或部署前，必須遵守以下守則：**
+
+1. **查閱參考資料**：必須先讀取並理解 `/.agent/skills/` 與 `/.agent/workflows/` 中的所有檔案。
+2. **品質保護網**：這些文件定義了產品的架構標準與品質檢查流程，任何變更不得與其衝突。
+3. **穩定性優先**：嚴格執行 `workflows/` 定義的 Pre-work 與檢查步驟。
+
+## Model Context Protocol (MCP) Integration
+
+This application now supports MCP, allowing AI agents (like Claude) to access wishlist data directly as resources.
+
+### Resources
+- `wishlist://all`: Returns a JSON list of all public wishlists and their items.
+
+### Running the MCP Server
+To use this with Claude Desktop or other MCP clients, configure it with the following command:
+```bash
+node /path/to/wishlist-app/server/dist/mcp/index.js
+```
+Note: Ensure you have built the project (`npm run build`) before running.

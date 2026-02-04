@@ -44,3 +44,5 @@ server/scripts/run_flickr_oauth.ps1
 marketing/chrome_data/
 marketing/pomelli-output/
 server/dist/
+server/scripts/audit_log.txt
+server/verify/naive_audit_log.txt

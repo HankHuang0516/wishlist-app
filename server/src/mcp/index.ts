@@ -3,21 +3,24 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import prisma from "../lib/prisma";
 
 /**
  * Wishlist MCP Server
- * Exposes wishlist data as resources for AI agents.
+ * Exposes wishlist data as resources and management tools for AI agents.
  */
 const server = new Server(
   {
     name: "wishlist-app-mcp",
-    version: "0.1.0",
+    version: "0.2.0",
   },
   {
     capabilities: {
       resources: {},
+      tools: {},
     },
   }
 );
@@ -86,6 +89,103 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 
   throw new Error(`Resource not found: ${request.params.uri}`);
+});
+
+/**
+ * List available tools.
+ */
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [
+      {
+        name: "create_wishlist",
+        description: "Creates a new wishlist for a specific user.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "The title of the wishlist" },
+            userId: { type: "number", description: "The ID of the user who owns the wishlist" },
+          },
+          required: ["title", "userId"],
+        },
+      },
+      {
+        name: "add_item",
+        description: "Adds a new item to an existing wishlist.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            wishlistId: { type: "number", description: "The ID of the wishlist to add the item to" },
+            name: { type: "string", description: "The name of the item" },
+            price: { type: "string", description: "The price of the item (optional)" },
+            link: { type: "string", description: "A link to the item (optional)" },
+            notes: { type: "string", description: "Additional notes for the item (optional)" },
+          },
+          required: ["wishlistId", "name"],
+        },
+      },
+    ],
+  };
+});
+
+/**
+ * Handle tool calls.
+ */
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name } = request.params;
+  const args = request.params.arguments;
+
+  try {
+    if (name === "create_wishlist") {
+      const { title, userId } = args as { title: string; userId: number };
+      const wishlist = await prisma.wishlist.create({
+        data: {
+          title,
+          userId,
+        },
+      });
+      return {
+        content: [{ type: "text", text: `Successfully created wishlist: ${JSON.stringify(wishlist)}` }],
+      };
+    }
+
+    if (name === "add_item") {
+      const { wishlistId, name: itemName, price, link, notes } = args as {
+        wishlistId: number;
+        name: string;
+        price?: string;
+        link?: string;
+        notes?: string;
+      };
+
+      const item = await prisma.item.create({
+        data: {
+          wishlistId,
+          name: itemName,
+          price: price || null,
+          link: link || null,
+          notes: notes || null,
+        },
+      });
+
+      return {
+        content: [{ type: "text", text: `Successfully added item: ${JSON.stringify(item)}` }],
+      };
+    }
+
+    throw new Error(`Unknown tool: ${name}`);
+  } catch (error) {
+    console.error(`MCP Tool Error (${name}):`, error);
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: `Error executing ${name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        },
+      ],
+    };
+  }
 });
 
 /**

@@ -80,6 +80,10 @@ This application now supports MCP, allowing AI agents (like Claude) to access wi
 ### Resources
 - `wishlist://all`: Returns a JSON list of all public wishlists and their items.
 
+### Tools
+- `create_wishlist`: Creates a new wishlist. Parameters: `{ title, userId }`.
+- `add_item`: Adds an item to a wishlist. Parameters: `{ wishlistId, name, price?, link?, notes? }`.
+
 ### Running the MCP Server
 To use this with Claude Desktop or other MCP clients, configure it with the following command:
 ```bash

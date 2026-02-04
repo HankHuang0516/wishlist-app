@@ -80,7 +80,7 @@ export const searchUsers = async (req: Request, res: Response) => {
 export const followUser = async (req: Request, res: Response) => {
     const { id } = req.params; // ID of user to follow
     const currentUserId = (req as any).user.id;
-    const targetId = parseInt(id);
+    const targetId = parseInt(id as string);
     if (isNaN(targetId)) {
         return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
     }
@@ -90,8 +90,6 @@ export const followUser = async (req: Request, res: Response) => {
     }
 
     try {
-        const targetId = parseInt(id);
-
         // Check if user exists and check limit
         const currentUser = await prisma.user.findUnique({
             where: { id: currentUserId },
@@ -149,7 +147,7 @@ export const followUser = async (req: Request, res: Response) => {
 export const unfollowUser = async (req: Request, res: Response) => {
     const { id } = req.params; // ID of user to unfollow
     const currentUserId = (req as any).user.id;
-    const targetId = parseInt(id);
+    const targetId = parseInt(id as string);
 
     if (isNaN(targetId)) {
         return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
@@ -160,7 +158,7 @@ export const unfollowUser = async (req: Request, res: Response) => {
             where: {
                 followerId_followingId: {
                     followerId: currentUserId,
-                    followingId: parseInt(id)
+                    followingId: targetId
                 }
             }
         });
@@ -266,7 +264,7 @@ export const getUpcomingBirthdays = async (req: Request, res: Response) => {
 // Get public wishlists of a specific user
 export const getUserPublicWishlists = async (req: Request, res: Response) => {
     const { id } = req.params; // Target user ID
-    const targetId = parseInt(id);
+    const targetId = parseInt(id as string);
     if (isNaN(targetId)) {
         return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
     }

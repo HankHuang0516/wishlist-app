@@ -256,8 +256,7 @@ router.get('/users', adminAuth, async (req: Request, res: Response) => {
                 createdAt: true,
                 _count: {
                     select: {
-                        wishlists: true,
-                        items: true
+                        wishlists: true
                     }
                 }
             },

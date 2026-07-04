@@ -47,7 +47,12 @@ export interface EclawResolveResult {
 
 type FetchLike = (
     input: string,
-    init?: { method?: string; headers?: Record<string, string>; signal?: AbortSignal }
+    init?: {
+        method?: string;
+        headers?: Record<string, string>;
+        signal?: AbortSignal;
+        redirect?: 'manual' | 'follow' | 'error';
+    }
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>;
 
 /**
@@ -57,8 +62,11 @@ type FetchLike = (
  */
 export function parseEclawPublicCode(proxyEndUserId: unknown): string | null {
     if (typeof proxyEndUserId !== 'string') return null;
-    if (!proxyEndUserId.startsWith(ECLAW_PUBLIC_CODE_PREFIX)) return null;
-    const code = proxyEndUserId.slice(ECLAW_PUBLIC_CODE_PREFIX.length).trim().toLowerCase();
+    // Case-insensitive prefix match — `ECLAW:...` must not slip past as an
+    // opaque (unverified) external id and thereby bypass verification.
+    const lower = proxyEndUserId.toLowerCase();
+    if (!lower.startsWith(ECLAW_PUBLIC_CODE_PREFIX)) return null;
+    const code = lower.slice(ECLAW_PUBLIC_CODE_PREFIX.length).trim();
     if (!ECLAW_PUBLIC_CODE_PATTERN.test(code)) return null;
     return code;
 }
@@ -92,6 +100,10 @@ export async function verifyPublicCode(
                     'User-Agent': OUTBOUND_UA,
                     Accept: 'application/json',
                 },
+                // Do NOT follow redirects: a 3xx from a compromised/misconfigured
+                // upstream must never bounce this authenticated-ish lookup to an
+                // attacker host. A redirect is treated as a non-200 → untrusted.
+                redirect: 'manual',
                 signal: controller.signal,
             });
         } finally {

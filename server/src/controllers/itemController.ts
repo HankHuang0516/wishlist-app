@@ -267,6 +267,44 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
+        // SECURITY (review HIGH #1): proxy_end_user_id is untrusted input. If the
+        // caller tries to tag this item with an EClaw identity (`eclaw:<code>`),
+        // that code MUST resolve against EClaw's public-code index before we
+        // persist it — otherwise anyone with the merchant key could impersonate
+        // any EClaw entity by writing an arbitrary `eclaw:` string. A non-eclaw
+        // proxy_end_user_id is stored as-is (opaque external id), an unresolved
+        // eclaw code is rejected, and an EClaw outage fails CLOSED (503).
+        let safeProxyId: string | null = null;
+        if (proxy_end_user_id != null && String(proxy_end_user_id).length > 0) {
+            const eclawCode = parseEclawPublicCode(proxy_end_user_id);
+            if (eclawCode) {
+                const verified = await verifyPublicCode(eclawCode);
+                if (!verified.ok) {
+                    if (verified.reason === 'upstream_error') {
+                        return res.status(503).json({
+                            error: 'EClaw public-code verification unavailable; try again later',
+                            errorCode: API_ERROR_CODES.INTERNAL_ERROR,
+                        });
+                    }
+                    return res.status(403).json({
+                        error: 'proxy_end_user_id names an EClaw code that does not resolve to a real entity',
+                        errorCode: API_ERROR_CODES.ACCESS_DENIED,
+                    });
+                }
+                // Canonicalize to the verified code.
+                safeProxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${verified.entity!.publicCode}`;
+            } else if (String(proxy_end_user_id).toLowerCase().startsWith(ECLAW_PUBLIC_CODE_PREFIX)) {
+                // Claims to be an eclaw identity but is malformed → reject.
+                return res.status(400).json({
+                    error: 'Malformed eclaw: proxy_end_user_id',
+                    errorCode: API_ERROR_CODES.INVALID_INPUT,
+                });
+            } else {
+                // Opaque non-EClaw external id: store as-is (never trusted for identity).
+                safeProxyId = String(proxy_end_user_id).slice(0, 128);
+            }
+        }
+
         const item = await prisma.item.create({
             data: {
                 name: req.body.name || 'New Item',
@@ -276,7 +314,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
                 aiStatus: file ? 'PENDING' : 'SKIPPED',
                 notes: req.body.notes || null,
                 price: validatedPrice,
-                proxy_end_user_id: proxy_end_user_id || null
+                proxy_end_user_id: safeProxyId
             }
         });
 
@@ -1005,6 +1043,9 @@ export const searchItems = async (req: Request, res: Response) => {
 
         const where = {
             isHidden: false,
+            // Only items on a PUBLIC wishlist may surface. Wishlist.isPublic
+            // defaults to false, so private lists are excluded by construction.
+            wishlist: { is: { isPublic: true } },
             OR: [
                 { name: { contains: q, mode: 'insensitive' as const } },
                 { notes: { contains: q, mode: 'insensitive' as const } },
@@ -1017,7 +1058,8 @@ export const searchItems = async (req: Request, res: Response) => {
                 take: limit,
                 skip: offset,
                 orderBy: { createdAt: 'desc' },
-                // Explicit select: never expose proxy_end_user_id to the public.
+                // Explicit select: never expose proxy_end_user_id to the public,
+                // and never leak the list owner's name/avatar via search.
                 select: {
                     id: true,
                     name: true,
@@ -1033,7 +1075,6 @@ export const searchItems = async (req: Request, res: Response) => {
                             id: true,
                             title: true,
                             isPublic: true,
-                            user: { select: { name: true, avatarUrl: true } },
                         },
                     },
                 },
@@ -1087,7 +1128,13 @@ export const listItemsByEclawCode = async (req: Request, res: Response) => {
         const offset = clampInt(req.query.offset, 0, Number.MAX_SAFE_INTEGER);
         const proxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${verified.entity!.publicCode}`;
 
-        const where = { isHidden: false, proxy_end_user_id: proxyId };
+        // Only surface listings that sit on a PUBLIC wishlist (isPublic defaults
+        // to false → a seller's items on a private list stay private).
+        const where = {
+            isHidden: false,
+            proxy_end_user_id: proxyId,
+            wishlist: { is: { isPublic: true } },
+        };
         const [items, total] = await Promise.all([
             prisma.item.findMany({
                 where,

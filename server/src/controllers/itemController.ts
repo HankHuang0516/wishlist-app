@@ -8,6 +8,7 @@ import path from 'path';
 import { flickrService } from '../lib/flickr';
 import { checkAndIncrementAiUsage } from '../lib/usageService';
 import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from '../lib/eclawBridge';
+import { parseOptionalPrice, parseOptionalCurrency } from '../lib/matchmakingPrice';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -271,6 +272,18 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
+        // Price-aware matchmaking (card_e1b8af79): a BUYER may declare an intended /
+        // max buy price on their wishlist item. OPTIONAL, validated (finite, >= 0,
+        // bounded) and never coerced silently — an invalid value is rejected (400).
+        const maxPriceParsed = parseOptionalPrice(req.body.maxPrice);
+        if (!maxPriceParsed.ok) {
+            return res.status(400).json({ error: maxPriceParsed.error || 'Invalid maxPrice', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+        const priceCurrencyParsed = parseOptionalCurrency(req.body.priceCurrency);
+        if (!priceCurrencyParsed.ok) {
+            return res.status(400).json({ error: priceCurrencyParsed.error || 'Invalid priceCurrency', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+
         // SECURITY (review HIGH #1 + card_e30cf03d): proxy_end_user_id is untrusted
         // input. Two cases:
         //   (A) The caller is a VERIFIED EClaw AGENT (authenticateEclawAgent proved
@@ -332,6 +345,12 @@ export const createItem = async (req: AuthRequest, res: Response) => {
                 aiStatus: file ? 'PENDING' : 'SKIPPED',
                 notes: req.body.notes || null,
                 price: validatedPrice,
+                // Buyer's intended/max buy price for price-aware matchmaking. Only
+                // set priceCurrency when a maxPrice was actually supplied (a currency
+                // with no price is meaningless for the comparison).
+                ...(maxPriceParsed.value !== null
+                    ? { maxPrice: maxPriceParsed.value, priceCurrency: priceCurrencyParsed.value }
+                    : {}),
                 proxy_end_user_id: safeProxyId
             }
         });
@@ -1108,6 +1127,14 @@ export const searchItems = async (req: Request, res: Response) => {
                     name: true,
                     price: true,
                     currency: true,
+                    // Price-aware matchmaking (card_e1b8af79): surface the numeric
+                    // matchmaking prices so the EClaw side can run its price-compat
+                    // filter (buyer.maxPrice >= seller.askPrice, same currency).
+                    // Nullable — a listing/wish without a price returns null here and
+                    // the matcher falls back to name/tags-only.
+                    askPrice: true,
+                    maxPrice: true,
+                    priceCurrency: true,
                     imageUrl: true,
                     notes: true,
                     link: true,
@@ -1189,6 +1216,10 @@ export const listItemsByEclawCode = async (req: Request, res: Response) => {
                     name: true,
                     price: true,
                     currency: true,
+                    // Price-aware matchmaking (card_e1b8af79) — see searchItems.
+                    askPrice: true,
+                    maxPrice: true,
+                    priceCurrency: true,
                     imageUrl: true,
                     notes: true,
                     link: true,
@@ -1270,6 +1301,22 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
             validatedPrice = String(req.body.price);
         }
 
+        // Price-aware matchmaking (card_e1b8af79): a SELLER declares an ASKING price
+        // on the listing. OPTIONAL, validated (finite, >= 0, bounded); invalid ⇒ 400.
+        const askPriceParsed = parseOptionalPrice(req.body.askPrice);
+        if (!askPriceParsed.ok) {
+            return res.status(400).json({ error: askPriceParsed.error || 'Invalid askPrice', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+        const listingCurrencyParsed = parseOptionalCurrency(req.body.priceCurrency);
+        if (!listingCurrencyParsed.ok) {
+            return res.status(400).json({ error: listingCurrencyParsed.error || 'Invalid priceCurrency', errorCode: API_ERROR_CODES.INVALID_INPUT });
+        }
+        // Only persist priceCurrency alongside a real askPrice (currency w/o price is
+        // meaningless for the comparison). null askPrice ⇒ leave the fields untouched.
+        const listingPriceData = askPriceParsed.value !== null
+            ? { askPrice: askPriceParsed.value, priceCurrency: listingCurrencyParsed.value }
+            : {};
+
         const proxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${code}`;
 
         // UPDATE path: itemId must exist AND already belong to this verified code.
@@ -1293,8 +1340,9 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
                     name,
                     notes: notes ?? existing.notes,
                     ...(validatedPrice !== null ? { price: validatedPrice } : {}),
+                    ...listingPriceData,
                 },
-                select: { id: true, name: true, price: true, notes: true, wishlistId: true, createdAt: true },
+                select: { id: true, name: true, price: true, currency: true, askPrice: true, maxPrice: true, priceCurrency: true, notes: true, wishlistId: true, createdAt: true },
             });
             return res.json({ upserted: 'updated', seller: code, item: updated });
         }
@@ -1314,12 +1362,13 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
                 wishlistId: Number(wishlistId),
                 notes: notes ?? null,
                 price: validatedPrice,
+                ...listingPriceData,
                 imageUrl: 'https://ui-avatars.com/api/?name=Item&background=random',
                 uploadStatus: 'COMPLETED',
                 aiStatus: 'SKIPPED',
                 proxy_end_user_id: proxyId,
             },
-            select: { id: true, name: true, price: true, notes: true, wishlistId: true, createdAt: true },
+            select: { id: true, name: true, price: true, currency: true, askPrice: true, maxPrice: true, priceCurrency: true, notes: true, wishlistId: true, createdAt: true },
         });
         return res.status(201).json({ upserted: 'created', seller: code, item: created });
     } catch (error) {

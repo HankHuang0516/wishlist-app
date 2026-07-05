@@ -87,6 +87,19 @@ model Item {
   name           String
   price          String?
   currency       String?     @default("USD")
+  // Price-aware matchmaking (card_e1b8af79). All three are OPTIONAL & nullable so
+  // existing rows are unaffected (null price => "no price" => name/tags-only match).
+  //   - askPrice  : a SELLER's asking price on a listing (set via upsert-listing).
+  //   - maxPrice  : a BUYER's intended/max buy price on a wishlist item.
+  //   - priceCurrency : ISO-4217-ish short code for askPrice/maxPrice. Defaults TWD
+  //     (Hank's confirmed default). Distinct from the legacy `currency` (which stays
+  //     "USD" default) so no existing behaviour changes.
+  // EClaw's matchmaking compares buyer.maxPrice >= seller.askPrice ONLY when both are
+  // present in the SAME currency; otherwise it falls back to name/tags-only matching.
+  // No money flows through the platform — these are match metadata only (官方不介入).
+  askPrice       Float?
+  maxPrice       Float?
+  priceCurrency  String?     @default("TWD")
   link           String?
   imageUrl       String?
   notes          String?

@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken, authenticateUserOrMerchant } from '../middleware/auth';
+import { authenticateToken, authenticateUserOrEclawAgent } from '../middleware/auth';
 import {
     getWishlists,
     createWishlist,
@@ -26,12 +26,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Merchant can create items, but maybe not manage wishlists?
-// The task says "Merchant 認證機制", implying they can use the API.
-// Let's allow create items to use either.
-
-router.post('/:wishlistId/items', authenticateUserOrMerchant, upload.single('image'), createItem);
-router.post('/:wishlistId/items/url', authenticateUserOrMerchant, createItemFromUrl);
+// Item creation accepts a logged-in USER (JWT/apiKey) OR a verified EClaw AGENT
+// (token / device-entity-botSecret headers). The old x-merchant-api-key path is
+// gone (card_e30cf03d — NO merchant key). An EClaw agent's proxy_end_user_id is
+// bound to its own verified publicCode inside the controller.
+router.post('/:wishlistId/items', authenticateUserOrEclawAgent, upload.single('image'), createItem);
+router.post('/:wishlistId/items/url', authenticateUserOrEclawAgent, createItemFromUrl);
 
 // Other routes still require user token for now
 router.use(authenticateToken);

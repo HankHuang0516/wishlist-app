@@ -12,6 +12,9 @@ import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from
 interface AuthRequest extends Request {
     user?: any;
     merchant?: any;
+    // Set by authenticateEclawAgent (card_e30cf03d): the caller's OWN verified
+    // EClaw public code. NO merchant key. The write binds proxy_end_user_id to it.
+    eclawAgent?: { publicCode: string };
 }
 
 // User-Agent Pool for rotation
@@ -203,9 +206,10 @@ const processItemUpload = async (itemId: number, filePath: string, filename: str
 export const createItem = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const merchantId = req.merchant?.id;
+        // An EClaw agent verified by authenticateEclawAgent (NO merchant key).
+        const agentPublicCode: string | undefined = req.eclawAgent?.publicCode;
 
-        if (!userId && !merchantId) {
+        if (!userId && !agentPublicCode) {
             return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.MISSING_TOKEN });
         }
 
@@ -267,15 +271,29 @@ export const createItem = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
-        // SECURITY (review HIGH #1): proxy_end_user_id is untrusted input. If the
-        // caller tries to tag this item with an EClaw identity (`eclaw:<code>`),
-        // that code MUST resolve against EClaw's public-code index before we
-        // persist it — otherwise anyone with the merchant key could impersonate
-        // any EClaw entity by writing an arbitrary `eclaw:` string. A non-eclaw
-        // proxy_end_user_id is stored as-is (opaque external id), an unresolved
-        // eclaw code is rejected, and an EClaw outage fails CLOSED (503).
+        // SECURITY (review HIGH #1 + card_e30cf03d): proxy_end_user_id is untrusted
+        // input. Two cases:
+        //   (A) The caller is a VERIFIED EClaw AGENT (authenticateEclawAgent proved
+        //       it against EClaw → req.eclawAgent.publicCode). The item is ALWAYS
+        //       bound to THAT verified code; any eclaw: code in the body that names
+        //       a DIFFERENT entity is rejected (a caller can't write under a code
+        //       it does not control). No merchant key, no re-verify needed.
+        //   (B) The caller is a logged-in USER tagging an `eclaw:<code>`. That code
+        //       MUST resolve against EClaw's public-code index (P1 anti-spoof) or
+        //       the write is rejected; an EClaw outage fails CLOSED (503).
+        // A non-eclaw proxy_end_user_id is stored as-is (opaque external id).
         let safeProxyId: string | null = null;
-        if (proxy_end_user_id != null && String(proxy_end_user_id).length > 0) {
+        if (agentPublicCode) {
+            // (A) Verified agent: bind to its own code, reject a foreign claim.
+            const claimed = parseEclawPublicCode(proxy_end_user_id);
+            if (claimed && claimed !== agentPublicCode) {
+                return res.status(403).json({
+                    error: 'Cannot write an item under an EClaw code you do not control',
+                    errorCode: API_ERROR_CODES.ACCESS_DENIED,
+                });
+            }
+            safeProxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${agentPublicCode}`;
+        } else if (proxy_end_user_id != null && String(proxy_end_user_id).length > 0) {
             const eclawCode = parseEclawPublicCode(proxy_end_user_id);
             if (eclawCode) {
                 const verified = await verifyPublicCode(eclawCode);
@@ -769,9 +787,10 @@ const processTextAi = async (itemId: number, text: string, userId: number, searc
 export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const merchantId = req.merchant?.id;
+        // An EClaw agent verified by authenticateEclawAgent (NO merchant key).
+        const agentPublicCode: string | undefined = req.eclawAgent?.publicCode;
 
-        if (!userId && !merchantId) {
+        if (!userId && !agentPublicCode) {
             return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.MISSING_TOKEN });
         }
 
@@ -808,6 +827,30 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
 
         const isUrl = url.trim().match(/^(http|https):\/\//);
 
+        // Bind proxy_end_user_id: a verified EClaw agent → its OWN code (reject a
+        // foreign claim); a user → store an opaque non-eclaw id as-is, but never
+        // let an unverified `eclaw:<code>` be trusted from this path.
+        let safeProxyId: string | null = null;
+        if (agentPublicCode) {
+            const claimed = parseEclawPublicCode(proxy_end_user_id);
+            if (claimed && claimed !== agentPublicCode) {
+                return res.status(403).json({
+                    error: 'Cannot write an item under an EClaw code you do not control',
+                    errorCode: API_ERROR_CODES.ACCESS_DENIED,
+                });
+            }
+            safeProxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${agentPublicCode}`;
+        } else if (proxy_end_user_id != null && String(proxy_end_user_id).length > 0) {
+            if (String(proxy_end_user_id).toLowerCase().startsWith(ECLAW_PUBLIC_CODE_PREFIX)) {
+                // A user cannot self-assert an EClaw identity on this path.
+                return res.status(403).json({
+                    error: 'An eclaw: identity requires a verified EClaw agent',
+                    errorCode: API_ERROR_CODES.ACCESS_DENIED,
+                });
+            }
+            safeProxyId = String(proxy_end_user_id).slice(0, 128);
+        }
+
         // 1. Create PENDING Item Immediately
         const item = await prisma.item.create({
             data: {
@@ -816,7 +859,7 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
                 link: isUrl ? url : null,
                 imageUrl: null,
                 aiStatus: 'PENDING',
-                proxy_end_user_id: proxy_end_user_id || null
+                proxy_end_user_id: safeProxyId
             }
         });
 
@@ -1175,51 +1218,38 @@ export const listItemsByEclawCode = async (req: Request, res: Response) => {
 };
 
 /**
- * POST /api/items/upsert-listing   (merchant-authed)
+ * POST /api/items/upsert-listing   (EClaw-agent-authed — NO merchant key)
  *
- * Seller UPSERT path keyed by a VERIFIED EClaw public code. Body:
- *   { publicCode | proxy_end_user_id, wishlistId, name, notes?, price?, itemId? }
- * The publicCode is verified against EClaw before the write, so a caller can
- * only ever write listings under an identity that resolves to a real entity.
- * If `itemId` is given AND that item already belongs to this verified code,
- * the listing is updated; otherwise a new listing is created. Requires the
- * merchant middleware (req.merchant) upstream in the route.
+ * Seller UPSERT path bound to a VERIFIED EClaw agent identity (card_e30cf03d).
+ * The authenticateEclawAgent middleware has already proven the caller against
+ * EClaw and set req.eclawAgent.publicCode — the listing is ALWAYS written under
+ * THAT code. Body: { wishlistId, name, notes?, price?, itemId? }. Any publicCode /
+ * proxy_end_user_id in the body that names a DIFFERENT code is rejected (a caller
+ * can never write under a code it does not control). If `itemId` is given AND that
+ * item already belongs to this verified code, the listing is updated; otherwise a
+ * new listing is created.
  */
 export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
     try {
-        const merchantId = req.merchant?.id;
-        const userId = req.user?.id;
-        if (!merchantId && !userId) {
+        // Identity was proven by authenticateEclawAgent; publicCode is the caller's OWN.
+        const code = req.eclawAgent?.publicCode;
+        if (!code || !/^[a-z0-9]{6}$/.test(code)) {
             return res.status(401).json({ error: 'Unauthorized', errorCode: API_ERROR_CODES.MISSING_TOKEN });
         }
 
-        // Accept either a bare publicCode or the eclaw: envelope.
-        const rawCode: unknown = req.body.publicCode ?? req.body.proxy_end_user_id;
-        let code: string | null = null;
-        if (typeof rawCode === 'string') {
-            code = rawCode.startsWith(ECLAW_PUBLIC_CODE_PREFIX)
-                ? parseEclawPublicCode(rawCode)
-                : (/^[a-z0-9]{6}$/.test(rawCode.trim().toLowerCase()) ? rawCode.trim().toLowerCase() : null);
-        }
-        if (!code) {
-            return res.status(400).json({
-                error: 'A valid EClaw publicCode (or eclaw:<code>) is required',
-                errorCode: API_ERROR_CODES.INVALID_INPUT,
-            });
-        }
-
-        const verified = await verifyPublicCode(code);
-        if (!verified.ok) {
-            if (verified.reason === 'upstream_error') {
-                return res.status(502).json({
-                    error: 'EClaw public-code verification unavailable',
-                    errorCode: API_ERROR_CODES.INTERNAL_ERROR,
+        // Ownership binding: if the body names a code (bare or eclaw:<code>), it
+        // MUST equal the verified caller's own code. We always write under `code`.
+        const rawClaimed: unknown = req.body.publicCode ?? req.body.proxy_end_user_id;
+        if (typeof rawClaimed === 'string' && rawClaimed.length > 0) {
+            const claimed = rawClaimed.toLowerCase().startsWith(ECLAW_PUBLIC_CODE_PREFIX)
+                ? parseEclawPublicCode(rawClaimed)
+                : (/^[a-z0-9]{6}$/.test(rawClaimed.trim().toLowerCase()) ? rawClaimed.trim().toLowerCase() : null);
+            if (claimed && claimed !== code) {
+                return res.status(403).json({
+                    error: 'Cannot write a listing under a public code you do not control',
+                    errorCode: API_ERROR_CODES.ACCESS_DENIED,
                 });
             }
-            return res.status(403).json({
-                error: 'EClaw public code does not resolve to a real entity',
-                errorCode: API_ERROR_CODES.ACCESS_DENIED,
-            });
         }
 
         const { wishlistId, name, notes, itemId } = req.body;
@@ -1240,7 +1270,7 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
             validatedPrice = String(req.body.price);
         }
 
-        const proxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${verified.entity!.publicCode}`;
+        const proxyId = `${ECLAW_PUBLIC_CODE_PREFIX}${code}`;
 
         // UPDATE path: itemId must exist AND already belong to this verified code.
         if (itemId !== undefined && itemId !== null) {
@@ -1266,7 +1296,7 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
                 },
                 select: { id: true, name: true, price: true, notes: true, wishlistId: true, createdAt: true },
             });
-            return res.json({ upserted: 'updated', seller: verified.entity!.publicCode, item: updated });
+            return res.json({ upserted: 'updated', seller: code, item: updated });
         }
 
         // CREATE path: need a wishlist to attach to.
@@ -1291,7 +1321,7 @@ export const upsertEclawListing = async (req: AuthRequest, res: Response) => {
             },
             select: { id: true, name: true, price: true, notes: true, wishlistId: true, createdAt: true },
         });
-        return res.status(201).json({ upserted: 'created', seller: verified.entity!.publicCode, item: created });
+        return res.status(201).json({ upserted: 'created', seller: code, item: created });
     } catch (error) {
         console.error('Upsert EClaw Listing Error:', error);
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

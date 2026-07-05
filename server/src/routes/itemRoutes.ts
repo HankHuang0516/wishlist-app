@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken, authenticateUserOrMerchant } from '../middleware/auth';
+import { authenticateToken, authenticateEclawAgent } from '../middleware/auth';
 import {
     deleteItem,
     updateItem,
@@ -20,8 +20,10 @@ router.get('/public', getPublicItems);
 router.get('/search', searchItems);
 router.get('/by-eclaw/:code', listItemsByEclawCode);
 
-// Seller upsert keyed by a VERIFIED EClaw public code (merchant OR user auth).
-router.post('/upsert-listing', authenticateUserOrMerchant, upsertEclawListing);
+// Seller upsert keyed by a VERIFIED EClaw agent identity (NO merchant key —
+// card_e30cf03d). authenticateEclawAgent proves the caller against EClaw and
+// sets req.eclawAgent.publicCode; the listing is bound to THAT verified code.
+router.post('/upsert-listing', authenticateEclawAgent, upsertEclawListing);
 
 // Protected Routes
 router.use(authenticateToken);

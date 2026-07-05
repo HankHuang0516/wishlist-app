@@ -9,10 +9,20 @@ export interface AuthRequest extends Request {
         id: number;
         name: string;
     };
+    /**
+     * Set by authenticateEclawAgent once EClaw has verified the caller's identity.
+     * `publicCode` is the agent's OWN verified 6-char EClaw public code — the
+     * write path binds proxy_end_user_id to it. The token/bot secret is NEVER
+     * stored here; only this resolved code survives.
+     */
+    eclawAgent?: {
+        publicCode: string;
+    };
 }
 
 import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
+import { extractAgentCredentials, verifyEclawAgent } from '../lib/eclawVerify';
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'];
@@ -108,6 +118,83 @@ export const authenticateUserOrMerchant = async (req: AuthRequest, res: Response
     } else {
         return authenticateToken(req, res, next);
     }
+};
+
+/**
+ * authenticateEclawAgent — the NO-merchant-key write-path gate (card_e30cf03d).
+ *
+ * The caller proves its OWN EClaw identity via either the short-lived token
+ * header (`x-eclaw-agent-token`, preferred) or the transient triple
+ * (`x-eclaw-device-id` / `x-eclaw-entity-id` / `x-eclaw-bot-secret`). We call
+ * BACK to EClaw to verify it. Only on a live { valid:true } do we set
+ * `req.eclawAgent = { publicCode }` and continue. Fail modes:
+ *   - no credentials                → 401
+ *   - invalid / spoofed identity    → 403 (no write)
+ *   - EClaw verify unavailable      → 503 FAIL-CLOSED (no write)
+ *
+ * The token / bot secret is VERIFY-THEN-DISCARD: never persisted, never logged.
+ */
+export const authenticateEclawAgent = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const creds = extractAgentCredentials(req.headers as Record<string, unknown>);
+    if (!creds) {
+        return res.status(401).json({
+            error: 'EClaw agent identity required (x-eclaw-agent-token or device/entity/bot-secret headers)',
+            errorCode: API_ERROR_CODES.MISSING_TOKEN,
+        });
+    }
+
+    let result;
+    try {
+        result = await verifyEclawAgent(creds);
+    } catch {
+        // Defensive: verifyEclawAgent already swallows its own errors, but never
+        // let an unexpected throw leak the credentials or fail open.
+        return res.status(503).json({
+            error: 'EClaw identity verification unavailable',
+            errorCode: API_ERROR_CODES.INTERNAL_ERROR,
+        });
+    }
+
+    if (!result.ok) {
+        if (result.reason === 'upstream_error') {
+            // EClaw is down → fail CLOSED, do not write.
+            return res.status(503).json({
+                error: 'EClaw identity verification unavailable; try again later',
+                errorCode: API_ERROR_CODES.INTERNAL_ERROR,
+            });
+        }
+        return res.status(403).json({
+            error: 'EClaw agent identity could not be verified',
+            errorCode: API_ERROR_CODES.ACCESS_DENIED,
+        });
+    }
+
+    // Verified. Bind ONLY the resolved public code; the proof is discarded.
+    req.eclawAgent = { publicCode: result.publicCode! };
+    return next();
+};
+
+/**
+ * authenticateUserOrEclawAgent — accept a logged-in USER (JWT / x-api-key) OR a
+ * verified EClaw AGENT (token / triple). Replaces the old
+ * authenticateUserOrMerchant on item-create routes so the merchant key is gone
+ * while human users keep their existing auth.
+ */
+export const authenticateUserOrEclawAgent = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    const apiKey = req.headers['x-api-key'] as string;
+    const token = authHeader && (authHeader as string).split(' ')[1];
+    const hasEclawAgent = !!extractAgentCredentials(req.headers as Record<string, unknown>);
+
+    if (!token && !apiKey && !hasEclawAgent) {
+        return res.status(401).json({ error: 'Authentication required', errorCode: API_ERROR_CODES.MISSING_TOKEN });
+    }
+
+    // A logged-in user takes precedence (their JWT/apiKey binds a real account).
+    if (token || apiKey) {
+        return authenticateToken(req, res, next);
+    }
+    return authenticateEclawAgent(req, res, next);
 };
 // Optional Authentication (for public endpoints that can be personalized)
 export const optionalAuthenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {

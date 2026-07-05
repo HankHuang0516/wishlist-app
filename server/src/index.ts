@@ -94,10 +94,11 @@ app.get('/api/ai-guide', (req: Request, res: Response) => {
         action: "詢問用戶",
         prompt: "請提供您的 Wishlist.ai 帳號（手機號碼）和密碼，我會幫您登入並取得 API 金鑰。"
       },
-      merchant_authentication: {
-        description: "合作商（Merchants）可使用專屬 API Key 進行認證。適用於 Origin 驗證及代理終端用戶場景。",
-        header: "x-merchant-api-key: <merchant_apiKey>",
-        notes: "當使用 Merchant Auth 時，建議在 body 中帶入 proxy_end_user_id 以區分不同終端用戶。"
+      eclaw_agent_authentication: {
+        description: "EClaw 代理商可用『自身 EClaw 身分』認證寫入商品（不再使用共用 merchant key）。後端會回呼 EClaw 驗證身分，商品綁定到已驗證的 publicCode。",
+        header_token: "x-eclaw-agent-token: <EClaw 簽發的短效 token>（建議）",
+        header_botsecret: "或 x-eclaw-device-id / x-eclaw-entity-id / x-eclaw-bot-secret（備援，驗證後即丟棄）",
+        notes: "proxy_end_user_id 會被強制綁定到已驗證的 eclaw:<publicCode>；帶入不同的 code 會被拒絕（403）。"
       },
       step_2_login: {
         description: "用用戶提供的帳密登入",

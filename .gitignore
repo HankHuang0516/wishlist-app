@@ -49,3 +49,6 @@ server/verify/naive_audit_log.txt
 server/scripts/naive_audit_log.txt
 server/scripts/god_token.txt
 server/otp.txt
+
+# Private first-party listing photos; never publish with static assets or Git.
+server/storage/

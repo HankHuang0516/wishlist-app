@@ -14,12 +14,14 @@ Before starting ANY task, execute this checklist sequentially.
 
 **Important**: 全程用繁體中文溝通
 
+**Credential preservation**: 管理金鑰不可硬編碼或印出。本機原值位於 macOS Keychain，service `com.aihankapps.wishlist.admin-key`、account `AiHankApps`；只在執行程序內讀取。正式服務沿用既有 Railway `ADMIN_API_KEY`，暫不輪替。`${WISHLIST_ADMIN_KEY}` 僅代表 runtime 值，不能直接當作字串送出；優先以 `x-admin-key` header 呼叫，不將機密放在 URL。
+
 ## 0. 🔴 Auto Bug & Crawler Check (Priority)
 **First**, check for production errors to prevent compounding issues.
 
 ```bash
 # 1. Check Crawler Logs (Stop if count > 0)
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-secure-admin-2026-xK9p
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=${WISHLIST_ADMIN_KEY}
 
 # 2. Check System Health
 read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
@@ -34,7 +36,7 @@ read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
 view_file .cursorrules
 
 # View System Stats (Users, Items) - Optional but recommended for context
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?key=wishlist-secure-admin-2026-xK9p
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?key=${WISHLIST_ADMIN_KEY}
 ```
 
 ## 2. 🛠️ Development Protocol

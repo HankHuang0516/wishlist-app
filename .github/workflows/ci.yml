@@ -21,7 +21,7 @@ jobs:
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
         cache: 'npm'
         cache-dependency-path: client/package-lock.json
 
@@ -37,6 +37,22 @@ jobs:
   server-checks:
     name: Server Test & Typecheck
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-ephemeral
+          POSTGRES_DB: wishlist_marketplace_test_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:ci-only-ephemeral@localhost:5432/wishlist_marketplace_test_ci
+      TEST_DATABASE_URL: postgresql://postgres:ci-only-ephemeral@localhost:5432/wishlist_marketplace_test_ci
 
     defaults:
       run:
@@ -48,7 +64,7 @@ jobs:
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
         cache: 'npm'
         cache-dependency-path: server/package-lock.json
 
@@ -63,3 +79,33 @@ jobs:
 
     - name: Run tests
       run: npm test
+
+    - name: Refuse unsafe database configuration before migrations
+      run: node ../scripts/assert-test-database.cjs
+
+    - name: Apply migrations to isolated database
+      run: npx prisma migrate deploy
+
+    - name: Verify schema and database agree
+      run: npx prisma migrate diff --from-url "$TEST_DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+    - name: Real marketplace HTTP and database tests
+      run: npm test -- --config jest.marketplace.config.js --runInBand
+
+  mobile-checks:
+    name: Native App Typecheck and Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mobile
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+    - run: npm ci
+    - run: npm run typecheck
+    - run: npm test
+    - run: npx expo install --check

@@ -19,7 +19,7 @@ export default function Register() {
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const [successProfile, setSuccessProfile] = useState<{ email: string } | null>(null);
+    const [successProfile, setSuccessProfile] = useState<{ email: string; sent: boolean } | null>(null);
 
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
@@ -49,7 +49,8 @@ export default function Register() {
             }
 
             // Success - show verification message
-            setSuccessProfile({ email });
+            setPassword('');
+            setSuccessProfile({ email, sent: data.emailVerification?.sent === true });
             Analytics.logSignUp('email');
 
         } catch (err: any) {
@@ -71,7 +72,7 @@ export default function Register() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-gray-600">
-                            We've sent a verification link to <span className="font-semibold text-gray-900">{successProfile.email}</span>.
+                            {successProfile.sent ? <>We've sent a verification link to <span className="font-semibold text-gray-900">{successProfile.email}</span>.</> : <>Account created, but the verification email could not be delivered. Return to Login to request another verification email.</>}
                         </p>
                         <p className="text-sm text-gray-500">
                             Please check your inbox (and spam folder) and click the link to verify your account.

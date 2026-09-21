@@ -1,11 +1,11 @@
 
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import bcrypt from 'bcryptjs';
 import { flickrService } from '../lib/flickr';
 import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
 import { generateApiKey } from '../lib/apiKey';
+import { ownProfileSelect } from '../lib/ownProfile';
 
 import { APP_CONSTANTS, getApiUrl } from '../config/constants';
 // import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
@@ -21,15 +21,17 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.id;
         const user = await prisma.user.findUnique({
-            where: { id: userId }
+            where: { id: userId }, select: ownProfileSelect
         });
 
         if (!user) return res.status(404).json({ error: 'User not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
 
-        // Return everything for the owner
+        // Settings may see own profile, never password hashes, OTP/reset/email
+        // bearer links or API keys. API-key management has its separate route.
+        res.setHeader('Cache-Control', 'private, no-store');
         res.json(user);
     } catch (error) {
-        console.error('Get Me Error:', error);
+        console.error('Profile read unavailable; request and database details withheld');
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
@@ -117,12 +119,13 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
 
         const updatedUser = await prisma.user.update({
             where: { id: userId },
-            data
+            data, select: ownProfileSelect
         });
 
+        res.setHeader('Cache-Control', 'private, no-store');
         res.json(updatedUser);
     } catch (error) {
-        console.error('Update Me Error:', error);
+        console.error('Profile update unavailable; request and database details withheld');
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
@@ -219,29 +222,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const updatePassword = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const { currentPassword, newPassword } = req.body;
-
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) return res.status(400).json({ error: 'Incorrect current password', errorCode: API_ERROR_CODES.INVALID_CREDENTIALS });
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        await prisma.user.update({
-            where: { id: userId },
-            data: { password: hashedPassword }
-        });
-
-        res.json({ message: 'Password updated successfully' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update password', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { updatePassword } from './accountSecurityController';
 
 // Cancel Subscription
 export const cancelSubscription = async (req: AuthRequest, res: Response) => {

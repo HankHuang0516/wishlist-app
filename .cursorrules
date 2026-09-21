@@ -109,8 +109,8 @@ wishlist-app/
   - `railway up` - 部署
 - **Admin API Endpoints** (無需 CLI):
   - Health: `https://wishlist-app-production.up.railway.app/api/admin/health`
-  - Stats: `https://wishlist-app-production.up.railway.app/api/admin/stats?key=wishlist-admin-2026`
-  - Logs: `https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-admin-2026`
+  - Stats: `https://wishlist-app-production.up.railway.app/api/admin/stats?key=${WISHLIST_ADMIN_KEY}`
+  - Logs: `https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=${WISHLIST_ADMIN_KEY}`
 
 ---
 

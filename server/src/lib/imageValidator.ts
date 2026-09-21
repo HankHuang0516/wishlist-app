@@ -61,7 +61,8 @@ export const validateImageUrl = async (url: string, timeoutMs: number = 5000): P
             validateStatus: (status: number) => status >= 200 && status < 400 // Accept 2xx and 3xx
         });
 
-        const contentType = response.headers['content-type'] || '';
+        const rawContentType = response.headers['content-type'];
+        const contentType = typeof rawContentType === 'string' ? rawContentType : '';
 
         // Check if it's an image
         if (contentType.startsWith('image/')) {

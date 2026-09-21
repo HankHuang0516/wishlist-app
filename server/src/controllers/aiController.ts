@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { withTransientRetry } from '../lib/transientRetry';
 
 dotenv.config();
 
@@ -17,6 +18,11 @@ const model = genAI.getGenerativeModel({
     ]
 });
 
+// A temporary provider outage must not immediately fail the user's item.
+// Only inference is retried; caller quota accounting and writes remain single-pass.
+const generateAiContent = (input: Parameters<typeof model.generateContent>[0]) =>
+    withTransientRetry(() => model.generateContent(input, { timeout: 20000 }));
+
 // Helper to convert buffer to generative part
 function fileToGenerativePart(buffer: Buffer, mimeType: string) {
     return {
@@ -29,7 +35,6 @@ function fileToGenerativePart(buffer: Buffer, mimeType: string) {
 
 export const analyzeLocalImage = async (file: { buffer: Buffer, mimetype: string, originalname: string }, language: string = 'traditional chinese') => {
     const apiKey = process.env.GEMINI_API_KEY;
-    console.log("DEBUG: API Key present?", !!apiKey, "Key length:", apiKey?.length);
 
     if (!apiKey || apiKey === "your_api_key_here") {
         console.warn("GEMINI_API_KEY missing, using mock response");
@@ -54,7 +59,7 @@ export const analyzeLocalImage = async (file: { buffer: Buffer, mimetype: string
         Return ONLY the JSON object, no markdown formatting.
     `;
 
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await generateAiContent([prompt, imagePart]);
     const response = await result.response;
     const text = response.text();
 
@@ -291,7 +296,7 @@ export const analyzeProductText = async (productName: string, language: string =
         Return ONLY valid JSON, no markdown.
     `;
 
-    const result = await model.generateContent(prompt);
+    const result = await generateAiContent(prompt);
     const response = await result.response;
     const text = response.text();
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -365,7 +370,7 @@ export const analyzeText = async (text: string, language: string = 'traditional 
             Reply ONLY in the requested language.
         `;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateAiContent(prompt);
         const response = await result.response;
         return response.text();
     } catch (error) {

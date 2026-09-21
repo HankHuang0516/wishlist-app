@@ -1,6 +1,6 @@
 {
   "name": "server",
-  "version": "1.0.8",
+  "version": "2.1.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@modelcontextprotocol/sdk": "^0.6.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/client": "^5.22.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
@@ -35,9 +35,9 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.12",
     "prisma": "^5.22.0",
-    "resend": "^6.8.0"
+    "resend": "^6.8.0",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

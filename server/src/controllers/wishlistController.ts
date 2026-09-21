@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
+import { publicWishItemSelect } from './wishItemReadController';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -51,7 +52,7 @@ export const createWishlist = async (req: AuthRequest, res: Response) => {
             data: {
                 title,
                 description,
-                isPublic: isPublic !== undefined ? isPublic : true,
+                isPublic: isPublic !== undefined ? isPublic : false,
                 userId,
                 maxItems: isPremium ? 10000 : globalLimit
             }
@@ -65,6 +66,7 @@ export const createWishlist = async (req: AuthRequest, res: Response) => {
 };
 
 export const getWishlist = async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'private, no-store');
     try {
         const userId = req.user?.id;
         const { id } = req.params;
@@ -106,7 +108,19 @@ export const getWishlist = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
-        res.json(wishlist);
+        if (wishlist.userId === userId) return res.json(wishlist);
+        // Re-read with visibility in the SELECT, including child filtering;
+        // never leak hidden wishes via a public parent or a visibility race.
+        const visible = await prisma.$transaction(tx => tx.wishlist.findFirst({
+            where: { id: Number(id), isPublic: true },
+            select: {
+                id: true, title: true, description: true, isPublic: true,
+                user: { select: { id: true, name: true, nicknames: true } },
+                items: { where: { isHidden: false }, select: publicWishItemSelect },
+            },
+        }), { isolationLevel: 'RepeatableRead' });
+        if (!visible) return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
+        return res.json(visible);
     } catch (error) {
         console.error('Error fetching wishlist:', error);
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

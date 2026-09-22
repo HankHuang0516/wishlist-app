@@ -7,6 +7,7 @@ import * as cheerio from 'cheerio';
 import path from 'path';
 import { flickrService } from '../lib/flickr';
 import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
+import { isLikelyImageResourceUrl } from '../lib/eclawRecognition';
 import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from '../lib/eclawBridge';
 import { parseOptionalPrice, parseOptionalCurrency } from '../lib/matchmakingPrice';
 
@@ -333,7 +334,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
         if (momoMatch && momoMatch[1]) {
             const iCode = momoMatch[1];
             // D15 FIX: Use Google Custom Search API first for reliable context
-            // Then pass the context to Gemini for parsing
+            // Then pass the context to EClaw for queued recognition
             const query = `momo購物網 ${iCode}`;
             console.log(`[AsyncURL] Proactive Smart Search for Momo i_code: ${iCode}`);
 
@@ -378,7 +379,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 pageTitle.includes('verify you are human');
 
             if (isSoftBlock) {
-                console.warn(`[AsyncURL] Soft block detected (Title: "${pageTitle}"), forcing AI fallback...`);
+                console.warn(`[AsyncURL] Soft block detected (Title: "${pageTitle}"), preparing EClaw fallback...`);
                 throw new Error('Soft Block Detected');
             }
 
@@ -430,7 +431,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
             }
 
         } catch (fetchError: any) {
-            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), checking AI fallback...`);
+            console.warn(`[AsyncURL] Web scraping failed (${fetchError.message}), checking EClaw fallback...`);
 
             // SMART FALLBACK LOGIC
             // 1. If it's Shopee/Amazon with IDs, use Smart Search
@@ -446,8 +447,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 if (id1 && id2) {
                     const query = `site:shopee.tw "${id1}" "${id2}"`;
                     console.log(`[AsyncURL] Smart Search for Shopee IDs: ${id1}, ${id2} (Query: ${query})`);
-                    // Even if custom search fails (returns null), we pass the QUERY string as a hint to Gemini!
-                    // This is the key fix: Let Gemini do the search using this exact query string.
+                    // Even if custom search fails, keep the URL as the EClaw resource.
                     searchContext = await searchGoogleWeb(query);
                     if (!searchContext) {
                         // Pass the query itself as a "context" object or separate arg?
@@ -485,13 +485,13 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                 }
             }
 
-            // AI Fallback Logic:
+            // EClaw queue fallback:
             try {
-                console.log(`[AsyncURL] Fallback: Asking Gemini to analyze URL: ${url} (Context: ${searchContext?.title || 'None'})`);
+                console.log(`[AsyncURL] Fallback: queueing EClaw recognition for ${url} (Context: ${searchContext?.title || 'None'})`);
                 await processTextAi(itemId, url, userId, searchContext);
                 return;
             } catch (fallbackError: any) {
-                console.error(`[AsyncURL] AI Fallback failed too:`, fallbackError);
+                console.error(`[AsyncURL] EClaw queue fallback failed:`, fallbackError);
 
                 // Log crawler failure to database
                 await prisma.crawlerLog.create({
@@ -499,7 +499,7 @@ const processUrlAi = async (itemId: number, url: string, userId: number) => {
                         userId,
                         url,
                         errorMessage: fetchError.message || 'Unknown fetch error',
-                        debugMessage: `AI Fallback also failed: ${fallbackError.message}`
+                        debugMessage: `EClaw queue fallback also failed: ${fallbackError.message}`
                     }
                 });
 
@@ -572,11 +572,12 @@ const processTextAi = async (itemId: number, text: string, userId: number, searc
     try {
         const resourceUrl = searchContext?.imageUrl || searchContext?.image || (/^https:\/\//i.test(text.trim()) ? text.trim() : null);
         if (!resourceUrl) throw new Error('EClaw recognition needs a public HTTPS image or product URL');
+        const shouldDisplayResource = isLikelyImageResourceUrl(resourceUrl);
         await prisma.item.update({
             where: { id: itemId },
             data: {
                 ...(searchContext?.title ? { name: String(searchContext.title).slice(0, 200) } : {}),
-                ...(searchContext?.imageUrl || searchContext?.image ? { imageUrl: resourceUrl } : {}),
+                ...(shouldDisplayResource ? { imageUrl: resourceUrl } : {}),
                 aiStatus: 'PENDING',
                 aiError: null
             }

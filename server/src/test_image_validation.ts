@@ -7,6 +7,7 @@
 
 import axios from 'axios';
 import { validateImageUrl, ImageValidationResult } from './lib/imageValidator';
+import { getApiUrl } from './config/constants';
 
 // ========================
 // PRESET TEST URLS
@@ -57,8 +58,7 @@ const PRESET_TESTS: TestCase[] = [
 // PRODUCTION DB FETCH
 // ========================
 
-const PRODUCTION_API = 'https://wishlist-app-production.up.railway.app/api/admin/all-images';
-const ADMIN_KEY = 'wishlist-secure-admin-2026-xK9p';
+const PRODUCTION_API = `${getApiUrl()}/admin/all-images`;
 
 interface DBImage {
     id: number;
@@ -67,12 +67,15 @@ interface DBImage {
 }
 
 async function fetchProductionImages(): Promise<DBImage[]> {
+    const adminKey = process.env.ADMIN_API_KEY?.trim();
+    if (!adminKey) throw new Error('ADMIN_API_KEY must be supplied securely at runtime');
     try {
-        const response = await axios.get(`${PRODUCTION_API}?key=${ADMIN_KEY}&limit=100`);
+        const response = await axios.get(PRODUCTION_API, {
+            headers: { 'x-admin-key': adminKey }, params: { limit: 100 }, timeout: 15000,
+        });
         return response.data.images || [];
     } catch (error: any) {
-        console.error('❌ Failed to fetch production images:', error.message);
-        return [];
+        throw new Error('Production image lookup failed; credential-bearing request details withheld');
     }
 }
 

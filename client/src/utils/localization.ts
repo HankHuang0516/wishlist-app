@@ -177,6 +177,7 @@ const translations: Record<string, Record<string, string>> = {
         'login.resendVerification': '重新發送驗證信',
         'login.sendingVerification': '發送中...',
         'login.verificationSent': '驗證信已發送，請查收信箱。',
+        'login.verificationRequested': '已收到請求；若帳號存在且尚未驗證，系統會嘗試寄送驗證信。請查看信箱，未收到可稍後重試。',
         'login.resendFailed': '發送失敗，請稍後再試。',
         'login.enterEmailToResend': '請使用電子信箱登入以重新發送驗證信。',
 
@@ -375,7 +376,7 @@ const translations: Record<string, Record<string, string>> = {
         'changePwd.updating': '更新中...',
         'changePwd.success': '密碼修改成功！',
         'changePwd.matchErr': '新密碼不相符',
-        'changePwd.lengthErr': '密碼長度至少需 6 個字元',
+        'changePwd.lengthErr': '新密碼需為 8–72 個字元，包含英文字母與數字；符號限 @$!%*?&。',
 
         // Friend Profile
         'friend.title': '好友資料',
@@ -458,6 +459,7 @@ const translations: Record<string, Record<string, string>> = {
         'login.resendVerification': 'Resend verification email',
         'login.sendingVerification': 'Sending...',
         'login.verificationSent': 'Verification email sent. Please check your inbox.',
+        'login.verificationRequested': 'Request received. If the account exists and is unverified, we will attempt to send a verification email. Check your inbox or retry later.',
         'login.resendFailed': 'Failed to send. Please try again later.',
         'login.enterEmailToResend': 'Please use your email to login to resend verification.',
 
@@ -659,7 +661,7 @@ const translations: Record<string, Record<string, string>> = {
         'changePwd.updating': 'Updating...',
         'changePwd.success': 'Password changed successfully!',
         'changePwd.matchErr': 'New passwords do not match',
-        'changePwd.lengthErr': 'Password must be at least 6 characters',
+        'changePwd.lengthErr': 'Use 8–72 characters with letters and numbers; symbols are limited to @$!%*?&.',
 
         // Friend Profile
         'friend.title': 'Profile',

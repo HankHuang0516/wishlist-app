@@ -7,6 +7,8 @@ description: Helper for checking Railway status and debugging build errors
 
 This skill provides tools for monitoring the Railway backend status and a comprehensive protocol for resolving build errors, based on project-specific lessons learned.
 
+管理金鑰只能在 runtime 從 Keychain service `com.aihankapps.wishlist.admin-key`、account `AiHankApps` 讀取，或使用既有 Railway `ADMIN_API_KEY`。下方變數是參考，不是真實值；改用 `x-admin-key` header，禁止把機密貼入 URL、文件或輸出。暫不輪替。
+
 ## 1. Railway Status Check
 
 Use these commands to check the health and stats of the production server.
@@ -16,13 +18,13 @@ Use these commands to check the health and stats of the production server.
 read_url_content https://wishlist-app-production.up.railway.app/api/admin/health
 
 # System Stats (Users, Items, Lists)
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?key=wishlist-secure-admin-2026-xK9p
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/stats?key=${WISHLIST_ADMIN_KEY}
 
 # Crawler Logs
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=wishlist-secure-admin-2026-xK9p
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/crawler-logs?key=${WISHLIST_ADMIN_KEY}
 
 # Gemini API Status
-read_url_content https://wishlist-app-production.up.railway.app/api/admin/gemini-status?key=wishlist-secure-admin-2026-xK9p
+read_url_content https://wishlist-app-production.up.railway.app/api/admin/gemini-status?key=${WISHLIST_ADMIN_KEY}
 ```
 
 ### Report Format

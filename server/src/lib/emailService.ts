@@ -11,7 +11,7 @@ console.log(`[EmailService] Initializing with provider: ${EMAIL_PROVIDER}`);
 let resend: Resend | null = null;
 if (process.env.RESEND_API_KEY) {
     resend = new Resend(process.env.RESEND_API_KEY);
-    console.log(`[EmailService] Resend configured (Key starts with: ${process.env.RESEND_API_KEY.substring(0, 8)}...)`);
+    console.log('[EmailService] Resend configured; credential details withheld');
 } else {
     console.warn(`[EmailService] RESEND_API_KEY is missing! Email sending will fail.`);
 }
@@ -31,7 +31,7 @@ const sendViaResend = async (to: string, subject: string, html: string): Promise
         });
 
         if (response.error) {
-            console.error(`❌ [Resend] Error:`, response.error);
+            console.error('[Resend] Send rejected; provider details withheld');
             return { success: false, error: response.error.message };
         }
 
@@ -39,13 +39,13 @@ const sendViaResend = async (to: string, subject: string, html: string): Promise
         console.log(`✅ [Resend] Email sent successfully! ID: ${response.data?.id}`);
         return { success: true, id: response.data?.id };
     } catch (error: any) {
-        console.error(`❌ [Resend] Exception:`, error);
+        console.error('[Resend] Send unavailable; request and provider details withheld');
         return { success: false, error: error.message };
     }
 };
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string; id?: string }> => {
-    console.log(`[EmailService] Request to send email to: ${to}`);
+    console.log('[EmailService] Mail requested; recipient and link details withheld');
 
     // Try Resend (Sole Provider)
     try {
@@ -57,7 +57,7 @@ export const sendEmail = async (to: string, subject: string, html: string): Prom
 
         throw new Error(result.error || 'Resend failed');
     } catch (error: any) {
-        console.error(`❌ [EmailService] Sending failed:`, error.message || error);
+        console.error('[EmailService] Sending failed; request and provider details withheld');
         return {
             success: false,
             error: `Email sending failed: ${error.message || 'Unknown error'}`,

@@ -19,10 +19,11 @@ const isImageAccessible = async (url: string): Promise<boolean> => {
         console.log(`  > Status: ${response.status}`);
         console.log(`  > Type: ${contentType}`);
 
-        if (contentType && contentType.startsWith('image/')) {
+        if (typeof contentType === 'string' && contentType.startsWith('image/')) {
             response.data.destroy();
             return true;
         }
+        response.data.destroy();
         return false;
     } catch (error: any) {
         console.log(`  > Failed: ${error.message}`);

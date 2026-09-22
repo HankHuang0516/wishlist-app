@@ -87,7 +87,7 @@ export default function Login() {
             });
             const data = await res.json();
             if (res.ok) {
-                setResendSuccess(t('login.verificationSent'));
+                setResendSuccess(t('login.verificationRequested'));
                 setError("");
             } else {
                 setError(data.error || t('login.resendFailed'));
@@ -172,4 +172,3 @@ export default function Login() {
         </div >
     );
 }
-

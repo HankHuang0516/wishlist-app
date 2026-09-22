@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_default';
+import { getJwtSecret, signUserJwt } from '../lib/jwtConfig';
+import { validNewPassword } from '../lib/accountSecurityRules';
 import { getClientUrl } from '../config/constants';
 
 // Error codes for API consumers
@@ -31,6 +31,7 @@ import crypto from 'crypto';
 
 export const register = async (req: Request, res: Response) => {
     try {
+        getJwtSecret(); // Fail before creating users or sending mail if unconfigured.
         const { phoneNumber, password, name, birthday, email } = req.body; // birthday: YYYY-MM-DD string
 
         if (!phoneNumber || !password || !email) {
@@ -45,9 +46,15 @@ export const register = async (req: Request, res: Response) => {
             });
         }
 
+        if (typeof phoneNumber !== 'string' || !phoneNumber.trim() || phoneNumber.length > 80 ||
+            typeof email !== 'string' || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
+            (name !== undefined && name !== null && (typeof name !== 'string' || name.length > 50)) ||
+            (birthday !== undefined && birthday !== null && typeof birthday !== 'string')) {
+            return res.status(400).json({ error: 'Invalid registration fields', errorCode: AUTH_ERROR_CODES.MISSING_FIELDS });
+        }
+
         // Enforce strong password
-        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
-        if (!passwordRegex.test(password)) {
+        if (!validNewPassword(password)) {
             return res.status(400).json({
                 error: 'Password must be at least 8 characters long and contain both letters and numbers.',
                 errorCode: AUTH_ERROR_CODES.WEAK_PASSWORD,
@@ -108,28 +115,29 @@ export const register = async (req: Request, res: Response) => {
         const clientUrl = getClientUrl();
         const verifyLink = `${clientUrl}/verify-email?token=${verificationToken}`;
 
-        await sendEmail(email, 'Verify your Wishlist Account', `
+        const emailResult = await sendEmail(email, 'Verify your Wishlist Account', `
            <h1>Welcome to Wishlist!</h1>
            <p>Please click the link below to verify your email address:</p>
            <a href="${verifyLink}">${verifyLink}</a>
        `);
 
         // Return JWT token immediately for AI agent access (User can still verify email later)
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = signUserJwt(user);
 
         res.status(201).json({
-            message: 'Registration successful. Please check your email to verify your account.',
+            message: emailResult.success ? 'Registration successful. Please check your email to verify your account.' : 'Account created, but verification email delivery failed. Please request another verification email.',
             token,
             user: { id: user.id, phoneNumber: user.phoneNumber, name: user.name },
             emailVerification: {
                 required: true,
+                sent: emailResult.success === true,
                 sentTo: email,
                 expiresIn: '24 hours',
                 resendEndpoint: '/api/auth/resend-verification'
             }
         });
     } catch (error) {
-        console.error(error);
+        console.error('Registration unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -139,9 +147,10 @@ export const register = async (req: Request, res: Response) => {
 
 export const verifyEmail = async (req: Request, res: Response) => {
     try {
+        getJwtSecret(); // Do not mutate verification state before config validation.
         const { token } = req.body;
 
-        if (!token) {
+        if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) {
             return res.status(400).json({
                 error: 'Verification token is required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
@@ -163,7 +172,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
         }
 
         // Check if token is expired
-        if (userWithToken.emailVerificationExpires && userWithToken.emailVerificationExpires < new Date()) {
+        if (!userWithToken.emailVerificationExpires || userWithToken.emailVerificationExpires <= new Date()) {
             return res.status(400).json({
                 error: 'Verification token has expired',
                 errorCode: AUTH_ERROR_CODES.TOKEN_EXPIRED,
@@ -172,16 +181,16 @@ export const verifyEmail = async (req: Request, res: Response) => {
             });
         }
 
-        const updatedUser = await prisma.user.update({
-            where: { id: userWithToken.id },
-            data: {
-                isEmailVerified: true,
-                emailVerificationToken: null,
-                emailVerificationExpires: null
-            }
+        const updatedUser = await prisma.$transaction(async tx => {
+            const consumed = await tx.user.updateMany({
+                where: { id: userWithToken.id, emailVerificationToken: token, emailVerificationExpires: { gt: new Date() } },
+                data: { isEmailVerified: true, emailVerificationToken: null, emailVerificationExpires: null },
+            });
+            return consumed.count === 1 ? tx.user.findUnique({ where: { id: userWithToken.id } }) : null;
         });
+        if (!updatedUser) return res.status(400).json({ error: 'Invalid verification token', errorCode: AUTH_ERROR_CODES.INVALID_TOKEN });
 
-        const jwtToken = jwt.sign({ id: updatedUser.id }, JWT_SECRET, { expiresIn: '7d' });
+        const jwtToken = signUserJwt(updatedUser);
 
         res.json({
             message: 'Email verified successfully',
@@ -190,7 +199,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Authentication operation unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -214,6 +223,7 @@ export const login = async (req: Request, res: Response) => {
             });
         }
 
+        if (typeof phoneNumber !== 'string' || phoneNumber.length > 254 || !phoneNumber.trim() || typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > 1024 || password.includes('\u0000')) return res.status(400).json({ error: 'Invalid credentials', errorCode: AUTH_ERROR_CODES.INVALID_CREDENTIALS });
         // Support login with phone number OR email
         // Determine if input is email (contains @) or phone number
         const isEmail = phoneNumber && phoneNumber.includes('@');
@@ -232,10 +242,11 @@ export const login = async (req: Request, res: Response) => {
             });
         }
 
-        // Bypass for old users (no email) or specific override
-        // logic: if user HAS email, they MUST be verified. If no email (legacy), allow.
-        // Bypass for test user 0911222339
-        if (user.email && !user.isEmailVerified && user.phoneNumber !== '0911222339') {
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ error: 'Invalid credentials', errorCode: AUTH_ERROR_CODES.INVALID_CREDENTIALS });
+        // Check verification only after the password, without a hardcoded bypass.
+        // Legacy accounts with no email retain their existing login behavior.
+        if (user.email && !user.isEmailVerified) {
             return res.status(403).json({
                 error: 'Please verify your email address before logging in.',
                 errorCode: AUTH_ERROR_CODES.EMAIL_NOT_VERIFIED,
@@ -246,15 +257,9 @@ export const login = async (req: Request, res: Response) => {
             });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({
-                error: 'Invalid credentials',
-                errorCode: AUTH_ERROR_CODES.INVALID_CREDENTIALS
-            });
-        }
-
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        const current = await prisma.user.findFirst({ where: { id: user.id, password: user.password, authVersion: user.authVersion } });
+        if (!current) return res.status(401).json({ error: 'Invalid credentials', errorCode: AUTH_ERROR_CODES.INVALID_CREDENTIALS });
+        const token = signUserJwt(current);
 
         res.json({
             message: 'Login successful',
@@ -268,7 +273,7 @@ export const login = async (req: Request, res: Response) => {
             }
         });
     } catch (error) {
-        console.error(error);
+        console.error('Login unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -280,7 +285,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     try {
         const { email } = req.body;
 
-        if (!email) {
+        if (typeof email !== 'string' || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) {
             return res.status(400).json({
                 error: 'Email is required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
@@ -326,7 +331,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
             expiresIn: '1 hour'
         });
     } catch (error) {
-        console.error(error);
+        console.error('Password recovery unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -338,7 +343,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
     try {
         const { phoneNumber, otp } = req.body;
 
-        if (!phoneNumber || !otp) {
+        if (typeof phoneNumber !== 'string' || !phoneNumber || phoneNumber.length > 80 || typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
             return res.status(400).json({
                 error: 'Phone number and OTP are required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
@@ -351,16 +356,21 @@ export const verifyOtp = async (req: Request, res: Response) => {
 
         const user = await prisma.user.findUnique({ where: { phoneNumber } });
 
-        if (!user || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
+        if (!user || user.otp !== otp || !user.otpExpires || user.otpExpires <= new Date()) {
             return res.status(400).json({
                 error: 'Invalid or expired OTP',
                 errorCode: AUTH_ERROR_CODES.INVALID_OTP
             });
         }
 
+        const consumed = await prisma.user.updateMany({
+            where: { id: user.id, otp, otpExpires: { gt: new Date() } },
+            data: { otp: null, otpExpires: null, isPhoneVerified: true },
+        });
+        if (consumed.count !== 1) return res.status(400).json({ error: 'Invalid or expired OTP', errorCode: AUTH_ERROR_CODES.INVALID_OTP });
         res.json({ message: 'OTP verified' });
     } catch (error) {
-        console.error(error);
+        console.error('OTP verification unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -372,7 +382,7 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
     try {
         const { email } = req.body;
 
-        if (!email) {
+        if (typeof email !== 'string' || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) {
             return res.status(400).json({
                 error: 'Email is required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
@@ -382,33 +392,21 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
 
         const user = await prisma.user.findFirst({ where: { email } });
 
-        if (!user) {
-            // Don't reveal if user exists for security
-            return res.json({
-                message: 'If this email exists and is unverified, a new verification link has been sent.',
-                expiresIn: '24 hours'
-            });
-        }
-
-        if (user.isEmailVerified) {
-            return res.status(400).json({
-                error: 'Email is already verified. You can login directly.',
-                errorCode: AUTH_ERROR_CODES.EMAIL_ALREADY_VERIFIED,
-                loginEndpoint: '/api/auth/login'
-            });
-        }
+        const generic = { message: 'If this email exists and is unverified, we will attempt to send a new verification link.', expiresIn: '24 hours' };
+        if (!user || user.isEmailVerified) return res.json(generic);
 
         // Generate new token
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        await prisma.user.update({
-            where: { id: user.id },
+        const issued = await prisma.user.updateMany({
+            where: { id: user.id, email, isEmailVerified: false },
             data: {
                 emailVerificationToken: verificationToken,
                 emailVerificationExpires: verificationExpires
             }
         });
+        if (issued.count !== 1) return res.json(generic);
 
         // Send verification email
         const clientUrl = getClientUrl();
@@ -422,21 +420,14 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
         `);
 
         if (!emailResult.success) {
-            console.error('[resendVerification] Email send failed:', emailResult.error);
-            return res.status(500).json({
-                error: 'Failed to send verification email. Please try again later.',
-                errorCode: AUTH_ERROR_CODES.EMAIL_SEND_FAILED
-            });
+            console.error('[resendVerification] Email send failed; provider details withheld');
         }
 
-        res.json({
-            message: 'Verification email sent successfully.',
-            sentTo: email,
-            expiresIn: '24 hours',
-            messageId: emailResult.id
-        });
+        // Same public response for unknown, verified, attempted and failed mail;
+        // never expose membership or provider identifiers through this endpoint.
+        res.json(generic);
     } catch (error) {
-        console.error(error);
+        console.error('Verification mail unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
@@ -448,7 +439,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     try {
         const { token, newPassword } = req.body;
 
-        if (!token || !newPassword) {
+        if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token) || !newPassword) {
             return res.status(400).json({
                 error: 'Token and new password are required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
@@ -474,7 +465,7 @@ export const resetPassword = async (req: Request, res: Response) => {
         }
 
         // Check if token is expired
-        if (userWithToken.passwordResetExpires && userWithToken.passwordResetExpires < new Date()) {
+        if (!userWithToken.passwordResetExpires || userWithToken.passwordResetExpires <= new Date()) {
             return res.status(400).json({
                 error: 'Reset token has expired',
                 errorCode: AUTH_ERROR_CODES.TOKEN_EXPIRED,
@@ -484,8 +475,7 @@ export const resetPassword = async (req: Request, res: Response) => {
         }
 
         // Enforce strong password
-        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
-        if (!passwordRegex.test(newPassword)) {
+        if (!validNewPassword(newPassword)) {
             return res.status(400).json({
                 error: 'Password must be at least 8 characters long and contain both letters and numbers.',
                 errorCode: AUTH_ERROR_CODES.WEAK_PASSWORD,
@@ -500,25 +490,32 @@ export const resetPassword = async (req: Request, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        await prisma.user.update({
-            where: { id: userWithToken.id },
+        const changed = await prisma.user.updateMany({
+            where: { id: userWithToken.id, passwordResetToken: token, passwordResetExpires: { gt: new Date() }, authVersion: { lt: 2147483647 } },
             data: {
                 password: hashedPassword,
+                authVersion: { increment: 1 },
+                apiKey: null,
+                otp: null,
+                otpExpires: null,
                 passwordResetToken: null,
                 passwordResetExpires: null
             }
         });
+        if (changed.count !== 1) return res.status(400).json({ error: 'Invalid reset token', errorCode: AUTH_ERROR_CODES.INVALID_TOKEN });
 
         res.json({
             message: 'Password reset successful. You can now login with your new password.',
+            changed: true,
+            requiresLogin: true,
+            personalApiKeysRevoked: true,
             loginEndpoint: '/api/auth/login'
         });
     } catch (error) {
-        console.error(error);
+        console.error('Password reset unavailable; request and credential details withheld');
         res.status(500).json({
             error: 'Internal server error',
             errorCode: AUTH_ERROR_CODES.INTERNAL_ERROR
         });
     }
 };
-

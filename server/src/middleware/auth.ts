@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
+    /** Verified JWT claims for this erasure operation ONLY. Not live-session
+     * authority; writes must recheck User version/password under the DB gate. */
+    verifiedErasureSession?: { id: number; authVersion: number };
     user?: {
         id: number;
     };
@@ -23,6 +25,9 @@ export interface AuthRequest extends Request {
 import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { extractAgentCredentials, verifyEclawAgent } from '../lib/eclawVerify';
+import { JwtConfigurationError } from '../lib/jwtConfig';
+import { authenticateUserSession } from '../lib/userSession';
+import jwt from 'jsonwebtoken';
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'];
@@ -47,7 +52,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             req.user = { id: user.id };
             return next();
         } catch (error) {
-            console.error('API Key Auth Error:', error);
+            console.error('API Key authentication unavailable; request and credential details withheld');
             return res.status(500).json({ error: 'Internal server error during authentication', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
         }
     }
@@ -55,11 +60,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     // JWT Authentication
     if (token) {
         try {
-            const verified = jwt.verify(token, process.env.JWT_SECRET || 'secret_key_default');
-            req.user = verified as { id: number };
+            req.user = await authenticateUserSession(token);
             next();
         } catch (error) {
-            res.status(400).json({ error: 'Invalid token', errorCode: API_ERROR_CODES.INVALID_TOKEN });
+            if (error instanceof JwtConfigurationError) return res.status(503).json({ error: 'Authentication unavailable', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
+            if (!(error instanceof jwt.JsonWebTokenError)) return res.status(503).json({ error: 'Authentication unavailable', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
+            res.status(401).json({ error: 'Invalid token', errorCode: API_ERROR_CODES.INVALID_TOKEN });
         }
     }
 };
@@ -98,7 +104,7 @@ export const authenticateMerchant = async (req: AuthRequest, res: Response, next
         req.merchant = { id: merchant.id, name: merchant.name };
         next();
     } catch (error) {
-        console.error('Merchant Auth Error:', error);
+        console.error('Merchant authentication unavailable; request and credential details withheld');
         return res.status(500).json({ error: 'Internal server error during authentication', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
@@ -198,6 +204,7 @@ export const authenticateUserOrEclawAgent = async (req: AuthRequest, res: Respon
 };
 // Optional Authentication (for public endpoints that can be personalized)
 export const optionalAuthenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    delete req.user;
     const authHeader = req.headers['authorization'];
     const apiKey = req.headers['x-api-key'] as string;
     const token = authHeader && authHeader.split(' ')[1];
@@ -217,7 +224,7 @@ export const optionalAuthenticateToken = async (req: AuthRequest, res: Response,
                 req.user = { id: user.id };
             }
         } catch (error) {
-            console.warn('Optional Auth - API Key Error:', error);
+            console.warn('Optional API Key authentication unavailable; request and credential details withheld');
         }
         return next();
     }
@@ -227,8 +234,7 @@ export const optionalAuthenticateToken = async (req: AuthRequest, res: Response,
         if (token === 'null' || token === 'undefined') return next();
 
         try {
-            const verified = jwt.verify(token, process.env.JWT_SECRET || 'secret_key_default');
-            req.user = verified as { id: number };
+            req.user = await authenticateUserSession(token);
         } catch (error) {
             // Ignore invalid tokens in optional auth
         }

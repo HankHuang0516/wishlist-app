@@ -405,80 +405,7 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const updateItem = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const { id } = req.params;
-
-        if (isNaN(Number(id))) {
-            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        const { isHidden, isPurchased, name, price, notes, link } = req.body; // Add other fields if needed
-
-        if (name && name.length > 200) {
-            return res.status(400).json({ error: 'Name too long (Max 200)', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        if (notes && notes.length > 1000) {
-            return res.status(400).json({ error: 'Notes too long (Max 1000)', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        const item = await prisma.item.findUnique({
-            where: { id: Number(id) },
-            include: { wishlist: true }
-        });
-
-        if (!item) return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
-
-        const isOwner = item.wishlist.userId === userId;
-
-        // Permissions Check
-        if (!isOwner) {
-            // Non-owners can ONLY update isPurchased
-            if (isHidden !== undefined || name || price || notes || link) {
-                return res.status(403).json({ error: 'Access denied: Only owner can edit details', errorCode: API_ERROR_CODES.ACCESS_DENIED });
-            }
-            // Ensure wishlist is public? Or accessible?
-            // Assuming if they have the link/ID and it's public.
-            if (!item.wishlist.isPublic) {
-                // Check if actually strictly private?
-                // For now, consistent with getWishlist logic in frontend
-            }
-        }
-
-        const dataToUpdate: any = {};
-
-        // Owner fields
-        if (isOwner) {
-            if (isHidden !== undefined) dataToUpdate.isHidden = isHidden;
-            if (name) dataToUpdate.name = name;
-            if (price) dataToUpdate.price = price;
-            if (notes) dataToUpdate.notes = notes;
-            if (link) dataToUpdate.link = link;
-        }
-
-        // Purchase Logic (Anyone allowed to mark purchased if they can view it)
-        if (isPurchased !== undefined) {
-            dataToUpdate.isPurchased = isPurchased;
-            if (isPurchased) {
-                dataToUpdate.purchasedById = userId;
-            } else {
-                dataToUpdate.purchasedById = null;
-            }
-        }
-
-        const updated = await prisma.item.update({
-            where: { id: Number(id) },
-            data: dataToUpdate
-        });
-
-        res.json(updated);
-    } catch (error) {
-        console.error('Update Item Error:', error);
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { updateItem } from './wishItemController';
 
 // Async URL Processor
 const processUrlAi = async (itemId: number, url: string, userId: number) => {
@@ -997,65 +924,7 @@ export const watchItem = async (req: AuthRequest, res: Response) => {
 };
 
 // Get single item details (Public/Visitor view)
-export const getItem = async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-
-        if (isNaN(Number(id))) {
-            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        const item = await prisma.item.findUnique({
-            where: { id: Number(id) },
-            include: {
-                wishlist: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                avatarUrl: true
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        if (!item) {
-            return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
-        }
-
-        res.json(item);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
-
-export const getPublicItems = async (req: Request, res: Response) => {
-    try {
-        const items = await prisma.item.findMany({
-            take: 20,
-            orderBy: { createdAt: 'desc' },
-            include: {
-                wishlist: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                avatarUrl: true
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        res.json(items);
-    } catch (error) {
-        console.error('Error fetching public items:', error);
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { getItem, getPublicItems } from './wishItemReadController';
 
 // ---------------------------------------------------------------------------
 // EClaw matchmaking additions

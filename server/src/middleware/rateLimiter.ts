@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit';
+export const securityLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false, message: { error: '帳號操作過於頻繁，請稍後重試', errorCode: 'ACCOUNT_RATE_LIMIT' } });
 
 // Rate limiter for auth endpoints (register, login)
 // More restrictive for register to prevent spam

@@ -11,6 +11,7 @@ model User {
   id                Int       @id @default(autoincrement())
   phoneNumber       String    @unique
   password          String
+  authVersion       Int       @default(0)
   apiKey            String?   @unique
   name              String?
   nicknames         String?
@@ -34,6 +35,7 @@ model User {
   email                    String?   @unique // New: Optional for backward compatibility, required for new
   isEmailVisible           Boolean   @default(false) // Privacy toggle for email
   isEmailVerified          Boolean   @default(false)
+  isPhoneVerified          Boolean   @default(false)
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
   passwordResetToken       String?
@@ -56,17 +58,395 @@ model User {
   itemWatches     ItemWatch[]
   purchases       Purchase[]
   wishlists       Wishlist[]
+  wishCreateReceipts WishCreateReceipt[]
+  listings        Listing[]
+  listingReports  ListingReport[]
+  listingReportOperations ListingReportOperation[]
+  listingMedia    ListingMedia[]
+  buyerConversations Conversation[] @relation("ConversationBuyer")
+  sellerConversations Conversation[] @relation("ConversationSeller")
+  conversationParticipants ConversationParticipant[]
+  messages Message[]
+  blocksSent UserBlock[] @relation("Blocker")
+  blocksReceived UserBlock[] @relation("Blocked")
+}
+
+enum ListingCondition {
+  NEW
+  USED
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  ACTIVE
+  RESERVED
+  SOLD
+  REMOVED
+  EXPIRED
+}
+
+enum ListingDeliveryMethod {
+  MEETUP
+  SHIPPING
+}
+
+enum ListingExpiryMode {
+  DEFAULT_30_DAYS
+  CUSTOM_DATE
+}
+
+model Listing {
+  id              String                  @id @default(uuid())
+  ownerUserId     Int
+  clientListingId String
+  requestHash     String
+  title           String
+  description     String?
+  condition       ListingCondition        @default(USED)
+  category        String?
+  brand           String?
+  price           Decimal?                @db.Decimal(12, 2)
+  currency        String                  @default("TWD")
+  deliveryMethods ListingDeliveryMethod[]  @default([])
+  negotiable      Boolean                 @default(false)
+  status          ListingStatus           @default(DRAFT)
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+  expiryMode      ListingExpiryMode       @default(DEFAULT_30_DAYS)
+  lastVerifiedAt  DateTime?
+  version         Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  owner           User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  media           ListingMedia[]
+  location        ListingLocation?
+  conversations   Conversation[]
+  reports         ListingReport[]
+  moderationActions ListingModerationAction[]
+
+  @@unique([ownerUserId, clientListingId])
+  @@index([status, expiresAt])
+  @@index([ownerUserId, createdAt])
+  @@index([createdAt, id])
+}
+
+enum ListingReportReason {
+  PROHIBITED
+  FRAUD
+  HARASSMENT
+  SPAM
+  OTHER
+}
+
+enum ListingReportStatus {
+  OPEN
+  DISMISSED
+  REMOVED
+}
+
+enum ListingModerationDecision {
+  DISMISS
+  REMOVE_LISTING
+}
+
+model ListingReport {
+  id String @id @default(uuid())
+  reporterUserId Int
+  listingId String
+  clientReportId String
+  requestHash String
+  reason ListingReportReason
+  details String?
+  status ListingReportStatus @default(OPEN)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reporter User @relation(fields: [reporterUserId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  actions ListingModerationAction[]
+  operation ListingReportOperation?
+
+  @@unique([reporterUserId, clientReportId])
+  @@index([status, createdAt, id])
+  @@index([reporterUserId, createdAt, id])
+  @@index([listingId])
+}
+
+enum ListingReportOperationState {
+  RECEIVED
+  ABANDONED
+}
+
+// Reporter-owned minimal receipt. A removed target detaches the case, without
+// retaining its listing ID, owner profile or report evidence. Reporter erasure
+// removes the receipt itself. A tombstone fences delayed same-key submissions.
+model ListingReportOperation {
+  reporterUserId Int
+  clientReportId String
+  requestHash String
+  state ListingReportOperationState
+  reportId String? @unique
+  createdAt DateTime @default(now())
+  reporter User @relation(fields: [reporterUserId], references: [id], onDelete: Cascade)
+  report ListingReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@id([reporterUserId, clientReportId])
+}
+
+// Minimal authorized decision ledger. Never copy a reporter profile, private
+// report evidence, admin credential or credential fingerprint here. Reporter
+// erasure detaches the case; listing-owner erasure removes this ledger too.
+model ListingModerationAction {
+  id String @id @default(uuid())
+  reportId String?
+  listingId String
+  clientDecisionId String @unique
+  requestHash String
+  decision ListingModerationDecision
+  notes String
+  actorKeyRef String
+  expectedReportVersion Int
+  expectedListingVersion Int?
+  listingStatusBefore ListingStatus
+  listingVersionBefore Int
+  createdAt DateTime @default(now())
+  report ListingReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+  @@index([listingId, createdAt])
+}
+
+model ListingMedia {
+  id           String   @id @default(uuid())
+  ownerUserId  Int
+  listingId    String?
+  imageUrl     String
+  thumbnailUrl String
+  contentHash  String
+  clientUploadId String?
+  width        Int?
+  height       Int?
+  byteSize     Int?
+  position     Int      @default(0)
+  createdAt    DateTime @default(now())
+  owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  listing      Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, position])
+  @@index([ownerUserId, createdAt])
+  @@unique([ownerUserId, clientUploadId])
+}
+
+// Only coarse, seller-approved public coordinates are stored here. Exact
+// handset/GPS coordinates are discarded; future meetup coordinates belong in
+// the private, membership-authorized appointment model, never this table.
+model ListingLocation {
+  listingId       String  @id
+  county          String
+  district        String
+  publicLatitude  Float
+  publicLongitude Float
+  precisionMeters Int     @default(2200)
+  listing         Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([publicLatitude, publicLongitude])
+}
+
+enum ConversationRole {
+  BUYER
+  SELLER
+}
+
+model Conversation {
+  id                  String   @id @default(uuid())
+  listingId           String?
+  buyerUserId         Int?
+  sellerUserId        Int?
+  archivedAt          DateTime?
+  lastMessageSequence Int      @default(0)
+  lastMessageAt       DateTime @default(now())
+  createdAt           DateTime @default(now())
+  listing             Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  buyer               User?    @relation("ConversationBuyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
+  seller              User?    @relation("ConversationSeller", fields: [sellerUserId], references: [id], onDelete: SetNull)
+  participants        ConversationParticipant[]
+  messages            Message[]
+  meetup              MeetupAppointment?
+  meetupOperations    MeetupOperation[]
+
+  @@unique([listingId, buyerUserId, sellerUserId])
+  @@index([buyerUserId, lastMessageAt, id])
+  @@index([sellerUserId, lastMessageAt, id])
+}
+
+model ConversationParticipant {
+  conversationId   String
+  userId           Int
+  role             ConversationRole
+  lastReadSequence Int          @default(0)
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sentMessages     Message[]
+  meetupProposals  MeetupAppointment[] @relation("MeetupProposer")
+  meetupOperations MeetupOperation[]
+
+  @@id([conversationId, userId])
+  @@unique([conversationId, role])
+  @@index([userId])
+}
+
+model Message {
+  id              String       @id @default(uuid())
+  conversationId  String
+  senderUserId    Int
+  clientMessageId String
+  sequence        Int
+  text            String
+  createdAt       DateTime     @default(now())
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User         @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  senderParticipant ConversationParticipant @relation(fields: [conversationId, senderUserId], references: [conversationId, userId], onDelete: Cascade)
+
+  @@unique([conversationId, senderUserId, clientMessageId])
+  @@unique([conversationId, sequence])
+  @@index([conversationId, senderUserId, sequence])
+}
+
+model UserBlock {
+  blockerUserId Int
+  blockedUserId Int
+  createdAt     DateTime @default(now())
+  blocker       User     @relation("Blocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked       User     @relation("Blocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@id([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+}
+
+enum MeetupStatus {
+  PROPOSED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// Private, conversation-members-only. Never selected by listing discovery.
+// version identifies the EXACT terms both parties agreed to, not a UI counter.
+model MeetupAppointment {
+  id                String @id @default(uuid())
+  conversationId    String @unique
+  version           Int @default(1)
+  status            MeetupStatus @default(PROPOSED)
+  proposedByUserId  Int
+  startsAt          DateTime
+  endsAt            DateTime
+  timeZone          String @default("Asia/Taipei")
+  placeName         String
+  latitude          Float?
+  longitude         Float?
+  notes             String
+  buyerConfirmedAt  DateTime?
+  sellerConfirmedAt DateTime?
+  buyerCompletedAt  DateTime?
+  sellerCompletedAt DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  proposer          ConversationParticipant @relation("MeetupProposer", fields: [conversationId, proposedByUserId], references: [conversationId, userId], onDelete: Cascade)
+
+  @@index([status, startsAt, endsAt])
+}
+
+// Durable retry receipts; the hash includes action/version/terms, not secrets.
+// A response may show newer current state: receipt.resultingVersion proves only
+// the acknowledged operation, never that both parties accepted later edits.
+model MeetupOperation {
+  id                String @id @default(uuid())
+  conversationId    String
+  actorUserId       Int
+  clientActionId    String
+  requestHash       String
+  action            String
+  resultingVersion  Int
+  abandoned         Boolean @default(false)
+  createdAt         DateTime @default(now())
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  actor             ConversationParticipant @relation(fields: [conversationId, actorUserId], references: [conversationId, userId], onDelete: Cascade)
+
+  @@unique([conversationId, actorUserId, clientActionId])
+  @@index([conversationId, createdAt])
 }
 
 model Purchase {
   id        Int      @id @default(autoincrement())
-  userId    Int
+  userId    Int?
   type      String
   amount    Float
   currency  String   @default("TWD")
   status    String   @default("COMPLETED")
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// A durable, identity-free work queue survives User and media-row erasure.
+// Exact UUIDs only; never arbitrary paths, URLs, user IDs or photo contents.
+model MediaErasureTask {
+  mediaId   String   @id @db.Uuid
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  identityHash String? @db.VarChar(64)
+  clientActionId String? @db.Uuid
+
+  @@index([identityHash, clientActionId])
+}
+
+// Private, temporary provenance for owned legacy uploads. A candidate is NOT
+// authority to remove a file/photo: the cleaner must verify producer ownership.
+model LegacyAssetErasureTask {
+  id             String @id @default(uuid())
+  identityHash   String @db.VarChar(64)
+  clientActionId String @db.Uuid
+  kind           String @db.VarChar(12)
+  target         String @db.VarChar(180)
+  resourceType   String @db.VarChar(12)
+  resourceId     Int
+  attempts       Int @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([identityHash, clientActionId])
+}
+
+// Only an authenticated operation's SHA-256 identity binding and random UUID.
+// No password/profile/token/payload survives here. Receipt access must verify
+// the original JWT's signature and bind its claims, even after User erasure.
+model AccountErasureReceipt {
+  id           String   @id @default(uuid())
+  identityHash String   @db.VarChar(64)
+  clientActionId String @db.Uuid
+  erasedAt     DateTime?
+  abandoned    Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  @@unique([identityHash, clientActionId])
+  @@index([erasedAt])
+}
+
+// Not a relation to the created resource: deleting a wish/list must retain the
+// request tombstone so delayed retries cannot resurrect it. Erasing the owning
+// account cascades these receipts. No payload or credential is stored here.
+model WishCreateReceipt {
+  id              String   @id @default(uuid())
+  userId          Int
+  clientRequestId String   @db.Uuid
+  requestHash     String   @db.VarChar(64)
+  kind            String   @db.VarChar(10)
+  resourceId      Int
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientRequestId])
 }
 
 model Wishlist {

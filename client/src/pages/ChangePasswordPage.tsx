@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { API_URL } from '../config';
@@ -10,8 +10,7 @@ import { ChevronLeft } from "lucide-react";
 import { t } from "../utils/localization";
 
 export default function ChangePasswordPage() {
-    const { token } = useAuth();
-    const navigate = useNavigate();
+    const { token, logout } = useAuth();
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -29,7 +28,7 @@ export default function ChangePasswordPage() {
             return;
         }
 
-        if (newPassword.length < 6) {
+        if (newPassword.length > 72 || !/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/.test(newPassword)) {
             setError(t('changePwd.lengthErr'));
             return;
         }
@@ -46,8 +45,10 @@ export default function ChangePasswordPage() {
             });
 
             if (res.ok) {
-                setSuccess(t('auth.pwdUpdated'));
-                setTimeout(() => navigate('/settings'), 1500);
+                const ack = await res.json();
+                if (ack?.changed !== true || ack?.requiresLogin !== true || ack?.personalApiKeysRevoked !== true) throw new Error('Unconfirmed password update');
+                setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+                logout();
             } else {
                 const data = await res.json();
                 setError(data.error || t('common.error'));

@@ -18,6 +18,12 @@ import userRoutes from './routes/userRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
+import listingRoutes from './routes/listingRoutes';
+import listingMediaRoutes from './routes/listingMediaRoutes';
+import chatRoutes from './routes/chatRoutes';
+import nativeWishRoutes from './routes/nativeWishRoutes';
+import listingReportRoutes, { createListingModerationRoutes } from './routes/listingReportRoutes';
+import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -77,6 +83,12 @@ app.use('/api/users', userRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/listings', listingRoutes);
+app.use('/api/listing-media', listingMediaRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/native-wishes', nativeWishRoutes);
+app.use('/api/listing-reports', listingReportRoutes);
+app.use('/api/moderation', createListingModerationRoutes());
 app.use('/uploads', express.static('public/uploads'));
 
 // Serve AI Guide JSON for external AI agents
@@ -202,6 +214,8 @@ app.use((err: any, req: Request, res: Response, next: express.NextFunction) => {
   }
 });
 
-app.listen(port, '0.0.0.0', () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`[server]: Server is running at http://0.0.0.0:${port}`);
 });
+const stopMediaErasureWorker = startMediaErasureWorker();
+server.once('close', stopMediaErasureWorker);

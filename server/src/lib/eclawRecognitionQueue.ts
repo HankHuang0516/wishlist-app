@@ -4,7 +4,13 @@ import { loadEclawRecognitionConfig, recognizeWithEclaw } from './eclawRecogniti
 
 const INTERVAL_MS = 3000;
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
+const TRANSIENT_CODES = new Set(['NO_REPLY', 'NETWORK', 'UPSTREAM', 'TIMEOUT']);
 let wakeCurrentWorker: (() => void) | null = null;
+
+function retryAttempt(aiError: string | null) {
+    const match = aiError?.match(/^ECLAW_RETRY_(\d+)$/);
+    return match ? Number(match[1]) : 0;
+}
 
 export function wakeEclawRecognitionWorker() { wakeCurrentWorker?.(); }
 
@@ -33,19 +39,20 @@ export function startEclawRecognitionWorker(
                     OR: [{ imageUrl: { not: null } }, { link: { not: null } }],
                 },
                 orderBy: { createdAt: 'asc' },
-                select: { id: true, name: true, imageUrl: true, link: true, wishlist: { select: { userId: true } } },
+                select: { id: true, name: true, imageUrl: true, link: true, aiError: true, wishlist: { select: { userId: true } } },
             });
             if (!item) return;
+            const attempt = retryAttempt(item.aiError);
             const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' }, data: { aiStatus: 'PROCESSING', aiError: null } });
             if (claimed.count !== 1) return;
             try {
-                const canUse = await checkAndIncrementAiUsage(item.wishlist.userId);
+                const canUse = attempt > 0 || await checkAndIncrementAiUsage(item.wishlist.userId);
                 if (!canUse) {
                     await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PROCESSING' }, data: { aiStatus: 'SKIPPED', aiError: 'Daily AI limit exceeded' } });
                     return;
                 }
                 const result = await recognize({
-                    jobId: `wish-${item.id}`,
+                    jobId: attempt > 0 ? `wish-${item.id}-retry-${attempt}` : `wish-${item.id}`,
                     resourceUrl: item.imageUrl || item.link!,
                     currentName: item.name,
                 }, config);
@@ -62,10 +69,19 @@ export function startEclawRecognitionWorker(
                     },
                 });
             } catch (error: any) {
-                report(`[EClawRecognition] item ${item.id} failed (${error?.code || 'UNKNOWN'})`);
+                const code = String(error?.code || 'UNKNOWN');
+                if (attempt < 1 && TRANSIENT_CODES.has(code)) {
+                    report(`[EClawRecognition] item ${item.id} retry queued (${code})`);
+                    await prisma.item.updateMany({
+                        where: { id: item.id, aiStatus: 'PROCESSING' },
+                        data: { aiStatus: 'PENDING', aiError: 'ECLAW_RETRY_1' },
+                    });
+                    return;
+                }
+                report(`[EClawRecognition] item ${item.id} failed (${code})`);
                 await prisma.item.updateMany({
                     where: { id: item.id, aiStatus: 'PROCESSING' },
-                    data: { aiStatus: 'FAILED', aiError: String(error?.code || 'ECLAW_RECOGNITION_FAILED').slice(0, 120) },
+                    data: { aiStatus: 'FAILED', aiError: code.slice(0, 120) },
                 });
             }
         } catch {

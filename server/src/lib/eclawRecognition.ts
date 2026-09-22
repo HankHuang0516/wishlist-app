@@ -4,11 +4,11 @@ export type EclawRecognitionResult = {
     model: string | null;
     category: string | null;
     condition: string | null;
-    price: number | null;
-    priceLow: number | null;
-    priceHigh: number | null;
-    currency: string | null;
-    priceBasis: string | null;
+    price: number;
+    priceLow: number;
+    priceHigh: number;
+    currency: string;
+    priceBasis: string;
     tags: string[];
     keyFeatures: string[];
     confidence: number | null;
@@ -106,12 +106,13 @@ function buildPrompt(jobId: string, resourceUrl: string, currentName: string) {
         `WISHLIST_AI_JOB:${jobId}`,
         '你是 Wishlist.ai 的資深商品鑑識與估價代理。請仔細查看附件圖片或下方公開網址，先依外觀、標誌、型號字樣、包裝與配件交叉判斷，再輸出結果。',
         '不可因相似外觀猜測品牌或型號；看不清楚、無法由圖片支持或價格資料不足的欄位必須填 null，並寫入 uncertainties。',
-        'price 是目前市場的代表成交／售價估計，priceLow 與 priceHigh 是合理區間；三者必須使用同一 currency。若無可靠價格依據，三者全部填 null。',
+        'price、priceLow、priceHigh、currency、priceBasis 都是必填且不得為 null。price 是目前市場的代表成交／售價估計，priceLow 與 priceHigh 是合理區間，三者使用同一 currency。',
+        '即使看不出精確型號，也要依可確認的商品品類、外觀狀況與台灣市場行情給出保守估價；priceBasis 清楚標示「品類估算」及估價依據，並把型號或規格不確定性寫入 uncertainties。',
         '二手品請依可見磨損、包裝、配件與外觀描述 condition；無法判斷新品或二手時填 null。confidence 為 0 到 1，反映整體辨識可信度。',
         `目前暫存名稱：${currentName.slice(0, 200)}`,
         `商品資源網址：${resourceUrl}`,
         '只回覆一個 JSON 物件，不要 Markdown、不要解說。格式：',
-        `{"jobId":"${jobId}","name":"精確商品名稱","brand":null,"model":null,"category":"品類","condition":null,"price":null,"priceLow":null,"priceHigh":null,"currency":"TWD","priceBasis":null,"tags":["最多5個標籤"],"keyFeatures":["最多6個可見或可確認特徵"],"confidence":0.0,"uncertainties":["最多4個不確定項"],"shoppingLink":null,"description":"四句內繁體中文詳細摘要"}`,
+        `{"jobId":"${jobId}","name":"精確商品名稱","brand":null,"model":null,"category":"品類","condition":null,"price":1000,"priceLow":800,"priceHigh":1200,"currency":"TWD","priceBasis":"台灣市場新品／二手行情或品類估算依據","tags":["最多5個標籤"],"keyFeatures":["最多6個可見或可確認特徵"],"confidence":0.0,"uncertainties":["最多4個不確定項"],"shoppingLink":null,"description":"四句內繁體中文詳細摘要"}`,
     ].join('\n');
 }
 
@@ -180,13 +181,15 @@ export function parseRecognitionReply(text: string, expectedJobId: string): Ecla
     if (!raw || typeof raw !== 'object' || raw.jobId !== expectedJobId) throw new EclawRecognitionError('EClaw reply job id did not match', 'BAD_RESPONSE');
     const name = cleanText(raw.name, 200);
     if (!name) throw new EclawRecognitionError('EClaw reply was missing a product name', 'BAD_RESPONSE');
-    const price = optionalPrice(raw.price, 'price');
-    const priceLow = optionalPrice(raw.priceLow, 'priceLow');
-    const priceHigh = optionalPrice(raw.priceHigh, 'priceHigh');
-    if ((priceLow === null) !== (priceHigh === null) || priceLow !== null && priceHigh !== null && (priceLow > priceHigh || price !== null && (price < priceLow || price > priceHigh))) throw new EclawRecognitionError('EClaw reply price range was invalid', 'BAD_RESPONSE');
+    const price = requiredPrice(raw.price, 'price');
+    const priceLow = requiredPrice(raw.priceLow, 'priceLow');
+    const priceHigh = requiredPrice(raw.priceHigh, 'priceHigh');
+    if (priceLow > priceHigh || price < priceLow || price > priceHigh) throw new EclawRecognitionError('EClaw reply price range was invalid', 'BAD_RESPONSE');
     const currency = cleanText(raw.currency, 8)?.toUpperCase() ?? null;
-    if (currency !== null && !/^[A-Z]{3}$/.test(currency)) throw new EclawRecognitionError('EClaw reply currency was invalid', 'BAD_RESPONSE');
-    if ((price !== null || priceLow !== null) && currency === null) throw new EclawRecognitionError('EClaw reply price currency was missing', 'BAD_RESPONSE');
+    if (currency === null) throw new EclawRecognitionError('EClaw reply price currency was missing', 'INCOMPLETE_ESTIMATE');
+    if (!/^[A-Z]{3}$/.test(currency)) throw new EclawRecognitionError('EClaw reply currency was invalid', 'BAD_RESPONSE');
+    const priceBasis = cleanText(raw.priceBasis, 240);
+    if (!priceBasis) throw new EclawRecognitionError('EClaw reply price basis was missing', 'INCOMPLETE_ESTIMATE');
     const tags = Array.isArray(raw.tags) ? raw.tags.map((v: unknown) => cleanText(v, 30)).filter((v: string | null): v is string => !!v).slice(0, 5) : [];
     const keyFeatures = textArray(raw.keyFeatures, 6, 100);
     const uncertainties = textArray(raw.uncertainties, 4, 120);
@@ -195,13 +198,13 @@ export function parseRecognitionReply(text: string, expectedJobId: string): Ecla
     const shoppingLink = optionalHttpsUrl(raw.shoppingLink);
     return {
         name, brand: cleanText(raw.brand, 100), model: cleanText(raw.model, 100), category: cleanText(raw.category, 100), condition: cleanText(raw.condition, 120),
-        price, priceLow, priceHigh, currency, priceBasis: cleanText(raw.priceBasis, 240), tags, keyFeatures, confidence, uncertainties,
+        price, priceLow, priceHigh, currency, priceBasis, tags, keyFeatures, confidence, uncertainties,
         shoppingLink, description: cleanText(raw.description, 800),
     };
 }
 
-function optionalPrice(value: unknown, field: string) {
-    if (value === null || value === undefined || value === '') return null;
+function requiredPrice(value: unknown, field: string) {
+    if (value === null || value === undefined || value === '') throw new EclawRecognitionError(`EClaw reply ${field} was missing`, 'INCOMPLETE_ESTIMATE');
     const price = Number(value);
     if (!Number.isFinite(price) || price < 0 || price > 1e12) throw new EclawRecognitionError(`EClaw reply ${field} was invalid`, 'BAD_RESPONSE');
     return price;

@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 import { PRODUCT_NOTICE_KEY, rememberProductNotice } from './productNotice';
+import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 
 export function ProductNoticeScreen({ apiUrl, onContinue }: { apiUrl: string; onContinue: () => void }) {
   const [busy, setBusy] = useState(false), [storageIssue, setStorageIssue] = useState(false);
@@ -17,6 +19,7 @@ export function ProductNoticeScreen({ apiUrl, onContinue }: { apiUrl: string; on
     } finally { running.current = false; if (active.current) setBusy(false); }
   }
   return <ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.heroIcon}><Ionicons name="sparkles" size={34} color={iosColors.white} /></View>
     <Text style={styles.eyebrow}>WEESH → WISHLIST.AI</Text>
     <Text accessibilityRole="header" style={styles.title}>新的願望，附近的好物</Text>
     <Text style={styles.body}>Weesh 已改版為 Wishlist.ai。除了整理願望，新版加入附近商品地圖、商品聊天室與面交預約。</Text>
@@ -32,14 +35,15 @@ export function ProductNoticeScreen({ apiUrl, onContinue }: { apiUrl: string; on
 }
 
 const styles = StyleSheet.create({
-  content: { flexGrow: 1, padding: 28, paddingTop: 36, gap: 22 },
-  eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1, color: '#486A60' },
-  title: { fontSize: 30, fontWeight: '800', color: '#173E36' },
-  heading: { fontSize: 21, fontWeight: '700', color: '#173E36' },
-  body: { fontSize: 16, lineHeight: 26, color: '#384D46' },
-  note: { fontSize: 14, lineHeight: 22, color: '#596960' },
-  error: { fontSize: 14, lineHeight: 22, color: '#A52626' },
-  button: { minHeight: 52, borderRadius: 14, padding: 14, backgroundColor: '#173E36', alignItems: 'center', justifyContent: 'center' },
-  buttonText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
-  disabled: { opacity: 0.5 }, link: { minHeight: 48, justifyContent: 'center' }, linkText: { fontSize: 16, fontWeight: '600', color: '#173E36' },
+  content: { flexGrow: 1, paddingHorizontal: iosSpacing.xl, paddingTop: 52, paddingBottom: 48, gap: iosSpacing.lg, backgroundColor: iosColors.background },
+  heroIcon: { width: 72, height: 72, borderRadius: iosRadius.large, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center', marginBottom: iosSpacing.xs, ...iosShadow },
+  eyebrow: { ...iosType.caption, letterSpacing: 1.1, color: iosColors.tint },
+  title: { ...iosType.largeTitle, color: iosColors.label },
+  heading: { ...iosType.title2, color: iosColors.label, marginTop: iosSpacing.sm },
+  body: { ...iosType.body, color: iosColors.label },
+  note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  error: { ...iosType.subheadline, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm },
+  button: { minHeight: 54, borderRadius: iosRadius.control, padding: iosSpacing.md, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center', marginTop: iosSpacing.sm },
+  buttonText: { ...iosType.headline, color: iosColors.white },
+  disabled: { opacity: 0.45 }, link: { minHeight: minimumTapSize, justifyContent: 'center', alignItems: 'center' }, linkText: { ...iosType.callout, fontWeight: '600', color: iosColors.tint },
 });

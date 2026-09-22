@@ -3,6 +3,7 @@ import { ActivityIndicator, AppState, Image, Pressable, ScrollView, StyleSheet, 
 import { createApi } from './api';
 import { PublicListing, emptySearchFilters, listingPrice, TAIWAN_BOUNDS } from './listingSearch';
 import { MatchWish, WishMatch, parseMatchWishes, parseWishMatchPage, wishMatchPath } from './wishData';
+import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 export function WishHome({ api, apiUrl, onExplore, onWishes }: { api: ReturnType<typeof createApi>; apiUrl: string; onExplore: (wishId?: number, listing?: PublicListing) => void; onWishes: () => void }) {
   const [wishes, setWishes] = useState<MatchWish[]>([]), [selected, setSelected] = useState<number | null>(null), [cursor, setCursor] = useState<number | null>(null), [matches, setMatches] = useState<WishMatch[]>([]);
   const [loading, setLoading] = useState(false), [matching, setMatching] = useState(false), [error, setError] = useState(''), [matchError, setMatchError] = useState(''), [notice, setNotice] = useState(''), [clock, setClock] = useState(Date.now());
@@ -47,4 +48,19 @@ export function WishHome({ api, apiUrl, onExplore, onWishes }: { api: ReturnType
     <Pressable accessibilityRole="button" disabled={loading || matching} style={s.chip} onPress={() => void load()}><Text style={s.body}>重新整理願望與配對</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => onExplore()}><Text style={s.body}>不套用願望，瀏覽商品地圖</Text></Pressable>
   </ScrollView>;
 }
-const s = StyleSheet.create({ content: { padding: 24, gap: 18 }, title: { color: '#173E36', fontSize: 30, fontWeight: '800' }, heading: { color: '#173E36', fontSize: 18, fontWeight: '700' }, body: { color: '#173E36', fontSize: 16, lineHeight: 25 }, small: { color: '#596960', fontSize: 14, lineHeight: 22 }, error: { color: '#A52626', fontSize: 14, lineHeight: 22 }, card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, gap: 10 }, row: { flexDirection: 'row', alignItems: 'center', gap: 12 }, chip: { minHeight: 48, maxWidth: 240, borderWidth: 1, borderColor: '#B4BDB4', borderRadius: 12, padding: 12, justifyContent: 'center' }, selected: { backgroundColor: '#DBEBE1', borderColor: '#173E36' }, button: { minHeight: 52, backgroundColor: '#173E36', borderRadius: 12, padding: 14, justifyContent: 'center' }, white: { color: '#FFF', fontSize: 16, fontWeight: '700' }, image: { width: 72, height: 72, borderRadius: 12 }, flex: { flex: 1 } });
+const s = StyleSheet.create({
+  content: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.xs, paddingBottom: iosSpacing.xxl, gap: iosSpacing.lg },
+  title: { color: iosColors.label, ...iosType.largeTitle },
+  heading: { color: iosColors.label, ...iosType.headline },
+  body: { color: iosColors.label, ...iosType.body },
+  small: { color: iosColors.secondaryLabel, ...iosType.subheadline },
+  error: { color: iosColors.danger, ...iosType.subheadline },
+  card: { backgroundColor: iosColors.surface, borderRadius: iosRadius.card, padding: iosSpacing.md, gap: iosSpacing.sm, ...iosShadow },
+  row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm },
+  chip: { minHeight: minimumTapSize, maxWidth: 240, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, justifyContent: 'center' },
+  selected: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint },
+  button: { minHeight: 52, backgroundColor: iosColors.tint, borderRadius: iosRadius.control, padding: iosSpacing.md, justifyContent: 'center', alignItems: 'center' },
+  white: { color: iosColors.white, ...iosType.headline },
+  image: { width: 72, height: 72, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary },
+  flex: { flex: 1 },
+});

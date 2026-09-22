@@ -5,7 +5,8 @@ import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { NativeWishError, nativeListCreate, nativeWishCreate, nativeWishlistPatch, wishCreateHash, wishId } from '../lib/nativeWishRules';
 import { WishItemUpdateError } from '../lib/wishItemUpdate';
-const itemSelect = { id: true, wishlistId: true, name: true, notes: true, link: true, maxPrice: true, priceCurrency: true, isHidden: true, isPurchased: true, updatedAt: true } as const;
+import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
+const itemSelect = { id: true, wishlistId: true, name: true, notes: true, link: true, imageUrl: true, aiStatus: true, price: true, currency: true, aiLink: true, maxPrice: true, priceCurrency: true, isHidden: true, isPurchased: true, updatedAt: true } as const;
 const listSelect = { id: true, title: true, description: true, isPublic: true, maxItems: true, updatedAt: true, _count: { select: { items: true } } } as const;
 type Tx = Prisma.TransactionClient;
 async function lockUser(tx: Tx, userId: number) {
@@ -67,16 +68,18 @@ export const createNativeList = endpoint(async (req, userId) => {
 }, 201);
 export const createNativeWish = endpoint(async (req, userId) => {
     const id = wishId(req.params.id), input = nativeWishCreate(req.body), requestHash = wishCreateHash('ITEM', id, input.data);
-    return prisma.$transaction(async tx => {
+    const result = await prisma.$transaction(async tx => {
         await lockUser(tx, userId);
         const previous = await replay(tx, userId, input.clientRequestId, requestHash, 'ITEM'); if (previous) return previous;
         const list = await lockList(tx, id, userId);
         if (await tx.item.count({ where: { wishlistId: id } }) >= list.maxItems) throw new NativeWishError(409);
-        const resource = await tx.item.create({ data: { ...input.data, wishlistId: id, aiStatus: 'SKIPPED', uploadStatus: 'COMPLETED' }, select: itemSelect });
+        const resource = await tx.item.create({ data: { ...input.data, wishlistId: id, aiStatus: input.data.imageUrl ? 'PENDING' : 'SKIPPED', uploadStatus: 'COMPLETED' }, select: itemSelect });
         await tx.wishCreateReceipt.create({ data: { userId, clientRequestId: input.clientRequestId, requestHash, kind: 'ITEM', resourceId: resource.id } });
         await tx.wishlist.update({ where: { id }, data: { updatedAt: new Date() } });
         return { resource, replayed: false };
     });
+    if (!result.replayed && 'aiStatus' in result.resource && result.resource.aiStatus === 'PENDING') wakeEclawRecognitionWorker();
+    return result;
 }, 201);
 export const updateNativeList = endpoint(async (req, userId) => {
     const id = wishId(req.params.id), data = nativeWishlistPatch(req.body);

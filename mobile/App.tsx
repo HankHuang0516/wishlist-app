@@ -4,6 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 import { ApiError, createApi } from './src/api';
 import { parseSessionUser, restoreSession, SESSION_KEY, sessionIssueMessage } from './src/session';
 import type { SessionUser, SessionIssue } from './src/session';
@@ -26,7 +27,16 @@ import type { PublicListing } from './src/listingSearch';
 import { TABS, TAB_IDS } from './src/navigation';
 import { configureMapLogging } from './src/mapLogging';
 import type { Tab } from './src/navigation';
+import { iosColors, iosFloatingShadow, iosRadius, iosSpacing, iosType, minimumTapSize } from './src/iosTheme';
 type User = SessionUser;
+
+const TAB_ICONS: Record<Tab, { active: React.ComponentProps<typeof Ionicons>['name']; inactive: React.ComponentProps<typeof Ionicons>['name'] }> = {
+  首頁: { active: 'sparkles', inactive: 'sparkles-outline' },
+  願望: { active: 'heart', inactive: 'heart-outline' },
+  探索: { active: 'map', inactive: 'map-outline' },
+  社交: { active: 'chatbubble-ellipses', inactive: 'chatbubble-ellipses-outline' },
+  我的: { active: 'person-circle', inactive: 'person-circle-outline' },
+};
 
 configureMapLogging();
 
@@ -193,28 +203,44 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   if (!user) return <SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
 
   return <SafeAreaView style={styles.screen}>
-    <View style={styles.header}><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.muted}>{user.name || '我的願望'}</Text></View>
+    <View style={styles.header}>
+      <View style={styles.brandLockup}><View style={styles.appMark}><Ionicons name="sparkles" color={iosColors.white} size={17} /></View><View><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.eyebrow}>願望市集</Text></View></View>
+      <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
+    </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
       <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing(true)} onLogout={() => void logout()} onRevoked={logout} />}
-    <View style={styles.tabs}>{TABS.map(item => <Pressable key={item} testID={TAB_IDS[item]} accessibilityLabel={item} accessibilityRole="tab" accessibilityState={{ selected: item === tab }} onPress={() => setTab(item)} style={styles.tab}><Text style={item === tab ? styles.activeTab : styles.muted}>{item}</Text></Pressable>)}</View>
+    <View style={styles.tabs}>{TABS.map(item => {
+      const selected = item === tab;
+      return <Pressable key={item} testID={TAB_IDS[item]} accessibilityLabel={item} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setTab(item)} style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}>
+        <Ionicons name={selected ? TAB_ICONS[item].active : TAB_ICONS[item].inactive} size={23} color={selected ? iosColors.tint : iosColors.tertiaryLabel} />
+        <Text style={selected ? styles.activeTab : styles.inactiveTab}>{item}</Text>
+      </Pressable>;
+    })}</View>
     {composing && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(false)} onSaved={status => { setComposing(false); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('探索'); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可至探索地圖查找商品。' : '商品目前已停止公開刊登。'); }} />}
     {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
   </SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F8F7F3' }, flex: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: iosSpacing.md, backgroundColor: iosColors.background },
   login: { padding: 28, paddingTop: 64, gap: 20 }, content: { padding: 24, gap: 20 },
-  header: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brand: { fontSize: 22, fontWeight: '800', color: '#173E36' }, title: { fontSize: 32, fontWeight: '800', color: '#173E36' },
-  eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1, color: '#486A60' },
-  body: { fontSize: 16, lineHeight: 25, color: '#384D46' }, muted: { fontSize: 14, lineHeight: 22, color: '#596960' },
-  input: { minHeight: 52, backgroundColor: '#FFF', borderColor: '#B4BDB4', borderWidth: 1, borderRadius: 14, padding: 16, fontSize: 16, color: '#173E36' },
-  button: { minHeight: 52, borderRadius: 14, backgroundColor: '#173E36', alignItems: 'center', justifyContent: 'center', padding: 14 },
-  buttonText: { color: '#FFF', fontSize: 16, fontWeight: '700' }, disabled: { opacity: 0.5 }, error: { fontSize: 14, color: '#A52626', padding: 16 },
-  card: { backgroundColor: '#FFF', padding: 20, borderRadius: 18, gap: 12 }, cardTitle: { fontSize: 19, fontWeight: '700', color: '#173E36' },
-  tabs: { flexDirection: 'row', borderTopWidth: 1, borderColor: '#D6DDD4', backgroundColor: '#FFF' }, tab: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center' }, activeTab: { color: '#173E36', fontSize: 14, fontWeight: '800' },
-  mapNotice: { position: 'absolute', top: 12, left: 12, right: 12, backgroundColor: '#FFF', padding: 12, borderRadius: 12 },
+  header: { minHeight: 60, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm },
+  appMark: { width: 34, height: 34, borderRadius: iosRadius.small, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' },
+  brand: { ...iosType.headline, color: iosColors.label }, title: { ...iosType.largeTitle, color: iosColors.label },
+  eyebrow: { ...iosType.caption, letterSpacing: 0.4, color: iosColors.secondaryLabel },
+  profilePill: { maxWidth: '42%', minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderRadius: iosRadius.pill, backgroundColor: iosColors.surface },
+  profileName: { ...iosType.footnote, color: iosColors.secondaryLabel, flexShrink: 1 },
+  body: { ...iosType.body, color: iosColors.label }, muted: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  input: { minHeight: 52, backgroundColor: iosColors.surface, borderColor: iosColors.separator, borderWidth: StyleSheet.hairlineWidth, borderRadius: iosRadius.control, padding: iosSpacing.md, fontSize: 17, color: iosColors.label },
+  button: { minHeight: 52, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center', padding: iosSpacing.sm },
+  buttonText: { color: iosColors.white, ...iosType.headline }, disabled: { opacity: 0.45 }, error: { ...iosType.subheadline, color: iosColors.danger, padding: iosSpacing.md },
+  card: { backgroundColor: iosColors.surface, padding: iosSpacing.lg, borderRadius: iosRadius.card, gap: iosSpacing.sm }, cardTitle: { ...iosType.headline, color: iosColors.label },
+  tabs: { flexDirection: 'row', minHeight: 64, paddingTop: 6, paddingHorizontal: iosSpacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: 'rgba(255,255,255,0.97)', ...iosFloatingShadow },
+  tab: { flex: 1, minHeight: minimumTapSize, alignItems: 'center', justifyContent: 'center', gap: 2, borderRadius: iosRadius.control },
+  tabPressed: { backgroundColor: iosColors.surfaceSecondary },
+  activeTab: { color: iosColors.tint, fontSize: 10.5, lineHeight: 13, fontWeight: '700' }, inactiveTab: { color: iosColors.tertiaryLabel, fontSize: 10.5, lineHeight: 13, fontWeight: '600' },
+  mapNotice: { position: 'absolute', top: 12, left: 12, right: 12, backgroundColor: iosColors.surface, padding: 12, borderRadius: iosRadius.control },
 });

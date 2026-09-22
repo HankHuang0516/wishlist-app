@@ -41,6 +41,17 @@ describe('native wish ownership and durable create receipts / PostgreSQL and rea
         expect(await prisma.item.count({ where: { wishlistId: id } })).toBe(1); expect(await prisma.item.findFirst({ where: { wishlistId: id } })).toMatchObject({ aiStatus: 'SKIPPED', uploadStatus: 'COMPLETED' });
         expect((await post(`/lists/${id}/items`, { ...body, maxPrice: 1 })).status).toBe(409);
     });
+    it('queues one EClaw image recognition job for an idempotent native image wish', async () => {
+        const { id } = await list(); const body = { clientRequestId: randomUUID(), name: '待辨識商品', imageUrl: 'https://images.example.com/camera.jpg' };
+        const first = await post(`/lists/${id}/items`, body), replayed = await post(`/lists/${id}/items`, body);
+        expect(first.status).toBe(201); expect(first.body.replayed).toBe(false); expect(first.body.resource).toMatchObject({ imageUrl: body.imageUrl, aiStatus: 'PENDING' });
+        expect(replayed.status).toBe(201); expect(replayed.body.replayed).toBe(true); expect(replayed.body.resource.id).toBe(first.body.resource.id);
+        expect(await prisma.item.count({ where: { wishlistId: id } })).toBe(1);
+    });
+    it.each(['http://images.example.com/camera.jpg', 'https://example.com/product', 'https://user:pass@example.com/camera.jpg'])('rejects unsafe or non-image native AI resource %s', async imageUrl => {
+        const { id } = await list(); expect((await post(`/lists/${id}/items`, { clientRequestId: randomUUID(), name: 'bad', imageUrl })).status).toBe(400);
+        expect(await prisma.item.count({ where: { wishlistId: id } })).toBe(0);
+    });
     it('keeps the request namespace independent of target and refuses changed kind or parent', async () => {
         const a = await list(), b = await list(); const body = { clientRequestId: randomUUID(), name: 'Sony' }; expect((await post(`/lists/${a.id}/items`, body)).status).toBe(201);
         expect((await post(`/lists/${b.id}/items`, body)).status).toBe(409); expect((await post('/lists', { clientRequestId: body.clientRequestId, title: 'x' })).status).toBe(409);

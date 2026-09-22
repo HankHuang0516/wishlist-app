@@ -25,13 +25,13 @@ describe('durable EClaw recognition queue', () => {
     it('claims one oldest pending item and writes the matching agent result', async () => {
         findFirst.mockResolvedValueOnce({ id: 7, name: 'Image Item', imageUrl: 'https://images.example/item.jpg', link: null, aiError: null, wishlist: { userId: 3 } }).mockResolvedValue(null);
         updateMany.mockResolvedValue({ count: 1 }); quota.mockResolvedValue(true);
-        const recognize = jest.fn().mockResolvedValue({ name: '二手相機', price: 2500, currency: 'TWD', tags: ['相機'], shoppingLink: null, description: '外觀良好' });
+        const recognize = jest.fn().mockResolvedValue({ name: '二手相機', brand: 'Sony', model: 'A7', category: '相機', condition: '外觀良好', price: 2500, priceLow: 2200, priceHigh: 2800, currency: 'TWD', priceBasis: '二手市場', tags: ['相機'], keyFeatures: ['可換鏡頭'], confidence: 0.9, uncertainties: ['快門數未知'], shoppingLink: null, description: '外觀良好' });
         const stop = startEclawRecognitionWorker(recognize, jest.fn());
         await settle();
         expect(recognize).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'wish-7', resourceUrl: 'https://images.example/item.jpg' }), expect.objectContaining({ deviceId: 'test-device' }));
         expect(updateMany.mock.calls[0][0]).toMatchObject({ where: { aiStatus: 'PROCESSING' }, data: { aiStatus: 'PENDING' } });
         expect(updateMany.mock.calls[1][0]).toMatchObject({ where: { id: 7, aiStatus: 'PENDING' }, data: { aiStatus: 'PROCESSING' } });
-        expect(updateMany.mock.calls[2][0]).toMatchObject({ where: { id: 7, aiStatus: 'PROCESSING' }, data: { name: '二手相機', price: '2500', currency: 'TWD', aiStatus: 'COMPLETED' } });
+        expect(updateMany.mock.calls[2][0]).toMatchObject({ where: { id: 7, aiStatus: 'PROCESSING' }, data: { name: '二手相機', price: '2500', currency: 'TWD', notes: expect.stringContaining('參考價格區間：TWD 2200–2800'), aiStatus: 'COMPLETED' } });
         stop();
     });
 
@@ -42,7 +42,7 @@ describe('durable EClaw recognition queue', () => {
         updateMany.mockResolvedValue({ count: 1 }); quota.mockResolvedValue(true);
         const recognize = jest.fn()
             .mockRejectedValueOnce(new EclawRecognitionError('No reply', 'NO_REPLY'))
-            .mockResolvedValueOnce({ name: '頭戴式耳機', price: null, currency: 'TWD', tags: ['耳機'], shoppingLink: null, description: null });
+            .mockResolvedValueOnce({ name: '頭戴式耳機', brand: null, model: null, category: '耳機', condition: null, price: null, priceLow: null, priceHigh: null, currency: null, priceBasis: null, tags: ['耳機'], keyFeatures: [], confidence: 0.7, uncertainties: [], shoppingLink: null, description: null });
         const report = jest.fn();
         const stop = startEclawRecognitionWorker(recognize, report);
         await settle();

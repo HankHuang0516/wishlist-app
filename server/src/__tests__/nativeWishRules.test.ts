@@ -5,7 +5,7 @@ describe('native wish create / deterministic bounded input', () => {
     it('retains explicit visibility and clearable description', () => { expect(nativeWishlistPatch({ isPublic: true, description: '' })).toEqual({ isPublic: true, description: '' }); expect(nativeWishlistPatch({ description: null, title: '新的' })).toEqual({ description: null, title: '新的' }); });
     it.each([{}, [], null, { title: '' }, { title: [] }, { title: 'x'.repeat(201) }, { title: 'bad\nname' }, { isPublic: 'true' }, { description: 1 }, { description: 'x'.repeat(1001) }, { description: '\u0000' }, { userId: 4 }])('rejects invalid list patch %j', input => { expect(() => nativeWishlistPatch(input)).toThrow(); });
     it('requires a name and separates absent and zero budgets', () => {
-        expect(nativeWishCreate({ clientRequestId, name: 'Sony' }).data).toEqual({ name: 'Sony', notes: null, link: null, maxPrice: null, priceCurrency: null });
+        expect(nativeWishCreate({ clientRequestId, name: 'Sony' }).data).toEqual({ name: 'Sony', notes: null, link: null, imageUrl: null, maxPrice: null, priceCurrency: null });
         expect(nativeWishCreate({ clientRequestId, name: 'Sony', maxPrice: 0 }).data).toMatchObject({ maxPrice: 0, priceCurrency: 'TWD' });
         expect(nativeWishCreate({ clientRequestId, name: 'Sony', maxPrice: 100, priceCurrency: 'usd' }).data).toMatchObject({ maxPrice: 100, priceCurrency: 'USD' });
     });

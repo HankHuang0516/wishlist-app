@@ -16,14 +16,16 @@ describe('EClaw queued product recognition contract', () => {
             .mockResolvedValueOnce(response({ success: true }))
             .mockResolvedValueOnce(response({ messages: [
                 { id: 'old', entity_id: 0, is_from_bot: true, text: 'old' },
-                { id: 'new', entity_id: 0, is_from_bot: true, created_at: new Date().toISOString(), text: '```json\n{"jobId":"wish-7","name":"Sony WH-1000XM5","price":6990,"currency":"twd","tags":["耳機","降噪"],"shoppingLink":"https://example.com/search","description":"無線降噪耳機"}\n```' },
+                { id: 'new', entity_id: 0, is_from_bot: true, created_at: new Date().toISOString(), text: '```json\n{"jobId":"wish-7","name":"Sony WH-1000XM5","brand":"Sony","model":"WH-1000XM5","category":"耳機","condition":"外觀良好","price":6990,"priceLow":6500,"priceHigh":7500,"currency":"twd","priceBasis":"台灣近期市場售價","tags":["耳機","降噪"],"keyFeatures":["頭戴式","主動降噪"],"confidence":0.94,"uncertainties":["無法確認保固"],"shoppingLink":"https://example.com/search","description":"無線降噪耳機"}\n```' },
             ] }));
 
         await expect(recognizeWithEclaw({ jobId: 'wish-7', resourceUrl: 'https://images.example.com/item.jpg', currentName: '上傳圖片' }, config, fetchImpl))
-            .resolves.toEqual({ name: 'Sony WH-1000XM5', price: 6990, currency: 'TWD', tags: ['耳機', '降噪'], shoppingLink: 'https://example.com/search', description: '無線降噪耳機' });
+            .resolves.toEqual({ name: 'Sony WH-1000XM5', brand: 'Sony', model: 'WH-1000XM5', category: '耳機', condition: '外觀良好', price: 6990, priceLow: 6500, priceHigh: 7500, currency: 'TWD', priceBasis: '台灣近期市場售價', tags: ['耳機', '降噪'], keyFeatures: ['頭戴式', '主動降噪'], confidence: 0.94, uncertainties: ['無法確認保固'], shoppingLink: 'https://example.com/search', description: '無線降噪耳機' });
         const dispatch = JSON.parse(fetchImpl.mock.calls[1][1].body);
         expect(dispatch).toMatchObject({ deviceId: 'device-1', entityId: 0, source: 'wishlist-ai', mediaType: 'photo', mediaUrl: 'https://images.example.com/item.jpg' });
         expect(dispatch.text).toContain('WISHLIST_AI_JOB:wish-7');
+        expect(dispatch.text).toContain('priceLow');
+        expect(dispatch.text).toContain('不可因相似外觀猜測品牌或型號');
         expect(fetchImpl.mock.calls[1][1].headers['idempotency-key']).toBe('wish-7');
     });
 
@@ -42,6 +44,11 @@ describe('EClaw queued product recognition contract', () => {
 
     it('does not invent optional values when the agent returns null', () => {
         expect(parseRecognitionReply('{"jobId":"wish-1","name":"未知商品","price":null,"currency":null,"tags":[],"shoppingLink":null,"description":null}', 'wish-1'))
-            .toEqual({ name: '未知商品', price: null, currency: null, tags: [], shoppingLink: null, description: null });
+            .toEqual({ name: '未知商品', brand: null, model: null, category: null, condition: null, price: null, priceLow: null, priceHigh: null, currency: null, priceBasis: null, tags: [], keyFeatures: [], confidence: null, uncertainties: [], shoppingLink: null, description: null });
+    });
+
+    it('rejects contradictory price ranges and prices without currency', () => {
+        expect(() => parseRecognitionReply('{"jobId":"wish-1","name":"商品","price":300,"priceLow":400,"priceHigh":500,"currency":"TWD"}', 'wish-1')).toThrow(EclawRecognitionError);
+        expect(() => parseRecognitionReply('{"jobId":"wish-1","name":"商品","price":300,"priceLow":null,"priceHigh":null,"currency":null}', 'wish-1')).toThrow(EclawRecognitionError);
     });
 });

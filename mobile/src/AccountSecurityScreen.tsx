@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { performSecurityOperation, securityPayload, SecurityApi, SecurityOperation } from './accountSecurity';
 import type { AuthOperationGate } from './authOperation';
+import { iosColors, iosRadius, iosShadow, iosSpacing, iosType } from './iosTheme';
 export function AccountSecurityScreen({ api, onPublish, onLogout, onRevoked, onDelete, operationGate }: { api: SecurityApi; onPublish: () => void; onLogout: () => void; onRevoked: (message: string) => Promise<void>; onDelete: () => void; operationGate: AuthOperationGate }) {
   const [current, setCurrent] = useState(''), [replacement, setReplacement] = useState(''), [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false), [issue, setIssue] = useState('');
@@ -35,9 +36,24 @@ export function AccountSecurityScreen({ api, onPublish, onLogout, onRevoked, onD
     <Text style={styles.note}>新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。</Text>
     {!!issue && <Text accessibilityRole="alert" style={styles.error}>{issue}</Text>}
     <Pressable accessibilityRole="button" disabled={busy || !current || !replacement || !confirmation} style={[styles.button, (busy || !current || !replacement || !confirmation) && styles.disabled]} onPress={() => confirm('password')}><Text style={styles.buttonText}>{busy ? '確認中…' : '更新密碼並重新登入'}</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={busy || !current} style={[styles.button, (busy || !current) && styles.disabled]} onPress={() => confirm('sessions')}><Text style={styles.buttonText}>撤銷所有裝置登入</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={onLogout}><Text style={styles.buttonText}>登出此裝置</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={onDelete}><Text style={styles.buttonText}>刪除本人帳號與資料</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy || !current} style={[styles.button, styles.secondaryButton, (busy || !current) && styles.disabled]} onPress={() => confirm('sessions')}><Text style={styles.secondaryButtonText}>撤銷所有裝置登入</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton, busy && styles.disabled]} onPress={onLogout}><Text style={styles.secondaryButtonText}>登出此裝置</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.dangerButton, busy && styles.disabled]} onPress={onDelete}><Text style={styles.dangerButtonText}>刪除本人帳號與資料</Text></Pressable>
   </ScrollView></KeyboardAvoidingView>;
 }
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 24, gap: 18 }, title: { fontSize: 32, fontWeight: '800', color: '#173E36' }, heading: { fontSize: 21, fontWeight: '700', color: '#173E36' }, note: { color: '#596960', fontSize: 14, lineHeight: 22 }, input: { minHeight: 52, padding: 16, borderWidth: 1, borderColor: '#B4BDB4', borderRadius: 14, backgroundColor: '#FFF', fontSize: 16, color: '#173E36' }, button: { minHeight: 52, padding: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#173E36', borderRadius: 14 }, buttonText: { fontSize: 16, fontWeight: '700', color: '#FFF' }, disabled: { opacity: 0.5 }, error: { color: '#A52626', fontSize: 14, lineHeight: 22 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: iosColors.background },
+  content: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.xs, paddingBottom: iosSpacing.xxl, gap: iosSpacing.md },
+  title: { ...iosType.largeTitle, color: iosColors.label },
+  heading: { ...iosType.title2, color: iosColors.label, marginTop: iosSpacing.sm },
+  note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, fontSize: 17, color: iosColors.label, ...iosShadow },
+  button: { minHeight: 52, padding: iosSpacing.md, alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.tint, borderRadius: iosRadius.control },
+  buttonText: { ...iosType.headline, color: iosColors.white },
+  secondaryButton: { backgroundColor: iosColors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator },
+  secondaryButtonText: { ...iosType.headline, color: iosColors.tint },
+  dangerButton: { backgroundColor: iosColors.dangerSoft },
+  dangerButtonText: { ...iosType.headline, color: iosColors.danger },
+  disabled: { opacity: 0.45 },
+  error: { ...iosType.subheadline, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm },
+});

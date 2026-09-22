@@ -1,6 +1,7 @@
 import prisma from './prisma';
 import { checkAndIncrementAiUsage } from './usageService';
 import { loadEclawRecognitionConfig, recognizeWithEclaw } from './eclawRecognition';
+import type { EclawRecognitionResult } from './eclawRecognition';
 
 const INTERVAL_MS = 3000;
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
@@ -10,6 +11,20 @@ let wakeCurrentWorker: (() => void) | null = null;
 function retryAttempt(aiError: string | null) {
     const match = aiError?.match(/^ECLAW_RETRY_(\d+)$/);
     return match ? Number(match[1]) : 0;
+}
+
+export function formatEclawRecognitionNotes(result: EclawRecognitionResult) {
+    const lines = [result.description];
+    const identity = [result.brand && `品牌：${result.brand}`, result.model && `型號：${result.model}`, result.category && `品類：${result.category}`, result.condition && `狀況：${result.condition}`].filter(Boolean).join('｜');
+    if (identity) lines.push(identity);
+    if (result.priceLow !== null && result.priceHigh !== null) lines.push(`參考價格區間：${result.currency ?? ''} ${result.priceLow}–${result.priceHigh}${result.priceBasis ? `（${result.priceBasis}）` : ''}`.trim());
+    else if (result.priceBasis) lines.push(`價格依據：${result.priceBasis}`);
+    if (result.keyFeatures.length) lines.push(`特徵：${result.keyFeatures.join('、')}`);
+    if (result.tags.length) lines.push(`標籤：${result.tags.join('、')}`);
+    if (result.confidence !== null) lines.push(`辨識可信度：${Math.round(result.confidence * 100)}%`);
+    if (result.uncertainties.length) lines.push(`待確認：${result.uncertainties.join('、')}`);
+    const summary = lines.filter(Boolean).join('\n');
+    return summary ? summary.slice(0, 1000) : null;
 }
 
 export function wakeEclawRecognitionWorker() { wakeCurrentWorker?.(); }
@@ -63,7 +78,7 @@ export function startEclawRecognitionWorker(
                         price: result.price === null ? null : String(result.price),
                         currency: result.currency,
                         aiLink: result.shoppingLink,
-                        notes: result.description,
+                        notes: formatEclawRecognitionNotes(result),
                         aiStatus: 'COMPLETED',
                         aiError: null,
                     },

@@ -8,6 +8,7 @@ import { erasePrivatePendingData } from './nativePendingStore';
 import { createAuthOperationGate } from './authOperation';
 import { createApi } from './api';
 import { securityPayload } from './accountSecurity';
+import { iosColors, iosRadius, iosShadow, iosSpacing, iosType } from './iosTheme';
 
 export function AccountDeletionScreen({ apiUrl, userId, token, initialJournal, onPrepared, onErased, onExit }: {
   apiUrl: string; userId?: number; token?: string; initialJournal: DeletionJournal | null;
@@ -120,18 +121,33 @@ export function AccountDeletionScreen({ apiUrl, userId, token, initialJournal, o
     {!journal ? <>
       <Text style={styles.heading}>刪除影響盤點</Text>
       {impact ? <><Text style={styles.note}>唯讀盤點時間：{new Date(impact.capturedAt).toLocaleString('zh-TW')}。數量可能因新資料而變動，不是刪除收據。</Text>{Object.entries(DELETION_IMPACT_LABELS).map(([name, label]) => <Text key={name} style={styles.body}>{label}：{impact.counts[name as keyof typeof DELETION_IMPACT_LABELS]}</Text>)}</> : <Text style={styles.note}>尚未取得有效盤點，不可送出刪除。</Text>}
-      <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={() => void loadImpact()}><Text style={styles.buttonText}>重新盤點</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton, busy && styles.disabled]} onPress={() => void loadImpact()}><Text style={styles.secondaryButtonText}>重新盤點</Text></Pressable>
       <TextInput accessibilityLabel="刪除帳號的目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={1024} value={password} onChangeText={setPassword} style={styles.input} />
       <TextInput accessibilityLabel="輸入刪除帳號以確認" placeholder="請輸入「刪除帳號」" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={20} value={confirmation} onChangeText={setConfirmation} style={styles.input} />
       <Pressable accessibilityRole="button" disabled={busy || !impact || !password || confirmation !== '刪除帳號'} style={[styles.button, styles.danger, (busy || !impact || !password || confirmation !== '刪除帳號') && styles.disabled]} onPress={confirmDelete}><Text style={styles.buttonText}>永久刪除本人帳號</Text></Pressable>
-      <Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={back}><Text style={styles.buttonText}>返回，不建立刪除操作</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={back}><Text style={styles.secondaryButtonText}>返回，不建立刪除操作</Text></Pressable>
     </> : <>
       <Text selectable style={styles.note}>操作識別碼：{journal.clientActionId}</Text>
       <Text style={styles.note}>恢復資料僅保存在此裝置加密儲存，沒有密碼；重啟只查收據，不重送刪除。登入失效或找不到收據都不是成功。</Text>
-      {outcome?.kind === 'erased' ? <><Text testID="帳號已確認刪除" accessibilityRole="alert" style={styles.heading}>帳號已確認刪除</Text><Text style={styles.body}>伺服器照片待清理：{outcome.ack.photoCleanupPending}；舊資產待核對／清理：{outcome.ack.legacyCleanupPending}。不代表全部資產或備份已清除。</Text>{deviceClean ? <Text testID="deletion-device-clean-proof" style={styles.body}>本人已索引的待確認資料與原登入已清理。</Text> : <Text testID="deletion-device-not-clean" style={styles.body}>裝置清理尚未確認完成。</Text>}<Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={() => void run(() => cleanDevice(journal, outcome.ack))}><Text style={styles.buttonText}>重試本人裝置清理</Text></Pressable></> : outcome?.kind === 'abandoned' ? <Text accessibilityRole="alert" style={styles.heading}>伺服器已確認放棄同筆刪除，帳號未刪除。</Text> : <Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={confirmAbandon}><Text style={styles.buttonText}>明確放棄尚未成立的操作</Text></Pressable>}
-      <Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={() => void check()}><Text style={styles.buttonText}>只查詢刪除結果</Text></Pressable>
+      {outcome?.kind === 'erased' ? <><Text testID="帳號已確認刪除" accessibilityRole="alert" style={styles.heading}>帳號已確認刪除</Text><Text style={styles.body}>伺服器照片待清理：{outcome.ack.photoCleanupPending}；舊資產待核對／清理：{outcome.ack.legacyCleanupPending}。不代表全部資產或備份已清除。</Text>{deviceClean ? <Text testID="deletion-device-clean-proof" style={styles.body}>本人已索引的待確認資料與原登入已清理。</Text> : <Text testID="deletion-device-not-clean" style={styles.body}>裝置清理尚未確認完成。</Text>}<Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={() => void run(() => cleanDevice(journal, outcome.ack))}><Text style={styles.secondaryButtonText}>重試本人裝置清理</Text></Pressable></> : outcome?.kind === 'abandoned' ? <Text accessibilityRole="alert" style={styles.heading}>伺服器已確認放棄同筆刪除，帳號未刪除。</Text> : <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={confirmAbandon}><Text style={styles.secondaryButtonText}>明確放棄尚未成立的操作</Text></Pressable>}
+      <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={() => void check()}><Text style={styles.secondaryButtonText}>只查詢刪除結果</Text></Pressable>
       {!!outcome && outcome.kind !== 'unconfirmed' && <Pressable accessibilityRole="button" disabled={busy || outcome.kind === 'erased' && !deviceClean} style={[styles.button, (busy || outcome.kind === 'erased' && !deviceClean) && styles.disabled]} onPress={() => void finish()}><Text style={styles.buttonText}>清除恢復資料並返回登入確認</Text></Pressable>}
     </>}
   </ScrollView></KeyboardAvoidingView>;
 }
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 24, gap: 16 }, title: { fontSize: 30, fontWeight: '800', color: '#173E36' }, heading: { fontSize: 20, fontWeight: '700', color: '#173E36' }, body: { fontSize: 16, lineHeight: 25, color: '#384D46' }, note: { fontSize: 14, lineHeight: 23, color: '#596960' }, error: { fontSize: 14, lineHeight: 23, color: '#A52626' }, input: { minHeight: 52, padding: 16, borderWidth: 1, borderColor: '#B4BDB4', borderRadius: 14, backgroundColor: '#FFF', fontSize: 16, color: '#173E36' }, button: { minHeight: 52, borderRadius: 14, padding: 14, backgroundColor: '#173E36', alignItems: 'center', justifyContent: 'center' }, buttonText: { fontSize: 16, fontWeight: '700', color: '#FFF' }, danger: { backgroundColor: '#A52626' }, disabled: { opacity: 0.5 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: iosColors.background },
+  content: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.lg, paddingBottom: 48, gap: iosSpacing.md },
+  title: { ...iosType.largeTitle, color: iosColors.label },
+  heading: { ...iosType.title2, color: iosColors.label },
+  body: { ...iosType.body, color: iosColors.label },
+  note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  error: { ...iosType.subheadline, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm },
+  input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, fontSize: 17, color: iosColors.label, ...iosShadow },
+  button: { minHeight: 52, borderRadius: iosRadius.control, padding: iosSpacing.md, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { ...iosType.headline, color: iosColors.white },
+  danger: { backgroundColor: iosColors.danger },
+  secondaryButton: { backgroundColor: iosColors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator },
+  secondaryButtonText: { ...iosType.headline, color: iosColors.tint },
+  disabled: { opacity: 0.45 },
+});

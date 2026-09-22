@@ -4,6 +4,7 @@ import { ApiError, createApi, validateApiUrl } from './api';
 import { validateNewPassword } from './accountSecurity';
 import { AuthMode, RecoveryLink, authErrorMessage, emailPayload, emailRequestAck, recoveryToken, registrationAck, registrationPayload, resetAck, verificationAck } from './authFlow';
 import { AuthOperationGate, createAuthOperationGate } from './authOperation';
+import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 const titles: Record<AuthMode, string> = { login: '登入', register: '建立帳號', forgot: '忘記密碼', resend: '重新寄送驗證信', verify: '驗證 Email', reset: '重設密碼' };
 export function AuthScreen({ apiUrl, initialLink, externalBusy = false, externalIssue, onRetryRestore, onAuthenticated, onClose, onResetConfirmed, operationGate }: {
   apiUrl: string; initialLink: RecoveryLink | null; externalBusy?: boolean; externalIssue?: string; onRetryRestore?: () => void;
@@ -105,4 +106,20 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
     <Text style={styles.note}>目前為開發驗證版本，完整雙平台與商店驗收尚未完成。</Text>
   </ScrollView></KeyboardAvoidingView>;
 }
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 28, paddingTop: 36, gap: 18 }, brand: { fontSize: 32, fontWeight: '800', color: '#173E36' }, heading: { fontSize: 23, fontWeight: '700', color: '#173E36' }, eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1, color: '#486A60' }, body: { fontSize: 16, lineHeight: 25, color: '#384D46' }, note: { fontSize: 14, lineHeight: 22, color: '#596960' }, input: { minHeight: 52, backgroundColor: '#FFF', borderColor: '#B4BDB4', borderWidth: 1, borderRadius: 14, padding: 16, fontSize: 16, color: '#173E36' }, button: { minHeight: 52, borderRadius: 14, backgroundColor: '#173E36', alignItems: 'center', justifyContent: 'center', padding: 14 }, buttonText: { color: '#FFF', fontSize: 16, fontWeight: '700' }, link: { minHeight: 48, justifyContent: 'center', paddingVertical: 12 }, linkText: { fontSize: 16, fontWeight: '600', color: '#173E36' }, navigation: { gap: 4 }, disabled: { opacity: 0.5 }, error: { color: '#A52626', fontSize: 14, lineHeight: 22 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: iosColors.background },
+  content: { flexGrow: 1, paddingHorizontal: iosSpacing.xl, paddingTop: iosSpacing.xxl, paddingBottom: 48, gap: iosSpacing.md },
+  brand: { ...iosType.largeTitle, color: iosColors.label },
+  heading: { ...iosType.title2, color: iosColors.label, marginTop: iosSpacing.sm },
+  eyebrow: { ...iosType.caption, letterSpacing: 1.1, color: iosColors.tint },
+  body: { ...iosType.body, color: iosColors.secondaryLabel },
+  note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  input: { minHeight: 54, backgroundColor: iosColors.surface, borderColor: iosColors.separator, borderWidth: StyleSheet.hairlineWidth, borderRadius: iosRadius.control, paddingHorizontal: iosSpacing.md, paddingVertical: 14, fontSize: 17, color: iosColors.label, ...iosShadow },
+  button: { minHeight: 54, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center', padding: iosSpacing.md, marginTop: iosSpacing.xs },
+  buttonText: { color: iosColors.white, ...iosType.headline },
+  link: { minHeight: minimumTapSize, justifyContent: 'center', alignItems: 'center', paddingVertical: iosSpacing.sm },
+  linkText: { ...iosType.callout, fontWeight: '600', color: iosColors.tint },
+  navigation: { gap: iosSpacing.xxs, backgroundColor: iosColors.surface, borderRadius: iosRadius.card, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.xs },
+  disabled: { opacity: 0.45 },
+  error: { color: iosColors.danger, ...iosType.subheadline, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm },
+});

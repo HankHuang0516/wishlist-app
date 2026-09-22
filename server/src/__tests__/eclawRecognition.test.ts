@@ -1,4 +1,4 @@
-import { EclawRecognitionError, parseRecognitionReply, recognizeWithEclaw, safePublicResourceUrl, type EclawRecognitionConfig } from '../lib/eclawRecognition';
+import { EclawRecognitionError, isLikelyImageResourceUrl, parseRecognitionReply, recognizeWithEclaw, safePublicResourceUrl, type EclawRecognitionConfig } from '../lib/eclawRecognition';
 
 const config: EclawRecognitionConfig = {
     baseUrl: 'https://eclaw.example', deviceId: 'device-1', deviceSecret: 'secret-1', entityId: 0,
@@ -34,6 +34,11 @@ describe('EClaw queued product recognition contract', () => {
 
     it.each(['http://example.com/a.jpg', 'https://user:pass@example.com/a.jpg', 'file:///tmp/a.jpg', 'not-a-url'])
         ('refuses non-public resource URL %s', value => expect(() => safePublicResourceUrl(value)).toThrow(EclawRecognitionError));
+
+    it('recognizes direct image URLs so the web card can retain its thumbnail', () => {
+        expect(isLikelyImageResourceUrl('https://upload.wikimedia.org/wikipedia/commons/8/8b/Headphones.jpg')).toBe(true);
+        expect(isLikelyImageResourceUrl('https://example.com/product/123')).toBe(false);
+    });
 
     it('does not invent optional values when the agent returns null', () => {
         expect(parseRecognitionReply('{"jobId":"wish-1","name":"未知商品","price":null,"currency":null,"tags":[],"shoppingLink":null,"description":null}', 'wish-1'))

@@ -121,8 +121,8 @@ export async function recognizeWithEclaw(
             entityId: config.entityId,
             text: prompt,
             source: 'wishlist-ai',
-            mediaType: looksLikeImage(resource) ? 'photo' : undefined,
-            mediaUrl: looksLikeImage(resource) ? resource : undefined,
+            mediaType: isLikelyImageResourceUrl(resource) ? 'photo' : undefined,
+            mediaUrl: isLikelyImageResourceUrl(resource) ? resource : undefined,
         }),
     }, 60000);
     if (sendBody.success !== true) throw new EclawRecognitionError('EClaw did not accept the recognition job', 'DISPATCH_FAILED');
@@ -141,7 +141,7 @@ export async function recognizeWithEclaw(
     throw new EclawRecognitionError('EClaw recognition reply timed out', 'NO_REPLY');
 }
 
-function looksLikeImage(url: string) {
+export function isLikelyImageResourceUrl(url: string) {
     try {
         const parsed = new URL(url);
         return /\.(?:avif|gif|jpe?g|png|webp)$/i.test(parsed.pathname) || /(?:flickr|staticflickr|images|img|cdn)/i.test(parsed.hostname);

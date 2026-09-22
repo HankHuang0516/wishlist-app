@@ -45,7 +45,9 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
       if (message?.kind === 'failed') {
         clearTimeout(timer);
         // Enum stage and environment NAMES only, never values or raw exceptions.
-        const stages = ['launch-guard', 'private-storage', 'compiled-production-modules', 'synthetic-seed', 'actual-routes', 'loopback-listener'];
+        const stages = ['launch-guard', 'private-storage', 'module-express', 'module-jwt', 'module-bcrypt', 'module-prisma',
+          'module-jwt-config', 'module-listing-rules', 'module-account-erasure', 'module-listing-storage', 'listing-storage-ready',
+          'synthetic-seed', 'actual-routes', 'loopback-listener'];
         const stage = stages.includes(message.stage) ? message.stage : 'cleanup';
         const names = Array.isArray(message.unexpectedEnvironmentNames)
           ? message.unexpectedEnvironmentNames.filter(name => typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,100}$/.test(name)).join(',') : '';

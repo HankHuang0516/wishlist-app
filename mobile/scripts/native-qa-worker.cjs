@@ -88,16 +88,24 @@ async function main() {
   await fs.chmod(root, 0o700);
   process.env.LISTING_MEDIA_STORAGE_ROOT = root;
   // No dist/index.js, dotenv, background workers, provider or store SDK setup.
+  startupStage = 'module-express';
   const express = require('../../server/node_modules/express');
-  startupStage = 'compiled-production-modules';
+  startupStage = 'module-jwt';
   const jwt = require('../../server/node_modules/jsonwebtoken');
+  startupStage = 'module-bcrypt';
   const bcrypt = require('../../server/node_modules/bcryptjs');
+  startupStage = 'module-prisma';
   prisma = require('../../server/dist/lib/prisma').default;
+  startupStage = 'module-jwt-config';
   const { decodeUserSessionJwt } = require('../../server/dist/lib/jwtConfig');
+  startupStage = 'module-listing-rules';
   const { isListingId } = require('../../server/dist/lib/listingRules');
+  startupStage = 'module-account-erasure';
   const { erasureIdentityHash } = require('../../server/dist/lib/accountErasure');
+  startupStage = 'module-listing-storage';
   const { ListingMediaStorage } = require('../../server/dist/lib/listingMediaStorage');
   storage = new ListingMediaStorage();
+  startupStage = 'listing-storage-ready';
   await storage.ready();
   startupStage = 'synthetic-seed';
   const runId = randomUUID(), actors = {};

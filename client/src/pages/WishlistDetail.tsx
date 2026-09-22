@@ -25,7 +25,7 @@ interface Item {
     imageUrl?: string;
     notes?: string;
     uploadStatus: string; // PENDING, UPLOADING, COMPLETED, FAILED
-    aiStatus: string; // PENDING, COMPLETED, FAILED, SKIPPED
+    aiStatus: string; // PREPARING, PENDING, PROCESSING, COMPLETED, FAILED, SKIPPED
     status?: string; // PURCHASED, AVAILABLE
     aiError?: string;
     isHidden: boolean;
@@ -115,6 +115,9 @@ export default function WishlistDetail() {
     const [isDetailOpen, setIsDetailOpen] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const pendingItemSignature = wishlist?.items
+        .map(item => `${item.id}:${item.uploadStatus}:${item.aiStatus}`)
+        .join('|') || '';
 
     useEffect(() => {
         fetchWishlist();
@@ -125,7 +128,9 @@ export default function WishlistDetail() {
         const hasPending = wishlist?.items.some(i =>
             i.uploadStatus === 'PENDING' ||
             i.uploadStatus === 'UPLOADING' ||
-            i.aiStatus === 'PENDING'
+            i.aiStatus === 'PREPARING' ||
+            i.aiStatus === 'PENDING' ||
+            i.aiStatus === 'PROCESSING'
         );
         if (!hasPending) return;
 
@@ -135,7 +140,7 @@ export default function WishlistDetail() {
         }, 3000); // 3 seconds for faster feedback during upload
 
         return () => clearInterval(interval);
-    }, [wishlist?.items.length, id]); // Only re-run when items count changes, not on every items update
+    }, [pendingItemSignature, id]);
 
     const fetchWishlist = async (silent = false) => {
         try {
@@ -467,7 +472,7 @@ export default function WishlistDetail() {
             {/* Item List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {wishlist.items.map(item => {
-                    const isProcessing = item.uploadStatus !== 'COMPLETED' || item.aiStatus === 'PENDING';
+                    const isProcessing = item.uploadStatus !== 'COMPLETED' || ['PREPARING', 'PENDING', 'PROCESSING'].includes(item.aiStatus);
                     const borderColor = (item.uploadStatus === 'COMPLETED' && item.aiStatus === 'COMPLETED') ? 'border-l-green-500' :
                         item.aiStatus === 'SKIPPED' ? 'border-l-orange-500' :
                             isProcessing ? 'border-l-yellow-500' : 'border-l-red-500';
@@ -485,7 +490,7 @@ export default function WishlistDetail() {
                                             <span className="text-xs text-white font-bold animate-pulse">
                                                 {item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING'
                                                     ? '⬆️ Uploading...'
-                                                    : t('ai.analyzing')}
+                                                    : item.aiStatus === 'PREPARING' ? '準備圖片…' : item.aiStatus === 'PENDING' ? 'AI 排隊中…' : t('ai.analyzing')}
                                             </span>
                                         </div>
                                     )}
@@ -507,6 +512,12 @@ export default function WishlistDetail() {
                                             <span className="text-red-600">{t('ai.failed')}</span>
                                         ) : item.aiStatus === 'SKIPPED' ? (
                                             <span className="text-orange-600">傳統模式</span>
+                                        ) : item.aiStatus === 'PREPARING' ? (
+                                            <span className="text-blue-600 animate-pulse">準備圖片…</span>
+                                        ) : item.aiStatus === 'PENDING' ? (
+                                            <span className="text-yellow-600 animate-pulse">EClaw 排隊中…</span>
+                                        ) : item.aiStatus === 'PROCESSING' ? (
+                                            <span className="text-yellow-600 animate-pulse">EClaw 辨識中…</span>
                                         ) : (
                                             <span className="text-yellow-600">{t('ai.analyzing')}...</span>
                                         )}

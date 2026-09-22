@@ -11,6 +11,13 @@ type Editor = { kind: 'LIST'; list?: ManagedList } | { kind: 'ITEM'; wish?: Mana
 const root = '/native-wishes';
 const emptyWish: WishDraft = { name: '', notes: '', link: '', imageUrl: '', budget: '', currency: 'TWD' };
 const aiLabel: Record<ManagedWish['aiStatus'], string> = { PENDING: 'AI 排隊中', PROCESSING: 'AI 辨識中', COMPLETED: 'AI 辨識完成', FAILED: 'AI 辨識失敗，可檢查圖片網址後重建', SKIPPED: '未啟用 AI 辨識' };
+function WishImage({ wish }: { wish: ManagedWish }) {
+  const [failed, setFailed] = useState(false), [loaded, setLoaded] = useState(false);
+  useEffect(() => { setFailed(false); setLoaded(false); }, [wish.imageUrl]);
+  const message = wish.imageUrl ? '商品圖片載入中' : '尚未提供商品圖片';
+  if (failed || !wish.imageUrl) return <View accessibilityLabel={`${wish.name} ${failed ? '商品圖片載入失敗' : '尚未提供商品圖片'}`} style={[s.wishImage, s.imagePlaceholder]}><Text style={s.placeholderIcon}>🖼️</Text><Text style={s.placeholderText}>{failed ? '圖片暫時無法載入' : message}</Text></View>;
+  return <View accessible accessibilityLabel={`${wish.name} 商品圖片${loaded ? '已載入' : '載入中'}`} style={[s.wishImage, s.imagePlaceholder]}>{!loaded && <Text style={s.placeholderText}>{message}</Text>}<Image accessible={false} source={{ uri: wish.imageUrl }} style={s.imageContent} resizeMode="cover" resizeMethod="resize" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} /></View>;
+}
 export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onExplore: (id: number) => void }) {
   const [lists, setLists] = useState<ManagedList[]>([]), [listCursor, setListCursor] = useState<number | null>(null);
   const [selected, setSelected] = useState<ManagedList | null>(null), [wishes, setWishes] = useState<ManagedWish[]>([]), [wishCursor, setWishCursor] = useState<number | null>(null);
@@ -130,7 +137,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
       <Text style={s.text}>{selected.isPublic ? '公開清單：未隱藏願望與備註可供他人查看' : '私人清單：只有自己可查看'} · {selected.count}/{selected.maxItems}</Text>
       {button('編輯清單與公開設定', () => openEditor({ kind: 'LIST', list: selected }))}{button('新增願望', () => openEditor({ kind: 'ITEM' }), blocked, 'primary')}
       {wishes.length === 0 && !busy && <Text style={s.text}>這個清單還沒有願望，先記下想找的好物。</Text>}
-      {wishes.map(w => <View key={w.id} style={s.card}>{w.imageUrl ? <Image accessibilityLabel={`${w.name} 商品圖片`} source={{ uri: w.imageUrl }} style={s.wishImage} resizeMode="cover" /> : <View accessibilityLabel={`${w.name} 尚未提供商品圖片`} style={[s.wishImage, s.imagePlaceholder]}><Text style={s.placeholderIcon}>🖼️</Text><Text style={s.placeholderText}>尚未提供商品圖片</Text></View>}<Text style={s.heading}>{w.name}</Text><Text style={[s.aiStatus, w.aiStatus === 'FAILED' && s.aiFailed]}>{aiLabel[w.aiStatus]}</Text>{w.aiStatus === 'COMPLETED' && w.aiPrice !== null && <Text style={s.aiPrice}>AI 參考價格 {w.aiCurrency ?? ''} {w.aiPrice}</Text>}<Text style={s.text}>{w.maxPrice === null ? '未設定預算' : `最高預算 ${w.priceCurrency ?? '幣別未確認'} ${w.maxPrice}`}{w.isHidden ? ' · 已隱藏' : ''}{w.isPurchased ? ' · 已完成' : ''}</Text>{!!w.notes && <Text style={s.text}>{w.notes}</Text>}{!!w.link && <Text style={s.text}>參考連結：{w.link}</Text>}{!!w.aiLink && <Text style={s.text}>AI 參考商品：{w.aiLink}</Text>}
+      {wishes.map(w => <View key={w.id} style={s.card}><WishImage wish={w} /><Text style={s.heading}>{w.name}</Text><Text style={[s.aiStatus, w.aiStatus === 'FAILED' && s.aiFailed]}>{aiLabel[w.aiStatus]}</Text>{w.aiStatus === 'COMPLETED' && w.aiPrice !== null && <Text style={s.aiPrice}>AI 參考價格 {w.aiCurrency ?? ''} {w.aiPrice}</Text>}<Text style={s.text}>{w.maxPrice === null ? '未設定預算' : `最高預算 ${w.priceCurrency ?? '幣別未確認'} ${w.maxPrice}`}{w.isHidden ? ' · 已隱藏' : ''}{w.isPurchased ? ' · 已完成' : ''}</Text>{!!w.notes && <Text style={s.text}>{w.notes}</Text>}{!!w.link && <Text style={s.text}>參考連結：{w.link}</Text>}{!!w.aiLink && <Text style={s.text}>AI 參考商品：{w.aiLink}</Text>}
         {button('編輯願望', () => openEditor({ kind: 'ITEM', wish: w }))}{button(w.isHidden ? '取消隱藏' : '隱藏願望', () => void mutate('/items/' + w.id, { isHidden: !w.isHidden }))}
         {button(w.isPurchased ? '取消完成' : '標記完成', () => void mutate('/items/' + w.id, { isPurchased: !w.isPurchased }))}
         {button('查附近符合商品', () => onExplore(w.id), busy || w.isHidden || w.isPurchased, 'primary')}
@@ -162,7 +169,8 @@ const s = StyleSheet.create({
   destructiveButtonText: { color: iosColors.danger },
   disabled: { opacity: 0.45 },
   input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, color: iosColors.label, fontSize: 17 },
-  wishImage: { width: '100%', aspectRatio: 16 / 9, borderRadius: iosRadius.control, backgroundColor: iosColors.background },
+  wishImage: { width: '100%', aspectRatio: 16 / 9, borderRadius: iosRadius.control, backgroundColor: iosColors.background, overflow: 'hidden' },
+  imageContent: { position: 'absolute', inset: 0 },
   imagePlaceholder: { justifyContent: 'center', alignItems: 'center', gap: iosSpacing.xs },
   placeholderIcon: { fontSize: 34 },
   placeholderText: { ...iosType.footnote, color: iosColors.secondaryLabel },

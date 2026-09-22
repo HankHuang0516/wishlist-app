@@ -35,14 +35,14 @@ describe('durable EClaw recognition queue', () => {
         stop();
     });
 
-    it('retries one transient no-reply with a distinct job id without charging quota twice', async () => {
+    it('retries one incomplete estimate with a distinct job id without charging quota twice', async () => {
         const original = { id: 9, name: 'Headphones', imageUrl: 'https://images.example/item.jpg', link: null, aiError: null, wishlist: { userId: 3 } };
         const retry = { ...original, aiError: 'ECLAW_RETRY_1' };
         findFirst.mockResolvedValueOnce(original).mockResolvedValueOnce(retry).mockResolvedValue(null);
         updateMany.mockResolvedValue({ count: 1 }); quota.mockResolvedValue(true);
         const recognize = jest.fn()
-            .mockRejectedValueOnce(new EclawRecognitionError('No reply', 'NO_REPLY'))
-            .mockResolvedValueOnce({ name: '頭戴式耳機', brand: null, model: null, category: '耳機', condition: null, price: null, priceLow: null, priceHigh: null, currency: null, priceBasis: null, tags: ['耳機'], keyFeatures: [], confidence: 0.7, uncertainties: [], shoppingLink: null, description: null });
+            .mockRejectedValueOnce(new EclawRecognitionError('Missing estimate', 'INCOMPLETE_ESTIMATE'))
+            .mockResolvedValueOnce({ name: '頭戴式耳機', brand: null, model: null, category: '耳機', condition: null, price: 1000, priceLow: 800, priceHigh: 1200, currency: 'TWD', priceBasis: '同類產品品類估算', tags: ['耳機'], keyFeatures: [], confidence: 0.7, uncertainties: ['型號未知'], shoppingLink: null, description: null });
         const report = jest.fn();
         const stop = startEclawRecognitionWorker(recognize, report);
         await settle();
@@ -55,7 +55,7 @@ describe('durable EClaw recognition queue', () => {
         expect(recognize.mock.calls.map(call => call[0].jobId)).toEqual(['wish-9', 'wish-9-retry-1']);
         expect(quota).toHaveBeenCalledTimes(1);
         expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 9, aiStatus: 'PROCESSING' }, data: expect.objectContaining({ name: '頭戴式耳機', aiStatus: 'COMPLETED' }),
+            where: { id: 9, aiStatus: 'PROCESSING' }, data: expect.objectContaining({ name: '頭戴式耳機', price: '1000', aiStatus: 'COMPLETED' }),
         }));
         stop();
     });

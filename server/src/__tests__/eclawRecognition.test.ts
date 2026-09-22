@@ -25,6 +25,8 @@ describe('EClaw queued product recognition contract', () => {
         expect(dispatch).toMatchObject({ deviceId: 'device-1', entityId: 0, source: 'wishlist-ai', mediaType: 'photo', mediaUrl: 'https://images.example.com/item.jpg' });
         expect(dispatch.text).toContain('WISHLIST_AI_JOB:wish-7');
         expect(dispatch.text).toContain('priceLow');
+        expect(dispatch.text).toContain('品類估算');
+        expect(dispatch.text).toContain('不得為 null');
         expect(dispatch.text).toContain('不可因相似外觀猜測品牌或型號');
         expect(fetchImpl.mock.calls[1][1].headers['idempotency-key']).toBe('wish-7');
     });
@@ -42,9 +44,11 @@ describe('EClaw queued product recognition contract', () => {
         expect(isLikelyImageResourceUrl('https://example.com/product/123')).toBe(false);
     });
 
-    it('does not invent optional values when the agent returns null', () => {
-        expect(parseRecognitionReply('{"jobId":"wish-1","name":"未知商品","price":null,"currency":null,"tags":[],"shoppingLink":null,"description":null}', 'wish-1'))
-            .toEqual({ name: '未知商品', brand: null, model: null, category: null, condition: null, price: null, priceLow: null, priceHigh: null, currency: null, priceBasis: null, tags: [], keyFeatures: [], confidence: null, uncertainties: [], shoppingLink: null, description: null });
+    it('keeps identity fields optional while requiring a transparent best-effort estimate', () => {
+        expect(parseRecognitionReply('{"jobId":"wish-1","name":"未知品牌耳機","price":1000,"priceLow":800,"priceHigh":1200,"currency":"TWD","priceBasis":"同類型頭戴耳機品類估算","tags":[],"shoppingLink":null,"description":null}', 'wish-1'))
+            .toEqual({ name: '未知品牌耳機', brand: null, model: null, category: null, condition: null, price: 1000, priceLow: 800, priceHigh: 1200, currency: 'TWD', priceBasis: '同類型頭戴耳機品類估算', tags: [], keyFeatures: [], confidence: null, uncertainties: [], shoppingLink: null, description: null });
+        expect(() => parseRecognitionReply('{"jobId":"wish-1","name":"未知商品","price":null,"currency":null}', 'wish-1'))
+            .toThrow(expect.objectContaining({ code: 'INCOMPLETE_ESTIMATE' }));
     });
 
     it('rejects contradictory price ranges and prices without currency', () => {

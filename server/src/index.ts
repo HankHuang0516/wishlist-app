@@ -24,6 +24,7 @@ import chatRoutes from './routes/chatRoutes';
 import nativeWishRoutes from './routes/nativeWishRoutes';
 import listingReportRoutes, { createListingModerationRoutes } from './routes/listingReportRoutes';
 import { startMediaErasureWorker } from './lib/mediaErasureWorker';
+import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -218,4 +219,5 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`[server]: Server is running at http://0.0.0.0:${port}`);
 });
 const stopMediaErasureWorker = startMediaErasureWorker();
-server.once('close', stopMediaErasureWorker);
+const stopEclawRecognitionWorker = startEclawRecognitionWorker();
+server.once('close', () => { stopMediaErasureWorker(); stopEclawRecognitionWorker(); });

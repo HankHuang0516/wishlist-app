@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
-import { analyzeLocalImage, analyzeProductText, searchGoogleWeb } from './aiController';
+import { searchGoogleWeb } from './aiController';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import path from 'path';
 import { flickrService } from '../lib/flickr';
-import { checkAndIncrementAiUsage } from '../lib/usageService';
+import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
 import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from '../lib/eclawBridge';
 import { parseOptionalPrice, parseOptionalCurrency } from '../lib/matchmakingPrice';
 
@@ -43,103 +43,18 @@ const getRandomHeaders = () => {
 // Async AI Processor
 const processItemAi = async (itemId: number, imagePathOrUrl: string, originalName: string, userId: number) => {
     try {
-        console.log(`[AsyncAI] Starting analysis for Item ${itemId}`);
-
-        // Check AI quota
-        const canUseAi = await checkAndIncrementAiUsage(userId);
-        if (!canUseAi) {
-            console.log(`[AsyncAI] User ${userId} exceeded AI limit - using Traditional Mode`);
-            await prisma.item.update({
-                where: { id: itemId },
-                data: {
-                    name: originalName.replace(/\.[^/.]+$/, '') || 'Image Item',
-                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
-                    aiStatus: 'SKIPPED',
-                    aiError: 'Daily AI limit exceeded'
-                }
-            });
-            return;
-        }
-
-        let imageBuffer: Buffer;
-
-        // Check if it's a URL or local file path
-        if (imagePathOrUrl.startsWith('http')) {
-            // Download from URL (Flickr URL)
-            console.log(`[AsyncAI] Downloading image from URL: ${imagePathOrUrl}`);
-            const response = await fetch(imagePathOrUrl);
-            if (!response.ok) {
-                throw new Error(`Failed to download image: ${response.statusText}`);
-            }
-            const arrayBuffer = await response.arrayBuffer();
-            imageBuffer = Buffer.from(arrayBuffer);
-        } else {
-            // Read from local file path
-            imageBuffer = fs.readFileSync(imagePathOrUrl);
-        }
-
-        const fileForAi = {
-            buffer: imageBuffer,
-            mimetype: 'image/jpeg', // simplified, or detect from path
-            originalname: originalName
-        };
-
-        const aiResult = await analyzeLocalImage(fileForAi); // We need to export this from aiController
-
-        // Update Item with results
-        await prisma.item.update({
-            where: { id: itemId },
-            data: {
-                name: aiResult.name,
-                price: aiResult.price ? String(aiResult.price) : undefined,
-                currency: aiResult.currency,
-                aiLink: aiResult.shoppingLink, // Save to aiLink, not link (user link)
-                notes: aiResult.description,
-                // tags: aiResult.tags
-                aiStatus: 'COMPLETED',
-                aiError: null
-            }
-        });
-
-        // No need to upload to Flickr again if it's already a Flickr URL
-        if (!imagePathOrUrl.startsWith('http')) {
-            // Only upload to Flickr if we used a local file path
-            try {
-                const flickrUrl = await flickrService.uploadImage(
-                    imageBuffer,
-                    `item_${itemId}_${Date.now()}.jpg`,
-                    `Item ${itemId} - ${aiResult.name || originalName}`
-                );
-
-                if (flickrUrl) {
-                    console.log(`[AsyncAI] Migrated Item ${itemId} to Flickr: ${flickrUrl}`);
-                    await prisma.item.update({
-                        where: { id: itemId },
-                        data: { imageUrl: flickrUrl }
-                    });
-
-                    // Clean up local file after successful Flickr upload
-                    try {
-                        fs.unlinkSync(imagePathOrUrl);
-                    } catch (e) {
-                        console.warn(`[AsyncAI] Failed to delete temp file:`, e);
-                    }
-                }
-            } catch (flickrErr) {
-                console.error(`[AsyncAI] Flickr upload failed for Item ${itemId}`, flickrErr);
-                // Continue, don't fail the whole process
-            }
-        }
-
-        console.log(`[AsyncAI] Completed Item ${itemId}`);
-
+        const item = await prisma.item.findUnique({ where: { id: itemId }, select: { imageUrl: true } });
+        const publicImageUrl = imagePathOrUrl.startsWith('https://') ? imagePathOrUrl : item?.imageUrl;
+        if (!publicImageUrl?.startsWith('https://')) throw new Error('EClaw recognition requires a persistent HTTPS image URL');
+        await prisma.item.update({ where: { id: itemId }, data: { imageUrl: publicImageUrl, aiStatus: 'PENDING', aiError: null } });
+        wakeEclawRecognitionWorker();
     } catch (error: any) {
-        console.error(`[AsyncAI] Failed for Item ${itemId}:`, error);
+        console.error(`[EClawQueue] Failed to enqueue Item ${itemId}:`, error?.message || error);
         await prisma.item.update({
             where: { id: itemId },
             data: {
                 aiStatus: 'FAILED',
-                aiError: error.message || 'Unknown error'
+                aiError: 'ECLAW_QUEUE_FAILED'
             }
         });
     }
@@ -655,77 +570,34 @@ const downloadImage = async (url: string, itemId: number): Promise<string | null
 
 const processTextAi = async (itemId: number, text: string, userId: number, searchContext: any = null, suggestedQuery: string | null = null) => {
     try {
-        console.log(`[AsyncText] Processing text "${text}" for Item ${itemId} (Query Hint: ${suggestedQuery})`);
-
-        // Check AI quota BEFORE calling AI
-        const canUseAi = await checkAndIncrementAiUsage(userId);
-        if (!canUseAi) {
-            console.log(`[AsyncText] User ${userId} exceeded AI limit - using Traditional Mode`);
-
-            // Traditional Mode: Use search context if available, otherwise just store the text
-            const fallbackName = searchContext?.title || text.substring(0, 100);
-            const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=random&size=200`;
-
-            await prisma.item.update({
-                where: { id: itemId },
-                data: {
-                    name: fallbackName,
-                    notes: '每日 AI 辨識額度已用完，請手動編輯商品資訊。',
-                    imageUrl: fallbackImage,
-                    aiStatus: 'SKIPPED',
-                    aiError: 'Daily AI limit exceeded'
-                }
-            });
-            return;
-        }
-
-        const result = await analyzeProductText(text, 'traditional chinese', searchContext, suggestedQuery);
-
-        // Option C: Use original image URL directly (no download)
-        // Railway's ephemeral filesystem causes downloaded images to disappear on redeploy
-        // TODO: Consider Cloudinary for persistent image storage in the future
-        let finalImageUrl = result.imageUrl || null;
-
-        // Fallback if no image URL from AI
-        if (!finalImageUrl) {
-            // Generate a placeholder based on product name
-            const lowerName = (result.name || text).toLowerCase();
-            if (lowerName.includes('sony') || lowerName.includes('headphone') || lowerName.includes('audio')) {
-                finalImageUrl = '/uploads/fallback_tech.png';
-            } else {
-                finalImageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(result.name || text)}&background=random&size=200`;
-            }
-        }
-
+        const resourceUrl = searchContext?.imageUrl || searchContext?.image || (/^https:\/\//i.test(text.trim()) ? text.trim() : null);
+        if (!resourceUrl) throw new Error('EClaw recognition needs a public HTTPS image or product URL');
         await prisma.item.update({
             where: { id: itemId },
             data: {
-                name: result.name || text,
-                price: result.price ? String(result.price) : undefined,
-                currency: result.currency,
-                aiLink: result.shoppingLink, // Save to aiLink, not link (user link)
-                imageUrl: finalImageUrl, // Use local path or fallback
-                notes: result.description,
-                aiStatus: 'COMPLETED',
+                ...(searchContext?.title ? { name: String(searchContext.title).slice(0, 200) } : {}),
+                ...(searchContext?.imageUrl || searchContext?.image ? { imageUrl: resourceUrl } : {}),
+                aiStatus: 'PENDING',
                 aiError: null
             }
         });
+        wakeEclawRecognitionWorker();
     } catch (error: any) {
-        console.error(`[AsyncText] Failed for Item ${itemId}:`, error);
+        console.error(`[EClawQueue] Failed to enqueue text/URL Item ${itemId}:`, error?.message || error);
 
         // Log AI errors to CrawlerLog for monitoring
         await prisma.crawlerLog.create({
             data: {
                 userId,
                 url: text, // The input text or URL
-                errorMessage: error.message || 'Unknown AI error',
-                debugMessage: `AI processing failed. Suggested query: ${suggestedQuery || 'None'}`
+                errorMessage: error.message || 'Unable to queue EClaw recognition',
+                debugMessage: `EClaw queue preparation failed. Suggested query: ${suggestedQuery || 'None'}`
             }
         });
 
         await prisma.item.update({
             where: { id: itemId },
-            data: { aiStatus: 'FAILED', aiError: error.message }
+            data: { aiStatus: 'FAILED', aiError: 'ECLAW_QUEUE_FAILED' }
         });
     }
 };
@@ -804,7 +676,7 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
                 wishlistId: Number(wishlistId),
                 link: isUrl ? url : null,
                 imageUrl: null,
-                aiStatus: 'PENDING',
+                aiStatus: 'PREPARING',
                 proxy_end_user_id: safeProxyId
             }
         });

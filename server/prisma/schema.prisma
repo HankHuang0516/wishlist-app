@@ -222,6 +222,7 @@ model ListingMedia {
   id           String   @id @default(uuid())
   ownerUserId  Int
   listingId    String?
+  wishItemId   Int?     @unique
   imageUrl     String
   thumbnailUrl String
   contentHash  String
@@ -233,6 +234,7 @@ model ListingMedia {
   createdAt    DateTime @default(now())
   owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   listing      Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  wishItem     Item?    @relation(fields: [wishItemId], references: [id], onDelete: SetNull)
 
   @@index([listingId, position])
   @@index([ownerUserId, createdAt])
@@ -499,6 +501,7 @@ model Item {
   purchasedBy    User?       @relation("PurchasedBy", fields: [purchasedById], references: [id])
   wishlist       Wishlist    @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   watchedBy      ItemWatch[]
+  wishMedia      ListingMedia?
   proxy_end_user_id String?
 }
 

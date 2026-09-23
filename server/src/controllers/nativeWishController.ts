@@ -6,6 +6,7 @@ import { API_ERROR_CODES } from '../lib/errorCodes';
 import { NativeWishError, nativeListCreate, nativeWishCreate, nativeWishlistPatch, wishCreateHash, wishId } from '../lib/nativeWishRules';
 import { WishItemUpdateError } from '../lib/wishItemUpdate';
 import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
+import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
 const itemSelect = { id: true, wishlistId: true, name: true, notes: true, link: true, imageUrl: true, aiStatus: true, price: true, currency: true, aiLink: true, maxPrice: true, priceCurrency: true, isHidden: true, isPurchased: true, updatedAt: true } as const;
 const listSelect = { id: true, title: true, description: true, isPublic: true, maxItems: true, updatedAt: true, _count: { select: { items: true } } } as const;
 type Tx = Prisma.TransactionClient;
@@ -67,13 +68,24 @@ export const createNativeList = endpoint(async (req, userId) => {
     });
 }, 201);
 export const createNativeWish = endpoint(async (req, userId) => {
-    const id = wishId(req.params.id), input = nativeWishCreate(req.body), requestHash = wishCreateHash('ITEM', id, input.data);
+    const id = wishId(req.params.id), input = nativeWishCreate(req.body), requestHash = wishCreateHash('ITEM', id, input.mediaId ? { ...input.data, mediaId: input.mediaId } : input.data);
     const result = await prisma.$transaction(async tx => {
         await lockUser(tx, userId);
         const previous = await replay(tx, userId, input.clientRequestId, requestHash, 'ITEM'); if (previous) return previous;
         const list = await lockList(tx, id, userId);
         if (await tx.item.count({ where: { wishlistId: id } }) >= list.maxItems) throw new NativeWishError(409);
-        const resource = await tx.item.create({ data: { ...input.data, wishlistId: id, aiStatus: input.data.imageUrl ? 'PENDING' : 'SKIPPED', uploadStatus: 'COMPLETED' }, select: itemSelect });
+        let imageUrl = input.data.imageUrl;
+        if (input.mediaId) {
+            await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ListingMedia" WHERE "id" = ${input.mediaId} FOR UPDATE`);
+            const media = await tx.listingMedia.findFirst({ where: { id: input.mediaId, ownerUserId: userId, listingId: null, wishItemId: null }, select: { imageUrl: true } });
+            if (!media) throw new NativeWishError(409);
+            imageUrl = media.imageUrl;
+        }
+        const resource = await tx.item.create({ data: { ...input.data, imageUrl, wishlistId: id, aiStatus: imageUrl ? 'PENDING' : 'SKIPPED', uploadStatus: 'COMPLETED' }, select: itemSelect });
+        if (input.mediaId) {
+            const attached = await tx.listingMedia.updateMany({ where: { id: input.mediaId, ownerUserId: userId, listingId: null, wishItemId: null }, data: { wishItemId: resource.id } });
+            if (attached.count !== 1) throw new NativeWishError(409);
+        }
         await tx.wishCreateReceipt.create({ data: { userId, clientRequestId: input.clientRequestId, requestHash, kind: 'ITEM', resourceId: resource.id } });
         await tx.wishlist.update({ where: { id }, data: { updatedAt: new Date() } });
         return { resource, replayed: false };
@@ -87,7 +99,12 @@ export const updateNativeList = endpoint(async (req, userId) => {
 });
 export const deleteNativeList = endpoint(async (req, userId) => {
     const id = wishId(req.params.id);
-    return prisma.$transaction(async tx => { await lockList(tx, id, userId); await tx.wishlist.delete({ where: { id } }); return { id, deleted: true }; });
+    return prisma.$transaction(async tx => {
+        await lockList(tx, id, userId);
+        const items = await tx.item.findMany({ where: { wishlistId: id }, select: { id: true } });
+        await enqueueWishPhotoErasure(tx, items.map(row => row.id));
+        await tx.wishlist.delete({ where: { id } }); return { id, deleted: true };
+    });
 });
 export const deleteNativeWish = endpoint(async (req, userId) => {
     const id = wishId(req.params.id);
@@ -96,6 +113,7 @@ export const deleteNativeWish = endpoint(async (req, userId) => {
         await lockList(tx, item.wishlistId, userId);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Item" WHERE "id" = ${id} FOR UPDATE`);
         if (!(await tx.item.findFirst({ where: { id, wishlistId: item.wishlistId, wishlist: { userId } }, select: { id: true } }))) throw new NativeWishError(404);
+        await enqueueWishPhotoErasure(tx, [id]);
         await tx.item.delete({ where: { id } }); await tx.wishlist.update({ where: { id: item.wishlistId }, data: { updatedAt: new Date() } });
         return { id, deleted: true };
     });

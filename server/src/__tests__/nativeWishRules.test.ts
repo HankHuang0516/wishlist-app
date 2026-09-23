@@ -9,6 +9,12 @@ describe('native wish create / deterministic bounded input', () => {
         expect(nativeWishCreate({ clientRequestId, name: 'Sony', maxPrice: 0 }).data).toMatchObject({ maxPrice: 0, priceCurrency: 'TWD' });
         expect(nativeWishCreate({ clientRequestId, name: 'Sony', maxPrice: 100, priceCurrency: 'usd' }).data).toMatchObject({ maxPrice: 100, priceCurrency: 'USD' });
     });
+    it('accepts one authenticated upload identity but not both image sources', () => {
+        const mediaId = 'fab22941-2df0-4ca4-90c2-70c504527243';
+        expect(nativeWishCreate({ clientRequestId, name: '待辨識商品', mediaId })).toMatchObject({ mediaId, data: { imageUrl: null } });
+        expect(() => nativeWishCreate({ clientRequestId, name: 'x', mediaId: 'invalid' })).toThrow();
+        expect(() => nativeWishCreate({ clientRequestId, name: 'x', mediaId, imageUrl: 'https://images.example.com/a.jpg' })).toThrow();
+    });
     it.each([{ clientRequestId }, { clientRequestId, name: 'a', priceCurrency: 'USD' }, { clientRequestId, name: 'a', maxPrice: null, priceCurrency: 'USD' }, { clientRequestId, name: 'a', purchasedById: 99 }, { clientRequestId, name: 'a', link: 'javascript:alert(1)' }])('refuses incomplete or injected create %j', input => { expect(() => nativeWishCreate(input)).toThrow(); });
     it('normalizes UUID case without accepting unbounded or fake operation IDs', () => { expect(wishRequestId(clientRequestId.toUpperCase())).toBe(clientRequestId); for (const input of ['', 'secret', null, 42, clientRequestId.replace('-4072-', '-1072-')]) expect(() => wishRequestId(input)).toThrow(); });
     it('requires title on list creation', () => { expect(() => nativeListCreate({ clientRequestId, description: 'notes' })).toThrow(); });

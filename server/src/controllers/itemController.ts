@@ -10,6 +10,7 @@ import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
 import { isLikelyImageResourceUrl } from '../lib/eclawRecognition';
 import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from '../lib/eclawBridge';
 import { parseOptionalPrice, parseOptionalCurrency } from '../lib/matchmakingPrice';
+import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -311,7 +312,10 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Access denied: You do not own this wishlist item', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
-        await prisma.item.delete({ where: { id: Number(id) } });
+        await prisma.$transaction(async tx => {
+            await enqueueWishPhotoErasure(tx, [Number(id)]);
+            await tx.item.delete({ where: { id: Number(id) } });
+        });
         console.log(`[DeleteItem] Success`);
 
         res.json({ message: 'Item deleted' });

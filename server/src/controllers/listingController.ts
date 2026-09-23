@@ -58,10 +58,10 @@ export async function createListing(req: AuthRequest, res: Response) {
                 ...input.data, ownerUserId, clientListingId: input.clientListingId, requestHash: input.requestHash,
                 ...(input.location ? { location: { create: input.location } } : {}),
             } });
-            const media = await tx.listingMedia.findMany({ where: { id: { in: input.mediaIds }, ownerUserId, listingId: null }, select: { id: true } });
+            const media = await tx.listingMedia.findMany({ where: { id: { in: input.mediaIds }, ownerUserId, listingId: null, wishItemId: null }, select: { id: true } });
             if (media.length !== input.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
             for (const [position, id] of input.mediaIds.entries()) {
-                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null }, data: { listingId: created.id, position } });
+                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null, wishItemId: null }, data: { listingId: created.id, position } });
                 if (bound.count !== 1) throw new ListingConflict();
             }
             return tx.listing.findUniqueOrThrow({ where: { id: created.id }, select: publicListingSelect });
@@ -200,7 +200,7 @@ export async function editListing(req: AuthRequest, res: Response) {
         assertListingPolicy(parsed.data);
         const ownerUserId = req.user.id;
         const result = await prisma.$transaction(async tx => {
-            const media = await tx.listingMedia.findMany({ where: { id: { in: parsed.mediaIds }, ownerUserId, OR: [{ listingId: null }, { listingId: id }] }, select: { id: true } });
+            const media = await tx.listingMedia.findMany({ where: { id: { in: parsed.mediaIds }, ownerUserId, wishItemId: null, OR: [{ listingId: null }, { listingId: id }] }, select: { id: true } });
             if (media.length !== parsed.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
             const { publishedAt, expiresAt, expiryMode, lastVerifiedAt, status, ...editable } = parsed.data;
             // No expiry/publication/status fields are written by normal editing.
@@ -209,7 +209,7 @@ export async function editListing(req: AuthRequest, res: Response) {
             if (body.location !== undefined && parsed.location) await tx.listingLocation.upsert({ where: { listingId: id }, create: { listingId: id, ...parsed.location }, update: parsed.location });
             await tx.listingMedia.updateMany({ where: { listingId: id, ownerUserId, id: { notIn: parsed.mediaIds } }, data: { listingId: null } });
             for (const [position, mediaId] of parsed.mediaIds.entries()) {
-                const bound = await tx.listingMedia.updateMany({ where: { id: mediaId, ownerUserId, OR: [{ listingId: null }, { listingId: id }] }, data: { listingId: id, position } });
+                const bound = await tx.listingMedia.updateMany({ where: { id: mediaId, ownerUserId, wishItemId: null, OR: [{ listingId: null }, { listingId: id }] }, data: { listingId: id, position } });
                 if (bound.count !== 1) throw new ListingConflict();
             }
             return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });

@@ -83,6 +83,9 @@ jobs:
     - name: Run tests
       run: npm test
 
+    - name: Test local MiniMax vision pilot without account access
+      run: node --test ../tools/minimax-vision-bridge/server.test.mjs
+
     - name: Refuse unsafe database configuration before migrations
       run: node ../scripts/assert-test-database.cjs
 

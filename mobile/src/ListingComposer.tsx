@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
+import { jpegPhotoUploadForm } from './photoUploadForm';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingForm, ListingFormError, parsePhotoRecord, PhotoRecord, taiwanDate, uuid } from './listingForm';
 import { PendingStoreError } from './pendingStore';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
@@ -52,11 +53,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
   }
 
   async function upload(photo: Photo) {
-    if (!/^(?:file|content):\/\//.test(photo.uri)) throw new ListingFormError('無法讀取本機照片');
-    const body = new FormData(); body.append('clientUploadId', photo.key);
-    // React Native's FormData bridge reads this local URI as file bytes. It is
-    // not a remote URL and is never interpreted as a JSON image placeholder.
-    body.append('image', { uri: photo.uri, name: 'listing-photo.jpg', type: 'image/jpeg' } as unknown as Blob);
+    const body = jpegPhotoUploadForm(photo.key, photo.uri, 'listing-photo.jpg');
     const record = parsePhotoRecord(await api<unknown>('/listing-media', { method: 'POST', body }), apiUrl, __DEV__);
     setPhotos(old => old.map(p => p.key === photo.key ? { ...p, record, failed: false } : p));
   }

@@ -7,6 +7,7 @@ import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
 import { parsePhotoRecord, PhotoRecord } from './listingForm';
+import { jpegPhotoUploadForm } from './photoUploadForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { PendingStoreError } from './pendingStore';
 import { ManagedList, ManagedWish, parseManagedList, parseManagedWish, parseManagementPage, parseWishJournal, WishDraft, WishManagementError, wishDraftBody } from './wishManagement';
@@ -84,9 +85,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
     }
   }
   async function uploadPhoto(value: WishPhoto) {
-    const form = new FormData();
-    form.append('clientUploadId', value.key);
-    form.append('image', { uri: value.uri, name: 'wish-photo.jpg', type: 'image/jpeg' } as unknown as Blob);
+    const form = jpegPhotoUploadForm(value.key, value.uri, 'wish-photo.jpg');
     const record = parsePhotoRecord(await api<unknown>('/listing-media', { method: 'POST', body: form }), apiUrl, __DEV__);
     if (active.current) setPhoto(old => old?.key === value.key ? { ...old, record, failed: false } : old);
   }

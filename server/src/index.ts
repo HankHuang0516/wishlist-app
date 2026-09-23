@@ -20,6 +20,7 @@ import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
 import listingRoutes from './routes/listingRoutes';
 import listingMediaRoutes from './routes/listingMediaRoutes';
+import { createLegacyUploadRoutes } from './routes/legacyUploadRoutes';
 import chatRoutes from './routes/chatRoutes';
 import nativeWishRoutes from './routes/nativeWishRoutes';
 import listingReportRoutes, { createListingModerationRoutes } from './routes/listingReportRoutes';
@@ -90,7 +91,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/native-wishes', nativeWishRoutes);
 app.use('/api/listing-reports', listingReportRoutes);
 app.use('/api/moderation', createListingModerationRoutes());
-app.use('/uploads', express.static('public/uploads'));
+app.use('/uploads', createLegacyUploadRoutes());
 
 // Serve AI Guide JSON for external AI agents
 app.get('/api/ai-guide', (req: Request, res: Response) => {

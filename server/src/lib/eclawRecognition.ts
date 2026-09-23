@@ -158,7 +158,7 @@ export async function recognizeWithEclaw(
 export function isLikelyImageResourceUrl(url: string) {
     try {
         const parsed = new URL(url);
-        return /\.(?:avif|gif|jpe?g|png|webp)$/i.test(parsed.pathname) || /(?:flickr|staticflickr|images|img|cdn)/i.test(parsed.hostname);
+        return /\.(?:avif|gif|jpe?g|png|webp)$/i.test(parsed.pathname) || /(?:flickr|staticflickr|images|img|cdn)/i.test(parsed.hostname) || /^\/api\/listing-media\/[0-9a-f-]{36}\/image$/.test(parsed.pathname);
     } catch { return false; }
 }
 

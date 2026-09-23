@@ -20,6 +20,14 @@ describe('native wish management boundaries', () => {
   it.each(['-1', 'Infinity', '1e3', '1.234', '1000000000001', 'not-money'])('refuses invalid budget %s', budget => { expect(() => wishDraftBody({ ...form, budget })).toThrow(); });
   it.each(['not-a-url', 'javascript:alert(1)', 'file:///private/file', 'https://user:pass@example.com', 'https://example.com/' + 'a'.repeat(2048)])('refuses unsafe link %s', link => { expect(() => wishDraftBody({ ...form, link })).toThrow(); });
   it('accepts only public HTTPS image-like URLs for queued AI', () => { expect(wishDraftBody({ ...form, imageUrl: ' https://images.example.com/camera?id=1 ' })).toMatchObject({ imageUrl: 'https://images.example.com/camera?id=1' }); for (const imageUrl of ['http://images.example.com/camera.jpg', 'https://example.com/product', 'https://u:p@example.com/a.jpg']) expect(() => wishDraftBody({ ...form, imageUrl })).toThrow(); });
+  it('creates a photo-first wish without typing a name and keeps the media identity in recovery', () => {
+    const mediaId = 'fab22941-2df0-4ca4-90c2-70c504527243';
+    const body = wishDraftBody({ ...form, name: '' }, mediaId);
+    expect(body).toMatchObject({ name: '待辨識商品', imageUrl: null, mediaId });
+    expect(parseWishJournal(JSON.stringify({ kind: 'ITEM', listId: 1, body: JSON.stringify({ clientRequestId, ...body }) }))).toMatchObject({ kind: 'ITEM', listId: 1 });
+    expect(() => wishDraftBody({ ...form, imageUrl: 'https://images.example.com/a.jpg' }, mediaId)).toThrow();
+    expect(() => wishDraftBody(form, 'bad-id')).toThrow();
+  });
   it('refuses unsupported currencies and malformed text', () => { expect(() => wishDraftBody({ ...form, budget: '1', currency: 'BAD' })).toThrow(); expect(() => wishDraftBody({ ...form, name: 'bad\nname' })).toThrow(); expect(() => wishDraftBody({ ...form, name: '' })).toThrow(); expect(() => wishDraftBody({ ...form, notes: 'a'.repeat(1001) })).toThrow(); });
   it('restores the exact request body and target instead of synthesizing a new ID', () => { const body = JSON.stringify({ clientRequestId, name: 'Sony' }); const journal = { kind: 'ITEM', listId: 1, body }; expect(parseWishJournal(JSON.stringify(journal))).toEqual(journal); const createList = { kind: 'LIST', listId: null, body: JSON.stringify({ clientRequestId, title: 'Camera' }) }; expect(parseWishJournal(JSON.stringify(createList))).toEqual(createList); });
   it('refuses corrupt, unscoped, or injected pending requests', () => {

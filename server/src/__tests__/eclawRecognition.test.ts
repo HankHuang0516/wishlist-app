@@ -41,6 +41,7 @@ describe('EClaw queued product recognition contract', () => {
 
     it('recognizes direct image URLs so the web card can retain its thumbnail', () => {
         expect(isLikelyImageResourceUrl('https://upload.wikimedia.org/wikipedia/commons/8/8b/Headphones.jpg')).toBe(true);
+        expect(isLikelyImageResourceUrl('https://wishlist-app-production.up.railway.app/api/listing-media/fab22941-2df0-4ca4-90c2-70c504527243/image')).toBe(true);
         expect(isLikelyImageResourceUrl('https://example.com/product/123')).toBe(false);
     });
 

@@ -60,8 +60,9 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
     try {
         const { id, variant } = req.params;
         if (!isListingId(id) || (variant !== 'image' && variant !== 'thumbnail')) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, listing: { select: { status: true, expiresAt: true } } } });
-        const publicAccess = record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date());
+        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, listing: { select: { status: true, expiresAt: true } } } });
+        // The opaque URL is shared with EClaw for recognition after attachment.
+        const publicAccess = record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date()));
         if (!record || (!publicAccess && record.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '照片不存在' });
         const file = await storage.open(id, variant as PhotoVariant);
         if (res.destroyed) { await file.close(); return; }
@@ -94,7 +95,7 @@ export async function deleteUnusedListingMedia(req: AuthRequest, res: Response) 
         if (!isListingId(id)) return res.status(404).json({ error: '照片不存在或已用於商品' });
         // Atomically prevent deleting an image that a concurrent listing has
         // attached. Only this owner's still-unbound record may be removed.
-        const deleted = await prisma.listingMedia.deleteMany({ where: { id, ownerUserId: req.user.id, listingId: null } });
+        const deleted = await prisma.listingMedia.deleteMany({ where: { id, ownerUserId: req.user.id, listingId: null, wishItemId: null } });
         if (!deleted.count) return res.status(404).json({ error: '照片不存在或已用於商品' });
         await storage.remove(id).catch(() => console.error('Unused private photo cleanup needs retry; details withheld'));
         return res.status(204).send();

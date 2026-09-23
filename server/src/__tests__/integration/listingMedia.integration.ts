@@ -9,13 +9,15 @@ import path from 'path';
 import prisma from '../../lib/prisma';
 import listingRoutes from '../../routes/listingRoutes';
 import mediaRoutes from '../../routes/listingMediaRoutes';
+import wishRoutes from '../../routes/nativeWishRoutes';
+import { drainMediaErasureTasks } from '../../lib/accountErasure';
 
 const { assertTestDatabase } = require('../../../../scripts/assert-test-database.cjs');
 assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Explicit matching test database configuration required');
 const secret = 'media-integration-only-test-secret'; process.env.JWT_SECRET = secret;
 const app = express(); app.set('trust proxy', 1); app.use(express.json());
-app.use('/api/listings', listingRoutes); app.use('/api/listing-media', mediaRoutes);
+app.use('/api/listings', listingRoutes); app.use('/api/listing-media', mediaRoutes); app.use('/api/native-wishes', wishRoutes);
 let seller: number, third: number, root: string, jpeg: Buffer, sequence = 1;
 const savedRoot = process.env.LISTING_MEDIA_STORAGE_ROOT;
 const savedMode = process.env.NODE_ENV;
@@ -38,6 +40,8 @@ beforeAll(async () => {
         .withExif({ IFD0: { Artist: 'PRIVATE_TEST_OWNER' }, IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '25/1 3/1 1/1', GPSLongitudeRef: 'E', GPSLongitude: '121/1 31/1 1/1' } }).toBuffer();
 });
 beforeEach(async () => {
+    await prisma.wishlist.deleteMany({ where: { userId: { in: [seller, third] } } });
+    await prisma.wishCreateReceipt.deleteMany({ where: { userId: { in: [seller, third] } } });
     await prisma.listing.deleteMany({ where: { ownerUserId: { in: [seller, third] } } });
     await prisma.listingMedia.deleteMany({ where: { ownerUserId: { in: [seller, third] } } });
 });
@@ -71,6 +75,41 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
         const draft = await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id, false)); expect(draft.status).toBe(201);
         expect((await image(photo.id)).status).toBe(404); expect((await image(photo.id, 'thumbnail', third)).status).toBe(404);
         expect((await image(photo.id, 'thumbnail', seller)).status).toBe(200);
+    });
+    it('attaches a camera/gallery upload to one wish, exposes its opaque image to EClaw, and erases it on deletion', async () => {
+        const photo = (await upload()).body;
+        expect((await image(photo.id)).status).toBe(404);
+        const list = await request(app).post('/api/native-wishes/lists').set('Authorization', 'Bearer ' + token(seller))
+            .send({ clientRequestId: randomUUID(), title: '合成照片願望' });
+        expect(list.status).toBe(201);
+        const body = { clientRequestId: randomUUID(), name: '待辨識商品', mediaId: photo.id };
+        const create = () => request(app).post(`/api/native-wishes/lists/${list.body.resource.id}/items`)
+            .set('Authorization', 'Bearer ' + token(seller)).send(body);
+        const first = await create(), repeat = await create();
+        expect(first.status).toBe(201); expect(first.body.replayed).toBe(false);
+        expect(first.body.resource).toMatchObject({ imageUrl: photo.imageUrl, aiStatus: 'PENDING' });
+        expect(repeat.status).toBe(201); expect(repeat.body.replayed).toBe(true);
+        expect((await image(photo.id)).status).toBe(200);
+        expect((await request(app).post(`/api/native-wishes/lists/${list.body.resource.id}/items`).set('Authorization', 'Bearer ' + token(third))
+            .send({ clientRequestId: randomUUID(), name: 'steal', mediaId: photo.id })).status).toBe(404);
+        expect((await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id))).status).not.toBe(201);
+        expect((await del(photo.id)).status).toBe(404);
+        const removed = await request(app).delete(`/api/native-wishes/items/${first.body.resource.id}`).set('Authorization', 'Bearer ' + token(seller));
+        expect(removed.status).toBe(200);
+        expect((await image(photo.id)).status).toBe(404);
+        expect(await prisma.mediaErasureTask.findUnique({ where: { mediaId: photo.id } })).not.toBeNull();
+        await drainMediaErasureTasks();
+        await expect(fs.stat(path.join(root, photo.id))).rejects.toThrow();
+    });
+    it('refuses to attach another user’s unbound photo', async () => {
+        const photo = (await upload(third)).body;
+        const list = await request(app).post('/api/native-wishes/lists').set('Authorization', 'Bearer ' + token(seller))
+            .send({ clientRequestId: randomUUID(), title: '合成清單' });
+        const result = await request(app).post(`/api/native-wishes/lists/${list.body.resource.id}/items`)
+            .set('Authorization', 'Bearer ' + token(seller)).send({ clientRequestId: randomUUID(), name: '不應建立', mediaId: photo.id });
+        expect(result.status).toBe(409);
+        expect(await prisma.item.count({ where: { wishlistId: list.body.resource.id } })).toBe(0);
+        expect((await image(photo.id)).status).toBe(404);
     });
     it('shows published photos publicly and stops public reads immediately on removal/expiry', async () => {
         const photo = (await upload()).body;

@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { parseWishItemPatch } from './wishItemUpdate';
 import { DEFAULT_CURRENCY } from './matchmakingPrice';
 import { isLikelyImageResourceUrl, safePublicResourceUrl } from './eclawRecognition';
+import { isListingId } from './listingRules';
 export class NativeWishError extends Error { constructor(public status = 400) { super('Wish request rejected'); } }
 export function wishId(raw: unknown) {
     if (!['string', 'number'].includes(typeof raw) || !/^[1-9]\d{0,9}$/.test(String(raw)) || Number(raw) > 2147483647) throw new NativeWishError();
@@ -32,19 +33,22 @@ export function nativeWishlistPatch(raw: unknown) {
     return patch;
 }
 export function nativeWishCreate(raw: unknown) {
-    const body = object(raw, ['clientRequestId', 'name', 'notes', 'link', 'imageUrl', 'maxPrice', 'priceCurrency']);
+    const body = object(raw, ['clientRequestId', 'name', 'notes', 'link', 'imageUrl', 'mediaId', 'maxPrice', 'priceCurrency']);
     const clientRequestId = wishRequestId(body.clientRequestId);
     const { clientRequestId: _, ...input } = body;
-    const { imageUrl: rawImageUrl, ...patchInput } = input;
+    const { imageUrl: rawImageUrl, mediaId: rawMediaId, ...patchInput } = input;
     const patch = parseWishItemPatch(patchInput);
     if (!patch.name || (patch.maxPrice === undefined || patch.maxPrice === null) && patch.priceCurrency !== undefined) throw new NativeWishError();
+    const mediaId = rawMediaId === undefined ? null : rawMediaId;
+    if (mediaId !== null && !isListingId(mediaId)) throw new NativeWishError();
     let imageUrl: string | null = null;
     if (rawImageUrl !== undefined && rawImageUrl !== null && rawImageUrl !== '') {
         if (typeof rawImageUrl !== 'string') throw new NativeWishError();
         try { imageUrl = safePublicResourceUrl(rawImageUrl.trim()); } catch { throw new NativeWishError(); }
         if (!isLikelyImageResourceUrl(imageUrl)) throw new NativeWishError();
     }
-    return { clientRequestId, data: { name: patch.name, notes: patch.notes ?? null, link: patch.link ?? null, imageUrl, maxPrice: patch.maxPrice ?? null, priceCurrency: patch.maxPrice !== undefined && patch.maxPrice !== null ? patch.priceCurrency ?? DEFAULT_CURRENCY : null } };
+    if (mediaId && imageUrl) throw new NativeWishError();
+    return { clientRequestId, mediaId, data: { name: patch.name, notes: patch.notes ?? null, link: patch.link ?? null, imageUrl, maxPrice: patch.maxPrice ?? null, priceCurrency: patch.maxPrice !== undefined && patch.maxPrice !== null ? patch.priceCurrency ?? DEFAULT_CURRENCY : null } };
 }
 export function nativeListCreate(raw: unknown) {
     const body = object(raw, ['clientRequestId', 'title', 'description', 'isPublic']);

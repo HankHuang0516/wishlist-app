@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { publicWishItemSelect } from './wishItemReadController';
+import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -200,8 +201,10 @@ export const deleteWishlist = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Access denied', errorCode: API_ERROR_CODES.ACCESS_DENIED });
         }
 
-        await prisma.wishlist.delete({
-            where: { id: Number(id) }
+        await prisma.$transaction(async tx => {
+            const items = await tx.item.findMany({ where: { wishlistId: Number(id) }, select: { id: true } });
+            await enqueueWishPhotoErasure(tx, items.map(item => item.id));
+            await tx.wishlist.delete({ where: { id: Number(id) } });
         });
 
         res.json({ message: 'Wishlist deleted successfully' });

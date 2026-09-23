@@ -30,8 +30,9 @@ export function parseManagementPage<T extends { id: number }>(v: unknown, parse:
   return { items, nextCursor: p.nextCursor as number | null };
 }
 export type WishDraft = { name: string; notes: string; link: string; imageUrl: string; budget: string; currency: string };
-export function wishDraftBody(form: WishDraft) {
-  if (!text(form.name, 200) || /[\u0000-\u001f\u007f]/.test(form.name) || !text(form.notes, 1000, true)) throw new WishManagementError('請填寫200字內名稱與1000字內備註');
+export function wishDraftBody(form: WishDraft, mediaId: string | null = null) {
+  const name = !form.name.trim() && (mediaId || form.imageUrl.trim()) ? '待辨識商品' : form.name.trim();
+  if (!text(name, 200) || /[\u0000-\u001f\u007f]/.test(name) || !text(form.notes, 1000, true)) throw new WishManagementError('請填寫200字內名稱與1000字內備註');
   let link: string | null = null;
   if (form.link.trim()) {
     let url: URL; try { url = new URL(form.link.trim()); } catch { throw new WishManagementError('請填寫有效的商品連結'); }
@@ -43,17 +44,19 @@ export function wishDraftBody(form: WishDraft) {
     if (url.protocol !== 'https:' || url.username || url.password || url.href.length > 2048 || (!/\.(?:avif|gif|jpe?g|png|webp)$/i.test(url.pathname) && !/(?:flickr|staticflickr|images|img|cdn)/i.test(url.hostname))) throw new WishManagementError('AI 圖片必須是公開 HTTPS 圖片網址');
     imageUrl = url.href;
   }
+  if (mediaId !== null && (!uuid(mediaId) || imageUrl !== null)) throw new WishManagementError('請選擇照片或圖片網址其中一種');
   const budget = form.budget.trim(); let maxPrice: number | null = null;
   if (budget) { if (!/^\d+(?:\.\d{1,2})?$/.test(budget) || !Number.isFinite(Number(budget)) || Number(budget) > 1e12) throw new WishManagementError('預算須為非負金額，最多兩位小數'); maxPrice = Number(budget); }
   const currency = form.currency.trim().toUpperCase(); if (maxPrice !== null && !currencies.includes(currency)) throw new WishManagementError('請填寫支援的幣別，例如TWD／USD／JPY');
-  return { name: form.name.trim(), notes: form.notes || null, link, imageUrl, maxPrice, ...(maxPrice !== null ? { priceCurrency: currency } : {}) };
+  return { name, notes: form.notes || null, link, imageUrl, ...(mediaId ? { mediaId } : {}), maxPrice, ...(maxPrice !== null ? { priceCurrency: currency } : {}) };
 }
 export type WishCreateJournal = { kind: 'LIST' | 'ITEM'; listId: number | null; body: string };
 export function parseWishJournal(raw: string): WishCreateJournal {
   try {
     const p = record(JSON.parse(raw)); if (!['LIST', 'ITEM'].includes(p.kind as string) || typeof p.body !== 'string' || p.body.length > 6000 || !(p.kind === 'LIST' ? p.listId === null : validWishId(p.listId))) throw new WishManagementError();
     const body = record(JSON.parse(p.body)); if (!uuid(body.clientRequestId)) throw new WishManagementError();
-    const allowed = p.kind === 'LIST' ? ['clientRequestId', 'title', 'description', 'isPublic'] : ['clientRequestId', 'name', 'notes', 'link', 'imageUrl', 'maxPrice', 'priceCurrency'];
+    const allowed = p.kind === 'LIST' ? ['clientRequestId', 'title', 'description', 'isPublic'] : ['clientRequestId', 'name', 'notes', 'link', 'imageUrl', 'mediaId', 'maxPrice', 'priceCurrency'];
+    if (p.kind === 'ITEM' && body.mediaId !== undefined && !uuid(body.mediaId)) throw new WishManagementError();
     if (Object.keys(body).some(k => !allowed.includes(k)) || !(p.kind === 'LIST' ? text(body.title, 200) : text(body.name, 200))) throw new WishManagementError();
     return { kind: p.kind as WishCreateJournal['kind'], listId: p.listId as number | null, body: p.body };
   } catch { throw new WishManagementError('無法安全恢復上次建立；不會丟棄識別碼重新建立'); }

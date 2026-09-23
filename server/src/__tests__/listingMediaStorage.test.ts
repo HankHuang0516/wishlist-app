@@ -119,4 +119,24 @@ describe('private filesystem photo storage', () => {
         delete process.env.LISTING_MEDIA_STORAGE_ROOT; process.env.RAILWAY_VOLUME_MOUNT_PATH = 'relative';
         await expect(store.ready()).rejects.toBeInstanceOf(MediaStorageConfigurationError);
     });
+    it('uses only the guarded legacy Railway volume child when the mount is under public/uploads', async () => {
+        const originalCwd = process.cwd();
+        const sandbox = path.join(root, 'railway-cwd');
+        const mount = path.join(sandbox, 'public', 'uploads');
+        await fs.mkdir(mount, { recursive: true });
+        try {
+            process.chdir(sandbox);
+            process.env.NODE_ENV = 'production';
+            process.env.RAILWAY_VOLUME_MOUNT_PATH = await fs.realpath(mount);
+            delete process.env.LISTING_MEDIA_STORAGE_ROOT;
+            await expect(store.ready()).resolves.toBeUndefined();
+            const id = randomUUID();
+            await store.write(id, Buffer.from('private'), Buffer.from('thumb'));
+            expect(await fs.readFile(path.join(mount, 'listing-media', id, 'image.webp'), 'utf8')).toBe('private');
+            process.env.LISTING_MEDIA_STORAGE_ROOT = path.join(mount, 'other');
+            await expect(store.ready()).rejects.toBeInstanceOf(MediaStorageConfigurationError);
+        } finally {
+            process.chdir(originalCwd);
+        }
+    });
 });

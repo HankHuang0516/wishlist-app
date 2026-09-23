@@ -16,14 +16,18 @@ async function storageRoot() {
     const root = configured ? path.resolve(configured) : production ? path.join(mount!, 'listing-media') : path.resolve(process.cwd(), 'storage', 'listing-media');
     if (production && !inside(root, path.resolve(mount!))) throw new MediaStorageConfigurationError();
     const publicRoot = path.resolve(process.cwd(), 'public');
-    if (root === publicRoot || inside(root, publicRoot)) throw new MediaStorageConfigurationError();
+    // The existing Railway volume is mounted at public/uploads for legacy
+    // flat images. The /uploads route now serves flat filenames only, so its
+    // listing-media child remains inaccessible except through the media API.
+    const guardedLegacyVolume = production && !configured && path.resolve(mount!) === path.join(publicRoot, 'uploads') && root === path.join(path.resolve(mount!), 'listing-media');
+    if ((root === publicRoot || inside(root, publicRoot)) && !guardedLegacyVolume) throw new MediaStorageConfigurationError();
     // A production mount must already exist. Do not silently create a directory
     // masquerading as a durable volume on the ephemeral container filesystem.
     const realMount = production ? await fs.realpath(mount!).catch(() => { throw new MediaStorageConfigurationError(); }) : undefined;
     await fs.mkdir(root, { recursive: true, mode: 0o700 });
     const realRoot = await fs.realpath(root);
     const realPublicRoot = await fs.realpath(publicRoot).catch(() => publicRoot);
-    if ((realMount && !inside(realRoot, realMount)) || realRoot === realPublicRoot || inside(realRoot, realPublicRoot)) throw new MediaStorageConfigurationError();
+    if ((realMount && !inside(realRoot, realMount)) || (realRoot === realPublicRoot || inside(realRoot, realPublicRoot)) && !guardedLegacyVolume) throw new MediaStorageConfigurationError();
     return realRoot;
 }
 

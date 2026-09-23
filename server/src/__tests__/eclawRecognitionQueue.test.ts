@@ -69,4 +69,16 @@ describe('durable EClaw recognition queue', () => {
         expect(report).toHaveBeenCalledWith(expect.stringContaining('worker disabled'));
         stop();
     });
+
+    it('preserves the user image and name when visual evidence conflicts with the agent', async () => {
+        findFirst.mockResolvedValueOnce({ id: 805, name: '上傳圖片', imageUrl: 'https://images.example/item.jpg', link: null, aiError: null, wishlist: { userId: 3 } }).mockResolvedValue(null);
+        updateMany.mockResolvedValue({ count: 1 }); quota.mockResolvedValue(true);
+        const stop = startEclawRecognitionWorker(jest.fn().mockRejectedValue(new EclawRecognitionError('wrong subject', 'VISION_CONFLICT')), jest.fn());
+        await settle();
+        expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 805, aiStatus: 'PROCESSING' }, data: { aiStatus: 'FAILED', aiError: 'VISION_CONFLICT' },
+        }));
+        expect(updateMany.mock.calls.every(call => !Object.prototype.hasOwnProperty.call(call[0].data, 'name'))).toBe(true);
+        stop();
+    });
 });

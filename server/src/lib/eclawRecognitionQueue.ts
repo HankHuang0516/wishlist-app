@@ -5,7 +5,7 @@ import type { EclawRecognitionResult } from './eclawRecognition';
 
 const INTERVAL_MS = 3000;
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
-const TRANSIENT_CODES = new Set(['NO_REPLY', 'NETWORK', 'UPSTREAM', 'TIMEOUT', 'INCOMPLETE_ESTIMATE']);
+const TRANSIENT_CODES = new Set(['NO_REPLY', 'NETWORK', 'UPSTREAM', 'TIMEOUT', 'INCOMPLETE_ESTIMATE', 'VISION_TIMEOUT', 'VISION_NETWORK', 'VISION_UPSTREAM', 'VISION_IMAGE_FETCH']);
 let wakeCurrentWorker: (() => void) | null = null;
 
 function retryAttempt(aiError: string | null) {

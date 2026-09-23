@@ -1,3 +1,6 @@
+import { loadOllamaVisionConfig, understandImage } from './ollamaVision';
+import type { OllamaVisionConfig, VisionEvidence } from './ollamaVision';
+
 export type EclawRecognitionResult = {
     name: string;
     brand: string | null;
@@ -26,6 +29,7 @@ export type EclawRecognitionConfig = {
     entityId: number;
     pollIntervalMs: number;
     replyTimeoutMs: number;
+    vision?: OllamaVisionConfig | null;
 };
 
 type HistoryMessage = {
@@ -58,6 +62,7 @@ export function loadEclawRecognitionConfig(env: NodeJS.ProcessEnv = process.env)
         entityId,
         pollIntervalMs,
         replyTimeoutMs,
+        vision: loadOllamaVisionConfig(env),
     };
 }
 
@@ -101,13 +106,15 @@ function isBotMessage(message: HistoryMessage, entityId: number) {
     return Number(message.entity_id) === entityId && (message.is_from_bot === true || message.is_from_bot === 't');
 }
 
-function buildPrompt(jobId: string, resourceUrl: string, currentName: string) {
+function buildPrompt(jobId: string, resourceUrl: string, currentName: string, vision: VisionEvidence | null) {
     return [
         `WISHLIST_AI_JOB:${jobId}`,
-        '你是 Wishlist.ai 的資深商品鑑識與估價代理。請仔細查看附件圖片或下方公開網址，先依外觀、標誌、型號字樣、包裝與配件交叉判斷，再輸出結果。',
+        '你是 Wishlist.ai 的商品估價代理。若有本地 Qwen3-VL 的視覺鑑識結果，必須以它為唯一圖片事實來源；不得從圖片網址猜測或改寫商品名稱。',
+        vision ? `已完成 Qwen3-VL 圖片鑑識：${JSON.stringify(vision)}` : '此任務沒有圖片，請只根據連結可讀取的內容判斷；無法讀取時應明確回報，不能猜測。',
+        vision ? `name 必須完全等於「${vision.name}」。不要將照片中不存在的品牌、型號或品類加入回覆。` : '',
         '不可因相似外觀猜測品牌或型號；看不清楚、無法由圖片支持或價格資料不足的欄位必須填 null，並寫入 uncertainties。',
         'price、priceLow、priceHigh、currency、priceBasis 都是必填且不得為 null。price 是目前市場的代表成交／售價估計，priceLow 與 priceHigh 是合理區間，三者使用同一 currency。',
-        '即使看不出精確型號，也要依可確認的商品品類、外觀狀況與台灣市場行情給出保守估價；priceBasis 清楚標示「品類估算」及估價依據，並把型號或規格不確定性寫入 uncertainties。',
+        '即使看不出精確型號，也要依可確認的商品品類、外觀狀況給出保守估價；沒有外部售價證據時，priceBasis 必須標示「品類估算」，不得聲稱已查證即時行情。',
         '二手品請依可見磨損、包裝、配件與外觀描述 condition；無法判斷新品或二手時填 null。confidence 為 0 到 1，反映整體辨識可信度。',
         `目前暫存名稱：${currentName.slice(0, 200)}`,
         `商品資源網址：${resourceUrl}`,
@@ -122,9 +129,15 @@ export async function recognizeWithEclaw(
     fetchImpl: Fetch = fetch,
 ): Promise<EclawRecognitionResult> {
     const resource = safePublicResourceUrl(input.resourceUrl);
+    const vision = isLikelyImageResourceUrl(resource)
+        ? await (async () => {
+            if (!config.vision) throw new EclawRecognitionError('Qwen3-VL vision is not configured', 'VISION_NOT_CONFIGURED');
+            return understandImage(resource, config.vision, fetchImpl);
+        })()
+        : null;
     const before = await readHistory(config, fetchImpl);
     const existingIds = new Set(before.map(row => typeof row.id === 'string' ? row.id : '').filter(Boolean));
-    const prompt = buildPrompt(input.jobId, resource, input.currentName);
+    const prompt = buildPrompt(input.jobId, resource, input.currentName, vision);
     const sentAt = Date.now();
     const sendBody = await requestJson(fetchImpl, `${config.baseUrl}/api/client/speak`, {
         method: 'POST',
@@ -149,7 +162,23 @@ export async function recognizeWithEclaw(
             const created = Date.parse(String(row.created_at || ''));
             return (!Number.isFinite(created) || created >= sentAt - 2000) && row.text.includes(input.jobId);
         });
-        if (reply && typeof reply.text === 'string') return parseRecognitionReply(reply.text, input.jobId);
+        if (reply && typeof reply.text === 'string') {
+            const result = parseRecognitionReply(reply.text, input.jobId);
+            if (!vision) return result;
+            if (result.name !== vision.name) throw new EclawRecognitionError('Agent estimate conflicts with observed subject', 'VISION_CONFLICT');
+            return {
+                ...result,
+                name: vision.name,
+                brand: vision.brand,
+                model: vision.model,
+                category: vision.category,
+                condition: vision.condition,
+                keyFeatures: vision.evidence,
+                confidence: vision.confidence,
+                uncertainties: vision.uncertainties,
+                description: vision.evidence.join('；'),
+            };
+        }
         await new Promise(resolve => setTimeout(resolve, Math.min(config.pollIntervalMs, Math.max(1, deadline - Date.now()))));
     }
     throw new EclawRecognitionError('EClaw recognition reply timed out', 'NO_REPLY');

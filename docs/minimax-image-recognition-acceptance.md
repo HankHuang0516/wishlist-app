@@ -14,6 +14,7 @@
 - `MINIMAX_API_HOST` 使用 `https://api.minimax.io`（Global）或 `https://api.minimaxi.com`（中國區），必須與金鑰區域相符。
 - 確認 `RAILWAY_PUBLIC_DOMAIN` 包含正式圖片網址的主機。其他受信任圖片主機可由 `MINIMAX_VISION_IMAGE_HOSTS` 逐一設定；不可放任意通配網域。
 - 在測試環境用真正 MiniMax 金鑰跑端到端測試，確認實際產生可見證據，而不只驗證 mock 回覆。
+- MiniMax 官方將 Token/Coding Plan 定位為個人互動式開發用途，建議正式服務採 pay-as-you-go。此分支呼叫 Coding Plan `understand_image` 底層端點，應先作為驗證版；正式上線前必須確認所選方案的商用、容量與計費方式，必要時改接正式計費的多模態 API。參考：https://platform.minimax.io/subscribe/token-plan
 - 未完成以上項目之前，不發布此流程到正式環境；否則新照片會安全失敗，但不會自動辨識。
 
 ## 高規格驗收

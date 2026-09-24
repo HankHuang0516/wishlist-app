@@ -24,6 +24,8 @@
 
 `node mobile/scripts/listing-ai-local-e2e.cjs` 是另行明確啟用的**合成照片專用** MiniMax 商品草稿驗收，需先完成 server build，並提供同值的本機 `TEST_DATABASE_URL`／`DATABASE_URL`。腳本固定校驗橘燈與藍杯兩張無個資 fixture 的 SHA-256；子程序自行產生只供本次合成帳號使用的 callback token，未繼承正式 MiniMax／Railway／Flickr／管理憑證。兩張照片都實際走上傳、私密授權讀取、排隊、真 MiniMax Connector、結果回寫與賣家查詢，且這兩張可估價的測試圖須有非空二手參考區間；公開清單在賣家確認前必須為 0。賣家明確填入售價與地區後僅發布其中一件，另一件保持私有，完成時檢查測試資料與媒體清理。這是**本機儲存與隔離資料庫**的端到端 HTTP 驗收，不包含真實 Flickr、正式 Railway、APP 原生 UI、商店配發或真實商品授權，不可外推為正式開放條件。
 
+`node mobile/scripts/listing-ai-android-smoke.cjs 202609241637 --recognize-one` 補驗 Android 原生 UI：必須在 Simulator Manager 的本任務私有裝置內執行，使用既有、雜湊與先前成功收據均核對的不同 package Debug 外殼及最新 Metro JS，並明確指定相同的隔離 `TEST_DATABASE_URL`／`DATABASE_URL`。只把固定 SHA-256 的無個資合成檯燈放入該裝置相簿；以已人工檢視的 320×640 畫面及橘色像素門檻防止錯選，再經原生登入、相簿選圖、本人私密上傳、真 MiniMax Connector 排隊／回寫，檢查畫面有商品照、草稿內容和參考價。另在手機改名稱、確認私人草稿持久化、按「稍後繼續」再開啟並核對修改，過程公開商品必為 0；匿名及另一測試帳號不能讀私人照片。原生照片、連線、服務、合成帳號及資料庫須精確清理並留非機密 `result.json`／三張截圖。`--inspect-picker` 與 `--inspect-selection` 只診斷系統選圖畫面，不能當作 AI 通過。此腳本**僅一張合成圖、既有 Debug 外殼、本機照片儲存**；未證明兩張原生 AI、賣家 UI 最終發布、Flickr／Railway、iOS 或 Play 內測配發版本。
+
 ## 原生操作驗收與已完成證據
 
 Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及多個單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-24 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1、連拍刊登入口1／1、相簿商品照單張私有上傳1／1、相簿同批兩張不同商品私有上傳1／1；Android 兩張連拍私有上傳已在獨立流程通過。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。

@@ -16,7 +16,7 @@ function filesBelow(root, relative) {
   return output;
 }
 
-function androidQaSources(mobile, { includeInstrumentation = true } = {}) {
+function androidQaSources(mobile, { includeInstrumentation = true, verifyFiles = true } = {}) {
   const fixed = [
     'App.tsx', 'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json',
     'android/build.gradle', 'android/gradle.properties', 'android/settings.gradle',
@@ -36,7 +36,7 @@ function androidQaSources(mobile, { includeInstrumentation = true } = {}) {
   else fixed.push('scripts/build-android-debug-qa.cjs');
   const sources = [...fixed, ...filesBelow(mobile, 'src')].sort();
   if (new Set(sources).size !== sources.length) throw new Error('Duplicate Android QA source provenance');
-  for (const source of sources) {
+  if (verifyFiles) for (const source of sources) {
     const absolute = path.join(mobile, source);
     if (!fs.existsSync(absolute) || !fs.lstatSync(absolute).isFile()) throw new Error('Android QA source missing');
   }

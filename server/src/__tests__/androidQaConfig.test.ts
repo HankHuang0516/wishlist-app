@@ -3,7 +3,10 @@ const { androidQaSources } = require('../../../mobile/scripts/android-qa-sources
 const path = require('node:path');
 describe('Android native QA build and lease boundaries', () => {
     it('keeps the Debug-only app build independent of the missing instrumentation source', () => {
-        const sources: string[] = androidQaSources(path.resolve(__dirname, '../../../mobile'), { includeInstrumentation: false });
+        // CI does not generate Expo's ignored android/ tree; compilation still
+        // uses the default strict file verification on the actual build host.
+        const sources: string[] = androidQaSources(path.resolve(__dirname, '../../../mobile'),
+            { includeInstrumentation: false, verifyFiles: false });
         expect(sources).toContain('scripts/build-android-debug-qa.cjs');
         expect(sources).toContain('android/app/build.gradle');
         expect(sources).toContain('src/ExploreScreen.tsx');

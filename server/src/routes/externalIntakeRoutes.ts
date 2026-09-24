@@ -16,8 +16,8 @@ const fail = (res: import('express').Response, error: unknown) => {
     return res.status(503).json({ error: '外部來源暫時無法處理', errorCode: 'EXTERNAL_INTAKE_UNAVAILABLE' });
 };
 
-// Admin-only staging. No route here inserts into Listing or feeds the public
-// search/map, and activation is a separate explicit authorization assertion.
+// Admin-only staging and review. Candidate approval exposes only the separate,
+// feature-gated, revalidated external index; it never creates seller Listings.
 export function createExternalIntakeRoutes(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const router = Router();
     router.use((_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
@@ -118,9 +118,11 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             const now = new Date();
             const changed = await prisma.$transaction(async tx => {
                 const result = await tx.externalListingCandidate.updateMany({ where: { id: candidateId,
-                    contentHash: body.expectedContentHash, status: 'PENDING_REVIEW', expiresAt: { gt: now }, source: { enabled: true } },
+                    contentHash: body.expectedContentHash, status: { in: ['PENDING_REVIEW', 'APPROVED'] },
+                    expiresAt: { gt: now }, source: { enabled: true } },
                     data: { status: 'REJECTED', rejectionRef: body.reviewRef, rejectionReason: body.reason,
                         rejectedContentHash: body.expectedContentHash, rejectedAt: now,
+                        approvalRef: null, approvedAuthorizationRef: null, approvedContentHash: null, approvedAt: null,
                         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
                 if (result.count) await tx.externalCandidateReviewEvent.create({ data: { candidateId,
                     decision: 'REJECTED', contentHash: body.expectedContentHash, reviewRef: body.reviewRef,

@@ -170,6 +170,32 @@ describe('admin-only attributed external supply staging', () => {
             expect((await request(app).get(`${url}/candidates/${id}/reviews`)).status).toBe(401);
             const approvedAdmin = await request(app).get(url + '/candidates?status=APPROVED').set('x-admin-key', adminKey);
             expect(approvedAdmin.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ id })]));
+            const takedownAdmin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+                .set('x-forwarded-for', '203.0.113.91');
+            const secondItem = { ...candidate(), sourceItemId: 'test-2',
+                canonicalUrl: 'https://partner.example.com/items/2', title: '二手桌燈待撤下合成測試' };
+            const stagedSecond = await takedownAdmin(`/sources/${reviewSourceId}/candidates`).send({ items: [secondItem] });
+            expect(stagedSecond.status).toBe(202);
+            const secondId: string = stagedSecond.body.items[0].id;
+            const second = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } });
+            expect((await takedownAdmin(`/candidates/${secondId}/approve`).send({ ...approval,
+                expectedContentHash: second.contentHash, reviewRef: 'review:synthetic-second-approval' })).status).toBe(200);
+            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
+            expect((await takedownAdmin(`/candidates/${secondId}/reject`).send({ expectedContentHash: second.contentHash,
+                reviewRef: 'review:synthetic-second-takedown', reason: 'ITEM_UNVERIFIED' })).status).toBe(200);
+            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } })).toMatchObject({
+                status: 'REJECTED', approvalRef: null, approvedAuthorizationRef: null, approvedContentHash: null,
+                rejectionReason: 'ITEM_UNVERIFIED',
+            });
+            expect((await request(app).get(`${url}/candidates/${secondId}/reviews`).set('x-admin-key', adminKey)).body.items)
+                .toEqual(expect.arrayContaining([
+                    expect.objectContaining({ decision: 'APPROVED', contentHash: second.contentHash }),
+                    expect.objectContaining({ decision: 'REJECTED', contentHash: second.contentHash,
+                        reason: 'ITEM_UNVERIFIED' }),
+                ]));
+            const repeatedSecond = await takedownAdmin(`/sources/${reviewSourceId}/candidates`).send({ items: [secondItem] });
+            expect(repeatedSecond.body.items[0].status).toBe('REJECTED');
             const publicPage = await request(app).get('/api/external-listings').query({ county: '新北市', district: '板橋區', q: '檯燈' });
             expect(publicPage.status).toBe(200);
             expect(publicPage.headers['cache-control']).toBe('no-store');

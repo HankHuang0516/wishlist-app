@@ -141,6 +141,58 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
+    it('revokes an unobserved 48-hour approval and requires a new private AI/review cycle', async () => {
+        const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.71');
+        const created = await admin('/sources').send({ ...sourceBody,
+            name: 'Synthetic 48-hour refresh partner', aiProcessingAllowed: true });
+        expect(created.status).toBe(201);
+        const refreshSourceId: string = created.body.id;
+        try {
+            expect((await admin(`/sources/${refreshSourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
+                confirmRights: true, confirmAiProcessing: true })).status).toBe(200);
+            const staged = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            const id: string = staged.body.items[0].id;
+            const first = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
+            const approval = { expectedContentHash: first.contentHash, authorizationRef: sourceBody.authorizationRef,
+                reviewRef: 'review:synthetic-refresh-first', confirmRights: true, confirmItem: true };
+            expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
+            await prisma.externalListingCandidate.update({ where: { id }, data: {
+                observedAt: new Date(Date.now() - 49 * 3_600_000) } });
+            expect((await request(app).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(false);
+            // A same-content feed refresh can arrive before the 15-minute
+            // expiry cycle; it must not silently restore yesterday's review.
+            const immediate = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
+            expect(immediate.status).toBe(202);
+            expect(immediate.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', aiStatus: 'PENDING', changed: false });
+            expect((await request(app).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(false);
+            expect((await admin(`/candidates/${id}/approve`).send({ ...approval,
+                reviewRef: 'review:synthetic-refresh-second' })).status).toBe(200);
+            await prisma.externalListingCandidate.update({ where: { id }, data: {
+                observedAt: new Date(Date.now() - 49 * 3_600_000), aiDraft: { title: 'stale private suggestion' } } });
+            expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
+                status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
+                approvedContentHash: null, aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiDraft: null });
+            const reobserved = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
+            expect(reobserved.status).toBe(202);
+            expect(reobserved.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', aiStatus: 'PENDING', changed: false });
+            expect((await request(app).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(false);
+            expect((await prisma.externalCandidateReviewEvent.count({ where: { candidateId: id } }))).toBe(2);
+        } finally {
+            if (priorFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = priorFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: refreshSourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: refreshSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: refreshSourceId } });
+        }
+    });
     it('publishes only a freshly observed, explicitly reviewed source item and revokes stale approval', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         const priorJwt = process.env.JWT_SECRET;

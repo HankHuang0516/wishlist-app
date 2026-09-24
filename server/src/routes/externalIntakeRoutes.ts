@@ -86,14 +86,17 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const aiReset = { aiStatus: eligible ? 'PENDING' as const : 'NOT_ELIGIBLE' as const,
                         aiInputHash: eligible ? item.contentHash : null, aiDraft: Prisma.DbNull, aiJobId: null,
                         aiAttempts: 0, aiUpdatedAt: now };
+                    const oldObservationRecent = !!old && old.observedAt.getTime() >= now.getTime() - 48 * 3_600_000;
                     const retainsApproval = old?.status === 'APPROVED' && !aiChanged &&
+                        oldObservationRecent &&
                         old.approvedAuthorizationRef === source.authorizationRef &&
                         source.textReuseAllowed && source.imageReuseAllowed;
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,
                         status: old.status === 'REJECTED' ? 'REJECTED' : retainsApproval ? 'APPROVED' : 'PENDING_REVIEW',
                         ...(!retainsApproval ? { approvalRef: null, approvedAuthorizationRef: null,
                             approvedContentHash: null, approvedAt: null } : {}),
-                        ...(aiChanged || !['PENDING_REVIEW', 'APPROVED'].includes(old.status) ? aiReset : {}) } }) :
+                        ...(aiChanged || !['PENDING_REVIEW', 'APPROVED'].includes(old.status) ||
+                            (old.status === 'APPROVED' && !retainsApproval) ? aiReset : {}) } }) :
                         await tx.externalListingCandidate.create({ data: { ...item, sourceId: source.id, lastSeenAt: now,
                             aiStatus: aiReset.aiStatus, aiInputHash: aiReset.aiInputHash, aiUpdatedAt: now } });
                     records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status,

@@ -1,11 +1,15 @@
 import prisma from './prisma';
 import { Prisma } from '@prisma/client';
 
-// Only private candidates are affected. A paused source or expired item must
-// be re-imported from a fresh authorized observation before further review.
+// A paused, expired or no-longer-recent source item must be re-imported from a
+// fresh authorized observation before further review. Public reads already
+// reject >48h observations; the scheduled status transition also prevents a
+// later same-content import from silently retaining an old approval.
 export async function expireExternalCandidates(now = new Date()) {
+    const observationCutoff = new Date(now.getTime() - 48 * 3_600_000);
     const result = await prisma.externalListingCandidate.updateMany({ where: {
-        status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
+        status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } },
+            { observedAt: { lt: observationCutoff } }, { source: { enabled: false } }],
     }, data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
         approvedContentHash: null, approvedAt: null,
         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,

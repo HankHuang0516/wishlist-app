@@ -154,7 +154,8 @@ describe('isolated MiniMax Code pull queue', () => {
         } });
         const now = new Date();
         const staleEligible = await prisma.externalListingCandidate.count({ where: {
-            status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
+            status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } },
+                { observedAt: { lt: new Date(now.getTime() - 48 * 3_600_000) } }, { source: { enabled: false } }],
         } });
         expect(staleEligible).toBeGreaterThanOrEqual(1);
         expect(await expireExternalCandidates(now)).toBe(staleEligible);
@@ -163,6 +164,19 @@ describe('isolated MiniMax Code pull queue', () => {
         });
         expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
         expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+    });
+    it('discards a late external AI callback when its source observation ages out', async () => {
+        const { candidate } = await externalCandidate();
+        const claimed = await auth('/api/internal/minimax-vision/next');
+        expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', jobId: expect.any(String) });
+        await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
+            observedAt: new Date(Date.now() - 49 * 3_600_000), aiDraft: { title: 'stale private suggestion' },
+        } });
+        expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+            status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null, aiDraft: null,
+        });
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
     });
     it('rejects a reviewed candidate and refuses its late AI callback', async () => {
         const { candidate } = await externalCandidate();

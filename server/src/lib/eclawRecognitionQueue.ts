@@ -3,6 +3,12 @@ import { checkAndIncrementAiUsage } from './usageService';
 import { loadEclawRecognitionConfig, recognizeWithEclaw } from './eclawRecognition';
 import type { EclawRecognitionResult } from './eclawRecognition';
 
+function minimaxPilotUserId() {
+    const raw = process.env.MINIMAX_PILOT_USER_ID;
+    const id = Number(raw);
+    return raw && Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 const INTERVAL_MS = 3000;
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
 const TRANSIENT_CODES = new Set(['NO_REPLY', 'NETWORK', 'UPSTREAM', 'TIMEOUT', 'INCOMPLETE_ESTIMATE']);
@@ -52,6 +58,7 @@ export function startEclawRecognitionWorker(
                 where: {
                     aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
                     OR: [{ imageUrl: { not: null } }, { link: { not: null } }],
+                    ...(minimaxPilotUserId() ? { NOT: { wishlist: { userId: minimaxPilotUserId()! }, imageUrl: { startsWith: `${process.env.API_URL || 'https://wishlist-app-production.up.railway.app/api'}/listing-media/` } } } : {}),
                 },
                 orderBy: { createdAt: 'asc' },
                 select: { id: true, name: true, imageUrl: true, link: true, aiError: true, wishlist: { select: { userId: true } } },

@@ -5,6 +5,7 @@ import prisma from './prisma';
 import { AccountSecurityError, boundedPassword } from './accountSecurityRules';
 import { isListingId } from './listingRules';
 import { ListingMediaStorage } from './listingMediaStorage';
+import { ListingFlickrStorage } from './listingFlickrStorage';
 import { legacyAssetCandidate } from './legacyAssetInventory';
 
 export function erasureIdentityHash(userId: number, authVersion: number) {
@@ -36,9 +37,9 @@ export async function eraseAccountData(userId: number, authVersion: number, pass
                 // commit behind it. A repeatable snapshot before the gate could
                 // silently miss a concurrently opened room or uploaded photo.
                 const rooms = await tx.conversation.findMany({ where: { OR: [{ buyerUserId: userId }, { sellerUserId: userId }] }, select: { id: true } });
-                const media = await tx.listingMedia.findMany({ where: { ownerUserId: userId }, select: { id: true } });
+                const media = await tx.listingMedia.findMany({ where: { ownerUserId: userId }, select: { id: true, flickrPhotoId: true } });
                 // Independent outbox survives both User and ListingMedia erasure.
-                if (media.length) await tx.mediaErasureTask.createMany({ data: media.map(m => ({ mediaId: m.id, identityHash, clientActionId })), skipDuplicates: true });
+                if (media.length) await tx.mediaErasureTask.createMany({ data: media.map(m => ({ mediaId: m.id, flickrPhotoId: m.flickrPhotoId, identityHash, clientActionId })), skipDuplicates: true });
                 // Capture legacy asset provenance BEFORE losing profile/wish
                 // links. No filesystem or third-party API runs in this tx.
                 const oldWishes = await tx.item.findMany({ where: { wishlist: { userId }, imageUrl: { not: null } }, select: { id: true, imageUrl: true } });
@@ -116,17 +117,17 @@ export async function abandonAccountErasure(userId: number, authVersion: number,
 /** Bounded multi-worker-safe drain. Crash/failure leaves a durable retry task.
  * The exact UUID directory's two known files are the only filesystem targets.
  */
-export async function drainMediaErasureTasks(limit = 25, storage = new ListingMediaStorage()) {
+export async function drainMediaErasureTasks(limit = 25, storage = new ListingMediaStorage(), flickrStorage = new ListingFlickrStorage()) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccountSecurityError();
     let completed = 0;
-    const candidates = await prisma.mediaErasureTask.findMany({ orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }, { mediaId: 'asc' }], take: limit, select: { mediaId: true } });
-    for (const { mediaId } of candidates) {
+    const candidates = await prisma.mediaErasureTask.findMany({ orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }, { mediaId: 'asc' }], take: limit, select: { mediaId: true, flickrPhotoId: true } });
+    for (const { mediaId, flickrPhotoId } of candidates) {
         const removed = await prisma.$transaction(async tx => {
             const locked = await tx.$queryRaw<Array<{ mediaId: string }>>`SELECT "mediaId" FROM "MediaErasureTask" WHERE "mediaId" = ${mediaId}::uuid FOR UPDATE SKIP LOCKED`;
             if (!locked.length) return false;
             // Never trust an outbox entry to erase a still-owned media record.
             if (await tx.listingMedia.findUnique({ where: { id: mediaId }, select: { id: true } })) return false;
-            try { await storage.remove(mediaId); }
+            try { if (flickrPhotoId) await flickrStorage.remove(flickrPhotoId); else await storage.remove(mediaId); }
             catch { await tx.mediaErasureTask.update({ where: { mediaId }, data: { attempts: { increment: 1 } } }); return false; }
             await tx.mediaErasureTask.delete({ where: { mediaId } }); return true;
         }, { timeout: 15000 });

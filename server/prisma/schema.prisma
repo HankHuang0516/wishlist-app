@@ -230,6 +230,10 @@ model ListingMedia {
   width        Int?
   height       Int?
   byteSize     Int?
+  // Null for photos created before the Flickr cutover (kept on the Railway volume).
+  flickrPhotoId String?
+  flickrImageUrl String?
+  flickrThumbnailUrl String?
   position     Int      @default(0)
   createdAt    DateTime @default(now())
   owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -396,6 +400,8 @@ model Purchase {
 // Exact UUIDs only; never arbitrary paths, URLs, user IDs or photo contents.
 model MediaErasureTask {
   mediaId   String   @id @db.Uuid
+  // Persist the remote identity before the media row is erased.
+  flickrPhotoId String?
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   identityHash String? @db.VarChar(64)

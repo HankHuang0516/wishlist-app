@@ -222,7 +222,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
       {!editor?.wish && <>
         <Text style={s.heading}>願望照片</Text>
         {photo ? <View style={s.card}><Image source={{ uri: photo.uri }} style={s.photoPreview} accessibilityLabel="選取的願望照片" /><Text style={s.text}>{photo.record ? '照片已上傳，儲存後開始 AI 辨識' : '照片尚未上傳成功'}</Text>{photo.failed && button('重試上傳照片', () => void retryPhoto())}{button('移除照片', () => void removePhoto())}</View> : <View style={s.photoActions}>{button('從相簿選擇', () => void choosePhoto(false))}{button('拍攝照片', () => void choosePhoto(true))}</View>}
-        <Text style={s.text}>可直接拍照或選一張照片。照片會去除位置資訊並縮小後上傳；儲存願望後，會透過難以猜測的圖片網址提供給 EClaw 辨識。知道該網址的人也能查看照片。</Text>
+        <Text style={s.text}>可直接拍照或選一張照片。照片會去除位置資訊並縮小後上傳；儲存願望後，會透過難以猜測的圖片網址提供給 AI 辨識服務。知道該網址的人也能查看照片。</Text>
       </>}
       {(['name', 'notes', 'link', 'imageUrl', 'budget', 'currency'] as const).map((field, index) => <TextInput key={field} style={s.input} accessibilityLabel={['願望名稱', '備註', '參考商品連結', 'AI 商品圖片網址', '最高預算', '預算幣別'][index]} placeholder={['願望名稱（有照片可留空由 AI 辨識）', '備註（公開清單會顯示）', 'http(s)商品連結（選填）', editor?.wish ? '圖片僅建立時可設定' : '或貼上公開 HTTPS 圖片網址', '最高預算，留空不限', '幣別，例如TWD'][index]} value={draft[field]} onChangeText={value => setDraft(old => ({ ...old, [field]: value }))} editable={!blocked && !(field === 'imageUrl' && (!!editor?.wish || !!photo))} multiline={field === 'notes'} keyboardType={field === 'budget' ? 'decimal-pad' : field === 'link' || field === 'imageUrl' ? 'url' : 'default'} autoCorrect={field !== 'link' && field !== 'imageUrl'} autoCapitalize={field === 'link' || field === 'imageUrl' ? 'none' : field === 'currency' ? 'characters' : 'sentences'} />)}
       <Text style={s.text}>照片或公開圖片網址擇一；AI 完成後會更新商品名稱、價格與詳細描述。</Text>

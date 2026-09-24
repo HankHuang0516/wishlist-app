@@ -18,7 +18,8 @@ const sourceBody = { name: 'Synthetic Taipei partner', kind: 'PARTNER_FEED', can
     imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026', textReuseAllowed: true,
     imageReuseAllowed: true, aiProcessingAllowed: false };
 const candidate = () => ({ sourceItemId: 'test-1', canonicalUrl: 'https://partner.example.com/items/1',
-    imageUrl: 'https://images.example.com/items/1.jpg', title: '二手檯燈合成測試', description: '合成測試資料，並非真實待售商品。',
+    imageUrl: 'https://images.example.com/items/1.jpg', thumbnailUrl: 'https://images.example.com/items/1-320.jpg',
+    title: '二手檯燈合成測試', description: '合成測試資料，並非真實待售商品。',
     priceTwd: 590, condition: 'USED', county: '新北市', district: '板橋區', observedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() });
 let sourceId: string;
@@ -162,6 +163,14 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, expectedContentHash: '0'.repeat(64) })).status).toBe(409);
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, authorizationRef: 'contract:wrong' })).status).toBe(409);
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
+            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({ id,
+                canonicalUrl: candidate().canonicalUrl, locationPrecision: 'DISTRICT_ONLY' });
+            expect((await request(app).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
+                minPrice: '590', maxPrice: '590' })).body.items).toHaveLength(1);
+            expect((await request(app).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
+                minPrice: '591' })).body.items).toEqual([]);
+            expect((await request(app).get('/api/external-listings').query({ bbox: '121.50,25.00,121.52,25.03' })).body.items).toEqual([]);
+            expect((await request(app).get('/api/external-listings').query({ bbox: '121.48,25.03,121.44,25.00' })).status).toBe(400);
             const reviews = await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey);
             expect(reviews.status).toBe(200);
             expect(reviews.body.items).toEqual([expect.objectContaining({ decision: 'APPROVED',
@@ -181,9 +190,16 @@ describe('admin-only attributed external supply staging', () => {
             expect((await takedownAdmin(`/candidates/${secondId}/approve`).send({ ...approval,
                 expectedContentHash: second.contentHash, reviewRef: 'review:synthetic-second-approval' })).status).toBe(200);
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
+            const firstPage = await request(app).get('/api/external-listings').query({ limit: '1' });
+            expect(firstPage.body.items).toHaveLength(1);
+            expect(firstPage.body.nextCursor).toBe(firstPage.body.items[0].id);
+            const secondPage = await request(app).get('/api/external-listings').query({ limit: '1', cursor: firstPage.body.nextCursor });
+            expect(secondPage.body.items).toHaveLength(1);
+            expect(secondPage.body.items[0].id).not.toBe(firstPage.body.items[0].id);
             expect((await takedownAdmin(`/candidates/${secondId}/reject`).send({ expectedContentHash: second.contentHash,
                 reviewRef: 'review:synthetic-second-takedown', reason: 'ITEM_UNVERIFIED' })).status).toBe(200);
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
+            expect((await request(app).get(`/api/external-listings/${secondId}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } })).toMatchObject({
                 status: 'REJECTED', approvalRef: null, approvedAuthorizationRef: null, approvedContentHash: null,
                 rejectionReason: 'ITEM_UNVERIFIED',
@@ -200,7 +216,8 @@ describe('admin-only attributed external supply staging', () => {
             expect(publicPage.status).toBe(200);
             expect(publicPage.headers['cache-control']).toBe('no-store');
             expect(publicPage.body.items).toEqual([expect.objectContaining({ id, title: candidate().title,
-                canonicalUrl: candidate().canonicalUrl, condition: 'USED', priceTwd: '590',
+                canonicalUrl: candidate().canonicalUrl, thumbnailUrl: candidate().thumbnailUrl,
+                condition: 'USED', priceTwd: '590',
                 locationPrecision: 'DISTRICT_ONLY', priceSource: 'SOURCE_STATED', inAppSeller: false,
                 location: { latitude: 25.01186, longitude: 121.45797, precision: 'DISTRICT_CENTER',
                     source: 'https://data.gov.tw/dataset/25489' },
@@ -220,6 +237,10 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: '0'.repeat(64) } });
             expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: first.contentHash } });
+            await prisma.externalListingCandidate.update({ where: { id }, data: { thumbnailUrl: null } });
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            await prisma.externalListingCandidate.update({ where: { id }, data: { thumbnailUrl: candidate().thumbnailUrl } });
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedAuthorizationRef: 'contract:other-rights' } });
             expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedAuthorizationRef: sourceBody.authorizationRef } });

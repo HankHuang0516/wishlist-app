@@ -33,3 +33,11 @@ export function districtCenter(county: string, district: string) {
     return center ? { latitude: center[0], longitude: center[1], precision: 'DISTRICT_CENTER' as const,
         source: DISTRICT_CENTER_SOURCE } : null;
 }
+
+export function districtsInBounds([west, south, east, north]: readonly [number, number, number, number]) {
+    return Object.entries(centers).flatMap(([place, [latitude, longitude]]) => {
+        if (longitude < west || longitude > east || latitude < south || latitude > north) return [];
+        const county = place.startsWith('臺北市') ? '臺北市' : '新北市';
+        return [{ county, district: place.slice(county.length) }];
+    });
+}

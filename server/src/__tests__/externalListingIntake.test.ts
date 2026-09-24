@@ -3,6 +3,7 @@ import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from
 const now = new Date('2026-09-24T12:00:00Z');
 const source = { canonicalHost: 'partner.example.com', imageHost: 'images.example.com', imageReuseAllowed: true, textReuseAllowed: true };
 const item = { sourceItemId: 'taipei-123', canonicalUrl: 'https://partner.example.com/items/123', imageUrl: 'https://images.example.com/123.jpg',
+    thumbnailUrl: 'https://images.example.com/123-320.jpg',
     title: '二手桌上型檯燈', description: '外觀有輕微使用痕跡，功能正常。', priceTwd: 560, condition: 'USED',
     county: '台北市', district: '中山區', observedAt: '2026-09-24T11:00:00Z', expiresAt: '2026-10-01T11:00:00Z' };
 
@@ -43,6 +44,8 @@ describe('authorized external supply intake', () => {
         [{ ...item, canonicalUrl: 'https://partner.example.com.evil.test/items/123' }, 'canonicalUrl'],
         [{ ...item, canonicalUrl: 'http://partner.example.com/items/123' }, 'canonicalUrl'],
         [{ ...item, imageUrl: 'https://other.example.com/123.jpg' }, 'imageUrl'],
+        [{ ...item, thumbnailUrl: 'https://other.example.com/123-320.jpg' }, 'thumbnailUrl'],
+        [{ ...item, thumbnailUrl: item.imageUrl }, 'thumbnailUrl'],
         [{ ...item, county: '臺中市' }, 'county'],
         [{ ...item, county: '台北市', district: '板橋區' }, 'district'],
         [{ ...item, county: '新北市', district: '中山區' }, 'district'],

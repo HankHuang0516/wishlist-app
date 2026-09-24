@@ -73,11 +73,15 @@ export function parseExternalSource(input: unknown) {
 
 export function parseExternalCandidate(input: unknown, source: SourcePolicy, now = new Date()) {
     const value = own(input);
-    exactKeys(value, ['sourceItemId', 'canonicalUrl', 'imageUrl', 'title', 'description', 'priceTwd', 'condition', 'county', 'district', 'observedAt', 'expiresAt']);
+    exactKeys(value, ['sourceItemId', 'canonicalUrl', 'imageUrl', 'thumbnailUrl', 'title', 'description', 'priceTwd', 'condition', 'county', 'district', 'observedAt', 'expiresAt']);
     const sourceItemId = word(value.sourceItemId, 'sourceItemId', 1, 160);
     const canonicalUrl = httpsOnHost(value.canonicalUrl, 'canonicalUrl', source.canonicalHost);
     const imageUrl = value.imageUrl === undefined || value.imageUrl === null ? null :
         source.imageReuseAllowed && source.imageHost ? httpsOnHost(value.imageUrl, 'imageUrl', source.imageHost) : (() => { throw new ExternalIntakeError('imageUrl', '來源尚未授權顯示圖片'); })();
+    const thumbnailUrl = value.thumbnailUrl === undefined || value.thumbnailUrl === null ? null :
+        source.imageReuseAllowed && source.imageHost ? httpsOnHost(value.thumbnailUrl, 'thumbnailUrl', source.imageHost) :
+            (() => { throw new ExternalIntakeError('thumbnailUrl', '來源尚未授權顯示縮圖'); })();
+    if (thumbnailUrl && thumbnailUrl === imageUrl) throw new ExternalIntakeError('thumbnailUrl', '縮圖與原圖需為不同資源');
     const title = word(value.title, 'title', 3, 120);
     const description = value.description === undefined || value.description === null ? null :
         source.textReuseAllowed ? word(value.description, 'description', 1, 1500) : (() => { throw new ExternalIntakeError('description', '來源尚未授權重用商品描述'); })();
@@ -94,7 +98,7 @@ export function parseExternalCandidate(input: unknown, source: SourcePolicy, now
     const observedAt = date(value.observedAt, 'observedAt'), expiresAt = date(value.expiresAt, 'expiresAt');
     if (observedAt.getTime() > now.getTime() + 5 * 60_000 || now.getTime() - observedAt.getTime() > 48 * 3_600_000 ||
         expiresAt.getTime() <= now.getTime() || expiresAt.getTime() > observedAt.getTime() + 30 * 86_400_000) throw new ExternalIntakeError('expiresAt', '來源資料須近期確認且最遲 30 天內失效');
-    const data = { sourceItemId, canonicalUrl, imageUrl, title, description, priceTwd, condition: value.condition,
+    const data = { sourceItemId, canonicalUrl, imageUrl, thumbnailUrl, title, description, priceTwd, condition: value.condition,
         county: normalizedCounty, district, observedAt, expiresAt };
     // Observation/expiry refreshes are freshness updates, not new content for
     // an AI reviewer to re-enrich on every scheduled feed check.

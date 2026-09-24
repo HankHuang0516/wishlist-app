@@ -155,7 +155,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             const changed = await prisma.$transaction(async tx => {
                 const result = await tx.externalListingCandidate.updateMany({ where: { id: row.id, status: 'PENDING_REVIEW',
                     contentHash: row.contentHash, aiStatus: row.aiStatus, observedAt: { gte: new Date(now.getTime() - 48 * 3_600_000) },
-                    expiresAt: { gt: now }, imageUrl: row.imageUrl, description: row.description, condition: 'USED',
+                    expiresAt: { gt: now }, imageUrl: row.imageUrl, thumbnailUrl: row.thumbnailUrl,
+                    description: row.description, condition: 'USED',
                     source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,
                         authorizationRef: row.source.authorizationRef } },
                     data: { status: 'APPROVED', approvalRef: body.reviewRef,

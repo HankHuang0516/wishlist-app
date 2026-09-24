@@ -44,7 +44,9 @@ for (const source of metadata.sourceFiles || []) {
 const publicSources = fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name);
 if (!Array.isArray(metadata.sourceFiles) || new Set(metadata.sourceFiles).size !== metadata.sourceFiles.length ||
   publicSources.some(source => !metadata.sourceFiles.includes(source)) ||
-  ['App.tsx', 'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json', 'scripts/ios-native-qa.cjs', 'scripts/build-ios-qa.cjs', 'ios-native-qa/PublicInputState.swift']
+  ['App.tsx', 'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json',
+    'scripts/ios-native-qa.cjs', 'scripts/build-ios-qa.cjs', 'scripts/native-qa.cjs', 'scripts/native-qa-migrations.cjs',
+    'scripts/native-qa-worker.cjs', 'ios-native-qa/PublicInputState.swift']
     .some(source => !metadata.sourceFiles.includes(source))) throw new Error('Incomplete current QA source fingerprint');
 const expectedGroup = 'KLBQRT47CT.' + appBundle;
 if (metadata.qaKeychainGroup !== expectedGroup) throw new Error('Unexpected QA access group');

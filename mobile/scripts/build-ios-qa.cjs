@@ -27,6 +27,7 @@ const sourceFiles = ['App.tsx', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.
   'ios-native-qa/WishlistNativeQa.xcodeproj/project.pbxproj', 'ios-native-qa/WishlistNativeQa.xcodeproj/xcshareddata/xcschemes/WishlistNativeQa.xcscheme',
   'scripts/ios-qa-build-guard.cjs', 'scripts/ios-qa-config.cjs', 'scripts/ios-simulator-entitlements.cjs', 'scripts/build-ios-qa.cjs',
   'scripts/ios-qa-input.cjs', 'scripts/ios-qa-result-privacy.cjs', 'scripts/ios-xctestrun-config.cjs', 'scripts/ios-native-qa.cjs',
+  'scripts/native-qa.cjs', 'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
   'scripts/native-qa-marketplace-fixture.cjs', 'scripts/test-native-qa-marketplace-fixture.cjs', 'scripts/test-ios-public-input.cjs',
   'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json',
   ...fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name)];

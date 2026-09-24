@@ -28,7 +28,8 @@ function androidQaSources(mobile, { includeInstrumentation = true, verifyFiles =
     'plugins/withForegroundOnlyLocation.js', 'plugins/withReleaseSigning.js',
     'scripts/android-native-qa.cjs', 'scripts/android-qa-config.cjs', 'scripts/android-qa-input.cjs',
     'scripts/android-qa-sources.cjs', 'scripts/build-android-qa.cjs', 'scripts/metro-qa-probe.cjs',
-    'scripts/native-qa.cjs', 'scripts/native-qa-api-smoke.cjs', 'scripts/native-qa-marketplace-fixture.cjs', 'scripts/native-qa-worker.cjs',
+    'scripts/native-qa.cjs', 'scripts/native-qa-api-smoke.cjs', 'scripts/native-qa-marketplace-fixture.cjs',
+    'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
     'scripts/test-native-qa-marketplace-fixture.cjs',
   ];
   if (includeInstrumentation) fixed.push(

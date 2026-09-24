@@ -16,6 +16,8 @@
 
 先執行 server build，確保使用最新 `server/dist`。控制程序透過 `startNativeQa(TEST_DATABASE_URL, lifetimeSeconds)` 取得 API 位址、合成 actor 與 `stop()`／`exited`；生命週期設定為 1–600 秒，啟動有 30 秒觀察期限。服務到期、控制 IPC 中斷、SIGTERM 或 SIGINT 都會停止接受新請求，等待正在進行的請求結束後清理。
 
+啟動時會先比較原始碼中的遷移清單與隔離資料庫已完成的遷移；少套、重複或多出不符來源的版本會在建立合成使用者之前以 `schema-preflight` 停止。此檢查只防止舊 QA 資料庫被誤當 APP 回歸，並不自動修改資料庫，也不取代完整的 `prisma migrate diff` 結構比對。應在確認是空置的指定測試庫後，先由 `server/` 對它執行 `prisma migrate deploy`，再重跑 QA；絕不可因此對正式資料庫套用未發布 migration。
+
 清理只作用於此程序實際建立的 User ID、追蹤的聊天室 UUID、已驗證的身份／操作摘要，以及私有 `mkdtemp` 儲存空間。圖片只移除合法 UUID 子目錄中的兩個既知 WebP 檔；不遞迴刪除、不掃除一般 App 儲存、未知檔案會保留並讓驗證失敗。啟動失敗回傳非零退出狀態，即使已完成部分啟動的安全清理也不冒充成功。
 
 `node mobile/scripts/native-qa-api-smoke.cjs` 會從真實登入走過願望、圖片、刊登期限、搜尋、配對、聊天、面交、刪除恢復與取消屏障，最後只輸出非機密檢查數和精確 cleanup 計數。這個流程與唯讀 cleanup 檢查已納入 `scripts/validate-before-push.sh`。

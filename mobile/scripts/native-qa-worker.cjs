@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
+const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
 const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
@@ -110,6 +111,12 @@ async function main() {
   const bcrypt = require('../../server/node_modules/bcryptjs');
   startupStage = 'module-prisma';
   prisma = require('../../server/dist/lib/prisma').default;
+  startupStage = 'schema-preflight';
+  const migrationRoot = path.resolve(__dirname, '../../server/prisma/migrations');
+  const expectedMigrations = (await fs.readdir(migrationRoot, { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && /^\d{14}_[a-z0-9_]+$/.test(entry.name)).map(entry => entry.name);
+  const appliedMigrations = await prisma.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL');
+  assertNativeQaMigrations(expectedMigrations, appliedMigrations.map(row => row.migration_name));
   startupStage = 'module-jwt-config';
   const { decodeUserSessionJwt } = require('../../server/dist/lib/jwtConfig');
   startupStage = 'module-listing-rules';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 const { isolatedDebugQa, isolatedIosQaMetro, isolatedIosQaInput } = require('../../plugins/withIsolatedDebugQa.js');
 const { qaEnvironment } = require('../../scripts/native-qa.cjs');
+const { assertNativeQaMigrations } = require('../../scripts/native-qa-migrations.cjs');
 
 const template = `android { buildTypes {
     debug {
@@ -41,6 +42,22 @@ describe('isolated listing AI QA process', () => {
     expect(external.EXTERNAL_LISTINGS_PUBLIC_ENABLED).toBeUndefined();
     expect(external.ADMIN_API_KEY).toBeUndefined();
     expect(pilot.DATABASE_URL).toBe(database);
+  });
+});
+
+describe('isolated native QA database preflight', () => {
+  const first = '20260925010000_external_candidate_ai_enrichment';
+  const second = '20260925020000_listing_media_seller_draft';
+  it('accepts exactly the applied source migrations without requiring order', () => {
+    expect(() => assertNativeQaMigrations([first, second], [second, first])).not.toThrow();
+  });
+  it('rejects the stale database that would otherwise fail in the APP restore screen', () => {
+    expect(() => assertNativeQaMigrations([first, second], [first])).toThrow('NATIVE_QA_SCHEMA_MISMATCH');
+  });
+  it('rejects unknown or duplicate migrations and an empty source inventory', () => {
+    expect(() => assertNativeQaMigrations([first], [first, second])).toThrow('NATIVE_QA_SCHEMA_MISMATCH');
+    expect(() => assertNativeQaMigrations([first, first], [first, first])).toThrow('NATIVE_QA_SCHEMA_MISMATCH');
+    expect(() => assertNativeQaMigrations([], [])).toThrow('NATIVE_QA_SCHEMA_MISMATCH');
   });
 });
 

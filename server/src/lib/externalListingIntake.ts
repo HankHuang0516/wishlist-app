@@ -6,6 +6,15 @@ export class ExternalIntakeError extends Error {
 }
 
 type SourcePolicy = { canonicalHost: string; imageHost: string | null; imageReuseAllowed: boolean; textReuseAllowed: boolean };
+// City-maintained administrative district lists, checked 2026-09-25:
+// https://www.gov.taipei/cp.aspx?n=1F076481DD9E556B
+// https://www.ca.ntpc.gov.tw/new/home.jsp?id=0de11fd46b419ad1
+const DOUBLE_NORTH_DISTRICTS = {
+    '臺北市': new Set(['松山區', '信義區', '大安區', '中山區', '中正區', '大同區', '萬華區', '文山區', '南港區', '內湖區', '士林區', '北投區']),
+    '新北市': new Set(['板橋區', '三重區', '中和區', '永和區', '新莊區', '新店區', '土城區', '蘆洲區', '汐止區', '樹林區',
+        '鶯歌區', '三峽區', '淡水區', '瑞芳區', '五股區', '泰山區', '林口區', '八里區', '深坑區', '石碇區',
+        '坪林區', '三芝區', '石門區', '金山區', '萬里區', '平溪區', '雙溪區', '貢寮區', '烏來區']),
+} as const;
 const own = (value: unknown): Record<string, unknown> => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ExternalIntakeError('body');
     return value as Record<string, unknown>;
@@ -74,14 +83,16 @@ export function parseExternalCandidate(input: unknown, source: SourcePolicy, now
     const county = word(value.county, 'county', 3, 5);
     if (!['臺北市', '台北市', '新北市'].includes(county)) throw new ExternalIntakeError('county', '目前只接受雙北商品');
     const district = word(value.district, 'district', 2, 12);
-    if (!/^[\p{Script=Han}]+區$/u.test(district)) throw new ExternalIntakeError('district');
+    const normalizedCounty = county === '台北市' ? '臺北市' : county;
+    if (!DOUBLE_NORTH_DISTRICTS[normalizedCounty as keyof typeof DOUBLE_NORTH_DISTRICTS].has(district))
+        throw new ExternalIntakeError('district', '行政區與縣市不符');
     const priceTwd = value.priceTwd;
     if (typeof priceTwd !== 'number' || !Number.isSafeInteger(priceTwd) || priceTwd < 1 || priceTwd > 10_000_000) throw new ExternalIntakeError('priceTwd', '需提供來源明示的商品售價');
     const observedAt = date(value.observedAt, 'observedAt'), expiresAt = date(value.expiresAt, 'expiresAt');
     if (observedAt.getTime() > now.getTime() + 5 * 60_000 || now.getTime() - observedAt.getTime() > 48 * 3_600_000 ||
         expiresAt.getTime() <= now.getTime() || expiresAt.getTime() > observedAt.getTime() + 30 * 86_400_000) throw new ExternalIntakeError('expiresAt', '來源資料須近期確認且最遲 30 天內失效');
     const data = { sourceItemId, canonicalUrl, imageUrl, title, description, priceTwd, condition: value.condition,
-        county: county === '台北市' ? '臺北市' : county, district, observedAt, expiresAt };
+        county: normalizedCounty, district, observedAt, expiresAt };
     // Observation/expiry refreshes are freshness updates, not new content for
     // an AI reviewer to re-enrich on every scheduled feed check.
     const { observedAt: _observedAt, expiresAt: _expiresAt, ...content } = data;

@@ -15,16 +15,19 @@ import { uploadPhotoRecord } from './photoUploadRecovery';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 
 type Card = { key: string; clientListingId: string; uri: string; local: boolean; record?: PhotoRecord;
-  ai: ListingAiState['status']; draft: ListingAiDraft | null; form: ListingForm; touched: ListingAiTouched; error: string; published: boolean };
+  ai: ListingAiState['status']; draft: ListingAiDraft | null; form: ListingForm; touched: ListingAiTouched; error: string; confirmed: boolean; published: boolean };
 const MAX_ITEMS = 12;
 const initialCard = (key: string, uri: string, local: boolean, record?: PhotoRecord): Card => ({ key,
   clientListingId: Crypto.randomUUID(), uri, local, record, ai: 'SKIPPED', draft: null,
-  form: { ...emptyListingForm }, touched: {}, error: '', published: false });
+  form: { ...emptyListingForm }, touched: {}, error: '', confirmed: false, published: false });
 const applyAi = (card: Card, state: ListingAiState): Card => {
   if (!state.draft) return { ...card, ai: state.status, draft: null, error: '' };
-  return { ...card, ai: state.status, draft: state.draft, error: '',
+  return { ...card, ai: state.status, draft: state.draft, error: '', confirmed: false,
     form: mergeListingAiSuggestions(card.form, state.draft, card.touched) };
 };
+const itemForm = (card: Card, shared: ListingForm): ListingForm => ({ ...card.form,
+  county: shared.county, district: shared.district, latitude: shared.latitude, longitude: shared.longitude,
+  meetup: shared.meetup, shipping: shared.shipping, negotiable: shared.negotiable, consent: shared.consent, expiryDate: shared.expiryDate });
 function releaseLocal(card: Card) {
   if (!card.local) return;
   const root = Paths.cache.uri.replace(/\/$/, '') + '/';
@@ -42,9 +45,12 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const keyRef = useRef<string | null>(null), polling = useRef(false), active = useRef(true), busyRef = useRef(false);
-  const changeShared = <K extends keyof ListingForm>(key: K, value: ListingForm[K]) => setShared(old => ({ ...old, [key]: value }));
+  const changeShared = <K extends keyof ListingForm>(key: K, value: ListingForm[K]) => {
+    setShared(old => ({ ...old, [key]: value }));
+    setCards(old => old.map(card => ({ ...card, confirmed: false })));
+  };
   const changeCard = <K extends ListingAiField>(key: string, field: K, value: ListingForm[K]) => setCards(old => old.map(card =>
-    card.key === key ? { ...card, touched: { ...card.touched, [field]: true }, form: { ...card.form, [field]: value } } : card));
+    card.key === key ? { ...card, touched: { ...card.touched, [field]: true }, form: { ...card.form, [field]: value }, confirmed: false } : card));
   const begin = () => { if (busyRef.current) return false; busyRef.current = true; setBusy(true); setError(''); return true; };
   const end = () => { busyRef.current = false; setBusy(false); };
 
@@ -151,6 +157,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       if (!(await Location.requestForegroundPermissionsAsync()).granted) throw new ListingFormError('未授予定位；可在下方手動填寫縣市與行政區。');
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const place = (await Location.reverseGeocodeAsync(current.coords)).at(0);
+      setCards(old => old.map(card => ({ ...card, confirmed: false })));
       setShared(old => ({ ...old, latitude: current.coords.latitude.toFixed(6), longitude: current.coords.longitude.toFixed(6),
         county: place?.city || place?.region || old.county, district: place?.district || place?.subregion || old.district }));
       if (!place?.district && !place?.subregion) setError('已取得約略位置，請確認或補上行政區。');
@@ -168,15 +175,26 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       Alert.alert('已確認先前刊登', '同一筆操作已安全確認，不會重複建立商品。');
     } catch { setError('前次刊登結果仍未確認。請稍後重試；不會建立另一筆商品。'); } finally { end(); }
   }
+  function confirmCard(card: Card) {
+    if (!card.record || card.published || busy || pending) return;
+    if (card.confirmed) { setCards(old => old.map(current => current.key === card.key ? { ...current, confirmed: false } : current)); return; }
+    try {
+      buildListingBody(itemForm(card, shared), card.clientListingId, [card.record.id], true);
+      setCards(old => old.map(current => current.key === card.key ? { ...current, confirmed: true, error: '' } : current));
+    } catch (failure) {
+      setCards(old => old.map(current => current.key === card.key ? { ...current, confirmed: false,
+        error: failure instanceof ListingFormError ? failure.message : '請逐欄確認商品資料後再刊登。' } : current));
+    }
+  }
   async function publishAll() {
     if (!ready || pending || !keyRef.current || !begin()) return;
     let count = 0, candidate: string | null = null;
     try {
-      for (const card of cards.filter(item => !item.published)) {
+      const confirmed = cards.filter(item => !item.published && item.confirmed);
+      if (!confirmed.length) throw new ListingFormError('請先逐件確認要刊登的商品。');
+      for (const card of confirmed) {
         if (!card.record) throw new ListingFormError('仍有照片尚未上傳成功');
-        const form = { ...card.form, county: shared.county, district: shared.district, latitude: shared.latitude, longitude: shared.longitude,
-          meetup: shared.meetup, shipping: shared.shipping, negotiable: shared.negotiable, consent: shared.consent, expiryDate: shared.expiryDate };
-        const body = JSON.stringify(buildListingBody(form, card.clientListingId, [card.record.id], true));
+        const body = JSON.stringify(buildListingBody(itemForm(card, shared), card.clientListingId, [card.record.id], true));
         candidate = body;
         await privatePendingStore.save(keyRef.current, body);
         setPending(body);
@@ -223,10 +241,12 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         <View style={s.row}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.condition === value }} disabled={busy || !!pending} style={[s.chip, card.form.condition === value && s.selected]} onPress={() => changeCard(card.key, 'condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
         <View style={s.wrap}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.category === value }} disabled={busy || !!pending} style={[s.chip, card.form.category === value && s.selected]} onPress={() => changeCard(card.key, 'category', value)}><Text style={s.small}>{label}</Text></Pressable>)}</View>
         {!!card.error && <Text style={s.error}>{card.error}</Text>}
+        {!card.published && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: card.confirmed, disabled: busy || !!pending || !card.record }}
+          disabled={busy || !!pending || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
         {!card.published && <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>重試 AI</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
       </View>)}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
-      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>確認並刊登全部商品</Text></Pressable>}
+      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || !cards.some(card => !card.published && card.confirmed)} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{cards.filter(card => !card.published && card.confirmed).length}）</Text></Pressable>}
       <Text style={s.small}>AI 參考價不是已驗證行情；無法可靠估價的商品仍須由賣家決定售價。未刊登照片只對本人可見，稍後可恢復或刪除。</Text>
     </ScrollView>
   </KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal>;

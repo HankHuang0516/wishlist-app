@@ -89,19 +89,21 @@ router.get('/next', async (_req, res) => {
         }
         if (process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1') return res.status(204).send();
         const now = new Date();
+        const observationCutoff = new Date(now.getTime() - 48 * 3_600_000);
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
-            aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now },
+            aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
             source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
             data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
             aiAttempts: { gte: 3 } }, data: { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } });
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'FAILED', aiAttempts: { lt: 3 },
-            aiUpdatedAt: { lt: new Date(now.getTime() - 30 * 60_000) }, status: 'PENDING_REVIEW', expiresAt: { gt: now },
+            aiUpdatedAt: { lt: new Date(now.getTime() - 30 * 60_000) }, status: 'PENDING_REVIEW',
+            expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
             source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
             data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
         for (let attempt = 0; attempt < 3; attempt++) {
             const candidate = await prisma.externalListingCandidate.findFirst({ where: { aiStatus: 'PENDING', aiAttempts: { lt: 3 },
-                status: 'PENDING_REVIEW', expiresAt: { gt: now }, imageUrl: { not: null },
+                status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff }, imageUrl: { not: null },
                 source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
                 orderBy: { createdAt: 'asc' }, include: { source: { select: { imageHost: true } } } });
             if (!candidate?.imageUrl) break;
@@ -119,7 +121,7 @@ router.get('/next', async (_req, res) => {
             const jobId = randomUUID();
             const claimed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING',
                 contentHash: candidate.contentHash, aiInputHash: candidate.contentHash, imageUrl: candidate.imageUrl,
-                status: 'PENDING_REVIEW', expiresAt: { gt: now },
+                status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
                 source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
                 data: { aiStatus: 'PROCESSING', aiJobId: jobId, aiAttempts: { increment: 1 }, aiUpdatedAt: now } });
             if (claimed.count) return res.json({ kind: 'EXTERNAL_CANDIDATE', jobId, imageUrl: candidate.imageUrl,
@@ -157,8 +159,11 @@ router.post('/:jobId/result', async (req, res) => {
         }
         if (process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1') return res.status(409).json({ error: 'LEASE_EXPIRED' });
         const candidate = await prisma.externalListingCandidate.findFirst({ where: { aiStatus: 'PROCESSING', aiJobId: jobId },
-            select: { id: true, contentHash: true, imageUrl: true } });
+            select: { id: true, contentHash: true, imageUrl: true, observedAt: true } });
         if (!candidate) return res.status(409).json({ error: 'LEASE_EXPIRED' });
+        const now = new Date();
+        const observationCutoff = new Date(now.getTime() - 48 * 3_600_000);
+        if (candidate.observedAt < observationCutoff) return res.status(409).json({ error: 'LEASE_EXPIRED' });
         const draft = failed ? null : validListingAiDraft(req.body?.result);
         if (!failed && (!draft || forbiddenListingField({ title: draft.title, description: draft.description })))
             return res.status(400).json({ error: 'INVALID_RESULT' });
@@ -167,10 +172,9 @@ router.post('/:jobId/result', async (req, res) => {
         const privateDraft = draft && { title: draft.title, description: draft.description, category: draft.category,
             brand: draft.brand, evidence: draft.evidence, uncertainties: draft.uncertainties,
             confidence: draft.confidence, source: draft.source };
-        const now = new Date();
         const changed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PROCESSING',
             aiJobId: jobId, aiInputHash: candidate.contentHash, contentHash: candidate.contentHash,
-            imageUrl: candidate.imageUrl, status: 'PENDING_REVIEW', expiresAt: { gt: now },
+            imageUrl: candidate.imageUrl, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
             source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
             data: failed ? { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } :
                 { aiStatus: 'COMPLETED', aiDraft: privateDraft as Prisma.InputJsonObject, aiJobId: null, aiUpdatedAt: now } });

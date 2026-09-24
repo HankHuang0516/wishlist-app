@@ -172,11 +172,26 @@ describe('isolated MiniMax Code pull queue', () => {
         await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
             observedAt: new Date(Date.now() - 49 * 3_600_000), aiDraft: { title: 'stale private suggestion' },
         } });
+        // Reject the callback even before the 15-minute expiry worker wakes.
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).aiStatus).toBe('PROCESSING');
         expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
         expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
             status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null, aiDraft: null,
         });
         expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+    });
+    it('does not lease an old external image during the expiry worker interval', async () => {
+        const { candidate } = await externalCandidate();
+        await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
+            observedAt: new Date(Date.now() - 49 * 3_600_000),
+        } });
+        await auth('/api/internal/minimax-vision/next');
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+            status: 'PENDING_REVIEW', aiStatus: 'PENDING', aiJobId: null,
+        });
+        expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).status).toBe('STALE');
     });
     it('rejects a reviewed candidate and refuses its late AI callback', async () => {
         const { candidate } = await externalCandidate();

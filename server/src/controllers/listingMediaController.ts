@@ -13,7 +13,13 @@ const storage = new ListingMediaStorage();
 const flickrStorage = new ListingFlickrStorage();
 // Keep the live volume path until the Flickr token has delete scope and the
 // explicit cutover flag is enabled. Existing media always follows its row.
-const uploadProvider = () => process.env.LISTING_MEDIA_STORAGE_PROVIDER ?? 'local';
+const uploadProvider = (ownerUserId: number) => {
+    const provider = process.env.LISTING_MEDIA_STORAGE_PROVIDER ?? 'local';
+    const pilotUserId = process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID;
+    // A configured pilot ID keeps every other user on the existing volume.
+    if (provider === 'flickr' && pilotUserId !== undefined && pilotUserId !== String(ownerUserId)) return 'local';
+    return provider;
+};
 async function rollbackUpload(id: string, flickrPhotoId?: string) {
     if (!flickrPhotoId) return storage.remove(id);
     try { await flickrStorage.remove(flickrPhotoId); }
@@ -40,7 +46,7 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         if (!isListingId(clientUploadId) || Object.keys(req.body ?? {}).some(k => k !== 'clientUploadId') || !req.file) throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼');
         const ownerUserId = req.user.id;
         if (!await prisma.user.findUnique({ where: { id: ownerUserId }, select: { id: true } })) return res.status(401).json({ error: '帳號已失效' });
-        const provider = uploadProvider();
+        const provider = uploadProvider(ownerUserId);
         if (provider === 'flickr') await flickrStorage.ready();
         else if (provider === 'local') await storage.ready();
         else throw new MediaStorageConfigurationError();

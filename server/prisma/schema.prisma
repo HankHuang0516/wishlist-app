@@ -276,6 +276,64 @@ model ListingLocation {
   @@index([publicLatitude, publicLongitude])
 }
 
+// External supply is an attributed index, never an invented in-app seller.
+// Intake stays private until a separate review and map publication flow exists.
+enum ExternalSourceKind {
+  PARTNER_FEED
+  LINE_OPT_IN
+  SELLER_IMPORT
+}
+
+enum ExternalCandidateStatus {
+  PENDING_REVIEW
+  REJECTED
+  STALE
+}
+
+model ExternalListingSource {
+  id               String                     @id @default(uuid())
+  name             String
+  kind             ExternalSourceKind
+  canonicalHost    String
+  imageHost        String?
+  authorizationRef String
+  textReuseAllowed Boolean                    @default(false)
+  imageReuseAllowed Boolean                   @default(false)
+  enabled          Boolean                    @default(false)
+  enabledAt        DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  candidates       ExternalListingCandidate[]
+
+  @@index([enabled, kind])
+}
+
+model ExternalListingCandidate {
+  id             String                  @id @default(uuid())
+  sourceId       String
+  sourceItemId   String
+  canonicalUrl   String
+  imageUrl       String?
+  title          String
+  description    String?
+  priceTwd       Decimal?                @db.Decimal(12, 2)
+  condition      ListingCondition
+  county         String
+  district       String
+  observedAt     DateTime
+  expiresAt      DateTime
+  lastSeenAt     DateTime                @default(now())
+  contentHash    String
+  status         ExternalCandidateStatus @default(PENDING_REVIEW)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  source         ExternalListingSource   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceId, sourceItemId])
+  @@index([status, expiresAt])
+  @@index([sourceId, lastSeenAt])
+}
+
 enum ConversationRole {
   BUYER
   SELLER

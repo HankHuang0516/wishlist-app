@@ -22,7 +22,7 @@
 
 ## 原生操作驗收與已完成證據
 
-Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及四種單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-22 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1；Android `202609220440` 為2／2。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。
+Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及多個單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-24 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1、連拍刊登入口1／1、相簿商品照單張私有上傳1／1、相簿同批兩張不同商品私有上傳1／1；Android 兩張連拍私有上傳已在獨立流程通過。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。
 
 ### iOS 隔離匿名基線
 
@@ -49,6 +49,10 @@ host build／純規則測試完成後，明確提供隔離 `TEST_DATABASE_URL`�
 Broker僅loopback＋精確QA bundle header／Host、禁止Origin／body／任意動作，capability與payload一次性且no-store；沒有將header宣稱為OS層身份認證，這不是同Mac帳號內其他程序的完整隔離。啟動／URL／notification探針只回報whitelisted enums，拒絕只記原因名稱，不記header值。SceneManifest不存在時，QA input只fallback至AppDelegate自己註冊的弱window引用；仍需active／key window／唯一空白可見的真正欄位，不擴至其他window或App。
 
 在完成相同 host build、完整回歸及明確 session／project 租用之後，每次只執行一個真登入流程：`--authenticated-deletion`、`--authenticated-marketplace-discovery`、`--authenticated-marketplace-chat` 或 `--authenticated-marketplace-meetup`。單一流程設計可保留明確失敗邊界，也避免前一個有狀態流程污染後一個流程。QA App 內的文字輸入引擎僅在 **Debug＋WISHLIST_NATIVE_QA＋Simulator** 條件編譯，且再次核對唯一 bundle／scheme、動作／一次性 job、loopback 埠與可見的空白 UIKit 欄位；不直接寫入 user／JWT／session，也不跳過後端 admission 或真實提交。
+
+新增 `--authenticated-listing-batch-entry` 與 `--authenticated-listing-batch-photo`，後者只在受管理、402×874 的隔離 iOS Simulator 使用固定 SHA-256 的合成杯子照片；先以 `simctl addmedia` 放入相簿，XCTest 只點選剛檢視過的最前端圖片格，選取狀態與私有草稿各保留一張安全截圖。系統相簿是另一個程序，iOS 26 的圖片格在 App 的 XCTest 查詢中不可見，故座標操作限定該尺寸並以後端真實結果作為通過條件，不可外推到其他裝置。`202609242305` 的精確結果為 1／1：本人可讀原圖、其他合成帳號與匿名均為 404，資料庫僅 1 張未刊登的賣家照片，憑證日誌稽核通過，六類後端清理殘留 0。此隔離服務未開 MiniMax 或 Flickr，所以只證明照片上傳與權限，**不證明正式辨識、Flickr、兩張 iOS 連拍或公開刊登**。`simctl addmedia` 的相簿測試圖可能仍留在該隔離 Simulator；後端 cleanup 的 `photoFoldersRemaining: 0` 不包含系統相簿。
+
+`--authenticated-listing-batch-two-photos` 將固定雜湊的合成橘色檯燈與藍色杯子加入相簿；因反覆測試會保留同款照片，iOS 26 的外部 Photos picker 不能靠第一、第二格推定不同商品。此 QA 方法以固定尺寸畫面截圖的橘／藍像素特徵定位兩種商品，找不到即拒絕，不讀取或上傳其他照片；後端再要求恰好兩筆不同 `contentHash`、兩筆都未刊登且本人可讀／其他帳號與匿名 404。`202609242333` 為 **1／1 passed**、隱私日誌稽核通過、六類後端清理 0，五張安全截圖及 `result.json` 位於 `mobile/build/ios-native-qa-202609242333/qa-67321736-1925-4530-a3bc-6e727ba16738/`。前兩輪誤選重複檯燈被不同內容門檻擋下，失敗結果保留。此流程不代表 MiniMax AI、Flickr、iOS 相機連拍或公開刊登已驗收。
 
 XCTest 只取得公開動態埠，向本機 broker 請求 enum 動作；broker 透過私有一次性 capability 讓 QA App 取得合成帳密、填入真正文字欄位並送出正常 editingChanged。XCTest 只收到布林完成狀態，不把帳密放入 launch environment、typeText、剪貼簿、測試設定或畫面附件。通道逾時／已取用／順序錯誤不自動重送；停止時取消待處理工作並關閉自己的 listener。
 

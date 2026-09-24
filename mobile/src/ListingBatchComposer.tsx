@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -201,8 +201,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const input = (value: string, label: string, onChangeText: (text: string) => void, numeric = false, multiline = false) =>
     <TextInput accessibilityLabel={label} placeholder={label} value={value} onChangeText={onChangeText} editable={!busy && !pending}
       keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} />;
-  return <Modal visible animationType="slide" onRequestClose={() => !busy && onClose()}><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={s.header}><Text style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={onClose} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
+  return <Modal visible animationType="slide" onRequestClose={() => !busy && onClose()}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={s.header}><Text accessibilityRole="header" testID="listing-batch-title" style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={onClose} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
       <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。AI 逐件產生私人草稿，你確認後才會公開。</Text>
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
@@ -231,7 +231,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>確認並刊登全部商品</Text></Pressable>}
       <Text style={s.small}>AI 參考價不是已驗證行情；無法可靠估價的商品仍須由賣家決定售價。未刊登照片只對本人可見，稍後可恢復或刪除。</Text>
     </ScrollView>
-  </KeyboardAvoidingView></SafeAreaView></Modal>;
+  </KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal>;
 }
 
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 },

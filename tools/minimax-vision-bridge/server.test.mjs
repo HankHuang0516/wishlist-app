@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createBridge, parseListingVisionDescription, parseVisionDescription, validImageUrl } from './server.mjs';
+import { createBridge, parseListingVisionDescription, parseVisionDescription, recognizeListingImage, validImageUrl } from './server.mjs';
 
 const imageUrl = 'https://wishlist-app-production.up.railway.app/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image';
 const token = 'local-pilot-test-token-1234567890';
@@ -42,6 +42,22 @@ test('listing AI creates only a private seller suggestion with conservative pric
     const uncertain = parseListingVisionDescription(JSON.stringify({ ...result, confidence: 0.75 }));
     assert.equal(uncertain.estimatedPriceLowTwd, null);
     assert.throws(() => parseListingVisionDescription('{"recognizable":false}'), /VISION_UNCERTAIN/);
+});
+
+test('connector failures cannot expose a signed temporary image URL or prompt in errors', async () => {
+    const signed = 'https://temporary.example.invalid/image?signature=secret-value';
+    const fakeImage = () => new Response(Buffer.from('89504e470d0a1a0a', 'hex'), { headers: { 'content-type': 'image/png' } });
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', { fetchImpl: fakeImage,
+        execCommand: async (_command, args) => args[0] === 'upload-temp-url'
+            ? { stdout: JSON.stringify({ temp_url: signed }) }
+            : Promise.reject(new Error(`Command failed: ${signed} private prompt`)),
+    }), error => error.message === 'VISION_UPSTREAM_FAILED' && !error.message.includes(signed));
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', { fetchImpl: fakeImage,
+        execCommand: async () => { throw new Error('Command failed: private file path'); },
+    }), error => error.message === 'TEMP_UPLOAD_FAILED' && !error.message.includes('private'));
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => { throw new Error('Authorization: Bearer private-token'); },
+    }), error => error.message === 'IMAGE_FETCH_FAILED' && !error.message.includes('private-token'));
 });
 
 test('loopback bridge requires auth, deduplicates jobs, and processes one at a time', async () => {

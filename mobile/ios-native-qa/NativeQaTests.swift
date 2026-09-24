@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-two-selected", "qa-two-listing", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -114,6 +114,41 @@ final class NativeQaTests: XCTestCase {
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+    private func syntheticBatchPhotoOffsets() throws -> (CGVector, CGVector) {
+        guard abs(app.frame.width - 402) < 1, abs(app.frame.height - 874) < 1,
+              let image = app.screenshot().image.cgImage, image.width == 1206, image.height == 2622 else { throw Failure.invalidIdentity }
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        return try pixels.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { throw Failure.invalidIdentity }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            let bytes = raw.bindMemory(to: UInt8.self)
+            for upsideDown in [false, true] {
+                var orange: CGVector?, blue: CGVector?
+                for row in 0..<3 {
+                    for column in 0..<3 {
+                        var orangePixels = 0, bluePixels = 0
+                        for y in stride(from: Int((326 + row * 134 + 10) * 3), to: Int((326 + row * 134 + 120) * 3), by: 15) {
+                            for x in stride(from: (column * 134 + 10) * 3, to: (column * 134 + 120) * 3, by: 15) {
+                                let offset = ((upsideDown ? height - 1 - y : y) * width + x) * 4
+                                let red = Int(bytes[offset]), green = Int(bytes[offset + 1]), cobalt = Int(bytes[offset + 2])
+                                if red > 120 && red * 10 > green * 14 && green * 10 > cobalt * 12 { orangePixels += 1 }
+                                if cobalt > 80 && cobalt * 10 > red * 12 && cobalt * 10 > green * 12 { bluePixels += 1 }
+                            }
+                        }
+                        let tile = CGVector(dx: Double(column * 134 + 67) / 402, dy: Double(326 + row * 134 + 67) / 874)
+                        if orange == nil && orangePixels >= 30 && bluePixels < 30 { orange = tile }
+                        if blue == nil && bluePixels >= 80 && orangePixels < 30 { blue = tile }
+                    }
+                }
+                if let orange, let blue { return (orange, blue) }
+            }
+            throw Failure.missingControl
+        }
     }
     private func hasCollapsedDebugWarningToast(_ screenshot: XCUIScreenshot) -> Bool {
         guard let image = screenshot.image.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data), image.bitsPerComponent == 8,
@@ -445,6 +480,92 @@ final class NativeQaTests: XCTestCase {
             app.terminate(); app.launch()
             try required("手機號碼或 Email")
             guard !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
+        } catch { reportFailure() }
+    }
+    func test07RealLoginListingBatchEntry() {
+        executionTimeAllowance = 120
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-batch-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            checkpoint("listing-batch-screen")
+            try safeScreenshot("qa-listing-batch")
+            checkpoint("listing-batch-controls")
+            for label in ["listing-batch-title", "連續拍照", "批次選照片", "共用刊登位置與交付方式", "商品草稿 0/12"] {
+                try required(label, scroll: true)
+            }
+            guard try required("連續拍照", kind: .button).isEnabled,
+                  try required("批次選照片", kind: .button).isEnabled else { throw Failure.unstableControl }
+            checkpoint("listing-batch-entry-complete")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test08RealLoginListingBatchPhotoUpload() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-photo-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-photo-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            checkpoint("listing-photo-picker-selection")
+            // PHPicker runs in a different process: its image elements appear
+            // in the diagnostic hierarchy but not in app.images queries.
+            // Fail closed outside the inspected 402x874 assigned device, then
+            // tap the known newest first tile containing our seeded image.
+            guard abs(app.frame.width - 402) < 1, abs(app.frame.height - 874) < 1 else { throw Failure.invalidIdentity }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.165, dy: 0.448)).tap()
+            checkpoint("listing-photo-picker-selected")
+            try safeScreenshot("qa-photo-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-photo-private-draft")
+            try required("商品草稿 1/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            try required("AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。", scroll: true)
+            try safeScreenshot("qa-listing-photo")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test09RealLoginListingBatchTwoPhotos() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-two-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-two-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (orange, blue) = try syntheticBatchPhotoOffsets()
+            checkpoint("listing-two-picker-selection")
+            app.coordinate(withNormalizedOffset: orange).tap()
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-two-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-two-private-drafts")
+            try required("商品草稿 2/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            try required("第2件商品照片", scroll: true)
+            let unavailable = "AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。"
+            let deadline = Date().addingTimeInterval(30)
+            while app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count < 2 && Date() < deadline {
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+            try safeScreenshot("qa-two-listing")
+            // React Native may expose both a text wrapper and its child to
+            // XCTest. The exact AX count is not the exact card count; the
+            // backend separately requires two distinct private records.
+            guard app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count >= 2 else { throw Failure.missingControl }
+            app.terminate()
         } catch { reportFailure() }
     }
 }

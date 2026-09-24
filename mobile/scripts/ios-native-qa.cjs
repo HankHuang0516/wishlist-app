@@ -44,7 +44,7 @@ for (const source of metadata.sourceFiles || []) {
 const publicSources = fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name);
 if (!Array.isArray(metadata.sourceFiles) || new Set(metadata.sourceFiles).size !== metadata.sourceFiles.length ||
   publicSources.some(source => !metadata.sourceFiles.includes(source)) ||
-  ['App.tsx', 'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json', 'scripts/ios-native-qa.cjs', 'scripts/build-ios-qa.cjs', 'ios-native-qa/PublicInputState.swift']
+  ['App.tsx', 'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json', 'scripts/ios-native-qa.cjs', 'scripts/build-ios-qa.cjs', 'ios-native-qa/PublicInputState.swift']
     .some(source => !metadata.sourceFiles.includes(source))) throw new Error('Incomplete current QA source fingerprint');
 const expectedGroup = 'KLBQRT47CT.' + appBundle;
 if (metadata.qaKeychainGroup !== expectedGroup) throw new Error('Unexpected QA access group');
@@ -54,7 +54,7 @@ fs.mkdirSync(evidence, { mode: 0o700 });
 let stopping = false, child, metro, metroExit, qa, requestedStop = false, installedApp = false, installedRunner = false;
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
-let nativeFailureStage = null, marketplaceFixtureSeeded = false;
+let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0;
 const ownedChildren = new Set();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); metro?.kill('SIGTERM');
@@ -104,6 +104,39 @@ async function auditBuyerErasure() {
     return buyerErasureProof(actors, rows, { ended: qaEnded, stopping, now: Date.now(), deadline: qaDeadline });
   } finally { await audit.$disconnect(); }
 }
+async function auditListingPhoto() {
+  if (!qa || qaEnded || stopping || Date.now() >= qaDeadline - 30000) return;
+  const { PrismaClient } = require('../../server/node_modules/@prisma/client');
+  const audit = new PrismaClient({ datasources: { db: { url: database } } });
+  try {
+    const records = await audit.listingMedia.findMany({ where: { ownerUserId: qa.actors.buyer.id },
+      select: { id: true, ownerUserId: true, listingId: true, wishItemId: true, width: true, height: true, byteSize: true,
+        contentHash: true, aiDraftStatus: true } });
+    listingPhotoCount = records.length;
+    const expectedCount = flow === 'listing-batch-two-photos' ? 2 : 1;
+    if (records.length !== expectedCount || new Set(records.map(record => record.contentHash)).size !== expectedCount ||
+      records.some(record => record.listingId !== null || record.wishItemId !== null || record.width < 100 || record.height < 100 ||
+        record.byteSize < 1000 || record.aiDraftStatus !== 'SKIPPED')) return;
+    const login = async actor => {
+      const response = await fetch(qa.apiUrl + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: actor.email, password: actor.password }), signal: AbortSignal.timeout(5000) });
+      const body = await response.json();
+      if (response.status !== 200 || typeof body.token !== 'string' || body.token.length < 40) throw new Error('Private QA actor login failed');
+      return body.token;
+    };
+    const ownerToken = await login(qa.actors.buyer), outsiderToken = await login(qa.actors.seller);
+    listingPhotoVerified = true; listingPhotoPrivacyVerified = true;
+    for (const record of records) {
+      const url = qa.apiUrl + '/api/listing-media/' + record.id + '/image';
+      const owner = await fetch(url, { headers: { Authorization: 'Bearer ' + ownerToken }, signal: AbortSignal.timeout(5000) });
+      const bytes = Buffer.from(await owner.arrayBuffer());
+      listingPhotoVerified &&= owner.status === 200 && !!owner.headers.get('content-type')?.startsWith('image/') && bytes.length > 1000;
+      const outsider = await fetch(url, { headers: { Authorization: 'Bearer ' + outsiderToken }, signal: AbortSignal.timeout(5000) });
+      const anonymous = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      listingPhotoPrivacyVerified &&= outsider.status === 404 && anonymous.status === 404;
+    }
+  } finally { await audit.$disconnect(); }
+}
 async function main() {
   const inventory = await simctl(['listapps']);
   // simctl listapps emits an OpenStep property list, not JSON. Convert in
@@ -147,6 +180,16 @@ async function main() {
   }
   if (!ready) throw new Error('Private Metro unavailable');
   stage = 'qa-only-install';
+  if (flow === 'listing-batch-photo' || flow === 'listing-batch-two-photos') {
+    stage = 'synthetic-photo-library-seed';
+    const fixtures = [['synthetic-used-blue-mug.png', '4bf0d16e92bff216bdf0521ba878886b0a31c734d43ee9363dbc69dda6aa06f9'],
+      ...(flow === 'listing-batch-two-photos' ? [['synthetic-used-orange-desk-lamp.png', 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0']] : [])];
+    for (const [name, expectedHash] of fixtures) {
+      const fixture = path.join(mobile, 'qa-fixtures', name);
+      if (hash(fixture) !== expectedHash) throw new Error('Synthetic fixture changed');
+      await command('/usr/bin/xcrun', ['simctl', 'addmedia', udid, fixture], 30000);
+    }
+  }
   await simctl(['install', app], 30000); installedApp = true;
   const products = path.join(build, 'runner-derived/Build/Products');
   const templates = fs.readdirSync(products).filter(name => name.endsWith('.xctestrun'));
@@ -171,14 +214,17 @@ async function main() {
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));
   if (flow === 'deletion') buyerErasureVerified = await auditBuyerErasure();
+  if (flow === 'listing-batch-photo' || flow === 'listing-batch-two-photos') await auditListingPhoto();
   const failures = Array.isArray(summary?.testFailures) ? summary.testFailures : [];
   for (const failure of failures) {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
-    (authenticated && ((flow === 'deletion' && !buyerErasureVerified) || broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
+    (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
+      (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified)) ||
+      broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
   }
@@ -203,6 +249,9 @@ async function main() {
     'marketplace-discovery': ['product-notice', 'home', 'marketplace'],
     'marketplace-chat': ['product-notice', 'home', 'chat-transition', 'chat'],
     'marketplace-meetup': ['product-notice', 'home', 'meetup'],
+    'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
+    'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo'],
+    'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
   const names = flow ? flowAttachments[flow] : ['product-notice'];
@@ -245,7 +294,8 @@ async function main() {
     failedStage: cleanupFailed ? 'exact-cleanup-failed' : failed ? failedStage : null,
     tests: summary ? { total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests } : null,
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
-    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
+    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoCount,
+    privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,
     authenticatedFlowVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

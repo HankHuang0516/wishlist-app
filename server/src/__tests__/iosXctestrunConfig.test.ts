@@ -1,6 +1,8 @@
 const { destinationTestRun, anonymousSummaryPassed, iosSummaryPassed, TESTS,
     AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS, AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
-    AUTHENTICATED_MARKETPLACE_MEETUP_TESTS, AUTHENTICATED_DELETION_TESTS } = require('../../../mobile/scripts/ios-xctestrun-config.cjs');
+    AUTHENTICATED_MARKETPLACE_MEETUP_TESTS, AUTHENTICATED_DELETION_TESTS,
+    AUTHENTICATED_LISTING_BATCH_TESTS, AUTHENTICATED_LISTING_PHOTO_TESTS,
+    AUTHENTICATED_LISTING_TWO_PHOTO_TESTS } = require('../../../mobile/scripts/ios-xctestrun-config.cjs');
 const label = '202609152142', udid = '04D84B5C-1960-466E-8851-3A21D1C93917';
 const template = () => ({ __xctestrun_metadata__: { FormatVersion: 1 }, WishlistNativeQa: {
     IsUITestBundle: true, UseUITargetAppProvidedByTests: true, BlueprintName: 'WishlistNativeQa', TestHostBundleIdentifier: 'com.hankhuang.wishlistnativeqa.qa' + label + '.xctrunner',
@@ -31,13 +33,27 @@ describe('supervised destination-only anonymous Xcode tests', () => {
         expect(qa.OnlyTestIdentifiers).toEqual(AUTHENTICATED_DELETION_TESTS);
         expect(qa.EnvironmentVariables).toEqual({ TERM: 'dumb', NATIVE_QA_PACKAGE: 'com.hankhuang.weesh.qa' + label, NATIVE_QA_INPUT_PORT: '23456' });
     });
+    it('selects only the isolated listing-batch entry check', () => {
+        const qa = destinationTestRun(template(), label, '/products', 23456, 'listing-batch-entry').WishlistNativeQa;
+        expect(qa.OnlyTestIdentifiers).toEqual(AUTHENTICATED_LISTING_BATCH_TESTS);
+        expect(qa.EnvironmentVariables).toEqual({ TERM: 'dumb', NATIVE_QA_PACKAGE: 'com.hankhuang.weesh.qa' + label, NATIVE_QA_INPUT_PORT: '23456' });
+    });
+    it('selects only the isolated photo-upload check', () => {
+        const qa = destinationTestRun(template(), label, '/products', 23456, 'listing-batch-photo').WishlistNativeQa;
+        expect(qa.OnlyTestIdentifiers).toEqual(AUTHENTICATED_LISTING_PHOTO_TESTS);
+        expect(qa.EnvironmentVariables).toEqual({ TERM: 'dumb', NATIVE_QA_PACKAGE: 'com.hankhuang.weesh.qa' + label, NATIVE_QA_INPUT_PORT: '23456' });
+    });
+    it('selects only the isolated two-photo batch check', () => {
+        const qa = destinationTestRun(template(), label, '/products', 23456, 'listing-batch-two-photos').WishlistNativeQa;
+        expect(qa.OnlyTestIdentifiers).toEqual(AUTHENTICATED_LISTING_TWO_PHOTO_TESTS);
+    });
     it.each([0, 1023, 65536, 23456.5, '23456', null])('rejects unsafe private input port %p', port => {
         expect(() => destinationTestRun(template(), label, '/products', port, 'marketplace-discovery')).toThrow();
     });
     it.each([undefined, 'unknown', '', null])('rejects authenticated input without an exact flow %p', flow => {
         expect(() => destinationTestRun(template(), label, '/products', 23456, flow)).toThrow();
     });
-    it.each(['marketplace-discovery', 'marketplace-chat', 'marketplace-meetup', 'deletion'])('rejects anonymous execution with authenticated flow %s', flow => {
+    it.each(['marketplace-discovery', 'marketplace-chat', 'marketplace-meetup', 'deletion', 'listing-batch-entry', 'listing-batch-photo', 'listing-batch-two-photos'])('rejects anonymous execution with authenticated flow %s', flow => {
         expect(() => destinationTestRun(template(), label, '/products', undefined, flow)).toThrow();
     });
     it('uses a fresh generated runner and provided unique App, exact two methods and no automatic system screenshots', () => {

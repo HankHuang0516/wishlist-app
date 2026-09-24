@@ -53,8 +53,10 @@ export function parseVisionDescription(description) {
 }
 
 async function boundedImage(url, fetchImpl, authToken) {
-    const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000),
-        ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}) });
+    let response;
+    try { response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000),
+        ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}) }); }
+    catch { throw new Error('IMAGE_FETCH_FAILED'); }
     if (!response.ok || !response.body) throw new Error('IMAGE_FETCH_FAILED');
     const mime = response.headers.get('content-type')?.split(';')[0].toLowerCase();
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime];
@@ -120,19 +122,23 @@ export function parseListingVisionDescription(description) {
         evidence, uncertainties, confidence };
 }
 
-async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken } = {}) {
+async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken, execCommand = execFileAsync } = {}) {
     const { bytes, extension } = await boundedImage(url, fetchImpl, authToken);
     const directory = await mkdtemp(join(tmpdir(), 'wishlist-minimax-vision-'));
     const imagePath = join(directory, `image.${extension}`);
     try {
         await writeFile(imagePath, bytes, { mode: 0o600 });
-        const upload = await execFileAsync(command, ['upload-temp-url', imagePath], { timeout: 30000, maxBuffer: 1024 * 1024 });
+        let upload;
+        try { upload = await execCommand(command, ['upload-temp-url', imagePath], { timeout: 30000, maxBuffer: 1024 * 1024 }); }
+        catch { throw new Error('TEMP_UPLOAD_FAILED'); }
         let uploaded;
         try { uploaded = JSON.parse(upload.stdout); } catch { throw new Error('TEMP_UPLOAD_FAILED'); }
         if (typeof uploaded.temp_url !== 'string' || !uploaded.temp_url.startsWith('https://')) throw new Error('TEMP_UPLOAD_FAILED');
         const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt }] });
-        const call = await execFileAsync(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
-            { timeout: 90000, maxBuffer: 1024 * 1024 });
+        let call;
+        try { call = await execCommand(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
+            { timeout: 90000, maxBuffer: 1024 * 1024 }); }
+        catch { throw new Error('VISION_UPSTREAM_FAILED'); }
         let response;
         try { response = JSON.parse(call.stdout); } catch { throw new Error('VISION_BAD_RESPONSE'); }
         if (response.code !== 0 || response.results?.[0]?.success !== true) throw new Error('VISION_UPSTREAM_FAILED');

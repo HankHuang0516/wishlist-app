@@ -5,12 +5,18 @@ const AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS = ['NativeQaTests/test03RealLogi
 const AUTHENTICATED_MARKETPLACE_CHAT_TESTS = ['NativeQaTests/test04RealLoginMarketplaceChat'];
 const AUTHENTICATED_MARKETPLACE_MEETUP_TESTS = ['NativeQaTests/test05RealLoginMarketplaceMeetup'];
 const AUTHENTICATED_DELETION_TESTS = ['NativeQaTests/test06RealLoginWishlistDeletionAndRestart'];
+const AUTHENTICATED_LISTING_BATCH_TESTS = ['NativeQaTests/test07RealLoginListingBatchEntry'];
+const AUTHENTICATED_LISTING_PHOTO_TESTS = ['NativeQaTests/test08RealLoginListingBatchPhotoUpload'];
+const AUTHENTICATED_LISTING_TWO_PHOTO_TESTS = ['NativeQaTests/test09RealLoginListingBatchTwoPhotos'];
 const AUTHENTICATED_TESTS = AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS;
 const AUTHENTICATED_FLOWS = {
   'marketplace-discovery': AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS,
   'marketplace-chat': AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
   'marketplace-meetup': AUTHENTICATED_MARKETPLACE_MEETUP_TESTS,
   deletion: AUTHENTICATED_DELETION_TESTS,
+  'listing-batch-entry': AUTHENTICATED_LISTING_BATCH_TESTS,
+  'listing-batch-photo': AUTHENTICATED_LISTING_PHOTO_TESTS,
+  'listing-batch-two-photos': AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||
@@ -64,4 +70,7 @@ function iosSummaryPassed(summary, udid, count) {
 }
 module.exports = { TESTS, AUTHENTICATED_TESTS, AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS, AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
   AUTHENTICATED_MARKETPLACE_MEETUP_TESTS, AUTHENTICATED_DELETION_TESTS, AUTHENTICATED_FLOWS,
+  AUTHENTICATED_LISTING_BATCH_TESTS,
+  AUTHENTICATED_LISTING_PHOTO_TESTS,
+  AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
   destinationTestRun, anonymousSummaryPassed, iosSummaryPassed };

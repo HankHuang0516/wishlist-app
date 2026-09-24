@@ -28,6 +28,7 @@ module.exports = {
     },
     plugins: [
       './plugins/withReleaseSigning',
+      './plugins/withIsolatedDebugQa',
       '@maplibre/maplibre-react-native',
       ['expo-location', {
         locationWhenInUsePermission: '用於查找附近商品；也可拒絕定位並手動選擇地區。',

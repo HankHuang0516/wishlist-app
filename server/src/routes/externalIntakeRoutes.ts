@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import { createHash } from 'crypto';
 import rateLimit from 'express-rate-limit';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ExternalCandidateStatus, type ExternalCandidateAiStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
@@ -26,6 +27,23 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
     router.get('/sources', async (_req, res) => {
         try { return res.json({ items: await prisma.externalListingSource.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }) }); }
         catch (error) { return fail(res, error); }
+    });
+    router.get('/sources/:id/intake-batches', async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
+            const cursor = req.query.cursor;
+            if (cursor !== undefined && !isListingId(cursor)) throw new ExternalIntakeError('cursor');
+            if (!await prisma.externalListingSource.findUnique({ where: { id: req.params.id }, select: { id: true } }))
+                return res.status(404).json({ error: '來源不存在' });
+            if (cursor) {
+                const previous = await prisma.externalIntakeBatch.findUnique({ where: { id: cursor }, select: { sourceId: true } });
+                if (previous?.sourceId !== req.params.id) throw new ExternalIntakeError('cursor');
+            }
+            const rows = await prisma.externalIntakeBatch.findMany({ where: { sourceId: req.params.id },
+                orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }], take: 26,
+                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+            return res.json({ items: rows.slice(0, 25), nextCursor: rows.length > 25 ? rows[24].id : null });
+        } catch (error) { return fail(res, error); }
     });
     router.post('/sources', writes(), async (req, res) => {
         try {
@@ -69,16 +87,26 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
-            if (!source || !source.enabled) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
+            if (!source || !source.enabled || !source.enabledAt) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             if (!req.body || Object.keys(req.body).join(',') !== 'items' || !Array.isArray(req.body.items) ||
                 req.body.items.length < 1 || req.body.items.length > 50) throw new ExternalIntakeError('items');
             const now = new Date();
-            const items = req.body.items.map((raw: unknown) => parseExternalCandidate(raw, source, now));
+            const items: Array<ReturnType<typeof parseExternalCandidate>> = req.body.items.map(
+                (raw: unknown) => parseExternalCandidate(raw, source, now));
             if (new Set(items.map((item: { sourceItemId: string }) => item.sourceItemId)).size !== items.length) throw new ExternalIntakeError('sourceItemId', '同一批次不得重複商品 ID');
             const saved = await prisma.$transaction(async tx => {
-                const locked = await tx.$queryRaw<Array<{ enabled: boolean }>>`SELECT "enabled" FROM "ExternalListingSource" WHERE "id" = ${source.id} FOR UPDATE`;
-                if (locked[0]?.enabled !== true) throw new ExternalIntakeError('source', '來源已暫停');
-                const records = [];
+                const locked = await tx.$queryRaw<Array<{ enabled: boolean; enabledAt: Date | null; authorizationRef: string;
+                    textReuseAllowed: boolean; imageReuseAllowed: boolean; aiProcessingAllowed: boolean }>>`
+                    SELECT "enabled", "enabledAt", "authorizationRef", "textReuseAllowed", "imageReuseAllowed", "aiProcessingAllowed"
+                    FROM "ExternalListingSource" WHERE "id" = ${source.id} FOR UPDATE`;
+                if (locked[0]?.enabled !== true || !locked[0].enabledAt ||
+                    locked[0].authorizationRef !== source.authorizationRef ||
+                    locked[0].textReuseAllowed !== source.textReuseAllowed ||
+                    locked[0].imageReuseAllowed !== source.imageReuseAllowed ||
+                    locked[0].aiProcessingAllowed !== source.aiProcessingAllowed)
+                    throw new ExternalIntakeError('source', '來源已暫停或授權範圍已變更');
+                const records: Array<{ id: string; sourceItemId: string; status: ExternalCandidateStatus;
+                    aiStatus: ExternalCandidateAiStatus; changed: boolean }> = [];
                 for (const item of items) {
                     const old = await tx.externalListingCandidate.findUnique({ where: { sourceId_sourceItemId: { sourceId: source.id, sourceItemId: item.sourceItemId } } });
                     const eligible = source.aiProcessingAllowed && source.imageReuseAllowed && !!item.imageUrl && old?.status !== 'REJECTED';
@@ -102,9 +130,16 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status,
                         aiStatus: record.aiStatus, changed: aiChanged });
                 }
-                return records;
+                const observations = items.map((item, index) => ({ sourceItemId: item.sourceItemId,
+                    canonicalUrlSha256: createHash('sha256').update(item.canonicalUrl).digest('hex'),
+                    contentHash: item.contentHash, observedAt: item.observedAt.toISOString(),
+                    status: records[index].status, changed: records[index].changed }));
+                const batch = await tx.externalIntakeBatch.create({ data: { sourceId: source.id,
+                    authorizationRef: source.authorizationRef, sourceEnabledAt: locked[0].enabledAt,
+                    receivedAt: now, itemCount: observations.length, observations } });
+                return { records, batchId: batch.id };
             }, { timeout: 15000 });
-            return res.status(202).json({ items: saved, publicCount: 0 });
+            return res.status(202).json({ items: saved.records, intakeBatchId: saved.batchId, publicCount: 0 });
         } catch (error) { return fail(res, error); }
     });
     router.post('/candidates/:id/reject', writes(), async (req, res) => {

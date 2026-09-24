@@ -98,7 +98,8 @@ export function parseExternalCandidate(input: unknown, source: SourcePolicy, now
     const observedAt = date(value.observedAt, 'observedAt'), expiresAt = date(value.expiresAt, 'expiresAt');
     if (observedAt.getTime() > now.getTime() + 5 * 60_000 || now.getTime() - observedAt.getTime() > 48 * 3_600_000 ||
         expiresAt.getTime() <= now.getTime() || expiresAt.getTime() > observedAt.getTime() + 30 * 86_400_000) throw new ExternalIntakeError('expiresAt', '來源資料須近期確認且最遲 30 天內失效');
-    const data = { sourceItemId, canonicalUrl, imageUrl, thumbnailUrl, title, description, priceTwd, condition: value.condition,
+    const data = { sourceItemId, canonicalUrl, imageUrl, thumbnailUrl, title, description, priceTwd,
+        condition: value.condition as 'USED' | 'NEW',
         county: normalizedCounty, district, observedAt, expiresAt };
     // Observation/expiry refreshes are freshness updates, not new content for
     // an AI reviewer to re-enrich on every scheduled feed check.

@@ -317,8 +317,24 @@ model ExternalListingSource {
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
   candidates       ExternalListingCandidate[]
+  intakeBatches    ExternalIntakeBatch[]
 
   @@index([enabled, kind])
+}
+
+// Immutable, compact receipts for accepted admin imports. Store hashes and
+// source item IDs, not another copy of partner photos or descriptions.
+model ExternalIntakeBatch {
+  id                 String                @id @default(uuid())
+  sourceId           String
+  authorizationRef   String
+  sourceEnabledAt    DateTime
+  receivedAt         DateTime              @default(now())
+  itemCount          Int
+  observations       Json
+  source             ExternalListingSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@index([sourceId, receivedAt, id])
 }
 
 model ExternalListingCandidate {

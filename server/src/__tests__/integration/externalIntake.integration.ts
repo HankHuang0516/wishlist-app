@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { createHash, randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { createExternalIntakeRoutes } from '../../routes/externalIntakeRoutes';
 import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
@@ -28,6 +29,7 @@ afterAll(async () => {
     if (sourceId) {
         await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId } } });
         await prisma.externalListingCandidate.deleteMany({ where: { sourceId } });
+        await prisma.externalIntakeBatch.deleteMany({ where: { sourceId } });
         await prisma.externalListingSource.delete({ where: { id: sourceId } });
     }
     await prisma.$disconnect();
@@ -53,17 +55,61 @@ describe('admin-only attributed external supply staging', () => {
             .send({ items: [candidate(), { ...candidate(), sourceItemId: 'test-2', canonicalUrl: 'https://evil.example/items/2' }] });
         expect(bad.status).toBe(400);
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(0);
+        expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(0);
         const staged = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(staged.status).toBe(202); expect(staged.body).toMatchObject({ publicCount: 0,
+            intakeBatchId: expect.any(String),
             items: [{ sourceItemId: 'test-1', status: 'PENDING_REVIEW', aiStatus: 'NOT_ELIGIBLE', changed: true }] });
+        expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`)).status).toBe(401);
+        expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
+            .query({ cursor: 'not-a-uuid' })).status).toBe(400);
+        const history = await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey);
+        expect(history.status).toBe(200);
+        expect(history.headers['cache-control']).toBe('private, no-store');
+        expect(history.body).toMatchObject({ nextCursor: null, items: [{ id: staged.body.intakeBatchId,
+            sourceId, authorizationRef: sourceBody.authorizationRef, itemCount: 1,
+            sourceEnabledAt: expect.any(String), observations: [{ sourceItemId: 'test-1',
+                canonicalUrlSha256: createHash('sha256').update(candidate().canonicalUrl).digest('hex'),
+                contentHash: expect.stringMatching(/^[0-9a-f]{64}$/), status: 'PENDING_REVIEW', changed: true }] }] });
+        expect(JSON.stringify(history.body.items[0].observations)).not.toContain('二手檯燈');
+        expect(JSON.stringify(history.body.items[0].observations)).not.toContain('https://partner.example.com/items/1');
         expect(await prisma.listing.count()).toBe(originalCount);
         const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(repeated.status).toBe(202);
         expect(repeated.body.items[0].changed).toBe(false);
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(1);
+        expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(2);
         const rows = await request(app).get(url + '/candidates').set('x-admin-key', adminKey);
         expect(rows.status).toBe(200); expect(rows.headers['cache-control']).toBe('private, no-store');
         expect(rows.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ sourceId, canonicalUrl: 'https://partner.example.com/items/1' })]));
+    });
+    it('pages private batch receipts without accepting another source cursor', async () => {
+        const source = await prisma.externalListingSource.create({ data: {
+            name: 'Synthetic receipt pagination partner', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            authorizationRef: 'contract:synthetic-pagination-2026', enabled: true, enabledAt: new Date(),
+        } });
+        try {
+            await prisma.externalIntakeBatch.createMany({ data: Array.from({ length: 26 }, (_, index) => ({
+                id: randomUUID(), sourceId: source.id, authorizationRef: source.authorizationRef,
+                sourceEnabledAt: source.enabledAt!, receivedAt: new Date(Date.now() - index * 1000),
+                itemCount: 1, observations: [{ sourceItemId: `synthetic-${index}` }],
+            })) });
+            const page = await request(app).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey);
+            expect(page.status).toBe(200);
+            expect(page.body.items).toHaveLength(25);
+            expect(page.body.nextCursor).toEqual(page.body.items[24].id);
+            const later = await request(app).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey)
+                .query({ cursor: page.body.nextCursor });
+            expect(later.status).toBe(200);
+            expect(later.body.items).toHaveLength(1);
+            expect(later.body.nextCursor).toBeNull();
+            expect(page.body.items.map((row: { id: string }) => row.id)).not.toContain(later.body.items[0].id);
+            expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
+                .query({ cursor: page.body.nextCursor })).status).toBe(400);
+        } finally {
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: source.id } });
+            await prisma.externalListingSource.delete({ where: { id: source.id } });
+        }
     });
     it('does not resurrect rejected candidates from a repeated feed and can pause a source', async () => {
         await prisma.externalListingCandidate.update({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } },
@@ -138,6 +184,7 @@ describe('admin-only attributed external supply staging', () => {
         } finally {
             await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: aiSourceId } } });
             await prisma.externalListingCandidate.deleteMany({ where: { sourceId: aiSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: aiSourceId } });
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
@@ -190,6 +237,7 @@ describe('admin-only attributed external supply staging', () => {
             else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = priorFlag;
             await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: refreshSourceId } } });
             await prisma.externalListingCandidate.deleteMany({ where: { sourceId: refreshSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: refreshSourceId } });
             await prisma.externalListingSource.delete({ where: { id: refreshSourceId } });
         }
     });
@@ -367,6 +415,7 @@ describe('admin-only attributed external supply staging', () => {
             if (testUsers.length) await prisma.user.deleteMany({ where: { id: { in: testUsers } } });
             await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: reviewSourceId } } });
             await prisma.externalListingCandidate.deleteMany({ where: { sourceId: reviewSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: reviewSourceId } });
             await prisma.externalListingSource.delete({ where: { id: reviewSourceId } });
         }
     });

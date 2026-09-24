@@ -45,6 +45,10 @@ describe('owned local QA process lifecycle and real isolated PostgreSQL', () => 
             const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: page.items[0].id } });
             sourceId = row.sourceId;
             expect(row.sourceItemId).toBe('synthetic-' + qa.runId);
+            const seededWish = await prisma.wishlist.findFirstOrThrow({ where: { userId: qa.actors.buyer.id,
+                title: 'Native QA 外部比對清單' }, include: { items: true } });
+            expect(seededWish).toMatchObject({ isPublic: false, items: [expect.objectContaining({ name: '檯燈', maxPrice: 600,
+                priceCurrency: 'TWD' })] });
             expect((await fetch(qa.apiUrl + '/api/external-listings/' + row.id, { signal: AbortSignal.timeout(3000) })).status).toBe(200);
             expect((await fetch(qa.apiUrl + '/api/external-listings/matches?wishItemId=1', { signal: AbortSignal.timeout(3000) })).status).toBe(401);
             const wishlist = await prisma.wishlist.create({ data: { userId: qa.actors.buyer.id, title: 'Synthetic private lamp wish',

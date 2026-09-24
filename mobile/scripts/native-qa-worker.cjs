@@ -157,6 +157,8 @@ async function main() {
         approvedAuthorizationRef: owner.authorizationRef, approvedContentHash: input.contentHash, approvedAt: new Date() } });
       await tx.externalCandidateReviewEvent.create({ data: { candidateId: candidate.id, decision: 'APPROVED',
         contentHash: input.contentHash, reviewRef: 'review:synthetic-native-qa', authorizationRef: owner.authorizationRef } });
+      await tx.wishlist.create({ data: { userId: actors.buyer.id, title: 'Native QA 外部比對清單', isPublic: false,
+        items: { create: { name: '檯燈', maxPrice: 600, priceCurrency: 'TWD', aiStatus: 'SKIPPED' } } } });
       return { sourceId: owner.id, candidateId: candidate.id };
     });
     sourceIds.push(created.sourceId);

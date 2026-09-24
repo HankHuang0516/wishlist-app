@@ -258,7 +258,7 @@ async function main() {
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
-    'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail'],
+    'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail', 'external-wish-map', 'external-wish-list'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
   const names = flow ? flowAttachments[flow] : ['product-notice'];

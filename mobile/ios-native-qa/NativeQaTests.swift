@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -110,7 +110,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("unexpected-logbox-warning")
             throw Failure.invalidIdentity
         }
-        if ["qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-external-map", "qa-external-list", "qa-external-detail"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
+        if ["qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
@@ -581,7 +581,7 @@ final class NativeQaTests: XCTestCase {
         } catch { reportFailure() }
     }
     func test10RealLoginExternalSourceMapAndDetail() {
-        executionTimeAllowance = 150
+        executionTimeAllowance = 210
         do {
             try prepare()
             try loginBuyerAndRequireTabs()
@@ -605,6 +605,22 @@ final class NativeQaTests: XCTestCase {
             try required("前往來源網站查看", scroll: true, kind: .button)
             guard !app.buttons["聯絡賣家"].exists else { throw Failure.invalidIdentity }
             try safeScreenshot("qa-external-detail")
+            try tap("返回探索")
+            try tapTab("願望")
+            try required("Native QA 外部比對清單", scroll: true)
+            try tap("查看清單")
+            try required("檯燈", scroll: true)
+            try required("最高預算 TWD 600", scroll: true)
+            try tap("查附近符合商品")
+            checkpoint("external-wish-map-open")
+            let wishBanner = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "符合所選願望")).firstMatch
+            guard wishBanner.waitForExistence(timeout: 20) else { throw Failure.missingControl }
+            guard externalCount.waitForExistence(timeout: 20), externalCount.isHittable else { throw Failure.missingControl }
+            try safeScreenshot("qa-external-wish-map")
+            checkpoint("external-wish-list-open")
+            try tap("切換清單")
+            try required(card, scroll: true, kind: .button)
+            try safeScreenshot("qa-external-wish-list")
             app.terminate()
         } catch { reportFailure() }
     }

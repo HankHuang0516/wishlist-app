@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
-import { mergeListingAiSuggestions, parseListingAiState, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -190,7 +190,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     if (!ready || pending || !keyRef.current || !begin()) return;
     let count = 0, candidate: string | null = null;
     try {
-      const confirmed = cards.filter(item => !item.published && item.confirmed);
+      const confirmed = confirmedBatchCandidates(cards);
       if (!confirmed.length) throw new ListingFormError('請先逐件確認要刊登的商品。');
       for (const card of confirmed) {
         if (!card.record) throw new ListingFormError('仍有照片尚未上傳成功');
@@ -246,7 +246,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {!card.published && <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>重試 AI</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
       </View>)}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
-      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || !cards.some(card => !card.published && card.confirmed)} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{cards.filter(card => !card.published && card.confirmed).length}）</Text></Pressable>}
+      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}
       <Text style={s.small}>AI 參考價不是已驗證行情；無法可靠估價的商品仍須由賣家決定售價。未刊登照片只對本人可見，稍後可恢復或刪除。</Text>
     </ScrollView>
   </KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal>;

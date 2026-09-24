@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeListingAiSuggestions, parseListingAiState, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
 import { emptyListingForm } from '../listingForm';
 
 const id = '41fe5714-b31f-475d-b040-01e2a5c2e1cb';
@@ -29,5 +29,12 @@ describe('private listing AI draft protocol', () => {
     expect(merged).toMatchObject({ title: '我自己命名', price: '999', brand: '未確認也不填',
       description: draft.description, category: 'electronics', condition: 'USED' });
     expect(mergeListingAiSuggestions(merged, draft, {})).toMatchObject({ title: draft.title, price: '1400', brand: '' });
+  });
+  it('selects only individually confirmed unpublished items for batch publication', () => {
+    expect(confirmedBatchCandidates([
+      { id: 'a', published: false, confirmed: true },
+      { id: 'b', published: false, confirmed: false },
+      { id: 'c', published: true, confirmed: true },
+    ]).map(card => card.id)).toEqual(['a']);
   });
 });

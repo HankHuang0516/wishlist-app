@@ -52,3 +52,7 @@ export function mergeListingAiSuggestions(form: ListingForm, draft: ListingAiDra
     price: touched.price ? form.price : suggestedAskingPrice(draft),
   };
 }
+
+export function confirmedBatchCandidates<T extends { published: boolean; confirmed: boolean }>(cards: readonly T[]): T[] {
+  return cards.filter(card => !card.published && card.confirmed);
+}

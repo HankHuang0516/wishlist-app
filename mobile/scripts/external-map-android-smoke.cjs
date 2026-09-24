@@ -12,6 +12,7 @@ const os = require('node:os');
 const net = require('node:net');
 const { startNativeQa } = require('./native-qa.cjs');
 const { assignedSerial, hostEnvironment, metroArguments, METRO_PORT, qaLabel, qaPackage } = require('./android-qa-config.cjs');
+const { androidQaSources } = require('./android-qa-sources.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 const runFile = promisify(execFile);
@@ -21,7 +22,10 @@ const packageName = qaPackage(sourceLabel);
 const priorId = process.argv[3] === '--reuse-owned-qa' ? process.argv[4] : null;
 if (process.argv[3] && (!priorId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(priorId)))
   throw new Error('Exact prior owned QA report required');
-const apk = path.join(mobile, 'build', `android-batch-qa-${sourceLabel}`, 'app.apk');
+const debugBuild = path.join(mobile, 'build', `android-debug-qa-${sourceLabel}`);
+const debugApk = path.join(debugBuild, 'app.apk');
+const legacyApk = path.join(mobile, 'build', `android-batch-qa-${sourceLabel}`, 'app.apk');
+let apk;
 const adbPath = '/Users/hank/Library/Android/sdk/platform-tools/adb';
 const aaptPath = '/Users/hank/Library/Android/sdk/build-tools/36.0.0/aapt2';
 const serial = assignedSerial(process.env);
@@ -132,15 +136,35 @@ async function reverse(port) {
   await adb(['reverse', endpoint, endpoint]); reverses.push(endpoint);
 }
 async function verifyApk() {
+  const debugExists = await fs.stat(debugApk).then(stat => stat.isFile()).catch(() => false);
+  const legacyExists = await fs.stat(legacyApk).then(stat => stat.isFile()).catch(() => false);
+  if (debugExists === legacyExists) throw new Error('Exactly one isolated QA APK must match the label');
+  apk = debugExists ? debugApk : legacyApk;
+  result.buildKind = debugExists ? 'isolated-android-debug-qa' : 'legacy-android-batch-qa';
   const stat = await fs.stat(apk);
   if (!stat.isFile() || stat.size < 10_000_000) throw new Error('QA APK unavailable');
   const badging = (await runFile(aaptPath, ['dump', 'badging', apk], { timeout: 20_000, maxBuffer: 2_000_000 })).stdout;
   if (!badging.includes(`package: name='${packageName}'`) || !badging.includes('application-debuggable'))
     throw new Error('APK is not the isolated Debug identity');
   result.apkSha256 = createHash('sha256').update(await fs.readFile(apk)).digest('hex');
+  if (debugExists) {
+    const metadata = JSON.parse(await fs.readFile(path.join(debugBuild, 'build.json'), 'utf8'));
+    const sources = androidQaSources(mobile, { includeInstrumentation: false });
+    if (metadata.kind !== result.buildKind || metadata.label !== sourceLabel ||
+      metadata.package !== packageName || metadata.metroPort !== METRO_PORT ||
+      metadata.storeDeliverable !== false || metadata.instrumented !== false ||
+      metadata.hashes?.app !== result.apkSha256 ||
+      !Array.isArray(metadata.sourceFiles) || metadata.sourceFiles.join('\n') !== sources.join('\n'))
+      throw new Error('Isolated Debug QA provenance mismatch');
+    for (const source of sources) {
+      const hash = createHash('sha256').update(await fs.readFile(path.join(mobile, source))).digest('hex');
+      if (metadata.sourceHashes?.[source] !== hash) throw new Error('QA source changed since compilation');
+    }
+  }
   if (priorId) {
     const prior = JSON.parse(await fs.readFile(path.join(mobile, 'build', 'android-external-map-' + priorId, 'result.json'), 'utf8'));
     if (prior.kind !== result.kind || prior.package !== packageName || prior.sourceLabel !== sourceLabel ||
+      (prior.buildKind ?? 'legacy-android-batch-qa') !== result.buildKind ||
       prior.apkSha256 !== result.apkSha256 || typeof prior.passed !== 'boolean' ||
       !prior.cleanup || Object.values(prior.cleanup).some(value => value !== 0))
       throw new Error('Prior owned QA receipt does not authorize reuse');

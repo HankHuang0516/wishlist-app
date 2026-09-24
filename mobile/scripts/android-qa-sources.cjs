@@ -16,7 +16,7 @@ function filesBelow(root, relative) {
   return output;
 }
 
-function androidQaSources(mobile) {
+function androidQaSources(mobile, { includeInstrumentation = true } = {}) {
   const fixed = [
     'App.tsx', 'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json',
     'android/build.gradle', 'android/gradle.properties', 'android/settings.gradle',
@@ -25,13 +25,15 @@ function androidQaSources(mobile) {
     'android/app/src/debug/AndroidManifest.xml',
     'android/app/src/main/java/com/hank_huang0516/snack425e646aa6a74ad8a964aadeb4741fc1/MainActivity.kt',
     'android/app/src/main/java/com/hank_huang0516/snack425e646aa6a74ad8a964aadeb4741fc1/MainApplication.kt',
-    'android/app/src/androidTest/java/com/hank_huang0516/snack425e646aa6a74ad8a964aadeb4741fc1/NativeQaTest.kt',
     'plugins/withForegroundOnlyLocation.js', 'plugins/withReleaseSigning.js',
     'scripts/android-native-qa.cjs', 'scripts/android-qa-config.cjs', 'scripts/android-qa-input.cjs',
     'scripts/android-qa-sources.cjs', 'scripts/build-android-qa.cjs', 'scripts/metro-qa-probe.cjs',
     'scripts/native-qa.cjs', 'scripts/native-qa-api-smoke.cjs', 'scripts/native-qa-marketplace-fixture.cjs', 'scripts/native-qa-worker.cjs',
     'scripts/test-native-qa-marketplace-fixture.cjs',
   ];
+  if (includeInstrumentation) fixed.push(
+    'android/app/src/androidTest/java/com/hank_huang0516/snack425e646aa6a74ad8a964aadeb4741fc1/NativeQaTest.kt');
+  else fixed.push('scripts/build-android-debug-qa.cjs');
   const sources = [...fixed, ...filesBelow(mobile, 'src')].sort();
   if (new Set(sources).size !== sources.length) throw new Error('Duplicate Android QA source provenance');
   for (const source of sources) {

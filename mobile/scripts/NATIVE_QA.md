@@ -64,6 +64,8 @@ XCTest 只取得公開動態埠，向本機 broker 請求 enum 動作；broker �
 
 ### Android 隔離介面測試
 
+外部來源地圖／私密願望的 Android Debug UI smoke 可先以 `node mobile/scripts/build-android-debug-qa.cjs YYYYMMDDHHmm` 建置新的獨立 package；此流程只編譯 `assembleDebug`，不需要已缺失的 `NativeQaTest.kt`，不產生 `androidTest` APK，也不讀取正式 upload key。需至少 15 GiB 可用空間；不繞過門檻。新包、來源 SHA-256 與「不可當商店交付品」標記保存在 `mobile/build/android-debug-qa-LABEL/`，每個 label 僅能使用一次。建置後仍須透過受管理 Android 模擬器執行 `external-map-android-smoke.cjs LABEL`，由腳本驗證 package、Debug 身分、APK 雜湊及建置來源未變；實際 UI 運行結果另存證據。**只建置或只載入舊 Debug 包都不等於 Play 內測版驗收。**
+
 先以 `node mobile/scripts/build-android-qa.cjs YYYYMMDDHHmm` 編譯。label 必須是未使用過的 12 位識別碼，產物保存在新的 `mobile/build/android-qa-LABEL/`。只編譯 app 的 arm64 debug 與 androidTest，不讀取正式 keystore／密碼，不生成新 key。原 package 只在明確 `wishlistNativeQa=true` 的 debug assemble 工作加上 `.qaLABEL`，QA 連結 scheme 為 `wishlistqaLABEL`，避免攔截正式 `weesh` 連結；混合／Release 工作拒絕 QA 參數。正常 Release 的識別碼、scheme 與簽章設定保持不變。
 
 主 App 直接讀取可公開的 `process.env.EXPO_PUBLIC_API_URL`（再 fallback 至嵌入 manifest），由 Metro bundle 注入該次 loopback endpoint。這是 [Expo 官方的公開環境變數方式](https://docs.expo.dev/guides/environment-variables/)，不是機密儲存；所有 Release API／session／恢復驗證仍拒絕明文 HTTP。QA Metro 使用 18887、localhost、offline 與禁止 dotenv 的白名單環境，既有埠占用時直接拒絕，不關閉別人的服務。

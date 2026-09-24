@@ -23,6 +23,7 @@ let seller: number, third: number, root: string, jpeg: Buffer, sequence = 1;
 const savedRoot = process.env.LISTING_MEDIA_STORAGE_ROOT;
 const savedMode = process.env.NODE_ENV;
 const savedProvider = process.env.LISTING_MEDIA_STORAGE_PROVIDER;
+const savedPilotUserId = process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID;
 const token = (id: number) => jwt.sign({ id }, secret, { expiresIn: '1h' });
 const upload = (id = seller, clientUploadId: string = randomUUID(), input?: Buffer, mime = 'image/jpeg') => request(app).post('/api/listing-media')
     .set('Authorization', 'Bearer ' + token(id)).set('X-Forwarded-For', '198.51.100.' + (sequence++ % 250 + 1))
@@ -53,6 +54,7 @@ afterAll(async () => {
     if (savedRoot === undefined) delete process.env.LISTING_MEDIA_STORAGE_ROOT; else process.env.LISTING_MEDIA_STORAGE_ROOT = savedRoot;
     if (savedMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedMode;
     if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
+    if (savedPilotUserId === undefined) delete process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID; else process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = savedPilotUserId;
     if (root) await fs.rm(root, { recursive: true, force: true }); // Exactly this suite's generated temp folder.
 });
 
@@ -158,6 +160,7 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
     });
     it('stores a new APP wish on Flickr, proxies its photo, and durably erases the remote ID', async () => {
         process.env.LISTING_MEDIA_STORAGE_PROVIDER = 'flickr';
+        process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = String(seller);
         const ready = jest.spyOn(ListingFlickrStorage.prototype, 'ready').mockResolvedValue();
         const uploadRemote = jest.spyOn(ListingFlickrStorage.prototype, 'upload').mockResolvedValue({ photoId: '123456',
             imageSource: 'https://live.staticflickr.com/22/123456_abc_h.jpg', thumbnailSource: 'https://live.staticflickr.com/22/123456_abc_n.jpg' });
@@ -182,9 +185,15 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
             await drainMediaErasureTasks();
             expect(removeRemote).toHaveBeenCalledWith('123456');
             expect(await prisma.mediaErasureTask.findUnique({ where: { mediaId: row.id } })).toBeNull();
+            const otherUserUpload = await upload(third);
+            expect(otherUserUpload.status).toBe(201);
+            expect(uploadRemote).toHaveBeenCalledTimes(1);
+            expect(await prisma.listingMedia.findUniqueOrThrow({ where: { id: otherUserUpload.body.id } })).toMatchObject({ flickrPhotoId: null });
+            expect((await fs.readdir(path.join(root, otherUserUpload.body.id))).sort()).toEqual(['image.webp', 'thumbnail.webp']);
         } finally {
             ready.mockRestore(); uploadRemote.mockRestore(); readRemote.mockRestore(); removeRemote.mockRestore();
             if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
+            if (savedPilotUserId === undefined) delete process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID; else process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = savedPilotUserId;
         }
     });
     it('returns generic404 for missing/invalid variants, missing files and traversal attempts', async () => {

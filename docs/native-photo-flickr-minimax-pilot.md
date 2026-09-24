@@ -4,15 +4,17 @@
 
 - 舊網頁版已經優先使用 Flickr，但其上傳實作是公開照片，失敗時某些流程仍會退回 Railway 檔案。
 - 新版 APP 的既有照片仍留在 Railway volume；資料列沒有 `flickrPhotoId` 時照舊讀取。此變更不搬移、覆寫或刪除任何舊照片。
-- 新版 APP 的新上傳**只有明確設定** `LISTING_MEDIA_STORAGE_PROVIDER=flickr` 才走 Flickr；未設定仍走 Railway volume。APP 的 `/api/listing-media/<UUID>/image|thumbnail` 網址保持不變，由 API 檢查權限後代理圖片。
+- 新版 APP 的新上傳**只有明確設定** `LISTING_MEDIA_STORAGE_PROVIDER=flickr` 才走 Flickr；未設定仍走 Railway volume。設定 `LISTING_MEDIA_FLICKR_PILOT_USER_ID` 時，僅該 User ID 走 Flickr，其餘使用者仍走 Railway；移除 pilot ID 才是全用戶切換。APP 的 `/api/listing-media/<UUID>/image|thumbnail` 網址保持不變，由 API 檢查權限後代理圖片。
 - Flickr 上傳設為 private，來源照片已由伺服器重編碼移除 EXIF/GPS；APP 不收到 Flickr 直連 URL。Flickr 可能仍將具有 secret 的靜態網址視為可分享資源，不能把它當成強私密儲存。
 - Flickr 只存一張 JPEG master，顯示與縮圖使用 Flickr 衍生尺寸；Railway 資料庫只保存遠端照片 ID 與衍生 URL。沒有第二份獨立備份，需另建備份方案。
 
 ## 上線前強制門檻
 
-1. Flickr OAuth 必須是 `delete` 權限；`write` 只可上傳、不能永久刪除。2026-09-24 讀取目前 Wishlist production OAuth token，結果是 `write`。因此目前不可把 `LISTING_MEDIA_STORAGE_PROVIDER` 切到 Flickr。
-2. 以該 token 測試私密上傳、簽名讀取尺寸、API 代理讀取、刪除遠端原檔與重試；確認無孤兒檔。
-3. 核對 Flickr 對此商業／拍賣用途的 API 授權；既有網頁程式用 Flickr，不代表本用途已獲核准。
+**用途許可狀態：** [Flickr 開發者指南](https://www.flickr.com/services/developer/business/) 明確反對一般後端儲存，[API 首頁](https://www.flickr.com/services/api/) 說明商業用途須事先安排。2026-09-24 產品負責人已明確告知「私密商品照作為後端儲存」獲 Flickr 許可；此處記錄的是負責人的確認，並非本專案已檢視書面許可內容。請將正式許可證明留存在私有法務／合規紀錄，不要提交至公開 repo。用途、流量或帳號條件若超出許可範圍，停止切換。
+
+1. Flickr OAuth 必須是 `delete` 權限；`write` 只可上傳、不能永久刪除。2026-09-24 經負責人明確同意後，在 twopiggyhavefun 帳號授權現有 Whishlist 連結；隨後 production OAuth token 的 API 查核回報 `delete` 且帳號 ID 相符。沒有把 OAuth 值寫入文件或更換正式 token。
+2. 以該 token 測試私密上傳、簽名讀取尺寸、API 代理讀取、刪除遠端原檔與重試；確認無孤兒檔。合成照片直接 Flickr 上傳、原圖／縮圖讀取、刪除與刪後查詢已通過；API 代理與 APP 實際上傳仍待 pilot 驗證。
+3. 確保實際商業／拍賣用途持續在 Flickr 授權範圍內；既有網頁程式用 Flickr 本身不構成許可證據。
 4. 先在隔離資料庫和內部測試帳號驗證，再部署並觀察；不要把舊 Railway 目錄刪除。Flickr 失敗不能以假成功或遺失照片回覆。
 
 ## MiniMax Code 單一測試帳號

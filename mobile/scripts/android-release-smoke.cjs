@@ -22,7 +22,7 @@ const devicePhoto = deviceXml.replace('.xml', '.png');
   const pageSize = adb(['shell', 'getconf', 'PAGESIZE']).trim();
   adb(['install', '-r', apk], 60_000);
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
-  if (!/versionCode=19\b/.test(installed) || !/versionName=2\.0\.4\b/.test(installed)) throw new Error('Installed build identity/version did not match');
+  if (!/versionCode=20\b/.test(installed) || !/versionName=2\.0\.5\b/.test(installed)) throw new Error('Installed build identity/version did not match');
   adb(['shell', 'am', 'force-stop', pkg]);
   const start = adb(['shell', 'am', 'start', '-W', '-n', pkg + '/.MainActivity'], 30_000);
   if (!/Status: ok/.test(start)) throw new Error('Android did not report a successful launch');
@@ -54,7 +54,7 @@ const devicePhoto = deviceXml.replace('.xml', '.png');
   const logs = adb(['logcat', '-d', '--pid=' + pid, '-v', 'brief']);
   if (/FATAL EXCEPTION|Fatal signal|ReactNativeJS.*(?:TypeError|ReferenceError|Invariant Violation)/i.test(logs)) throw new Error('A native or JavaScript fatal error occurred');
   if (screenshot) { adb(['shell', 'screencap', '-p', devicePhoto]); adb(['pull', devicePhoto, screenshot]); }
-  console.log(JSON.stringify({ scope: 'release-native-cold-launch-only', serial, model, sdk: Number(sdk), pageSize: Number(pageSize), package: pkg, versionCode: 19, versionName: '2.0.4', apkSha256: createHash('sha256').update(fs.readFileSync(apk)).digest('hex'), productNoticeAcknowledged, nativeLoginRendered: loginRendered, authenticatedNavigationRendered, tenSecondStability: true, fatalErrors: false, launchTiming: start.match(/(?:TotalTime|WaitTime|ThisTime): \d+/g), screenshot: screenshot ?? null }));
+  console.log(JSON.stringify({ scope: 'release-native-cold-launch-only', serial, model, sdk: Number(sdk), pageSize: Number(pageSize), package: pkg, versionCode: 20, versionName: '2.0.5', apkSha256: createHash('sha256').update(fs.readFileSync(apk)).digest('hex'), productNoticeAcknowledged, nativeLoginRendered: loginRendered, authenticatedNavigationRendered, tenSecondStability: true, fatalErrors: false, launchTiming: start.match(/(?:TotalTime|WaitTime|ThisTime): \d+/g), screenshot: screenshot ?? null }));
 })().catch(error => { console.error(error instanceof Error ? error.message : 'Release smoke failed'); process.exitCode = 1; }).finally(() => {
   // Only remove artifacts created by this test, not device data or other apps.
   try { adb(['shell', 'rm', '-f', deviceXml, devicePhoto]); } catch { /* The supervisor still releases the lease. */ }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'crypto';
-import { externalGeoJSON, externalPrice, externalSearchPath, parseExternalListing,
+import { externalGeoJSON, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
   parseExternalListingPage } from '../externalListingSearch';
 import { emptySearchFilters, type SearchFilters } from '../listingSearch';
 
@@ -60,5 +60,14 @@ describe('source-attributed external map data', () => {
       { condition: 'NEW' }, { minPrice: '10000001' }])
       expect(externalSearchPath({ ...filters, ...changed } as SearchFilters, box)).toBeNull();
     expect(externalSearchPath(filters, [122, 27, 123, 28])).toBeNull();
+  });
+  it('uses a private wish-match path only for source-verifiable filters', () => {
+    const box: [number, number, number, number] = [121.4, 24.9, 121.6, 25.1];
+    const path = externalWishSearchPath(42, { ...emptySearchFilters, q: '相機' }, box, '');
+    expect(path).toContain('/external-listings/matches?wishItemId=42&');
+    expect(path).toContain('q=%E7%9B%B8%E6%A9%9F');
+    expect(externalWishSearchPath(42, emptySearchFilters, box, '5')).toBeNull();
+    expect(externalWishSearchPath(42, { ...emptySearchFilters, brand: 'Sony' }, box, '')).toBeNull();
+    expect(externalWishSearchPath(0, emptySearchFilters, box, '')).toBeNull();
   });
 });

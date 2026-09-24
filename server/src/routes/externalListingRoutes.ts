@@ -4,7 +4,9 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { eligibleExternalCandidate } from '../lib/externalListingPublication';
 import { districtCenter, districtsInBounds } from '../lib/doubleNorthDistrictCenters';
-import { isListingId } from '../lib/listingRules';
+import { isListingId, ListingInputError } from '../lib/listingRules';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { evaluateWishMatch, parseWishMatchQuery, wishKeywords } from '../lib/wishlistMatch';
 
 const router = Router();
 router.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false,
@@ -106,6 +108,88 @@ router.get('/', async (req, res) => {
     } catch (error) {
         if (error instanceof Error && error.message === 'INVALID_QUERY') return res.status(400).json({ error: '搜尋條件不正確', errorCode: 'EXTERNAL_QUERY_INVALID' });
         return res.status(503).json({ error: '外部商品索引暫時無法使用', errorCode: 'EXTERNAL_INDEX_UNAVAILABLE' });
+    }
+});
+
+// A private wishlist is never exposed through the public source index. Search
+// the approved source facts first, then recheck rights/freshness before return.
+router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED !== '1')
+        return res.json({ enabled: false, items: [], nextCursor: null });
+    try {
+        const { id, search, preferences } = parseWishMatchQuery(req.query);
+        if (preferences.brand || preferences.category || preferences.delivery || preferences.condition === 'NEW' ||
+            preferences.center || preferences.radiusKm !== undefined)
+            throw new ListingInputError('filters', '外部來源尚未驗證品牌、分類、交付或距離條件');
+        const wish = await prisma.item.findFirst({ where: { id, wishlist: { userId: req.user.id },
+            isHidden: false, isPurchased: false }, select: { id: true, name: true, maxPrice: true, priceCurrency: true } });
+        if (!wish) return res.status(404).json({ error: '願望不存在、已隱藏或已完成', errorCode: 'WISH_MATCH_NOT_FOUND' });
+        const tokens = wishKeywords(wish.name), now = new Date();
+        if (!tokens.length) return res.json({ enabled: true, items: [], nextCursor: null,
+            notice: '願望名稱資訊不足，請補充名稱或型號後再比對' });
+        const areas = search.bbox ? districtsInBounds([search.bbox.west, search.bbox.south,
+            search.bbox.east, search.bbox.north]) : null;
+        if (areas && !areas.length) return res.json({ enabled: true, items: [], nextCursor: null });
+        if (search.cursor) {
+            const anchor = await prisma.externalListingCandidate.findUnique({ where: { id: search.cursor }, select });
+            if (!anchor || !publicCandidate(anchor, now))
+                return res.status(400).json({ error: '商品分頁已失效', errorCode: 'EXTERNAL_CURSOR_INVALID' });
+        }
+        const title = (token: string) => Prisma.sql`position(${token} in lower(normalize(c.title, NFKC))) > 0`;
+        const titleOr = Prisma.sql`(${Prisma.join(tokens.map(title), ' OR ')})`;
+        const chinese = tokens.filter(token => /[\p{Script=Han}]/u.test(token));
+        const clauses: Prisma.Sql[] = [
+            Prisma.sql`c.status = 'APPROVED'::"ExternalCandidateStatus" AND c."approvedContentHash" = c."contentHash" AND c."approvedAuthorizationRef" = s."authorizationRef" AND c."approvedAt" IS NOT NULL`,
+            Prisma.sql`s.enabled = true AND s."enabledAt" IS NOT NULL AND s."textReuseAllowed" = true AND s."imageReuseAllowed" = true`,
+            Prisma.sql`c.condition = 'USED'::"ListingCondition" AND c."imageUrl" IS NOT NULL AND c."thumbnailUrl" IS NOT NULL AND c.description IS NOT NULL AND c."priceTwd" IS NOT NULL`,
+            Prisma.sql`c."observedAt" >= ${new Date(now.getTime() - 48 * 3_600_000)} AND c."expiresAt" > ${now}`,
+            titleOr,
+            Prisma.sql`(${Prisma.join(tokens.map(token => Prisma.sql`CASE WHEN ${title(token)} THEN 1 ELSE 0 END`), ' + ')}) >= ${Math.ceil(tokens.length / 2)}`,
+        ];
+        if (chinese.length) clauses.push(Prisma.sql`(${Prisma.join(chinese.map(title), ' OR ')})`);
+        for (const token of tokens.filter(token => !/[\p{Script=Han}]/u.test(token))) clauses.push(title(token));
+        if (search.q) clauses.push(Prisma.sql`(position(lower(${search.q}) in lower(c.title)) > 0 OR position(lower(${search.q}) in lower(c.description)) > 0)`);
+        if (search.condition) clauses.push(Prisma.sql`c.condition = ${search.condition}::"ListingCondition"`);
+        if (search.minPrice !== undefined) clauses.push(Prisma.sql`c."priceTwd" >= ${search.minPrice}`);
+        if (search.maxPrice !== undefined) clauses.push(Prisma.sql`c."priceTwd" <= ${search.maxPrice}`);
+        if (wish.maxPrice !== null && wish.priceCurrency === 'TWD') clauses.push(Prisma.sql`c."priceTwd" <= ${wish.maxPrice}`);
+        if (areas) clauses.push(Prisma.sql`(${Prisma.join(areas.map(place =>
+            Prisma.sql`(c.county = ${place.county} AND c.district = ${place.district})`), ' OR ')})`);
+        const items: Array<NonNullable<ReturnType<typeof publicCandidate>>> = [];
+        let scanCursor = search.cursor, exhausted = false;
+        // Content hashes and source rights are revalidated in JS. Scan bounded
+        // batches until the public page is full, never return a private anchor.
+        for (let scan = 0; scan < 10 && items.length <= search.limit; scan++) {
+            const pageClauses = scanCursor ? [...clauses, Prisma.sql`(c."observedAt", c.id) < (SELECT a."observedAt", a.id FROM "ExternalListingCandidate" a WHERE a.id = ${scanCursor})`] : clauses;
+            const ids = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT c.id FROM "ExternalListingCandidate" c JOIN "ExternalListingSource" s ON s.id = c."sourceId" WHERE ${Prisma.join(pageClauses, ' AND ')} ORDER BY c."observedAt" DESC, c.id DESC LIMIT 100`);
+            if (!ids.length) { exhausted = true; break; }
+            const rows = await prisma.externalListingCandidate.findMany({ where: { id: { in: ids.map(row => row.id) } }, select });
+            const byId = new Map(rows.map(row => [row.id, row]));
+            for (const { id: candidateId } of ids) {
+                scanCursor = candidateId;
+                const row = byId.get(candidateId), publicItem = row && publicCandidate(row, new Date());
+                if (!row || !publicItem || row.priceTwd === null) continue;
+                const match = evaluateWishMatch(wish, { title: row.title, brand: null, category: null,
+                    condition: row.condition, price: Number(row.priceTwd), currency: 'TWD', deliveryMethods: [],
+                    status: 'ACTIVE', expiresAt: row.expiresAt, publishedAt: null, lastVerifiedAt: null,
+                    location: { publicLatitude: publicItem.location.latitude,
+                        publicLongitude: publicItem.location.longitude } }, {}, new Date());
+                if (match) items.push(publicItem);
+                if (items.length > search.limit) break;
+            }
+            if (ids.length < 100) { exhausted = true; break; }
+        }
+        const visible = items.slice(0, search.limit);
+        if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED !== '1')
+            return res.json({ enabled: false, items: [], nextCursor: null });
+        return res.json({ enabled: true, items: visible,
+            nextCursor: (items.length > search.limit || !exhausted) && visible.length ? visible[visible.length - 1].id : null,
+            notice: '依來源商品名稱與願望文字比對；台幣願望預算才比較來源售價。不保證同一型號、庫存或商品真偽，請到來源核對' });
+    } catch (error) {
+        if (error instanceof ListingInputError) return res.status(400).json({ error: error.message, errorCode: 'EXTERNAL_MATCH_INVALID' });
+        return res.status(503).json({ error: '外部商品願望比對暫時無法使用', errorCode: 'EXTERNAL_MATCH_UNAVAILABLE' });
     }
 });
 

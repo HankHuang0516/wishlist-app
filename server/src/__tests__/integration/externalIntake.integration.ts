@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import prisma from '../../lib/prisma';
 import { createExternalIntakeRoutes } from '../../routes/externalIntakeRoutes';
 import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
@@ -142,6 +143,9 @@ describe('admin-only attributed external supply staging', () => {
     });
     it('publishes only a freshly observed, explicitly reviewed source item and revokes stale approval', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        const priorJwt = process.env.JWT_SECRET;
+        process.env.JWT_SECRET = 'synthetic-external-wish-match-test-only';
+        const testUsers: number[] = [];
         const sellerListingCount = await prisma.listing.count();
         const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.90');
@@ -163,6 +167,30 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, expectedContentHash: '0'.repeat(64) })).status).toBe(409);
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, authorizationRef: 'contract:wrong' })).status).toBe(409);
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
+            const buyer = await prisma.user.create({ data: { phoneNumber: 'external-match-buyer-' + id,
+                password: 'synthetic-only', name: 'source match buyer' } });
+            const other = await prisma.user.create({ data: { phoneNumber: 'external-match-other-' + id,
+                password: 'synthetic-only', name: 'source match other' } });
+            testUsers.push(buyer.id, other.id);
+            const wishlist = await prisma.wishlist.create({ data: { userId: buyer.id, title: '合成私密檯燈願望',
+                items: { create: { name: '檯燈', maxPrice: 600, priceCurrency: 'TWD' } } }, include: { items: true } });
+            const wishItemId = wishlist.items[0].id;
+            const match = (userId: number, query: Record<string, string> = {}) => request(app)
+                .get('/api/external-listings/matches').set('Authorization', 'Bearer ' + jwt.sign({ id: userId },
+                    process.env.JWT_SECRET!, { algorithm: 'HS256' })).query({ wishItemId: String(wishItemId), ...query });
+            expect((await request(app).get('/api/external-listings/matches').query({ wishItemId })).status).toBe(401);
+            expect((await match(other.id)).status).toBe(404);
+            const matched = await match(buyer.id, { bbox: '121.44,25.00,121.48,25.03' });
+            expect(matched.status).toBe(200);
+            expect(matched.headers['cache-control']).toBe('private, no-store');
+            expect(matched.body.items).toEqual([expect.objectContaining({ id, priceTwd: '590',
+                inAppSeller: false, aiDerivedPublicFields: false })]);
+            expect(matched.body.notice).toContain('不保證');
+            expect((await match(buyer.id, { bbox: '121.50,25.00,121.52,25.03' })).body.items).toEqual([]);
+            expect((await match(buyer.id, { brand: 'Sony' })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { maxPrice: 500 } });
+            expect((await match(buyer.id)).body.items).toEqual([]);
+            await prisma.item.update({ where: { id: wishItemId }, data: { maxPrice: 600 } });
             expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({ id,
                 canonicalUrl: candidate().canonicalUrl, locationPrecision: 'DISTRICT_ONLY' });
             expect((await request(app).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
@@ -182,13 +210,21 @@ describe('admin-only attributed external supply staging', () => {
             const takedownAdmin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
                 .set('x-forwarded-for', '203.0.113.91');
             const secondItem = { ...candidate(), sourceItemId: 'test-2',
-                canonicalUrl: 'https://partner.example.com/items/2', title: '二手桌燈待撤下合成測試' };
+                canonicalUrl: 'https://partner.example.com/items/2', title: '二手檯燈待撤下合成測試' };
             const stagedSecond = await takedownAdmin(`/sources/${reviewSourceId}/candidates`).send({ items: [secondItem] });
             expect(stagedSecond.status).toBe(202);
             const secondId: string = stagedSecond.body.items[0].id;
             const second = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } });
             expect((await takedownAdmin(`/candidates/${secondId}/approve`).send({ ...approval,
                 expectedContentHash: second.contentHash, reviewRef: 'review:synthetic-second-approval' })).status).toBe(200);
+            const firstMatchPage = await match(buyer.id, { limit: '1' });
+            expect(firstMatchPage.status).toBe(200);
+            expect(firstMatchPage.body.items).toHaveLength(1);
+            expect(firstMatchPage.body.nextCursor).toBe(firstMatchPage.body.items[0].id);
+            const nextMatchPage = await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor });
+            expect(nextMatchPage.status).toBe(200);
+            expect(nextMatchPage.body.items).toHaveLength(1);
+            expect(new Set([firstMatchPage.body.items[0].id, nextMatchPage.body.items[0].id])).toEqual(new Set([id, secondId]));
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
             const firstPage = await request(app).get('/api/external-listings').query({ limit: '1' });
             expect(firstPage.body.items).toHaveLength(1);
@@ -198,6 +234,8 @@ describe('admin-only attributed external supply staging', () => {
             expect(secondPage.body.items[0].id).not.toBe(firstPage.body.items[0].id);
             expect((await takedownAdmin(`/candidates/${secondId}/reject`).send({ expectedContentHash: second.contentHash,
                 reviewRef: 'review:synthetic-second-takedown', reason: 'ITEM_UNVERIFIED' })).status).toBe(200);
+            expect((await match(buyer.id)).body.items).toHaveLength(1);
+            expect((await match(buyer.id, { cursor: secondId })).status).toBe(400);
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
             expect((await request(app).get(`/api/external-listings/${secondId}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } })).toMatchObject({
@@ -233,9 +271,11 @@ describe('admin-only attributed external supply staging', () => {
             expect(JSON.stringify(afterAi.body)).not.toContain('AI 假建議不可公開');
             process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '0';
             expect((await request(app).get('/api/external-listings')).body).toMatchObject({ items: [], enabled: false });
+            expect((await match(buyer.id)).body).toMatchObject({ items: [], enabled: false });
             process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: '0'.repeat(64) } });
             expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await match(buyer.id)).body.items).toEqual([]);
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: first.contentHash } });
             await prisma.externalListingCandidate.update({ where: { id }, data: { thumbnailUrl: null } });
             expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
@@ -268,8 +308,11 @@ describe('admin-only attributed external supply staging', () => {
                 approvalRef: null, approvedAt: null,
             });
         } finally {
+            if (priorJwt === undefined) delete process.env.JWT_SECRET;
+            else process.env.JWT_SECRET = priorJwt;
             if (priorFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
             else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = priorFlag;
+            if (testUsers.length) await prisma.user.deleteMany({ where: { id: { in: testUsers } } });
             await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: reviewSourceId } } });
             await prisma.externalListingCandidate.deleteMany({ where: { sourceId: reviewSourceId } });
             await prisma.externalListingSource.delete({ where: { id: reviewSourceId } });

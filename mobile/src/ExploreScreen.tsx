@@ -10,7 +10,7 @@ import { Bounds, clipBounds, emptySearchFilters, listingGeoJSON, listingPrice, L
 import { parseWishMatchPage, wishMatchPath } from './wishData';
 import { ListingReportSheet } from './ListingReportSheet';
 import { iosColors, iosFloatingShadow, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
-import { externalGeoJSON, externalPrice, externalSearchPath, parseExternalListing,
+import { externalGeoJSON, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
   parseExternalListingPage, type ExternalListing } from './externalListingSearch';
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -48,8 +48,8 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
   const camera = useRef<CameraRef>(null); const source = useRef<GeoJSONSourceRef>(null);
   const externalSource = useRef<GeoJSONSourceRef>(null);
   const path = useMemo(() => bounds ? wishItemId ? wishMatchPath(wishItemId, applied, bounds, radiusApplied) : listingSearchPath(applied, bounds) : null, [applied, bounds, wishItemId, radiusApplied]);
-  const externalPath = useMemo(() => !wishItemId && bounds ? externalSearchPath(applied, bounds) : null,
-    [applied, bounds, wishItemId]);
+  const externalPath = useMemo(() => bounds ? wishItemId ? externalWishSearchPath(wishItemId, applied, bounds, radiusApplied) :
+    externalSearchPath(applied, bounds) : null, [applied, bounds, wishItemId, radiusApplied]);
 
   useEffect(() => {
     mounted.current = true;
@@ -222,12 +222,12 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
   return <View style={s.screen}>
-    {wishItemId && <View style={s.toolbar}><Text style={s.small}>符合所選願望 · 本頁評分排序／已載入群聚；外部來源尚未參與願望比對</Text><Pressable accessibilityRole="button" style={s.chip} onPress={onClearWish}><Text style={s.text}>取消願望篩選</Text></Pressable></View>}
+    {wishItemId && <View style={s.toolbar}><Text style={s.small}>符合所選願望 · 站內本頁評分排序；外部來源依文字及可比較的台幣預算篩出候選，請到來源核對型號、庫存與真偽</Text><Pressable accessibilityRole="button" style={s.chip} onPress={onClearWish}><Text style={s.text}>取消願望篩選</Text></Pressable></View>}
     <View style={s.search}><TextInput accessibilityLabel="搜尋商品名稱與說明" placeholder="想找什麼好物？" value={filters.q} onChangeText={q => setFilters(old => ({ ...old, q }))} returnKeyType="search" onSubmitEditing={apply} style={s.searchInput} /><Pressable accessibilityRole="button" style={s.chip} onPress={apply}><Text style={s.text}>搜尋</Text></Pressable></View>
     <View style={s.toolbar}><Pressable accessibilityRole="button" style={s.chip} onPress={() => setFiltering(true)}><Text style={s.text}>篩選</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => setListMode(old => !old)}><Text style={s.text}>{listMode ? '切換地圖' : '切換清單'}</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => openReport(null)}><Text style={s.text}>我的檢舉</Text></Pressable><Text style={s.small}>站內 {visible.length} 件{externalEnabled ? ` · 外部 ${externalVisible.length} 件` : ''}</Text>{(busy || externalBusy) && <ActivityIndicator accessibilityLabel="搜尋商品中" />}</View>
     {!!error && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{error}</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View>}
     {!!externalError && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{externalError}</Text><Pressable accessibilityRole="button" disabled={externalBusy} style={s.chip} onPress={() => void loadExternal()}><Text style={s.text}>重載外部商品</Text></Pressable></View>}
-    {!wishItemId && bounds && !externalPath && <Text style={s.notice}>目前篩選包含外部來源無法驗證的欄位，因此只顯示站內刊登。</Text>}
+    {bounds && !externalPath && <Text style={s.notice}>目前篩選包含外部來源無法驗證的欄位{wishItemId && radiusApplied ? '（含距離）' : ''}，因此只顯示站內刊登。</Text>}
     {!bounds && <Text style={s.notice}>目前視野不在台灣，請將地圖移回台灣範圍。</Text>}
     {listMode ? <FlatList data={listItems} keyExtractor={entry => entry.kind + ':' + entry.item.id}
       renderItem={({ item }) => item.kind === 'seller' ? card(item.item) : externalCard(item.item)}

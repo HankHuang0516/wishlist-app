@@ -94,6 +94,13 @@ export function externalSearchPath(filters: SearchFilters, bounds: Bounds, curso
   return '/external-listings?' + params.toString().replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase());
 }
 
+export function externalWishSearchPath(wishItemId: number, filters: SearchFilters, bounds: Bounds,
+  radiusKm: string): string | null {
+  if (!Number.isSafeInteger(wishItemId) || wishItemId < 1 || radiusKm.trim()) return null;
+  const path = externalSearchPath(filters, bounds);
+  return path ? path.replace('/external-listings?', '/external-listings/matches?wishItemId=' + wishItemId + '&') : null;
+}
+
 export function externalGeoJSON(items: ExternalListing[]): FeatureCollection<Point> {
   return { type: 'FeatureCollection', features: items.map(item => ({ type: 'Feature', id: item.id,
     geometry: { type: 'Point', coordinates: [item.location.longitude, item.location.latitude] },

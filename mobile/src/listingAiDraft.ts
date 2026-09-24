@@ -1,4 +1,4 @@
-import { CATEGORIES, uuid } from './listingForm';
+import { CATEGORIES, uuid, type ListingForm } from './listingForm';
 
 export class ListingAiDraftError extends Error {}
 export type ListingAiDraft = {
@@ -38,3 +38,17 @@ export function suggestedAskingPrice(draft: ListingAiDraft) {
 }
 
 export const suggestedBrand = (draft: ListingAiDraft) => draft.brand ?? '';
+
+export type ListingAiField = 'title' | 'description' | 'category' | 'brand' | 'condition' | 'price';
+export type ListingAiTouched = Partial<Record<ListingAiField, true>>;
+
+export function mergeListingAiSuggestions(form: ListingForm, draft: ListingAiDraft, touched: ListingAiTouched): ListingForm {
+  return { ...form,
+    title: touched.title ? form.title : draft.title,
+    description: touched.description ? form.description : draft.description,
+    category: touched.category ? form.category : draft.category,
+    brand: touched.brand ? form.brand : suggestedBrand(draft),
+    condition: touched.condition ? form.condition : draft.condition ?? 'USED',
+    price: touched.price ? form.price : suggestedAskingPrice(draft),
+  };
+}

@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
-import { parseListingAiState, suggestedAskingPrice, suggestedBrand, type ListingAiDraft, type ListingAiState } from './listingAiDraft';
+import { mergeListingAiSuggestions, parseListingAiState, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -15,17 +15,15 @@ import { uploadPhotoRecord } from './photoUploadRecovery';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 
 type Card = { key: string; clientListingId: string; uri: string; local: boolean; record?: PhotoRecord;
-  ai: ListingAiState['status']; draft: ListingAiDraft | null; form: ListingForm; edited: boolean; error: string; published: boolean };
+  ai: ListingAiState['status']; draft: ListingAiDraft | null; form: ListingForm; touched: ListingAiTouched; error: string; published: boolean };
 const MAX_ITEMS = 12;
 const initialCard = (key: string, uri: string, local: boolean, record?: PhotoRecord): Card => ({ key,
   clientListingId: Crypto.randomUUID(), uri, local, record, ai: 'SKIPPED', draft: null,
-  form: { ...emptyListingForm }, edited: false, error: '', published: false });
+  form: { ...emptyListingForm }, touched: {}, error: '', published: false });
 const applyAi = (card: Card, state: ListingAiState): Card => {
-  if (!state.draft || card.edited) return { ...card, ai: state.status, draft: state.draft, error: '' };
-  const d = state.draft;
-  return { ...card, ai: state.status, draft: d, error: '', form: { ...card.form, title: d.title,
-    description: d.description, category: d.category, brand: suggestedBrand(d), condition: d.condition ?? 'USED',
-    price: suggestedAskingPrice(d) } };
+  if (!state.draft) return { ...card, ai: state.status, draft: null, error: '' };
+  return { ...card, ai: state.status, draft: state.draft, error: '',
+    form: mergeListingAiSuggestions(card.form, state.draft, card.touched) };
 };
 function releaseLocal(card: Card) {
   if (!card.local) return;
@@ -45,8 +43,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const [pending, setPending] = useState<string | null>(null);
   const keyRef = useRef<string | null>(null), polling = useRef(false), active = useRef(true), busyRef = useRef(false);
   const changeShared = <K extends keyof ListingForm>(key: K, value: ListingForm[K]) => setShared(old => ({ ...old, [key]: value }));
-  const changeCard = <K extends keyof ListingForm>(key: string, field: K, value: ListingForm[K]) => setCards(old => old.map(card =>
-    card.key === key ? { ...card, edited: true, form: { ...card.form, [field]: value } } : card));
+  const changeCard = <K extends ListingAiField>(key: string, field: K, value: ListingForm[K]) => setCards(old => old.map(card =>
+    card.key === key ? { ...card, touched: { ...card.touched, [field]: true }, form: { ...card.form, [field]: value } } : card));
   const begin = () => { if (busyRef.current) return false; busyRef.current = true; setBusy(true); setError(''); return true; };
   const end = () => { busyRef.current = false; setBusy(false); };
 
@@ -218,7 +216,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       <Text style={s.section}>商品草稿 {cards.filter(card => !card.published).length}/{MAX_ITEMS}</Text>
       {cards.map((card, index) => <View key={card.key} style={s.card}>
         <View style={s.row}><Image source={card.local ? { uri: card.uri } : { uri: card.uri, headers: { Authorization: `Bearer ${token}` } }} style={s.image} accessibilityLabel={`第${index + 1}件商品照片`} /><View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : '等待上傳'}</Text></View></View>
-        {!!card.draft && <><Text style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{card.edited && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, edited: false }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
+        {!!card.draft && <><Text style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
         {input(card.form.title, `第${index + 1}件商品名稱`, value => changeCard(card.key, 'title', value))}
         {input(card.form.description, `第${index + 1}件商品描述`, value => changeCard(card.key, 'description', value), false, true)}
         <View style={s.row}>{input(card.form.brand, `第${index + 1}件品牌（可留空）`, value => changeCard(card.key, 'brand', value))}{input(card.form.price, `第${index + 1}件售價 TWD`, value => changeCard(card.key, 'price', value), true)}</View>

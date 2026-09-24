@@ -35,11 +35,14 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
     router.post('/sources/:id/activate', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
-            if (!req.body || Object.keys(req.body).sort().join(',') !== 'authorizationRef,confirmRights' || req.body.confirmRights !== true ||
+            if (!req.body || Object.keys(req.body).some(key => !['authorizationRef', 'confirmRights', 'confirmAiProcessing'].includes(key)) ||
+                req.body.confirmRights !== true ||
                 typeof req.body.authorizationRef !== 'string') throw new ExternalIntakeError('confirmRights', '須明確核對來源授權與圖片／文字使用範圍');
             const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
             if (!source) return res.status(404).json({ error: '來源不存在' });
             if (source.authorizationRef !== req.body.authorizationRef) throw new ExternalIntakeError('authorizationRef');
+            if (source.aiProcessingAllowed ? req.body.confirmAiProcessing !== true : req.body.confirmAiProcessing !== undefined)
+                throw new ExternalIntakeError('confirmAiProcessing', 'AI 分析須另行確認授權範圍');
             return res.json(await prisma.externalListingSource.update({ where: { id: source.id }, data: { enabled: true, enabledAt: source.enabledAt ?? new Date() } }));
         } catch (error) { return fail(res, error); }
     });
@@ -47,7 +50,14 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
             if (!req.body || Object.keys(req.body).length) throw new ExternalIntakeError('body');
-            const changed = await prisma.externalListingSource.updateMany({ where: { id: req.params.id }, data: { enabled: false } });
+            const sourceId = String(req.params.id);
+            const changed = await prisma.$transaction(async tx => {
+                const updated = await tx.externalListingSource.updateMany({ where: { id: sourceId }, data: { enabled: false } });
+                if (updated.count) await tx.externalListingCandidate.updateMany({ where: { sourceId, status: 'PENDING_REVIEW' },
+                    data: { status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null,
+                        aiDraft: Prisma.DbNull, aiUpdatedAt: new Date() } });
+                return updated;
+            });
             return changed.count ? res.status(204).send() : res.status(404).json({ error: '來源不存在' });
         } catch (error) { return fail(res, error); }
     });
@@ -67,10 +77,18 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 const records = [];
                 for (const item of items) {
                     const old = await tx.externalListingCandidate.findUnique({ where: { sourceId_sourceItemId: { sourceId: source.id, sourceItemId: item.sourceItemId } } });
+                    const eligible = source.aiProcessingAllowed && source.imageReuseAllowed && !!item.imageUrl && old?.status !== 'REJECTED';
+                    const aiChanged = old?.contentHash !== item.contentHash;
+                    const aiReset = { aiStatus: eligible ? 'PENDING' as const : 'NOT_ELIGIBLE' as const,
+                        aiInputHash: eligible ? item.contentHash : null, aiDraft: Prisma.DbNull, aiJobId: null,
+                        aiAttempts: 0, aiUpdatedAt: now };
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,
-                        status: old.status === 'REJECTED' ? 'REJECTED' : 'PENDING_REVIEW' } }) :
-                        await tx.externalListingCandidate.create({ data: { ...item, sourceId: source.id, lastSeenAt: now } });
-                    records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status, changed: old?.contentHash !== record.contentHash });
+                        status: old.status === 'REJECTED' ? 'REJECTED' : 'PENDING_REVIEW',
+                        ...(aiChanged || old.status !== 'PENDING_REVIEW' ? aiReset : {}) } }) :
+                        await tx.externalListingCandidate.create({ data: { ...item, sourceId: source.id, lastSeenAt: now,
+                            aiStatus: aiReset.aiStatus, aiInputHash: aiReset.aiInputHash, aiUpdatedAt: now } });
+                    records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status,
+                        aiStatus: record.aiStatus, changed: aiChanged });
                 }
                 return records;
             }, { timeout: 15000 });

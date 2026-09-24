@@ -10,11 +10,17 @@ describe('authorized external supply intake', () => {
     it('registers a bounded rights reference, never an active source by implication', () => {
         expect(parseExternalSource({ name: '北部合作商家', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
             imageHost: 'images.example.com', authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true,
-            imageReuseAllowed: true })).toMatchObject({ canonicalHost: 'partner.example.com', authorizationRef: 'contract:partner-2026-09' });
+            imageReuseAllowed: true, aiProcessingAllowed: false })).toMatchObject({ canonicalHost: 'partner.example.com',
+                authorizationRef: 'contract:partner-2026-09', aiProcessingAllowed: false });
         expect(() => parseExternalSource({ name: '假來源', kind: 'PARTNER_FEED', canonicalHost: 'localhost',
-            authorizationRef: 'contract:missing', textReuseAllowed: true, imageReuseAllowed: false })).toThrow(ExternalIntakeError);
+            authorizationRef: 'contract:missing', textReuseAllowed: true, imageReuseAllowed: false, aiProcessingAllowed: false })).toThrow(ExternalIntakeError);
         expect(() => parseExternalSource({ name: '未證明來源', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
-            authorizationRef: 'raw-private-token-value', textReuseAllowed: true, imageReuseAllowed: false })).toThrow(ExternalIntakeError);
+            authorizationRef: 'raw-private-token-value', textReuseAllowed: true, imageReuseAllowed: false, aiProcessingAllowed: false })).toThrow(ExternalIntakeError);
+        expect(() => parseExternalSource({ name: 'AI 權利不足', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true, imageReuseAllowed: false,
+            aiProcessingAllowed: true })).toThrow(ExternalIntakeError);
+        expect(() => parseExternalSource({ name: '未明示 AI 權利', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true, imageReuseAllowed: true })).toThrow(ExternalIntakeError);
     });
     it('accepts only fresh sourced records and normalizes Taipei spelling', () => {
         expect(parseExternalCandidate(item, source, now)).toMatchObject({ county: '臺北市', priceTwd: 560, condition: 'USED',

@@ -6,12 +6,53 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import https from 'node:https';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
 
 const execFileAsync = promisify(execFile);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 4096;
 const JOB_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_IMAGE_HOST = 'wishlist-app-production.up.railway.app';
+const blockedIpv4 = new BlockList();
+for (const [network, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+    ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24],
+    ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
+    ['224.0.0.0', 4], ['240.0.0.0', 4]]) blockedIpv4.addSubnet(network, prefix, 'ipv4');
+
+export function isPublicIpv4(address) { return isIP(address) === 4 && !blockedIpv4.check(address, 'ipv4'); }
+
+export function validExternalImageUrl(raw, host) {
+    try {
+        const url = new URL(raw);
+        return typeof host === 'string' && /^(?:[a-z0-9-]+\.)+[a-z]{2,63}$/.test(host) &&
+            url.protocol === 'https:' && url.hostname === host && !url.port && !url.username && !url.password &&
+            url.pathname !== '/' && !url.hash;
+    } catch { return false; }
+}
+
+export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dnsLookup } = {}) {
+    if (!validExternalImageUrl(raw, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
+    const url = new URL(raw);
+    let addresses;
+    try { addresses = await lookup(imageHost, { all: true }); }
+    catch { throw new Error('IMAGE_FETCH_FAILED'); }
+    const ipv4 = addresses.filter(entry => entry.family === 4);
+    if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('IMAGE_HOST_UNSAFE');
+    return new Promise((resolve, reject) => {
+        const req = https.request(url, { method: 'GET', agent: false, timeout: 20_000,
+            headers: { Accept: 'image/jpeg,image/png,image/webp' },
+            lookup: (_hostname, _options, callback) => callback(null, ipv4[0].address, 4) }, response => {
+            if (response.statusCode !== 200) { response.destroy(); reject(new Error('IMAGE_FETCH_FAILED')); return; }
+            resolve({ ok: true, body: response, headers: { get: key => response.headers[key]?.toString() ?? null } });
+        });
+        req.on('error', () => reject(new Error('IMAGE_FETCH_FAILED')));
+        req.on('timeout', () => req.destroy(new Error('IMAGE_FETCH_FAILED')));
+        signal?.addEventListener('abort', () => req.destroy(new Error('IMAGE_FETCH_FAILED')), { once: true });
+        req.end();
+    });
+}
 
 export function validImageUrl(raw, host = DEFAULT_IMAGE_HOST) {
     try {
@@ -95,6 +136,7 @@ const PROMPT = [
 // Keep the vision instruction compact: the Connector has returned detailed JSON
 // for this shape, while the longer policy-style prompt repeatedly timed out.
 const LISTING_PROMPT = '只依照片像素，以繁體中文 JSON 寫尚未公開的二手商品草稿：recognizable,name,description(可見外觀與瑕疵、賣家待確認),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(NEW/USED/null),estimatedPriceLowTwd,estimatedPriceHighTwd,priceBasis,evidence(至少2項陣列),uncertainties(陣列),confidence(0到1)。不要猜品牌或已測功能。二手價格可依可見品類與磨損作極保守、較寬的台幣參考區間；無法辨識或無法估計則null。未測試功能的電器要納入故障風險，不可用正常品價格。priceBasis註明「僅依照片粗估，非即時行情」。不得輸出私人聯絡資訊。只輸出JSON。';
+const EXTERNAL_CANDIDATE_PROMPT = '只依照片像素，用繁體中文 JSON 寫供後台人工審查的二手商品圖片補充建議：recognizable,name,description(可見外觀與瑕疵，不要捏造測試結果),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(null),estimatedPriceLowTwd(null),estimatedPriceHighTwd(null),priceBasis(null),evidence(至少2項陣列),uncertainties(陣列),confidence(0到1)。不可臆測價格、賣家、地點或授權；不可輸出聯絡資訊。只輸出JSON。';
 
 export function parseListingVisionDescription(description) {
     if (typeof description !== 'string') throw new Error('VISION_BAD_RESPONSE');
@@ -152,8 +194,14 @@ export async function recognizeImage(url, options = {}) { return describeImage(u
 export async function recognizeListingImage(url, options = {}) {
     return describeImage(url, LISTING_PROMPT, parseListingVisionDescription, { connectorTimeoutMs: 150000, ...options });
 }
+export async function recognizeExternalCandidateImage(url, imageHost, options = {}) {
+    if (!validExternalImageUrl(url, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
+    return describeImage(url, EXTERNAL_CANDIDATE_PROMPT, parseListingVisionDescription,
+        { connectorTimeoutMs: 150000, ...options, authToken: undefined,
+            fetchImpl: (target, init) => pinnedExternalFetch(target, { imageHost, signal: init.signal }) });
+}
 
-const SAFE_VISION_ERRORS = new Set(['IMAGE_FETCH_FAILED', 'IMAGE_FORMAT_UNSUPPORTED', 'IMAGE_TOO_LARGE',
+const SAFE_VISION_ERRORS = new Set(['IMAGE_FETCH_FAILED', 'IMAGE_HOST_UNSAFE', 'IMAGE_FORMAT_UNSUPPORTED', 'IMAGE_TOO_LARGE',
     'TEMP_UPLOAD_FAILED', 'VISION_UPSTREAM_FAILED', 'VISION_BAD_RESPONSE', 'VISION_UNCERTAIN', 'VISION_PRIVATE_CONTACT']);
 export function safeVisionError(error) {
     return SAFE_VISION_ERRORS.has(error?.message) ? error.message : 'VISION_UNAVAILABLE';

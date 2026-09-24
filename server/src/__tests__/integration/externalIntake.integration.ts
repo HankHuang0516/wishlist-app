@@ -13,7 +13,8 @@ const app = express(); app.set('trust proxy', 1); app.use(express.json());
 app.use('/api/external-intake', createExternalIntakeRoutes(() => adminKey));
 const url = '/api/external-intake';
 const sourceBody = { name: 'Synthetic Taipei partner', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
-    imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026', textReuseAllowed: true, imageReuseAllowed: true };
+    imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026', textReuseAllowed: true,
+    imageReuseAllowed: true, aiProcessingAllowed: false };
 const candidate = () => ({ sourceItemId: 'test-1', canonicalUrl: 'https://partner.example.com/items/1',
     imageUrl: 'https://images.example.com/items/1.jpg', title: '二手檯燈合成測試', description: '合成測試資料，並非真實待售商品。',
     priceTwd: 590, condition: 'USED', county: '新北市', district: '板橋區', observedAt: new Date().toISOString(),
@@ -49,7 +50,7 @@ describe('admin-only attributed external supply staging', () => {
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(0);
         const staged = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(staged.status).toBe(202); expect(staged.body).toMatchObject({ publicCount: 0,
-            items: [{ sourceItemId: 'test-1', status: 'PENDING_REVIEW', changed: true }] });
+            items: [{ sourceItemId: 'test-1', status: 'PENDING_REVIEW', aiStatus: 'NOT_ELIGIBLE', changed: true }] });
         expect(await prisma.listing.count()).toBe(originalCount);
         const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(repeated.status).toBe(202);
@@ -73,8 +74,49 @@ describe('admin-only attributed external supply staging', () => {
             .send({ items: [{ ...candidate(), sourceItemId: 'test-2', canonicalUrl: 'https://partner.example.com/items/2' }] });
         expect(second.status).toBe(202);
         expect((await request(app).post(`${url}/sources/${sourceId}/pause`).set('x-admin-key', adminKey).send({})).status).toBe(204);
-        expect(await expireExternalCandidates()).toBe(1);
+        expect(await expireExternalCandidates()).toBe(0);
         expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-2' } } })).status).toBe('STALE');
         expect((await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
+    });
+    it('requires a separate AI-processing authorization confirmation and keeps image jobs private', async () => {
+        const publicListingCount = await prisma.listing.count();
+        const aiAdmin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.70');
+        const source = await aiAdmin('/sources')
+            .send({ ...sourceBody, name: 'Synthetic AI-authorized partner', aiProcessingAllowed: true });
+        expect(source.status).toBe(201);
+        const aiSourceId: string = source.body.id;
+        try {
+            expect((await aiAdmin(`/sources/${aiSourceId}/activate`)
+                .send({ authorizationRef: sourceBody.authorizationRef, confirmRights: true })).status).toBe(400);
+            expect((await aiAdmin(`/sources/${aiSourceId}/activate`)
+                .send({ authorizationRef: sourceBody.authorizationRef, confirmRights: true, confirmAiProcessing: true })).status).toBe(200);
+            const staged = await aiAdmin(`/sources/${aiSourceId}/candidates`)
+                .send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            expect(staged.body.items[0]).toMatchObject({ aiStatus: 'PENDING', changed: true });
+            const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId: aiSourceId, sourceItemId: 'test-1' } } });
+            expect(row).toMatchObject({ aiInputHash: row.contentHash, aiDraft: null, aiJobId: null, aiAttempts: 0 });
+            const repeated = await aiAdmin(`/sources/${aiSourceId}/candidates`)
+                .send({ items: [candidate()] });
+            expect(repeated.body.items[0]).toMatchObject({ changed: false, aiStatus: 'PENDING' });
+            const changed = await aiAdmin(`/sources/${aiSourceId}/candidates`)
+                .send({ items: [{ ...candidate(), title: '二手橘色檯燈合成測試' }] });
+            expect(changed.body.items[0]).toMatchObject({ changed: true, aiStatus: 'PENDING' });
+            await prisma.externalListingCandidate.update({ where: { id: row.id },
+                data: { aiStatus: 'PROCESSING', aiJobId: 'synthetic-old-job', aiAttempts: 1 } });
+            expect((await aiAdmin(`/sources/${aiSourceId}/pause`).send({})).status).toBe(204);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({
+                status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null });
+            expect((await aiAdmin(`/sources/${aiSourceId}/activate`)
+                .send({ authorizationRef: sourceBody.authorizationRef, confirmRights: true, confirmAiProcessing: true })).status).toBe(200);
+            const reimported = await aiAdmin(`/sources/${aiSourceId}/candidates`)
+                .send({ items: [{ ...candidate(), title: '二手橘色檯燈合成測試' }] });
+            expect(reimported.body.items[0]).toMatchObject({ changed: false, status: 'PENDING_REVIEW', aiStatus: 'PENDING' });
+            expect(await prisma.listing.count()).toBe(publicListingCount);
+        } finally {
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: aiSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
+        }
     });
 });

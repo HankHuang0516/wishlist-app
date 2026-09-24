@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createBridge, parseListingVisionDescription, parseVisionDescription, recognizeListingImage, safeVisionError, validImageUrl } from './server.mjs';
+import { createBridge, isPublicIpv4, pinnedExternalFetch, parseListingVisionDescription, parseVisionDescription, recognizeListingImage,
+    recognizeExternalCandidateImage, safeVisionError, validExternalImageUrl, validImageUrl } from './server.mjs';
 
 const imageUrl = 'https://wishlist-app-production.up.railway.app/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image';
 const token = 'local-pilot-test-token-1234567890';
@@ -11,6 +12,22 @@ test('only a public approved wishlist image URL may be submitted', () => {
     assert.equal(validImageUrl('http://127.0.0.1/private.jpg'), false);
     assert.equal(validImageUrl('https://wishlist-app-production.up.railway.app.evil.test/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image'), false);
     assert.equal(validImageUrl(`${imageUrl}?token=secret`), false);
+});
+
+test('external image fetch requires exact authorized HTTPS host and public IPv4', async () => {
+    assert.equal(validExternalImageUrl('https://images.example.com/item/1.jpg', 'images.example.com'), true);
+    for (const url of ['http://images.example.com/item/1.jpg', 'https://images.example.com.evil.test/item/1.jpg',
+        'https://images.example.com:8443/item/1.jpg', 'https://user:pass@images.example.com/item/1.jpg',
+        'https://images.example.com/item/1.jpg#fragment']) assert.equal(validExternalImageUrl(url, 'images.example.com'), false);
+    for (const ip of ['127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '100.64.0.1',
+        '198.51.100.1', '203.0.113.1', '224.0.0.1', '::1']) assert.equal(isPublicIpv4(ip), false);
+    assert.equal(isPublicIpv4('1.1.1.1'), true);
+    await assert.rejects(pinnedExternalFetch('https://images.example.com/item/1.jpg', { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '169.254.169.254', family: 4 }] }), /IMAGE_HOST_UNSAFE/);
+    await assert.rejects(pinnedExternalFetch('https://images.example.com/item/1.jpg', { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '1.1.1.1', family: 4 }, { address: '127.0.0.1', family: 4 }] }), /IMAGE_HOST_UNSAFE/);
+    await assert.rejects(recognizeExternalCandidateImage('https://images.example.com.evil.test/item/1.jpg', 'images.example.com',
+        { authToken: 'must-not-leak' }), /IMAGE_HOST_UNSAFE/);
 });
 
 test('accepts visual evidence but not unsupported price claims', () => {

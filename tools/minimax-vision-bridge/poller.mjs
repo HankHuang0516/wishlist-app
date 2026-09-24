@@ -1,4 +1,4 @@
-import { recognizeImage, recognizeListingImage, safeVisionError } from './server.mjs';
+import { recognizeImage, recognizeListingImage, recognizeExternalCandidateImage, validExternalImageUrl, safeVisionError } from './server.mjs';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
@@ -21,10 +21,13 @@ async function cycle() {
     // Old Railway versions omit kind; treat them as the original wish job so
     // the worker can be updated before the backend without interrupting wishes.
     const kind = job.kind ?? 'WISH';
-    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string' || !['WISH', 'LISTING_DRAFT'].includes(kind)) throw new Error('POLL_BAD_JOB');
+    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string' ||
+        !['WISH', 'LISTING_DRAFT', 'EXTERNAL_CANDIDATE'].includes(kind) ||
+        (kind === 'EXTERNAL_CANDIDATE' && !validExternalImageUrl(job.imageUrl, job.imageHost))) throw new Error('POLL_BAD_JOB');
     let body;
     try { body = { status: 'COMPLETED', result: kind === 'LISTING_DRAFT'
-        ? await recognizeListingImage(job.imageUrl, { authToken: token }) : await recognizeImage(job.imageUrl) }; }
+        ? await recognizeListingImage(job.imageUrl, { authToken: token }) : kind === 'EXTERNAL_CANDIDATE'
+            ? await recognizeExternalCandidateImage(job.imageUrl, job.imageHost) : await recognizeImage(job.imageUrl) }; }
     catch (error) {
         process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${safeVisionError(error)}\n`);
         body = { status: 'FAILED' };

@@ -53,7 +53,7 @@ const date = (value: unknown, field: string) => {
 
 export function parseExternalSource(input: unknown) {
     const value = own(input);
-    exactKeys(value, ['name', 'kind', 'canonicalHost', 'imageHost', 'authorizationRef', 'textReuseAllowed', 'imageReuseAllowed']);
+    exactKeys(value, ['name', 'kind', 'canonicalHost', 'imageHost', 'authorizationRef', 'textReuseAllowed', 'imageReuseAllowed', 'aiProcessingAllowed']);
     const name = word(value.name, 'name', 3, 100);
     const kind = value.kind;
     if (!['PARTNER_FEED', 'LINE_OPT_IN', 'SELLER_IMPORT'].includes(String(kind))) throw new ExternalIntakeError('kind');
@@ -62,10 +62,13 @@ export function parseExternalSource(input: unknown) {
     const authorizationRef = word(value.authorizationRef, 'authorizationRef', 8, 200);
     if (!/^(?:contract|consent|license|self):[A-Za-z0-9._/-]{4,160}$/.test(authorizationRef))
         throw new ExternalIntakeError('authorizationRef', '請只填授權文件或同意紀錄的參照 ID，不要填憑證或原文');
-    if (typeof value.textReuseAllowed !== 'boolean' || typeof value.imageReuseAllowed !== 'boolean') throw new ExternalIntakeError('rights');
+    if (typeof value.textReuseAllowed !== 'boolean' || typeof value.imageReuseAllowed !== 'boolean' ||
+        typeof value.aiProcessingAllowed !== 'boolean') throw new ExternalIntakeError('rights');
     if (value.imageReuseAllowed && !imageHost) throw new ExternalIntakeError('imageHost');
+    if (value.aiProcessingAllowed && !value.imageReuseAllowed) throw new ExternalIntakeError('aiProcessingAllowed', 'AI 分析圖片前須取得圖片使用與 AI 處理兩項明確授權');
     return { name, kind: kind as 'PARTNER_FEED' | 'LINE_OPT_IN' | 'SELLER_IMPORT', canonicalHost, imageHost,
-        authorizationRef, textReuseAllowed: value.textReuseAllowed, imageReuseAllowed: value.imageReuseAllowed };
+        authorizationRef, textReuseAllowed: value.textReuseAllowed, imageReuseAllowed: value.imageReuseAllowed,
+        aiProcessingAllowed: value.aiProcessingAllowed };
 }
 
 export function parseExternalCandidate(input: unknown, source: SourcePolicy, now = new Date()) {

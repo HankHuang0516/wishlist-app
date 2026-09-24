@@ -290,6 +290,14 @@ enum ExternalCandidateStatus {
   STALE
 }
 
+enum ExternalCandidateAiStatus {
+  NOT_ELIGIBLE
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model ExternalListingSource {
   id               String                     @id @default(uuid())
   name             String
@@ -299,6 +307,7 @@ model ExternalListingSource {
   authorizationRef String
   textReuseAllowed Boolean                    @default(false)
   imageReuseAllowed Boolean                   @default(false)
+  aiProcessingAllowed Boolean                 @default(false)
   enabled          Boolean                    @default(false)
   enabledAt        DateTime?
   createdAt        DateTime                   @default(now())
@@ -325,6 +334,12 @@ model ExternalListingCandidate {
   lastSeenAt     DateTime                @default(now())
   contentHash    String
   status         ExternalCandidateStatus @default(PENDING_REVIEW)
+  aiStatus       ExternalCandidateAiStatus @default(NOT_ELIGIBLE)
+  aiInputHash    String?
+  aiDraft        Json?
+  aiJobId        String?
+  aiAttempts     Int @default(0)
+  aiUpdatedAt    DateTime?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   source         ExternalListingSource   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
@@ -332,6 +347,7 @@ model ExternalListingCandidate {
   @@unique([sourceId, sourceItemId])
   @@index([status, expiresAt])
   @@index([sourceId, lastSeenAt])
+  @@index([aiStatus, aiUpdatedAt])
 }
 
 enum ConversationRole {

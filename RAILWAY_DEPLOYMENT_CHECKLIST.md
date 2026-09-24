@@ -26,12 +26,9 @@ account into a repository, pull request, log, screenshot, or support ticket.
 3. Exercise only authorized test accounts for state-changing checks.
 4. Record deployment, rollback, and verification evidence outside this file.
 
-## Credential incident note
+## Credential handling
 
-An earlier version of this public repository contained credential values in
-this checklist. Removing them from the current file does **not** remove them
-from Git history or invalidate a copied value. Treat those credentials as
-exposed and rotate or revoke them through their providers as soon as the owner
-authorizes a coordinated change. Until then, do not copy the old values into
-new files, tickets, logs, or replies; watch for unexpected use and keep the
-affected integrations under review.
+If a credential may have been exposed, coordinate incident response privately
+with the owner. Removing a value from the current file alone does not erase
+Git history or invalidate copied credentials. Do not publish incident details
+or credential values in this repository.

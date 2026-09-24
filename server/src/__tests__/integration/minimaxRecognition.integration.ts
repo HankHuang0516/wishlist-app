@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import route from '../../routes/minimaxRecognitionRoutes';
 import { getApiUrl } from '../../config/constants';
+import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
 
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated matching test database required');
@@ -139,5 +140,24 @@ describe('isolated MiniMax Code pull queue', () => {
         await prisma.externalListingCandidate.update({ where: { id: second.candidate.id },
             data: { title: 'changed', contentHash: 'changed-hash', aiStatus: 'PENDING', aiJobId: null } });
         expect((await callback(secondJob.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+    });
+    it('expires an external source item and discards an in-flight private AI suggestion', async () => {
+        const { candidate } = await externalCandidate();
+        const claimed = await auth('/api/internal/minimax-vision/next');
+        expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', jobId: expect.any(String) });
+        await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
+            expiresAt: new Date(Date.now() - 1_000), aiDraft: { title: 'stale private suggestion' },
+        } });
+        const now = new Date();
+        const staleEligible = await prisma.externalListingCandidate.count({ where: {
+            status: 'PENDING_REVIEW', OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
+        } });
+        expect(staleEligible).toBeGreaterThanOrEqual(1);
+        expect(await expireExternalCandidates(now)).toBe(staleEligible);
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+            status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null, aiDraft: null,
+        });
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+        expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
     });
 });

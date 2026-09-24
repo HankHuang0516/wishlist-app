@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createBridge, parseListingVisionDescription, parseVisionDescription, recognizeListingImage, validImageUrl } from './server.mjs';
+import { createBridge, parseListingVisionDescription, parseVisionDescription, recognizeListingImage, safeVisionError, validImageUrl } from './server.mjs';
 
 const imageUrl = 'https://wishlist-app-production.up.railway.app/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image';
 const token = 'local-pilot-test-token-1234567890';
@@ -41,6 +41,8 @@ test('listing AI creates only a private seller suggestion with conservative pric
     assert.match(result.priceBasis, /未查詢即時市場成交價/);
     const uncertain = parseListingVisionDescription(JSON.stringify({ ...result, confidence: 0.75 }));
     assert.equal(uncertain.estimatedPriceLowTwd, null);
+    assert.deepEqual(parseListingVisionDescription(JSON.stringify({ ...result,
+        uncertainties: '照片無法確認杯底品牌' })).uncertainties, ['照片無法確認杯底品牌']);
     assert.throws(() => parseListingVisionDescription('{"recognizable":false}'), /VISION_UNCERTAIN/);
 });
 
@@ -58,6 +60,33 @@ test('connector failures cannot expose a signed temporary image URL or prompt in
     await assert.rejects(recognizeListingImage('https://fixture.invalid/image', {
         fetchImpl: async () => { throw new Error('Authorization: Bearer private-token'); },
     }), error => error.message === 'IMAGE_FETCH_FAILED' && !error.message.includes('private-token'));
+    const brokenBody = new ReadableStream({ start(controller) { controller.error(new Error('private signed stream URL')); } });
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => new Response(brokenBody, { headers: { 'content-type': 'image/png' } }),
+    }), error => error.message === 'IMAGE_FETCH_FAILED' && !error.message.includes('private'));
+    assert.equal(safeVisionError(new Error('private signed image URL')), 'VISION_UNAVAILABLE');
+    assert.equal(safeVisionError(new Error('VISION_UPSTREAM_FAILED')), 'VISION_UPSTREAM_FAILED');
+});
+
+test('listing pilot sends a concise private-draft prompt with a bounded connector timeout', async () => {
+    let connectorArgs, connectorTimeout;
+    const result = await recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => new Response(Buffer.from('89504e470d0a1a0a', 'hex'), { headers: { 'content-type': 'image/png' } }),
+        execCommand: async (_command, args, options) => {
+            if (args[0] === 'upload-temp-url') return { stdout: JSON.stringify({ temp_url: 'https://fixture.invalid/temporary' }) };
+            connectorArgs = JSON.parse(args.at(-1)); connectorTimeout = options.timeout;
+            return { stdout: JSON.stringify({ code: 0, results: [{ success: true, description: JSON.stringify({
+                recognizable: true, name: '橘色檯燈', description: '可見橘色燈罩、底座與刮痕，功能須賣家確認。',
+                category: 'home', evidence: ['橘色燈罩', '底座刮痕'], uncertainties: ['是否通電'], confidence: 0.9,
+            }) }] }) };
+        },
+    });
+    assert.equal(result.name, '橘色檯燈');
+    assert.equal(connectorTimeout, 150000);
+    assert.equal(connectorArgs.image_info.length, 1);
+    assert.ok(connectorArgs.image_info[0].prompt.length < 450);
+    assert.match(connectorArgs.image_info[0].prompt, /私人聯絡資訊/);
+    assert.match(connectorArgs.image_info[0].prompt, /估價依據/);
 });
 
 test('loopback bridge requires auth, deduplicates jobs, and processes one at a time', async () => {
@@ -109,5 +138,23 @@ test('a failed MiniMax call stays failed and never becomes a fabricated result',
         }
         assert.deepEqual({ status: result.status, result: result.result, error: result.error },
             { status: 'FAILED', result: null, error: 'VISION_UPSTREAM_FAILED' });
+    } finally { server.close(); }
+});
+
+test('loopback bridge never returns an unrecognized uppercase upstream secret', async () => {
+    const server = createBridge({ token, recognize: async () => { throw new Error('PRIVATE_TOKEN'); } });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+    try {
+        await fetch(`${base}/jobs`, { method: 'POST', headers, body: JSON.stringify({ jobId: 'wish-secret', imageUrl }) });
+        let result;
+        for (let attempt = 0; attempt < 20; attempt++) {
+            result = await (await fetch(`${base}/jobs/wish-secret`, { headers })).json();
+            if (result.status === 'FAILED') break;
+            await new Promise(resolve => setTimeout(resolve, 5));
+        }
+        assert.equal(result?.error, 'VISION_UNAVAILABLE');
     } finally { server.close(); }
 });

@@ -1,4 +1,4 @@
-import { recognizeImage, recognizeListingImage } from './server.mjs';
+import { recognizeImage, recognizeListingImage, safeVisionError } from './server.mjs';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
@@ -26,7 +26,7 @@ async function cycle() {
     try { body = { status: 'COMPLETED', result: kind === 'LISTING_DRAFT'
         ? await recognizeListingImage(job.imageUrl, { authToken: token }) : await recognizeImage(job.imageUrl) }; }
     catch (error) {
-        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${String(error?.message || 'VISION_UNAVAILABLE')}\n`);
+        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${safeVisionError(error)}\n`);
         body = { status: 'FAILED' };
     }
     const delivered = await api(`/${job.jobId}/result`, { method: 'POST', body: JSON.stringify(body) });
@@ -41,7 +41,9 @@ do {
         if (once) break;
         if (!worked) await new Promise(resolve => setTimeout(resolve, 3000));
     } catch (error) {
-        process.stderr.write(`MiniMax pilot poll unavailable: ${String(error?.message || error)}\n`);
+        const reason = /^(?:POLL_HTTP_|CALLBACK_HTTP_)\d{3}$/.test(error?.message || '') || error?.message === 'POLL_BAD_JOB'
+            ? error.message : 'POLL_UNAVAILABLE';
+        process.stderr.write(`MiniMax pilot poll unavailable: ${reason}\n`);
         if (once) process.exitCode = 1;
         else await new Promise(resolve => setTimeout(resolve, 10000));
     }

@@ -64,10 +64,15 @@ async function boundedImage(url, fetchImpl, authToken) {
     if (Number(response.headers.get('content-length') || 0) > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
     const chunks = [];
     let length = 0;
-    for await (const chunk of response.body) {
-        length += chunk.length;
-        if (length > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
-        chunks.push(chunk);
+    try {
+        for await (const chunk of response.body) {
+            length += chunk.length;
+            if (length > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
+            chunks.push(chunk);
+        }
+    } catch (error) {
+        if (error?.message === 'IMAGE_TOO_LARGE') throw error;
+        throw new Error('IMAGE_FETCH_FAILED');
     }
     const bytes = Buffer.concat(chunks, length);
     const validMagic = mime === 'image/jpeg' ? bytes[0] === 0xff && bytes[1] === 0xd8 :
@@ -87,16 +92,9 @@ const PROMPT = [
     '{"recognizable":true,"name":"主體名稱","category":"品類","visibleText":["確實可讀的文字"],"listedPriceTwd":null,"evidence":["可見證據1","可見證據2"],"uncertainties":["無法確認的部分"],"confidence":0.8}',
 ].join('\n');
 
-const LISTING_PROMPT = [
-    '你正在幫賣家建立「尚未公開」的二手商品草稿。只看圖片像素，不讀網址或檔名，不假裝已確認功能、品牌、型號、真偽、新舊、所有權、價格、交易地點或可售狀態。',
-    'name 具體描述主要商品（100字內）；description 以繁體中文詳細列出可見外觀、顏色、數量與缺陷，並明確註明哪些關鍵資訊仍須賣家確認。不可宣稱已測試功能。',
-    '不要輸出圖片中可能出現的電話、Email、社群帳號、精確住址、QR碼內容或其他個人資料；description 只能保留商品本身的必要資訊。',
-    'category 僅能填 electronics、home、fashion、sports、books、toys、other。brand 只有清楚可見且可靠辨認才填；condition 只有圖片確實可見新品密封或明確使用痕跡才填 NEW 或 USED，否則填 null。',
-    'estimatedPriceLowTwd 與 estimatedPriceHighTwd 是台幣二手參考範圍，不是圖片上的標價，也不是即時市場行情；只有對品類、型號與狀況有足夠依據時才給保守範圍，否則兩者都填 null。不得把新品定價、廣告價或猜測品牌當成二手成交價。',
-    'priceBasis 只寫估算理由與限制，不可宣稱查過即時成交紀錄。evidence 至少兩項各自可見特徵；uncertainties 列出照片無法證實之處。資訊不足時 recognizable=false。',
-    '只輸出一個 JSON 物件，不要 Markdown。',
-    '{"recognizable":true,"name":"商品名稱","description":"可見外觀與待確認事項","category":"other","brand":null,"condition":null,"estimatedPriceLowTwd":null,"estimatedPriceHighTwd":null,"priceBasis":null,"evidence":["可見證據1","可見證據2"],"uncertainties":["待確認資訊"],"confidence":0.8}',
-].join('\n');
+// Keep the vision instruction compact: the Connector has returned detailed JSON
+// for this shape, while the longer policy-style prompt repeatedly timed out.
+const LISTING_PROMPT = '只依照片像素，用繁體中文輸出 JSON 商品草稿。欄位：recognizable(true/false),name,description(詳細可見外觀、瑕疵與賣家待確認事項),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(NEW/USED/null),estimatedPriceLowTwd,estimatedPriceHighTwd,priceBasis,evidence(至少兩項陣列),uncertainties(陣列),confidence(0到1)。勿猜品牌、功能、真偽、所有權或私人聯絡資訊；沒有可靠二手估價依據就把價格與priceBasis設null。只輸出JSON。';
 
 export function parseListingVisionDescription(description) {
     if (typeof description !== 'string') throw new Error('VISION_BAD_RESPONSE');
@@ -106,7 +104,8 @@ export function parseListingVisionDescription(description) {
     try { raw = JSON.parse(description.slice(start, end + 1)); }
     catch { throw new Error('VISION_BAD_RESPONSE'); }
     const name = clean(raw.name, 100), details = clean(raw.description, 1500);
-    const evidence = textArray(raw.evidence, 6, 160), uncertainties = textArray(raw.uncertainties, 6, 160);
+    const evidence = textArray(raw.evidence, 6, 160);
+    const uncertainties = textArray(Array.isArray(raw.uncertainties) ? raw.uncertainties : [raw.uncertainties], 6, 160);
     const confidence = Number(raw.confidence);
     if (raw.recognizable !== true || name.length < 3 || details.length < 16 || evidence.length < 2 ||
         !Number.isFinite(confidence) || confidence < 0.7 || confidence > 1) throw new Error('VISION_UNCERTAIN');
@@ -122,7 +121,8 @@ export function parseListingVisionDescription(description) {
         evidence, uncertainties, confidence };
 }
 
-async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken, execCommand = execFileAsync } = {}) {
+async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken, execCommand = execFileAsync,
+    connectorTimeoutMs = 90000 } = {}) {
     const { bytes, extension } = await boundedImage(url, fetchImpl, authToken);
     const directory = await mkdtemp(join(tmpdir(), 'wishlist-minimax-vision-'));
     const imagePath = join(directory, `image.${extension}`);
@@ -137,7 +137,7 @@ async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 
         const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt }] });
         let call;
         try { call = await execCommand(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
-            { timeout: 90000, maxBuffer: 1024 * 1024 }); }
+            { timeout: connectorTimeoutMs, maxBuffer: 1024 * 1024 }); }
         catch { throw new Error('VISION_UPSTREAM_FAILED'); }
         let response;
         try { response = JSON.parse(call.stdout); } catch { throw new Error('VISION_BAD_RESPONSE'); }
@@ -149,7 +149,15 @@ async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 
 }
 
 export async function recognizeImage(url, options = {}) { return describeImage(url, PROMPT, parseVisionDescription, options); }
-export async function recognizeListingImage(url, options = {}) { return describeImage(url, LISTING_PROMPT, parseListingVisionDescription, options); }
+export async function recognizeListingImage(url, options = {}) {
+    return describeImage(url, LISTING_PROMPT, parseListingVisionDescription, { connectorTimeoutMs: 150000, ...options });
+}
+
+const SAFE_VISION_ERRORS = new Set(['IMAGE_FETCH_FAILED', 'IMAGE_FORMAT_UNSUPPORTED', 'IMAGE_TOO_LARGE',
+    'TEMP_UPLOAD_FAILED', 'VISION_UPSTREAM_FAILED', 'VISION_BAD_RESPONSE', 'VISION_UNCERTAIN', 'VISION_PRIVATE_CONTACT']);
+export function safeVisionError(error) {
+    return SAFE_VISION_ERRORS.has(error?.message) ? error.message : 'VISION_UNAVAILABLE';
+}
 
 function authorized(value, token) {
     if (typeof value !== 'string' || !value.startsWith('Bearer ')) return false;
@@ -187,7 +195,7 @@ export function createBridge({ token, imageHost = DEFAULT_IMAGE_HOST, recognize 
             const job = waiting.shift();
             job.status = 'PROCESSING';
             try { job.result = await recognize(job.imageUrl); job.status = 'COMPLETED'; }
-            catch (error) { job.error = /^([A-Z_]+)$/.test(error?.message || '') ? error.message : 'VISION_UNAVAILABLE'; job.status = 'FAILED'; }
+            catch (error) { job.error = safeVisionError(error); job.status = 'FAILED'; }
             job.updatedAt = Date.now();
         }
         running = false;

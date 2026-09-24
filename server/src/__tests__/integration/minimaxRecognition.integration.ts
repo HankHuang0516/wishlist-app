@@ -43,6 +43,7 @@ beforeAll(async () => {
     process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED = '1';
 });
 afterAll(async () => {
+    await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: { in: sourceIds } } } });
     await prisma.externalListingCandidate.deleteMany({ where: { sourceId: { in: sourceIds } } });
     await prisma.externalListingSource.deleteMany({ where: { id: { in: sourceIds } } });
     if (userId) await prisma.user.delete({ where: { id: userId } });
@@ -153,7 +154,7 @@ describe('isolated MiniMax Code pull queue', () => {
         } });
         const now = new Date();
         const staleEligible = await prisma.externalListingCandidate.count({ where: {
-            status: 'PENDING_REVIEW', OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
+            status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
         } });
         expect(staleEligible).toBeGreaterThanOrEqual(1);
         expect(await expireExternalCandidates(now)).toBe(staleEligible);

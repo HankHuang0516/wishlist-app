@@ -289,6 +289,7 @@ enum ExternalSourceKind {
 
 enum ExternalCandidateStatus {
   PENDING_REVIEW
+  APPROVED
   REJECTED
   STALE
 }
@@ -337,6 +338,10 @@ model ExternalListingCandidate {
   lastSeenAt     DateTime                @default(now())
   contentHash    String
   status         ExternalCandidateStatus @default(PENDING_REVIEW)
+  approvalRef    String?
+  approvedAuthorizationRef String?
+  approvedContentHash String?
+  approvedAt     DateTime?
   rejectionRef   String?
   rejectionReason String?
   rejectedContentHash String?
@@ -350,11 +355,26 @@ model ExternalListingCandidate {
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   source         ExternalListingSource   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  reviewEvents   ExternalCandidateReviewEvent[]
 
   @@unique([sourceId, sourceItemId])
   @@index([status, expiresAt])
   @@index([sourceId, lastSeenAt])
   @@index([aiStatus, aiUpdatedAt])
+}
+
+model ExternalCandidateReviewEvent {
+  id            String                   @id @default(uuid())
+  candidateId   String
+  decision      ExternalCandidateStatus
+  contentHash   String
+  reviewRef     String
+  reason        String?
+  authorizationRef String?
+  createdAt     DateTime                 @default(now())
+  candidate     ExternalListingCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, createdAt])
 }
 
 enum ConversationRole {

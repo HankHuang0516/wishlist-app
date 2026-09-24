@@ -5,8 +5,10 @@ import { Prisma } from '@prisma/client';
 // be re-imported from a fresh authorized observation before further review.
 export async function expireExternalCandidates(now = new Date()) {
     const result = await prisma.externalListingCandidate.updateMany({ where: {
-        status: 'PENDING_REVIEW', OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
-    }, data: { status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,
+        status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } }, { source: { enabled: false } }],
+    }, data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
+        approvedContentHash: null, approvedAt: null,
+        aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,
         aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
     return result.count;
 }

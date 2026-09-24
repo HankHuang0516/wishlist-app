@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { eligibleExternalCandidate } from '../lib/externalListingPublication';
+import { districtCenter } from '../lib/doubleNorthDistrictCenters';
 import { isListingId } from '../lib/listingRules';
 
 const writes = () => rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false,
@@ -53,8 +55,10 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             const sourceId = String(req.params.id);
             const changed = await prisma.$transaction(async tx => {
                 const updated = await tx.externalListingSource.updateMany({ where: { id: sourceId }, data: { enabled: false } });
-                if (updated.count) await tx.externalListingCandidate.updateMany({ where: { sourceId, status: 'PENDING_REVIEW' },
-                    data: { status: 'STALE', aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null,
+                if (updated.count) await tx.externalListingCandidate.updateMany({ where: { sourceId, status: { in: ['PENDING_REVIEW', 'APPROVED'] } },
+                    data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
+                        approvedContentHash: null, approvedAt: null,
+                        aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null,
                         aiDraft: Prisma.DbNull, aiUpdatedAt: new Date() } });
                 return updated;
             });
@@ -82,9 +86,14 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const aiReset = { aiStatus: eligible ? 'PENDING' as const : 'NOT_ELIGIBLE' as const,
                         aiInputHash: eligible ? item.contentHash : null, aiDraft: Prisma.DbNull, aiJobId: null,
                         aiAttempts: 0, aiUpdatedAt: now };
+                    const retainsApproval = old?.status === 'APPROVED' && !aiChanged &&
+                        old.approvedAuthorizationRef === source.authorizationRef &&
+                        source.textReuseAllowed && source.imageReuseAllowed;
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,
-                        status: old.status === 'REJECTED' ? 'REJECTED' : 'PENDING_REVIEW',
-                        ...(aiChanged || old.status !== 'PENDING_REVIEW' ? aiReset : {}) } }) :
+                        status: old.status === 'REJECTED' ? 'REJECTED' : retainsApproval ? 'APPROVED' : 'PENDING_REVIEW',
+                        ...(!retainsApproval ? { approvalRef: null, approvedAuthorizationRef: null,
+                            approvedContentHash: null, approvedAt: null } : {}),
+                        ...(aiChanged || !['PENDING_REVIEW', 'APPROVED'].includes(old.status) ? aiReset : {}) } }) :
                         await tx.externalListingCandidate.create({ data: { ...item, sourceId: source.id, lastSeenAt: now,
                             aiStatus: aiReset.aiStatus, aiInputHash: aiReset.aiInputHash, aiUpdatedAt: now } });
                     records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status,
@@ -98,6 +107,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
     router.post('/candidates/:id/reject', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });
+            const candidateId = String(req.params.id);
             const body = req.body;
             if (!body || typeof body !== 'object' || Array.isArray(body) ||
                 Object.keys(body).sort().join(',') !== 'expectedContentHash,reason,reviewRef' ||
@@ -106,24 +116,78 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 !['SOURCE_UNVERIFIED', 'ITEM_UNVERIFIED', 'PROHIBITED', 'DUPLICATE', 'MISLEADING'].includes(body.reason))
                 throw new ExternalIntakeError('review', '請提供目前內容指紋、審核紀錄 ID 與固定拒絕原因；勿填個資或憑證');
             const now = new Date();
-            const changed = await prisma.externalListingCandidate.updateMany({ where: { id: req.params.id,
-                contentHash: body.expectedContentHash, status: 'PENDING_REVIEW', expiresAt: { gt: now }, source: { enabled: true } },
-                data: { status: 'REJECTED', rejectionRef: body.reviewRef, rejectionReason: body.reason,
-                    rejectedContentHash: body.expectedContentHash, rejectedAt: now,
-                    aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
+            const changed = await prisma.$transaction(async tx => {
+                const result = await tx.externalListingCandidate.updateMany({ where: { id: candidateId,
+                    contentHash: body.expectedContentHash, status: 'PENDING_REVIEW', expiresAt: { gt: now }, source: { enabled: true } },
+                    data: { status: 'REJECTED', rejectionRef: body.reviewRef, rejectionReason: body.reason,
+                        rejectedContentHash: body.expectedContentHash, rejectedAt: now,
+                        aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
+                if (result.count) await tx.externalCandidateReviewEvent.create({ data: { candidateId,
+                    decision: 'REJECTED', contentHash: body.expectedContentHash, reviewRef: body.reviewRef,
+                    reason: body.reason } });
+                return result;
+            });
             return changed.count ? res.status(200).json({ id: req.params.id, status: 'REJECTED',
                 rejectedContentHash: body.expectedContentHash, rejectedAt: now }) :
                 res.status(409).json({ error: '候選內容、來源授權或審核狀態已變更；請重新確認', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
         } catch (error) { return fail(res, error); }
     });
+    router.post('/candidates/:id/approve', writes(), async (req, res) => {
+        try {
+            if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED !== '1') return res.status(503).json({ error: '外部商品公開尚未啟用', errorCode: 'EXTERNAL_PUBLICATION_DISABLED' });
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).sort().join(',') !== 'authorizationRef,confirmItem,confirmRights,expectedContentHash,reviewRef' ||
+                typeof body.expectedContentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.expectedContentHash) ||
+                typeof body.reviewRef !== 'string' || !/^review:[A-Za-z0-9._/-]{4,160}$/.test(body.reviewRef) ||
+                typeof body.authorizationRef !== 'string' || body.confirmRights !== true || body.confirmItem !== true)
+                throw new ExternalIntakeError('review', '須明確核對來源授權、商品真實性與目前內容指紋');
+            const row = await prisma.externalListingCandidate.findUnique({ where: { id: req.params.id }, include: { source: true } });
+            if (!row) return res.status(404).json({ error: '候選商品不存在' });
+            const now = new Date();
+            if (row.status !== 'PENDING_REVIEW' || row.contentHash !== body.expectedContentHash ||
+                row.source.authorizationRef !== body.authorizationRef || !districtCenter(row.county, row.district) ||
+                !eligibleExternalCandidate(row, row.source, now))
+                return res.status(409).json({ error: '來源權利、商品內容或時效不符合公開條件', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
+            const changed = await prisma.$transaction(async tx => {
+                const result = await tx.externalListingCandidate.updateMany({ where: { id: row.id, status: 'PENDING_REVIEW',
+                    contentHash: row.contentHash, aiStatus: row.aiStatus, observedAt: { gte: new Date(now.getTime() - 48 * 3_600_000) },
+                    expiresAt: { gt: now }, imageUrl: row.imageUrl, description: row.description, condition: 'USED',
+                    source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,
+                        authorizationRef: row.source.authorizationRef } },
+                    data: { status: 'APPROVED', approvalRef: body.reviewRef,
+                        approvedAuthorizationRef: row.source.authorizationRef,
+                        approvedContentHash: row.contentHash, approvedAt: now,
+                        ...(row.aiStatus === 'COMPLETED' ? {} : { aiStatus: 'NOT_ELIGIBLE' as const, aiInputHash: null,
+                            aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now }) } });
+                if (result.count) await tx.externalCandidateReviewEvent.create({ data: { candidateId: row.id,
+                    decision: 'APPROVED', contentHash: row.contentHash, reviewRef: body.reviewRef,
+                    authorizationRef: row.source.authorizationRef } });
+                return result;
+            });
+            return changed.count ? res.json({ id: row.id, status: 'APPROVED', approvedContentHash: row.contentHash, approvedAt: now }) :
+                res.status(409).json({ error: '候選商品在審核期間變更，請重新確認', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
+        } catch (error) { return fail(res, error); }
+    });
     router.get('/candidates', async (req, res) => {
         try {
             const status = req.query.status === undefined ? 'PENDING_REVIEW' : req.query.status;
-            if (!['PENDING_REVIEW', 'REJECTED', 'STALE'].includes(String(status))) throw new ExternalIntakeError('status');
-            const rows = await prisma.externalListingCandidate.findMany({ where: { status: status as 'PENDING_REVIEW' | 'REJECTED' | 'STALE' },
+            if (!['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'STALE'].includes(String(status))) throw new ExternalIntakeError('status');
+            const rows = await prisma.externalListingCandidate.findMany({ where: { status: status as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'STALE' },
                 orderBy: [{ lastSeenAt: 'desc' }, { id: 'desc' }], take: 100,
                 include: { source: { select: { name: true, kind: true, authorizationRef: true, textReuseAllowed: true, imageReuseAllowed: true } } } });
             return res.json({ items: rows });
+        } catch (error) { return fail(res, error); }
+    });
+    router.get('/candidates/:id/reviews', async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });
+            const exists = await prisma.externalListingCandidate.findUnique({ where: { id: req.params.id }, select: { id: true } });
+            if (!exists) return res.status(404).json({ error: '候選商品不存在' });
+            const items = await prisma.externalCandidateReviewEvent.findMany({ where: { candidateId: exists.id },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 });
+            return res.json({ items });
         } catch (error) { return fail(res, error); }
     });
     return router;

@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../co
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2, LogOut } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
-import PaymentModal from "../components/PaymentModal";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 
@@ -76,33 +75,6 @@ export default function SettingsPage() {
             variant,
             confirmText: confirmTextWithPrice || t('common.confirm')
         });
-    };
-
-    // Payment Modal State
-    const [paymentModalConfig, setPaymentModalConfig] = useState<{
-        isOpen: boolean;
-        amount: number;
-        itemName: string;
-        extraPayload?: any; // New: to store purchaseType etc.
-    }>({
-        isOpen: false,
-        amount: 0,
-        itemName: "",
-        extraPayload: {}
-    });
-
-    const openPaymentModal = (amount: number, itemName: string, extraPayload?: any) => {
-        setPaymentModalConfig({
-            isOpen: true,
-            amount,
-            itemName,
-            extraPayload
-        });
-    };
-
-    const handlePaymentSuccess = (data: any) => {
-        setFeedback({ message: `Payment Successful! Transaction ID: ${data.transactionId}`, type: 'success' });
-        setTimeout(() => window.location.reload(), 2000);
     };
 
     useEffect(() => {
@@ -816,27 +788,7 @@ export default function SettingsPage() {
                             <CardDescription>{t('settings.expandListDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
-
-                            <div className="mb-4">
-                                <label className="text-sm text-gray-500 mb-1 block">{t('settings.type')}</label>
-                                <select
-                                    className="w-full border rounded p-2 text-sm"
-                                    id="expansion-type-select"
-                                >
-                                    <option value="wishlists">{t('dashboard.myWishlists')}</option>
-                                    <option value="following">{t('social.following')}</option>
-                                </select>
-                            </div>
-
-                            <Button className="w-full" variant="outline" onClick={() => {
-                                const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
-                                if (!select) return;
-                                const targetType = select.value;
-                                openPaymentModal(30, targetType === 'following' ? "Following Expansion (+10)" : "Wishlist Expansion (+10)", { purchaseType: 'limit', target: targetType });
-                            }}>
-                                {t('settings.buyNow')}
-                            </Button>
+                            <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                         </CardContent>
                     </Card>
 
@@ -847,45 +799,14 @@ export default function SettingsPage() {
                             <CardDescription>{t('settings.premiumDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/mo (3 USD)</span></p>
-
                             {profile.isPremium ? (
                                 <div className="space-y-3">
                                     <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
                                         {t('settings.isPremium')}
                                     </div>
-                                    <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
-                                        openModal(
-                                            t('settings.cancelSubscription'),
-                                            "Are you sure you want to cancel? \n\nYour limit will revert to default (100).",
-                                            async () => {
-                                                try {
-                                                    const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
-                                                        method: 'POST',
-                                                        headers: { 'Authorization': `Bearer ${token}` }
-                                                    });
-                                                    if (res.ok) {
-                                                        // Smooth update
-                                                        handleUpdate({ isPremium: false });
-                                                        // Optional: Show toast or small feedback
-                                                    } else {
-                                                        setFeedback({ message: "Failed to cancel", type: 'error' });
-                                                        setTimeout(() => setFeedback(null), 3000);
-                                                    }
-                                                } catch (e) { console.error(e); }
-                                            },
-                                            "destructive",
-                                            t('common.confirm')
-                                        );
-                                    }}>
-                                        {t('settings.cancelSubscription')}
-                                    </Button>
+                                    <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                                 </div>
-                            ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                                openPaymentModal(90, "Premium Subscription", { purchaseType: 'PREMIUM' });
-                            }}>
-                                {t('settings.subscribe')} (NT$ 90)
-                            </Button>
+                            ) : <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                             }
 
                         </CardContent>
@@ -1011,14 +932,6 @@ export default function SettingsPage() {
                     confirmText={modalConfig.confirmText}
                     variant={modalConfig.variant}
                     isProcessing={modalConfig.isProcessing}
-                />
-                <PaymentModal
-                    isOpen={paymentModalConfig.isOpen}
-                    onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    amount={paymentModalConfig.amount}
-                    itemName={paymentModalConfig.itemName}
-                    onPaymentSuccess={handlePaymentSuccess}
-                    extraPayload={paymentModalConfig.extraPayload}
                 />
             </div>
         </div>

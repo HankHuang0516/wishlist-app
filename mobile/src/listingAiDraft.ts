@@ -56,3 +56,9 @@ export function mergeListingAiSuggestions(form: ListingForm, draft: ListingAiDra
 export function confirmedBatchCandidates<T extends { published: boolean; confirmed: boolean }>(cards: readonly T[]): T[] {
   return cards.filter(card => !card.published && card.confirmed);
 }
+
+// The private recovery endpoint returns the latest uploads first. Keep its
+// newest-N safety cap, then restore the camera/gallery capture order in the UI.
+export function restoreBatchCaptureOrder<T>(newestFirst: readonly T[], limit: number): T[] {
+  return newestFirst.slice(0, limit).reverse();
+}

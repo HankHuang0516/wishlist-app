@@ -8,7 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
-import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, taiwanDate, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -74,7 +74,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
         const [journal, response] = await Promise.all([privatePendingStore.get(key), api<{ items: unknown[] }>('/listing-media/unused')]);
         if (!Array.isArray(response.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
-        const recovered = response.items.slice(0, MAX_ITEMS).map(raw => {
+        const recovered = restoreBatchCaptureOrder(response.items, MAX_ITEMS).map(raw => {
           const record = parsePhotoRecord(raw, apiUrl, __DEV__);
           const row = raw as Record<string, unknown>;
           const state = parseListingAiState({ mediaId: record.id, status: row.aiDraftStatus, draft: row.aiDraft ?? null }, record.id);

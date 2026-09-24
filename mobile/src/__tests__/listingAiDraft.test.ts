@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
 import { emptyListingForm } from '../listingForm';
 
 const id = '41fe5714-b31f-475d-b040-01e2a5c2e1cb';
@@ -36,5 +36,10 @@ describe('private listing AI draft protocol', () => {
       { id: 'b', published: false, confirmed: false },
       { id: 'c', published: true, confirmed: true },
     ]).map(card => card.id)).toEqual(['a']);
+  });
+  it('keeps the latest private photos but restores their capture order', () => {
+    const newestFirst = ['third photo', 'second photo', 'first photo', 'older photo'];
+    expect(restoreBatchCaptureOrder(newestFirst, 3)).toEqual(['first photo', 'second photo', 'third photo']);
+    expect(newestFirst).toEqual(['third photo', 'second photo', 'first photo', 'older photo']);
   });
 });

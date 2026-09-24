@@ -1,4 +1,4 @@
-// Supervised Android-only native listing AI smoke with one owned synthetic photo.
+// Supervised Android-only native listing AI smoke with owned synthetic photos.
 // Uses an existing distinct-package Debug shell + fresh Metro JS, never a store build.
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -16,7 +16,8 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-selection', '--recognize-one'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
 assertTestDatabase(database);
@@ -26,8 +27,11 @@ const runId = randomUUID();
 const evidence = path.join(mobile, 'build', 'android-listing-ai-' + runId);
 const uiPath = `/sdcard/wishlist-listing-ai-${runId}.xml`;
 const galleryPath = `/sdcard/Pictures/wishlist-listing-ai-${runId}.png`;
+const secondGalleryPath = `/sdcard/Pictures/wishlist-listing-ai-${runId}-mug.png`;
 const fixturePath = path.join(mobile, 'qa-fixtures', 'synthetic-used-orange-desk-lamp.png');
 const fixtureHash = 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0';
+const secondFixturePath = path.join(mobile, 'qa-fixtures', 'synthetic-used-blue-mug.png');
+const secondFixtureHash = '4bf0d16e92bff216bdf0521ba878886b0a31c734d43ee9363dbc69dda6aa06f9';
 const apk = path.join(mobile, 'build', `android-batch-qa-${label}`, 'app.apk');
 const priorPath = path.join(mobile, 'build', 'android-external-map-a6cc02cd-b5da-427c-bf89-287167d87f5b', 'result.json');
 const adbPath = '/Users/hank/Library/Android/sdk/platform-tools/adb';
@@ -36,7 +40,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const adb = async (args, timeout = 20_000) => (await runFile(adbPath, ['-s', serial, ...args], { timeout, maxBuffer: 4 * 1024 * 1024 })).stdout;
 const adbBytes = async (args, timeout = 20_000) => (await runFile(adbPath, ['-s', serial, ...args],
   { timeout, encoding: 'buffer', maxBuffer: 15 * 1024 * 1024 })).stdout;
-let qa, metro, metroExit, stage = 'preflight', launched = false, galleryAdded = false, stopping = false;
+let qa, metro, metroExit, stage = 'preflight', launched = false, stopping = false;
+const galleryAdded = [];
 const reverses = [];
 const report = { kind: 'isolated-android-listing-ai-smoke', mode, passed: false, stage, sourceLabel: label,
   package: packageName, evidenceDirectory: evidence, screenshots: [], cleanup: null };
@@ -93,7 +98,7 @@ async function waitWithScroll(label, exact = true) {
   throw new Error('QA_SCROLLED_CONTROL_MISSING');
 }
 async function shot(name) {
-  if (!['picker', 'selected', 'ai-draft'].includes(name)) throw new Error('QA_SHOT_NAME');
+  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'pre-edit', 'edited'].includes(name)) throw new Error('QA_SHOT_NAME');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   report.screenshots.push(target);
@@ -138,6 +143,10 @@ async function preflight() {
     throw new Error('QA_APK_PROVENANCE');
   const fixture = await fs.readFile(fixturePath);
   if (createHash('sha256').update(fixture).digest('hex') !== fixtureHash) throw new Error('QA_FIXTURE_CHANGED');
+  if (twoPhotos) {
+    const secondFixture = await fs.readFile(secondFixturePath);
+    if (createHash('sha256').update(secondFixture).digest('hex') !== secondFixtureHash) throw new Error('QA_SECOND_FIXTURE_CHANGED');
+  }
   const packages = (await adb(['shell', 'pm', 'list', 'packages', '-u', packageName])).split(/\r?\n/).map(line => line.trim());
   if (!packages.includes('package:' + packageName)) throw new Error('QA_PACKAGE_NOT_OWNED');
 }
@@ -155,8 +164,12 @@ async function main() {
   await metroReady();
   stage = 'reverse'; await reverse(Number(new URL(qa.apiUrl).port)); await reverse(METRO_PORT);
   stage = 'gallery';
-  await adb(['push', fixturePath, galleryPath], 30_000); galleryAdded = true;
+  galleryAdded.push(galleryPath); await adb(['push', fixturePath, galleryPath], 30_000);
   await adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + galleryPath]);
+  if (twoPhotos) {
+    galleryAdded.push(secondGalleryPath); await adb(['push', secondFixturePath, secondGalleryPath], 30_000);
+    await adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + secondGalleryPath]);
+  }
   stage = 'launch'; await adb(['shell', 'am', 'force-stop', packageName]);
   await adb(['shell', 'am', 'start', '-n', `${packageName}/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity`]);
   launched = true;
@@ -189,29 +202,38 @@ async function main() {
     addButton: !!findNode(picker, 'Add', false) || !!findNode(picker, '新增', false),
     imageNodes: nodes(picker).filter(node => node.includes('class="android.widget.ImageView"')).length,
   };
-  if (mode === '--inspect-picker') { report.passed = true; return; }
   // The private QA emulator was visually inspected at 320x640. Fail closed
   // if the picker layout changes or the first tile lacks the fixture's orange lamp.
   const { data: pixels, info } = await sharp(path.join(evidence, 'picker.png')).raw().toBuffer({ resolveWithObject: true });
   if (info.width !== 320 || info.height !== 640 || info.channels < 3) throw new Error('QA_PICKER_LAYOUT_CHANGED');
-  let orangePixels = 0;
-  for (let y = 422; y < 529; y++) for (let x = 0; x < 106; x++) {
-    const offset = (y * info.width + x) * info.channels;
-    const red = pixels[offset], green = pixels[offset + 1], blue = pixels[offset + 2];
-    if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blue * 1.2) orangePixels++;
-  }
+  const tilePixels = (left, right, color) => {
+    let count = 0;
+    for (let y = 422; y < 529; y++) for (let x = left; x < right; x++) {
+      const offset = (y * info.width + x) * info.channels;
+      const red = pixels[offset], green = pixels[offset + 1], blue = pixels[offset + 2];
+      if (color === 'orange' ? red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blue * 1.2
+        : blue > 80 && blue > red * 1.2 && blue > green * 1.1) count++;
+    }
+    return count;
+  };
+  const orangePixels = tilePixels(0, 106, 'orange');
   report.pickerMarkers.orangeFixtureVerified = orangePixels > 300;
-  if (!report.pickerMarkers.orangeFixtureVerified || !report.pickerMarkers.photoTab) throw new Error('QA_PICKER_FIXTURE_NOT_VISIBLE');
+  if (twoPhotos) report.pickerMarkers.blueFixtureVerified = tilePixels(107, 213, 'blue') > 300;
+  if (!report.pickerMarkers.orangeFixtureVerified || (twoPhotos && !report.pickerMarkers.blueFixtureVerified) ||
+    !report.pickerMarkers.photoTab) throw new Error('QA_PICKER_FIXTURE_NOT_VISIBLE');
+  if (mode === '--inspect-picker' || mode === '--inspect-picker-two') { report.passed = true; return; }
   stage = 'selection';
   await adb(['shell', 'input', 'tap', '53', '474']);
+  if (twoPhotos) await adb(['shell', 'input', 'tap', '159', '474']);
   await sleep(2500);
   await shot('selected');
   const selected = await dump();
   report.selectionMarkers = { composer: !!findNode(selected, '連續拍照刊登'),
     addButton: !!findNode(selected, 'Add', false) || !!findNode(selected, '新增', false),
-    doneButton: !!findNode(selected, 'Done'), selectedCount: selected.includes('1 selected') || selected.includes('已選取 1') };
+    doneButton: !!findNode(selected, 'Done'), selectedCount: !!findNode(selected, String(twoPhotos ? 2 : 1)) ||
+      selected.includes(twoPhotos ? '2 selected' : '1 selected') || selected.includes(twoPhotos ? '已選取 2' : '已選取 1') };
   if (mode === '--inspect-selection') { report.passed = true; return; }
-  if (!report.selectionMarkers.doneButton) throw new Error('QA_PICKER_CONFIRM_MISSING');
+  if (!report.selectionMarkers.doneButton || !report.selectionMarkers.selectedCount) throw new Error('QA_PICKER_CONFIRM_MISSING');
   await tapLabel('Done');
   stage = 'native-private-upload';
   const base = qa.apiUrl + '/api';
@@ -222,65 +244,111 @@ async function main() {
     return { Authorization: 'Bearer ' + reply.token };
   };
   const owner = await login(qa.actors.buyer), outsider = await login(qa.actors.third);
-  let photo;
+  let photos;
   const uploadDeadline = Date.now() + 45_000;
   while (Date.now() < uploadDeadline && !stopping) {
     const unused = await json(base + '/listing-media/unused', { headers: owner });
-    if (unused.items?.length === 1) { photo = unused.items[0]; break; }
-    if (unused.items?.length > 1) throw new Error('QA_UNEXPECTED_PRIVATE_MEDIA');
+    if (unused.items?.length === (twoPhotos ? 2 : 1)) { photos = unused.items; break; }
+    if (unused.items?.length > (twoPhotos ? 2 : 1)) throw new Error('QA_UNEXPECTED_PRIVATE_MEDIA');
     await sleep(1200);
   }
-  if (!photo?.id || !photo.imageUrl) throw new Error('QA_UPLOAD_MISSING');
-  const ownerImage = await fetch(photo.imageUrl, { headers: owner, signal: AbortSignal.timeout(15_000) });
-  const anonymousImage = await fetch(photo.imageUrl, { signal: AbortSignal.timeout(15_000) });
-  const otherImage = await fetch(photo.imageUrl, { headers: outsider, signal: AbortSignal.timeout(15_000) });
-  if (ownerImage.status !== 200 || anonymousImage.status !== 404 || otherImage.status !== 404) throw new Error('QA_PRIVATE_IMAGE_ACCESS');
-  await ownerImage.arrayBuffer();
-  const queued = await json(base + '/listing-media/' + photo.id + '/ai-draft', { headers: owner });
-  if (!['PENDING', 'PROCESSING'].includes(queued.status)) throw new Error('QA_AI_NOT_QUEUED');
+  if (!photos?.every(photo => photo?.id && photo.imageUrl)) throw new Error('QA_UPLOAD_MISSING');
+  const classified = new Map();
+  for (const photo of photos) {
+    const ownerImage = await fetch(photo.imageUrl, { headers: owner, signal: AbortSignal.timeout(15_000) });
+    const anonymousImage = await fetch(photo.imageUrl, { signal: AbortSignal.timeout(15_000) });
+    const otherImage = await fetch(photo.imageUrl, { headers: outsider, signal: AbortSignal.timeout(15_000) });
+    if (ownerImage.status !== 200 || anonymousImage.status !== 404 || otherImage.status !== 404) throw new Error('QA_PRIVATE_IMAGE_ACCESS');
+    const { data: small, info: imageInfo } = await sharp(Buffer.from(await ownerImage.arrayBuffer())).resize(64, 64)
+      .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    let orange = 0, blue = 0;
+    for (let offset = 0; offset < small.length; offset += imageInfo.channels) {
+      const red = small[offset], green = small[offset + 1], blueValue = small[offset + 2];
+      if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blueValue * 1.2) orange++;
+      if (blueValue > 80 && blueValue > red * 1.2 && blueValue > green * 1.1) blue++;
+    }
+    const item = orange > 400 && blue < 100 ? 'lamp' : blue > 600 ? 'mug' : null;
+    if (!item || classified.has(item)) throw new Error('QA_UPLOADED_PHOTO_MISMATCH');
+    classified.set(item, photo);
+    const queued = await json(base + '/listing-media/' + photo.id + '/ai-draft', { headers: owner });
+    if (!['PENDING', 'PROCESSING'].includes(queued.status)) throw new Error('QA_AI_NOT_QUEUED');
+  }
+  if (classified.size !== (twoPhotos ? 2 : 1) || !classified.has('lamp') || (twoPhotos && !classified.has('mug')))
+    throw new Error('QA_UPLOADED_PHOTO_MISMATCH');
   if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
   stage = 'minimax-claim';
   const worker = { Authorization: 'Bearer ' + qa.callbackToken };
-  let job;
-  const claimDeadline = Date.now() + 20_000;
-  while (Date.now() < claimDeadline && !stopping) {
-    const response = await fetch(base + '/internal/minimax-vision/next', { headers: worker, signal: AbortSignal.timeout(15_000) });
-    if (response.status === 200) { job = await response.json(); break; }
-    if (response.status !== 204) throw new Error('QA_AI_CLAIM_' + response.status);
-    await sleep(900);
-  }
-  if (job?.kind !== 'LISTING_DRAFT' || job.imageUrl !== photo.imageUrl || !job.jobId) throw new Error('QA_AI_JOB_MISMATCH');
-  stage = 'minimax-vision';
   const { recognizeListingImage } = await import('../../tools/minimax-vision-bridge/server.mjs');
-  const draft = await recognizeListingImage(job.imageUrl, { authToken: qa.callbackToken });
-  if (!/燈/.test(draft.name) || draft.estimatedPriceLowTwd === null ||
-    draft.estimatedPriceHighTwd < draft.estimatedPriceLowTwd) throw new Error('QA_AI_DRAFT_UNGROUNDED');
-  stage = 'minimax-callback';
-  await json(base + '/internal/minimax-vision/' + job.jobId + '/result', { method: 'POST',
-    headers: { ...worker, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'COMPLETED', result: draft }) }, 204);
-  const serverDraft = await json(base + '/listing-media/' + photo.id + '/ai-draft', { headers: owner });
-  if (serverDraft.status !== 'COMPLETED' || serverDraft.draft?.title !== draft.name) throw new Error('QA_AI_CALLBACK_MISSING');
+  const recognized = new Map();
+  for (let index = 0; index < classified.size; index++) {
+    let job;
+    const claimDeadline = Date.now() + 20_000;
+    while (Date.now() < claimDeadline && !stopping) {
+      const response = await fetch(base + '/internal/minimax-vision/next', { headers: worker, signal: AbortSignal.timeout(15_000) });
+      if (response.status === 200) { job = await response.json(); break; }
+      if (response.status !== 204) throw new Error('QA_AI_CLAIM_' + response.status);
+      await sleep(900);
+    }
+    const kind = [...classified].find(([, photo]) => photo.imageUrl === job?.imageUrl)?.[0];
+    if (job?.kind !== 'LISTING_DRAFT' || !kind || recognized.has(kind) || !job.jobId) throw new Error('QA_AI_JOB_MISMATCH');
+    stage = 'minimax-vision-' + kind;
+    const draft = await recognizeListingImage(job.imageUrl, { authToken: qa.callbackToken });
+    if (!(kind === 'lamp' ? /燈/ : /杯/).test(draft.name) || draft.estimatedPriceLowTwd === null ||
+      draft.estimatedPriceHighTwd < draft.estimatedPriceLowTwd) throw new Error('QA_AI_DRAFT_UNGROUNDED');
+    stage = 'minimax-callback-' + kind;
+    await json(base + '/internal/minimax-vision/' + job.jobId + '/result', { method: 'POST',
+      headers: { ...worker, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'COMPLETED', result: draft }) }, 204);
+    const photo = classified.get(kind);
+    const serverDraft = await json(base + '/listing-media/' + photo.id + '/ai-draft', { headers: owner });
+    if (serverDraft.status !== 'COMPLETED' || serverDraft.draft?.title !== draft.name) throw new Error('QA_AI_CALLBACK_MISSING');
+    recognized.set(kind, draft);
+  }
   stage = 'native-ai-result';
   await waitWithScroll('AI 草稿已完成，請確認');
   await waitWithScroll('AI 二手參考價：', false);
   const screen = await dump();
+  const draft = recognized.get('lamp');
   const expectedPrice = `NT$ ${draft.estimatedPriceLowTwd}–${draft.estimatedPriceHighTwd}`;
   if (!screen.includes(expectedPrice)) throw new Error('QA_NATIVE_PRICE_MISSING');
   await shot('ai-draft');
+  if (twoPhotos) {
+    stage = 'native-second-ai-result';
+    await waitWithScroll('第2件商品名稱');
+    const mug = recognized.get('mug');
+    const mugScreen = await dump();
+    if (!mugScreen.includes(mug.name) || !mugScreen.includes(`NT$ ${mug.estimatedPriceLowTwd}–${mug.estimatedPriceHighTwd}`))
+      throw new Error('QA_NATIVE_SECOND_AI_MISSING');
+    await shot('ai-second-draft');
+  }
   if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
+  if (twoPhotos) {
+    stage = 'native-two-restore-before-edit';
+    await tapLabel('稍後繼續');
+    await waitNode('刊登好物');
+    await tapLabel('刊登好物');
+    await waitNode('連續拍照刊登');
+    await waitWithScroll('第1件商品名稱');
+    if (!(await dump()).includes(draft.name)) throw new Error('QA_NATIVE_FIRST_NOT_RESTORED');
+  }
   stage = 'native-edit';
-  await tap(await waitWithScroll('第1件商品名稱'));
+  const titleInput = await waitWithScroll('第1件商品名稱');
+  await shot('pre-edit');
+  await tap(titleInput);
   await adb(['shell', 'input', 'keyevent', '123']); // Move to end of this synthetic title.
   await adb(['shell', 'input', 'text', 'NativeQA']);
   if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_EDITOR_CLOSED_UNEXPECTEDLY');
+  await shot('edited');
   const editedTitle = draft.name + 'NativeQA';
   let editedSaved = false;
   const editDeadline = Date.now() + 18_000;
   while (Date.now() < editDeadline && !stopping) {
     const media = await json(base + '/listing-media/unused', { headers: owner });
-    if (media.items?.length !== 1) throw new Error('QA_EDIT_PRIVATE_MEDIA');
-    if (media.items[0].sellerDraft?.form?.title === editedTitle && media.items[0].sellerDraftVersion >= 1) {
+    if (media.items?.length !== (twoPhotos ? 2 : 1)) throw new Error('QA_EDIT_PRIVATE_MEDIA');
+    const lamp = media.items.find(item => item.id === classified.get('lamp').id);
+    report.editObserved = media.items.map(item => ({ fixture: item.id === classified.get('lamp').id ? 'lamp' : 'mug',
+      title: item.sellerDraft?.form?.title ?? null, version: item.sellerDraftVersion }));
+    if (lamp?.sellerDraft?.form?.title === editedTitle && lamp.sellerDraftVersion >= 1) {
       editedSaved = true; break;
     }
     await sleep(800);
@@ -310,8 +378,13 @@ async function main() {
   stage = 'native-edit-resume';
   await waitWithScroll('第1件商品名稱');
   if (!(await dump()).includes(editedTitle)) throw new Error('QA_NATIVE_EDIT_NOT_RESTORED');
+  if (twoPhotos) {
+    await waitWithScroll('第2件商品名稱');
+    if (!(await dump()).includes(recognized.get('mug').name)) throw new Error('QA_NATIVE_SECOND_NOT_RESTORED');
+  }
   if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
-  report.ai = { status: 'COMPLETED', name: draft.name, referencePriceTwd: [draft.estimatedPriceLowTwd, draft.estimatedPriceHighTwd],
+  report.ai = { status: 'COMPLETED', items: [...recognized].map(([fixture, result]) => ({ fixture, name: result.name,
+    referencePriceTwd: [result.estimatedPriceLowTwd, result.estimatedPriceHighTwd] })),
     nativePriceVisible: true, sellerEditRestored: true, unpublished: true, ownerOnly: true };
   report.passed = true;
 }
@@ -331,10 +404,10 @@ async function main() {
   }
   let cleanupFailed = false;
   if (launched) try { await adb(['shell', 'am', 'force-stop', packageName], 10_000); } catch { cleanupFailed = true; }
-  if (galleryAdded) try {
-    await adb(['shell', 'rm', galleryPath], 10_000);
-    await adb(['shell', 'test', '!', '-e', galleryPath], 10_000);
-    await adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + galleryPath]);
+  for (const ownedPath of galleryAdded) try {
+    await adb(['shell', 'rm', ownedPath], 10_000);
+    await adb(['shell', 'test', '!', '-e', ownedPath], 10_000);
+    await adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + ownedPath]);
   } catch { cleanupFailed = true; }
   for (const endpoint of reverses.reverse()) try { await adb(['reverse', '--remove', endpoint], 10_000); } catch { cleanupFailed = true; }
   if (metro && metro.exitCode === null) metro.kill('SIGTERM');
@@ -349,6 +422,6 @@ async function main() {
   console.log(JSON.stringify({ kind: report.kind, passed: report.passed, stage: report.stage,
     evidenceDirectory: evidence, pickerMarkers: report.pickerMarkers, selectionMarkers: report.selectionMarkers, ai: report.ai,
     screenshots: report.screenshots.length,
-    cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers }));
+    cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers, editObserved: report.editObserved }));
   if (!report.passed) process.exitCode = 1;
 })().catch(() => { console.error('Isolated Android listing AI QA could not complete; private input withheld'); process.exitCode = 1; });

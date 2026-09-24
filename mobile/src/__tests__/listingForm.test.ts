@@ -14,9 +14,14 @@ describe('native listing form contracts', () => {
     const body = buildListingBody({ ...emptyListingForm, title: '待整理' }, id, [], false, now);
     expect(body).toMatchObject({ publish: false, consentToMap: false, mediaIds: [] }); expect(body).not.toHaveProperty('location'); expect(body).not.toHaveProperty('price');
   });
+  it('allows an unbranded photographed item to be confirmed without inventing a brand', () => {
+    const body = buildListingBody({ ...full, brand: '' }, id, [id], true, now);
+    expect(body).not.toHaveProperty('brand');
+    expect(body).toMatchObject({ publish: true, price: 0 });
+  });
   it.each([{ title: '' }, { title: 'x'.repeat(101) }, { description: 'x'.repeat(3001) }, { brand: 'x'.repeat(61) }, { category: 'bad' }, { price: '-1' }, { price: '1.001' },
     { price: '10000000000' }, { expiryDate: '2026-02-30' }, { expiryDate: '2020-01-01' }, { consent: false }, { latitude: '' }, { latitude: '0' }, { longitude: 'x' }, { county: '' },
-    { district: 'x'.repeat(31) }, { description: '' }, { brand: '' }, { price: '' }, { meetup: false, shipping: false }])('rejects invalid publication data %p', changes => {
+    { district: 'x'.repeat(31) }, { description: '' }, { price: '' }, { meetup: false, shipping: false }])('rejects invalid publication data %p', changes => {
     expect(() => buildListingBody({ ...full, ...changes }, id, [id], true, now)).toThrow(ListingFormError);
   });
   it('rejects missing/duplicate image IDs and malformed listing IDs', () => {

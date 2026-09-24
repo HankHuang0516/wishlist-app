@@ -4,7 +4,7 @@ const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
-function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env) {
+function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env, { listingAiPilot = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
@@ -15,12 +15,13 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     TEST_DATABASE_URL: databaseUrl, DATABASE_URL: databaseUrl,
     JWT_SECRET: randomBytes(32).toString('hex'),
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
+    ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
   };
 }
 
-async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
+async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
   const child = fork(path.join(__dirname, 'native-qa-worker.cjs'), [], {
-    env: qaEnvironment(databaseUrl, lifetimeSeconds),
+    env: qaEnvironment(databaseUrl, lifetimeSeconds, process.env, options),
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
   let summary;
@@ -64,10 +65,16 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
     await exited.catch(() => undefined);
     throw failure;
   }
+  if (options.listingAiPilot && (typeof fixture.callbackToken !== 'string' || !/^[0-9a-f]{64}$/.test(fixture.callbackToken))) {
+    requestStop();
+    await exited.catch(() => undefined);
+    throw new Error('QA worker capability missing; details withheld');
+  }
   // Actors are synthetic credentials carried only over private IPC and held in
   // the caller's memory. Never serialize this object into a QA report/screenshot.
   return {
     apiUrl: fixture.apiUrl, runId: fixture.runId, actors: fixture.actors,
+    ...(options.listingAiPilot ? { callbackToken: fixture.callbackToken } : {}),
     async stop() {
       if (child.exitCode === null) requestStop();
       return exited;

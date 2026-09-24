@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
@@ -83,6 +83,8 @@ async function main() {
       Object.keys(process.env).some(key => !allowedEnv.has(key)) || !/^[0-9a-f]{64}$/.test(process.env.JWT_SECRET || '')) throw new Error('Unsafe QA launch');
   const lifetime = Number(process.env.NATIVE_QA_LIFETIME_SECONDS);
   if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 600) throw new Error('Unsafe QA lifetime');
+  if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
+  const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-native-qa-'));
   startupStage = 'private-storage';
   await fs.chmod(root, 0o700);
@@ -121,6 +123,13 @@ async function main() {
     userIds.push(user.id); hashes.add(erasureIdentityHash(user.id, 0));
     actors[['buyer', 'seller', 'third'][index]] = { ...user, password };
   });
+  const callbackToken = listingAiPilot ? randomBytes(32).toString('hex') : null;
+  if (listingAiPilot) {
+    process.env.MINIMAX_PILOT_USER_ID = String(actors.buyer.id);
+    process.env.MINIMAX_LISTING_AI_ENABLED = '1';
+    process.env.MINIMAX_LISTING_AI_PILOT_USER_ID = String(actors.buyer.id);
+    process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = callbackToken;
+  }
   const identities = new Set(users.flatMap(user => [user.email, user.phoneNumber]));
   startupStage = 'actual-routes';
   const app = express();
@@ -141,9 +150,10 @@ async function main() {
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
       const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path);
-      if (!userRoute && !marketRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
+      const workerRoute = listingAiPilot && /^\/api\/internal\/minimax-vision(?:\/|$)/.test(req.path);
+      if (!userRoute && !marketRoute && !workerRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
       if (req.headers['x-api-key'] !== undefined) return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' });
-      if (req.headers.authorization !== undefined) {
+      if (!workerRoute && req.headers.authorization !== undefined && !(listingAiPilot && req.headers.authorization === 'Bearer ' + callbackToken)) {
         if (typeof req.headers.authorization !== 'string' || !/^Bearer [^\s]{1,8192}$/.test(req.headers.authorization)) throw new jwt.JsonWebTokenError('Invalid QA session');
         const claims = decodeUserSessionJwt(req.headers.authorization.slice(7));
         if (!userIds.includes(claims.id)) return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' });
@@ -172,6 +182,7 @@ async function main() {
   for (const [route, file] of [['auth', 'authRoutes'], ['users', 'userRoutes'], ['native-wishes', 'nativeWishRoutes'], ['listings', 'listingRoutes'], ['listing-media', 'listingMediaRoutes'], ['listing-reports', 'listingReportRoutes'], ['chat', 'chatRoutes']]) {
     app.use('/api/' + route, require('../../server/dist/routes/' + file).default);
   }
+  if (listingAiPilot) app.use('/api/internal/minimax-vision', require('../../server/dist/routes/minimaxRecognitionRoutes').default);
   app.use((_req, res) => res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' }));
   app.use((_failure, _req, res, _next) => res.status(400).json({ errorCode: 'QA_INVALID_REQUEST' }));
   server = createServer(app);
@@ -181,7 +192,7 @@ async function main() {
   const apiUrl = 'http://127.0.0.1:' + server.address().port;
   process.env.API_URL = apiUrl + '/api'; process.env.CLIENT_URL = apiUrl;
   timer = setTimeout(() => { void stop(); }, lifetime * 1000);
-  send({ kind: 'ready', apiUrl, runId, actors });
+  send({ kind: 'ready', apiUrl, runId, actors, ...(listingAiPilot ? { callbackToken } : {}) });
 }
 startup = main();
 startup.catch(() => {

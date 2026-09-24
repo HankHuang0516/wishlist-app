@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 const { isolatedDebugQa, isolatedIosQaMetro, isolatedIosQaInput } = require('../../plugins/withIsolatedDebugQa.js');
+const { qaEnvironment } = require('../../scripts/native-qa.cjs');
 
 const template = `android { buildTypes {
     debug {
@@ -19,6 +20,23 @@ describe('isolated Android debug QA package', () => {
     expect(isolatedDebugQa(result)).toBe(result);
   });
   it('refuses an unknown native template', () => expect(() => isolatedDebugQa('android {}')).toThrow());
+});
+
+describe('isolated listing AI QA process', () => {
+  it('starts opt-in only and never inherits production provider or admin credentials', () => {
+    const database = 'postgresql://hank@127.0.0.1:5432/wishlist_marketplace_test_listingai_qa';
+    const inherited = { PATH: '/usr/bin:/bin', ADMIN_API_KEY: 'private', WISHLIST_MINIMAX_CALLBACK_TOKEN: 'private',
+      LISTING_MEDIA_STORAGE_PROVIDER: 'flickr', MINIMAX_LISTING_AI_ENABLED: '1' };
+    const normal = qaEnvironment(database, 60, inherited);
+    expect(normal.NATIVE_QA_LISTING_AI_PILOT).toBeUndefined();
+    const pilot = qaEnvironment(database, 60, inherited, { listingAiPilot: true });
+    expect(pilot.NATIVE_QA_LISTING_AI_PILOT).toBe('1');
+    expect(pilot.ADMIN_API_KEY).toBeUndefined();
+    expect(pilot.WISHLIST_MINIMAX_CALLBACK_TOKEN).toBeUndefined();
+    expect(pilot.LISTING_MEDIA_STORAGE_PROVIDER).toBeUndefined();
+    expect(pilot.MINIMAX_LISTING_AI_ENABLED).toBeUndefined();
+    expect(pilot.DATABASE_URL).toBe(database);
+  });
 });
 
 describe('isolated iOS debug QA Metro location', () => {

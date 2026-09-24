@@ -160,7 +160,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
       <Text style={s.text}>個人二手與新品。不處理付款，請以站內聯絡預約面交。</Text>
       {pending && <Text style={s.text}>已恢復上次待確認刊登。重試使用原識別碼與完整資料；也可稍後返回確認，不會重新建立商品。</Text>}
       {!ready && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復待確認刊登</Text></Pressable>}
-      {input('title', '商品名稱')}{input('description', '商品狀況與說明', false, true)}{input('brand', '品牌（無品牌可填「無品牌」）')}{input('price', '售價 TWD（0為贈送）', true)}
+      {input('title', '商品名稱')}{input('description', '商品狀況與說明', false, true)}{input('brand', '品牌（可留空）')}{input('price', '售價 TWD（0為贈送）', true)}
       <View style={s.wrap}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: form.condition === value }} disabled={locked} style={[s.chip, form.condition === value && s.selected]} onPress={() => change('condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
       <View style={s.wrap}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: form.category === value }} disabled={locked} style={[s.chip, form.category === value && s.selected]} onPress={() => change('category', value)}><Text style={s.text}>{label}</Text></Pressable>)}</View>
       <Text style={s.section}>實拍照片 {photos.length}/8</Text>

@@ -72,12 +72,13 @@ describe('listing validation and idempotent data', () => {
         { ...full, deliveryMethods: 'MEETUP' }, { ...full, deliveryMethods: ['MEETUP', 'MEETUP'] }, { ...full, deliveryMethods: ['PICKUP'] },
         { ...full, mediaIds: 'x' }, { ...full, mediaIds: [uuid, uuid] }, { ...full, mediaIds: ['bad'] },
         { ...full, mediaIds: Array.from({ length: 9 }, () => uuid) }, { ...full, mediaIds: [] },
-        { ...full, description: undefined }, { ...full, category: undefined }, { ...full, brand: undefined },
+        { ...full, description: undefined }, { ...full, category: undefined },
         { ...full, price: undefined }, { ...full, deliveryMethods: [] }, { ...full, location: undefined },
     ])('rejects invalid or privileged input %p', value => expect(() => parseListingCreate(value, now)).toThrow(ListingInputError));
     it('accepts free items and valid fractional prices', () => {
         expect(parseListingCreate({ ...full, price: 0 }, now).data.price).toBe(0);
         expect(parseListingCreate({ ...full, price: 7.99 }, now).data.price).toBe(7.99);
+        expect(parseListingCreate({ ...full, brand: undefined }, now).data.brand).toBeNull();
     });
     it.each(['DRAFT', 'SOLD', 'REMOVED', 'EXPIRED', 'PENDING_CONFIRMATION'])('never discovers %s', status => expect(isDiscoverable(status, publicationExpiry(now).expiresAt, now)).toBe(false));
     it('requires a future expiry even for active/reserved rows', () => {

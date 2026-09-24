@@ -9,6 +9,7 @@ import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
 import { jpegPhotoUploadForm } from './photoUploadForm';
+import { uploadPhotoRecord } from './photoUploadRecovery';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingForm, ListingFormError, parsePhotoRecord, PhotoRecord, taiwanDate, uuid } from './listingForm';
 import { PendingStoreError } from './pendingStore';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
@@ -54,7 +55,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
 
   async function upload(photo: Photo) {
     const body = jpegPhotoUploadForm(photo.key, photo.uri, 'listing-photo.jpg');
-    const record = parsePhotoRecord(await api<unknown>('/listing-media', { method: 'POST', body }), apiUrl, __DEV__);
+    const record = await uploadPhotoRecord(api, apiUrl, photo.key, body, __DEV__);
     setPhotos(old => old.map(p => p.key === photo.key ? { ...p, record, failed: false } : p));
   }
   async function choosePhoto(camera: boolean) {

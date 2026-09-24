@@ -24,6 +24,15 @@ describe('native API safety', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: 'private-secret-stack' }) }));
     await expect(createApi('https://example.com', () => null)('/users/me')).rejects.toEqual(new ApiError(500));
   });
+  it('uses a bounded per-request timeout without sending it to fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = createApi('https://example.com', () => null);
+    await api('/listing-media', { method: 'POST', timeoutMs: 60000 });
+    expect(fetchMock.mock.calls[0][1]).not.toHaveProperty('timeoutMs');
+    await expect(api('/listing-media', { timeoutMs: 120001 })).rejects.toThrow('無效的 API 等待時間');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it.each(['//evil.example/path', '/https://evil.example', '/users/../secret', '/users/%2e%2e/secret', '/users?x=%GG', '/users#secret', '/users?x=https://evil.example'])('rejects path escape %s', async path => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

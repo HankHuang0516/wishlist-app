@@ -20,7 +20,8 @@ async function request(route, options = {}) {
 async function main() {
     if (!credentialFile || !Number.isSafeInteger(expectedUserId) || expectedUserId < 1 ||
         process.env.LISTING_MEDIA_STORAGE_PROVIDER !== 'flickr' ||
-        process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID !== String(expectedUserId)) throw new Error('pilot_configuration_not_ready');
+        (process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID &&
+            process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID !== String(expectedUserId))) throw new Error('flickr_configuration_not_ready');
     const credentialText = fs.readFileSync(credentialFile, 'utf8');
     const line = label => credentialText.split('\n').find(value => value.startsWith(label))?.slice(label.length).trim();
     const phoneNumber = line('測試帳號：'), password = line('測試密碼：');
@@ -77,7 +78,7 @@ async function main() {
     try { await flickr('flickr.photos.getInfo', { photo_id: row.flickrPhotoId }); }
     catch (error) {
         if (Number(error?.cause?.code) === 1) {
-            console.log(JSON.stringify({ pilot: 'PASS', mediaId, provider: 'flickr', uploadMs, privateProxy: 'PASS', remoteDeletion: 'PASS' }));
+            console.log(JSON.stringify({ storageMode: process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID ? 'pilot' : 'global', result: 'PASS', mediaId, provider: 'flickr', uploadMs, privateProxy: 'PASS', remoteDeletion: 'PASS' }));
             return;
         }
         throw new Error('flickr_delete_lookup_inconclusive');

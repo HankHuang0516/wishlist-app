@@ -96,6 +96,14 @@ enum ListingExpiryMode {
   CUSTOM_DATE
 }
 
+enum ListingAiStatus {
+  SKIPPED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Listing {
   id              String                  @id @default(uuid())
   ownerUserId     Int
@@ -234,6 +242,13 @@ model ListingMedia {
   flickrPhotoId String?
   flickrImageUrl String?
   flickrThumbnailUrl String?
+  // Private, seller-owned AI suggestion. It never publishes a listing by itself.
+  aiDraftStatus ListingAiStatus @default(SKIPPED)
+  aiDraft       Json?
+  aiDraftError  String?
+  aiDraftJobId  String? @unique
+  aiDraftAttempts Int @default(0)
+  aiDraftUpdatedAt DateTime?
   position     Int      @default(0)
   createdAt    DateTime @default(now())
   owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -242,6 +257,7 @@ model ListingMedia {
 
   @@index([listingId, position])
   @@index([ownerUserId, createdAt])
+  @@index([aiDraftStatus, aiDraftUpdatedAt])
   @@unique([ownerUserId, clientUploadId])
 }
 

@@ -2,13 +2,15 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { deleteUnusedListingMedia, getListingMedia, getMediaByUploadId, mediaError, uploadListingMedia } from '../controllers/listingMediaController';
+import { deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
 
 const router = Router();
 const slots = new PhotoUploadSlots(1);
 const uploads = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false,
     message: { error: '照片操作過於頻繁，請稍後重試', errorCode: 'PHOTO_RATE_LIMIT' } });
+const aiRequests = rateLimit({ windowMs: 60_000, limit: 15, standardHeaders: true, legacyHeaders: false,
+    message: { error: 'AI 辨識請求過於頻繁，請稍後再試', errorCode: 'LISTING_AI_RATE_LIMIT' } });
 const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1, fields: 1, parts: 2, fieldSize: 100, fieldNameSize: 30, headerPairs: 100 },
     fileFilter: (_req, file, callback) => PHOTO_MIME_TYPES.includes(file.mimetype) ? callback(null, true) : callback(new PhotoInputError()) }).single('image');
 
@@ -36,6 +38,9 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
     } finally { release(); }
 });
 router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadId);
+router.get('/unused', authenticateToken, myUnusedListingMedia);
+router.post('/:id/ai-draft', authenticateToken, aiRequests, requestListingAiDraft);
+router.get('/:id/ai-draft', authenticateToken, getListingAiDraft);
 router.get('/:id/:variant', optionalAuthenticateToken, getListingMedia);
 router.delete('/:id', authenticateToken, uploads, deleteUnusedListingMedia);
 export default router;

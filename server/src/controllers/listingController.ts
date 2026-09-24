@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
-import { forbiddenListingField } from '../lib/listingPolicy';
+import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 
 // Explicit projection: no credentials, request hashes, private profile/contact
 // fields or future exact meetup locations can escape through a relation include.
@@ -31,6 +31,8 @@ function fail(res: Response, error: unknown) {
 function assertListingPolicy(input: Parameters<typeof forbiddenListingField>[0]) {
     const field = forbiddenListingField(input);
     if (field) throw new ListingInputError(field, '此商品不符合禁售商品政策');
+    const contact = privateContactField(input);
+    if (contact) throw new ListingInputError(contact, '請勿在公開商品資訊填入電話、Email 或 LINE ID；請使用站內聊天');
 }
 
 export async function createListing(req: AuthRequest, res: Response) {

@@ -81,6 +81,38 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
         expect((await image(photo.id)).status).toBe(404); expect((await image(photo.id, 'thumbnail', third)).status).toBe(404);
         expect((await image(photo.id, 'thumbnail', seller)).status).toBe(200);
     });
+    it('queues only the owner’s unbound photo for listing AI and grants the worker a temporary image read', async () => {
+        const saved = { enabled: process.env.MINIMAX_LISTING_AI_ENABLED, pilot: process.env.MINIMAX_LISTING_AI_PILOT_USER_ID,
+            token: process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN };
+        const workerToken = 'synthetic-listing-ai-worker-token-at-least-32-chars';
+        try {
+            const photo = (await upload()).body;
+            const url = `/api/listing-media/${photo.id}/ai-draft`;
+            expect((await request(app).post(url)).status).toBe(401);
+            expect((await request(app).post(url).set('Authorization', 'Bearer ' + token(third))).status).toBe(404);
+            expect((await request(app).post(url).set('Authorization', 'Bearer ' + token(seller))).status).toBe(503);
+            process.env.MINIMAX_LISTING_AI_ENABLED = '1'; process.env.MINIMAX_LISTING_AI_PILOT_USER_ID = String(seller);
+            process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = workerToken;
+            const queued = await request(app).post(url).set('Authorization', 'Bearer ' + token(seller));
+            expect(queued.status).toBe(202); expect(queued.body).toMatchObject({ mediaId: photo.id, status: 'PENDING', draft: null });
+            expect((await request(app).post(url).set('Authorization', 'Bearer ' + token(seller))).status).toBe(200);
+            expect((await request(app).get(url).set('Authorization', 'Bearer ' + token(third))).status).toBe(404);
+            const unused = await request(app).get('/api/listing-media/unused').set('Authorization', 'Bearer ' + token(seller));
+            expect(unused.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: photo.id, aiDraftStatus: 'PENDING' })]));
+            expect((await image(photo.id)).status).toBe(404);
+            expect((await request(app).get(`/api/listing-media/${photo.id}/image`).set('Authorization', `Bearer ${workerToken}`)).status).toBe(404);
+            await prisma.listingMedia.update({ where: { id: photo.id }, data: { aiDraftStatus: 'PROCESSING', aiDraftJobId: randomUUID() } });
+            expect((await request(app).get(`/api/listing-media/${photo.id}/image`).set('Authorization', `Bearer ${workerToken}`)).status).toBe(200);
+            expect((await request(app).get(`/api/listing-media/${photo.id}/thumbnail`).set('Authorization', `Bearer ${workerToken}`)).status).toBe(404);
+            await prisma.listingMedia.update({ where: { id: photo.id }, data: { aiDraftStatus: 'COMPLETED', aiDraftJobId: null } });
+            expect((await request(app).get(`/api/listing-media/${photo.id}/image`).set('Authorization', `Bearer ${workerToken}`)).status).toBe(404);
+        } finally {
+            for (const [key, value] of Object.entries({ MINIMAX_LISTING_AI_ENABLED: saved.enabled,
+                MINIMAX_LISTING_AI_PILOT_USER_ID: saved.pilot, WISHLIST_MINIMAX_CALLBACK_TOKEN: saved.token })) {
+                if (value === undefined) delete process.env[key]; else process.env[key] = value;
+            }
+        }
+    });
     it('attaches a camera/gallery upload to one wish, exposes its opaque image to EClaw, and erases it on deletion', async () => {
         const photo = (await upload()).body;
         expect((await image(photo.id)).status).toBe(404);

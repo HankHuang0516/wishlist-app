@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createBridge, parseVisionDescription, validImageUrl } from './server.mjs';
+import { createBridge, parseListingVisionDescription, parseVisionDescription, validImageUrl } from './server.mjs';
 
 const imageUrl = 'https://wishlist-app-production.up.railway.app/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image';
 const token = 'local-pilot-test-token-1234567890';
@@ -30,6 +30,18 @@ test('accepts visual evidence but not unsupported price claims', () => {
         evidence: ['有雙翼', '彩色底座'], confidence: 0.8,
     })).listedPriceTwd, null);
     assert.throws(() => parseVisionDescription('{"recognizable":true,"name":"相機","evidence":[],"confidence":0.9}'), /VISION_UNCERTAIN/);
+});
+
+test('listing AI creates only a private seller suggestion with conservative pricing', () => {
+    const result = parseListingVisionDescription(JSON.stringify({ recognizable: true, name: '黑色小型相機',
+        description: '可見黑色機身、鏡頭與背面螢幕，功能和型號需要賣家確認。', category: 'electronics',
+        brand: null, condition: null, estimatedPriceLowTwd: 800, estimatedPriceHighTwd: 2000,
+        evidence: ['可見鏡頭', '可見螢幕'], uncertainties: ['功能未驗證'], confidence: 0.86 }));
+    assert.equal(result.estimatedPriceLowTwd, 800);
+    assert.match(result.priceBasis, /未查詢即時市場成交價/);
+    const uncertain = parseListingVisionDescription(JSON.stringify({ ...result, confidence: 0.75 }));
+    assert.equal(uncertain.estimatedPriceLowTwd, null);
+    assert.throws(() => parseListingVisionDescription('{"recognizable":false}'), /VISION_UNCERTAIN/);
 });
 
 test('loopback bridge requires auth, deduplicates jobs, and processes one at a time', async () => {

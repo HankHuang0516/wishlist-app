@@ -1,4 +1,4 @@
-import { recognizeImage } from './server.mjs';
+import { recognizeImage, recognizeListingImage } from './server.mjs';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
@@ -18,9 +18,13 @@ async function cycle() {
     if (response.status === 204) return false;
     if (!response.ok) throw new Error(`POLL_HTTP_${response.status}`);
     const job = await response.json();
-    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string') throw new Error('POLL_BAD_JOB');
+    // Old Railway versions omit kind; treat them as the original wish job so
+    // the worker can be updated before the backend without interrupting wishes.
+    const kind = job.kind ?? 'WISH';
+    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string' || !['WISH', 'LISTING_DRAFT'].includes(kind)) throw new Error('POLL_BAD_JOB');
     let body;
-    try { body = { status: 'COMPLETED', result: await recognizeImage(job.imageUrl) }; }
+    try { body = { status: 'COMPLETED', result: kind === 'LISTING_DRAFT'
+        ? await recognizeListingImage(job.imageUrl, { authToken: token }) : await recognizeImage(job.imageUrl) }; }
     catch (error) {
         process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${String(error?.message || 'VISION_UNAVAILABLE')}\n`);
         body = { status: 'FAILED' };

@@ -52,8 +52,9 @@ export function parseVisionDescription(description) {
     return { name, category: category || null, visibleText, listedPriceTwd, evidence, uncertainties, confidence };
 }
 
-async function boundedImage(url, fetchImpl) {
-    const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000) });
+async function boundedImage(url, fetchImpl, authToken) {
+    const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000),
+        ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}) });
     if (!response.ok || !response.body) throw new Error('IMAGE_FETCH_FAILED');
     const mime = response.headers.get('content-type')?.split(';')[0].toLowerCase();
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime];
@@ -84,8 +85,43 @@ const PROMPT = [
     '{"recognizable":true,"name":"主體名稱","category":"品類","visibleText":["確實可讀的文字"],"listedPriceTwd":null,"evidence":["可見證據1","可見證據2"],"uncertainties":["無法確認的部分"],"confidence":0.8}',
 ].join('\n');
 
-export async function recognizeImage(url, { fetchImpl = fetch, command = 'mcode-tools' } = {}) {
-    const { bytes, extension } = await boundedImage(url, fetchImpl);
+const LISTING_PROMPT = [
+    '你正在幫賣家建立「尚未公開」的二手商品草稿。只看圖片像素，不讀網址或檔名，不假裝已確認功能、品牌、型號、真偽、新舊、所有權、價格、交易地點或可售狀態。',
+    'name 具體描述主要商品（100字內）；description 以繁體中文詳細列出可見外觀、顏色、數量與缺陷，並明確註明哪些關鍵資訊仍須賣家確認。不可宣稱已測試功能。',
+    '不要輸出圖片中可能出現的電話、Email、社群帳號、精確住址、QR碼內容或其他個人資料；description 只能保留商品本身的必要資訊。',
+    'category 僅能填 electronics、home、fashion、sports、books、toys、other。brand 只有清楚可見且可靠辨認才填；condition 只有圖片確實可見新品密封或明確使用痕跡才填 NEW 或 USED，否則填 null。',
+    'estimatedPriceLowTwd 與 estimatedPriceHighTwd 是台幣二手參考範圍，不是圖片上的標價，也不是即時市場行情；只有對品類、型號與狀況有足夠依據時才給保守範圍，否則兩者都填 null。不得把新品定價、廣告價或猜測品牌當成二手成交價。',
+    'priceBasis 只寫估算理由與限制，不可宣稱查過即時成交紀錄。evidence 至少兩項各自可見特徵；uncertainties 列出照片無法證實之處。資訊不足時 recognizable=false。',
+    '只輸出一個 JSON 物件，不要 Markdown。',
+    '{"recognizable":true,"name":"商品名稱","description":"可見外觀與待確認事項","category":"other","brand":null,"condition":null,"estimatedPriceLowTwd":null,"estimatedPriceHighTwd":null,"priceBasis":null,"evidence":["可見證據1","可見證據2"],"uncertainties":["待確認資訊"],"confidence":0.8}',
+].join('\n');
+
+export function parseListingVisionDescription(description) {
+    if (typeof description !== 'string') throw new Error('VISION_BAD_RESPONSE');
+    const start = description.indexOf('{'), end = description.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('VISION_BAD_RESPONSE');
+    let raw;
+    try { raw = JSON.parse(description.slice(start, end + 1)); }
+    catch { throw new Error('VISION_BAD_RESPONSE'); }
+    const name = clean(raw.name, 100), details = clean(raw.description, 1500);
+    const evidence = textArray(raw.evidence, 6, 160), uncertainties = textArray(raw.uncertainties, 6, 160);
+    const confidence = Number(raw.confidence);
+    if (raw.recognizable !== true || name.length < 3 || details.length < 16 || evidence.length < 2 ||
+        !Number.isFinite(confidence) || confidence < 0.7 || confidence > 1) throw new Error('VISION_UNCERTAIN');
+    if (/(?:^|\D)09\d{8}(?:\D|$)/.test(`${name} ${details}`) || /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(`${name} ${details}`)) throw new Error('VISION_PRIVATE_CONTACT');
+    const categories = new Set(['electronics', 'home', 'fashion', 'sports', 'books', 'toys', 'other']);
+    const amount = x => Number.isSafeInteger(x) && x >= 0 && x <= 1_000_000 ? x : null;
+    const low = amount(raw.estimatedPriceLowTwd), high = amount(raw.estimatedPriceHighTwd);
+    const priceValid = confidence >= 0.8 && low !== null && high !== null && high >= low && high <= Math.max(100, low * 10);
+    return { recognizable: true, name, description: details, category: categories.has(raw.category) ? raw.category : 'other',
+        brand: clean(raw.brand, 60) || null, condition: ['NEW', 'USED'].includes(raw.condition) ? raw.condition : null,
+        estimatedPriceLowTwd: priceValid ? low : null, estimatedPriceHighTwd: priceValid ? high : null,
+        priceBasis: priceValid ? '僅依照片外觀與模型既有知識粗估；未查詢即時市場成交價，請賣家確認' : null,
+        evidence, uncertainties, confidence };
+}
+
+async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken } = {}) {
+    const { bytes, extension } = await boundedImage(url, fetchImpl, authToken);
     const directory = await mkdtemp(join(tmpdir(), 'wishlist-minimax-vision-'));
     const imagePath = join(directory, `image.${extension}`);
     try {
@@ -94,17 +130,20 @@ export async function recognizeImage(url, { fetchImpl = fetch, command = 'mcode-
         let uploaded;
         try { uploaded = JSON.parse(upload.stdout); } catch { throw new Error('TEMP_UPLOAD_FAILED'); }
         if (typeof uploaded.temp_url !== 'string' || !uploaded.temp_url.startsWith('https://')) throw new Error('TEMP_UPLOAD_FAILED');
-        const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt: PROMPT }] });
+        const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt }] });
         const call = await execFileAsync(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
             { timeout: 90000, maxBuffer: 1024 * 1024 });
         let response;
         try { response = JSON.parse(call.stdout); } catch { throw new Error('VISION_BAD_RESPONSE'); }
         if (response.code !== 0 || response.results?.[0]?.success !== true) throw new Error('VISION_UPSTREAM_FAILED');
-        return parseVisionDescription(response.results[0].description);
+        return parse(response.results[0].description);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
 }
+
+export async function recognizeImage(url, options = {}) { return describeImage(url, PROMPT, parseVisionDescription, options); }
+export async function recognizeListingImage(url, options = {}) { return describeImage(url, LISTING_PROMPT, parseListingVisionDescription, options); }
 
 function authorized(value, token) {
     if (typeof value !== 'string' || !value.startsWith('Bearer ')) return false;

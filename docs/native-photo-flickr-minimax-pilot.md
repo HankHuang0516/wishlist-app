@@ -24,3 +24,10 @@ Railway 設 `MINIMAX_PILOT_USER_ID`（數字 User ID）與 `WISHLIST_MINIMAX_CAL
 Mac 可用 `tools/minimax-vision-bridge/run-poller.sh` 從登入鑰匙圈讀取 callback token 後啟動長輪詢；工作器只保留單一行程。macOS 可能阻止登入代理讀取 Desktop 上的原始碼，因此背景代理應執行安裝在 `~/Library/Application Support/WishlistMiniMax` 的 `run-poller.sh`、`poller.mjs`、`server.mjs` 副本；每次修改工作器程式碼後需同步這三個檔案並重啟代理。Mac 關機、睡眠或 MiniMax Code 登入失效時，新任務留在雲端排隊，不會自動辨識；恢復後工作器重領。價格僅在圖片文字可讀、且可歸屬於主要品項時回填，不產生二手市場估價。辨識結果並非 100% 保證，涉及具體型號／版本時仍應讓使用者確認。
 
 這是內部測試方案，未驗證 MiniMax Code 個人方案可合法供公開用戶使用。正式擴大前須確認服務條款、費用、隱私告知與穩定執行方式。所有 token 僅在環境中取得，不寫入 repo 或畫面證據。
+
+## 商品連續拍照 AI 草稿（2026-09-24 開發中）
+
+- 每張上傳照片只建立一筆私有 AI 草稿；相機連續拍攝或相簿批次選取不會自動發布商品。草稿包含可見事實、待確認項與可能的二手價格區間，價格明示不是即時成交行情。賣家確認售價、商品狀況、共用行政區與公開同意後才逐件提交刊登；前次不確定的刊登使用原 idempotency key 恢復。
+- `MINIMAX_LISTING_AI_ENABLED=1` 是獨立開關，預設關閉。驗收期再設 `MINIMAX_LISTING_AI_PILOT_USER_ID` 限定單一測試帳號；未設定 pilot ID 代表所有帳號，**不得**在未確認 MiniMax 公開服務授權、用量與隱私告知前移除 pilot ID。先同步並啟動向後相容的本地 poller，再部署後端與 migration，最後才可開 pilot 開關。
+- 本地 worker 只在處理中的租約期間帶 callback token 讀取那張私有商品照片；匿名、其他使用者與 worker 讀取非處理中照片均為 404。失敗或低信心輸出維持私有草稿，不能被當成已上架商品。
+- 雙北地圖目前沒有在售商品。外部來源必須先有真實商品、授權或投稿、原始連結、可核對的所在行政區與失效時間；AI 可幫忙整理及草擬，不能憑空產生賣家、庫存或面交地點。Facebook／LINE 不做未授權批量擷取。

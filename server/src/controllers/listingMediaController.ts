@@ -8,6 +8,7 @@ import { isDiscoverable, isListingId } from '../lib/listingRules';
 import { encodeListingPhoto, PhotoInputError } from '../lib/listingPhoto';
 import { ListingMediaStorage, MediaStorageConfigurationError, PhotoVariant } from '../lib/listingMediaStorage';
 import { ListingFlickrStorage, FlickrMediaUnavailable, FlickrOrphanedUpload } from '../lib/listingFlickrStorage';
+import { isMinimaxWorker, listingAiEnabledFor } from '../lib/minimaxWorkerAuth';
 
 const storage = new ListingMediaStorage();
 const flickrStorage = new ListingFlickrStorage();
@@ -93,11 +94,13 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
     try {
         const { id, variant } = req.params;
         if (!isListingId(id) || (variant !== 'image' && variant !== 'thumbnail')) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, flickrPhotoId: true,
+        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, aiDraftStatus: true, flickrPhotoId: true,
             flickrImageUrl: true, flickrThumbnailUrl: true, listing: { select: { status: true, expiresAt: true } } } });
         // The opaque URL is shared with EClaw for recognition after attachment.
         const publicAccess = record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date()));
-        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '照片不存在' });
+        const workerAccess = variant === 'image' && record?.aiDraftStatus === 'PROCESSING' &&
+            listingAiEnabledFor(record.ownerUserId) && isMinimaxWorker(req.headers.authorization);
+        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id && !workerAccess)) return res.status(404).json({ error: '照片不存在' });
         if (record.flickrPhotoId) {
             const source = variant === 'image' ? record.flickrImageUrl : record.flickrThumbnailUrl;
             if (!source) throw new FlickrMediaUnavailable();
@@ -116,6 +119,52 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
         res.once('close', () => stream.destroy());
         stream.pipe(res);
     } catch { return res.status(404).json({ error: '照片不存在' }); }
+}
+
+const aiDraftSelect = { id: true, aiDraftStatus: true, aiDraft: true, aiDraftUpdatedAt: true, aiDraftAttempts: true } satisfies Prisma.ListingMediaSelect;
+function aiDraftResponse(record: { id: string; aiDraftStatus: string; aiDraft: Prisma.JsonValue | null; aiDraftUpdatedAt: Date | null }) {
+    return { mediaId: record.id, status: record.aiDraftStatus, draft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null,
+        updatedAt: record.aiDraftUpdatedAt };
+}
+
+export async function requestListingAiDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '照片不存在' });
+    try {
+        const where = { id: req.params.id, ownerUserId: req.user.id, listingId: null, wishItemId: null };
+        const record = await prisma.listingMedia.findFirst({ where, select: aiDraftSelect });
+        if (!record) return res.status(404).json({ error: '照片不存在或已被使用' });
+        if (!listingAiEnabledFor(req.user.id)) return res.status(503).json({ error: '照片 AI 刊登暫未開放此帳號', errorCode: 'LISTING_AI_UNAVAILABLE' });
+        if (record.aiDraftStatus === 'COMPLETED' || record.aiDraftStatus === 'PENDING' || record.aiDraftStatus === 'PROCESSING') return res.json(aiDraftResponse(record));
+        if (record.aiDraftAttempts >= 3) return res.status(429).json({ error: '此照片已達辨識重試上限', errorCode: 'LISTING_AI_RETRY_LIMIT' });
+        await prisma.listingMedia.updateMany({ where: { ...where, aiDraftStatus: record.aiDraftStatus, aiDraftAttempts: { lt: 3 } },
+            data: { aiDraftStatus: 'PENDING', aiDraft: Prisma.DbNull, aiDraftError: null, aiDraftJobId: null,
+                aiDraftAttempts: { increment: 1 }, aiDraftUpdatedAt: new Date() } });
+        const updated = await prisma.listingMedia.findFirst({ where, select: aiDraftSelect });
+        return updated ? res.status(202).json(aiDraftResponse(updated)) : res.status(404).json({ error: '照片不存在' });
+    } catch { return res.status(503).json({ error: '照片辨識暫時無法排隊', errorCode: 'LISTING_AI_QUEUE_UNAVAILABLE' }); }
+}
+
+export async function getListingAiDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '照片不存在' });
+    try {
+        const record = await prisma.listingMedia.findFirst({ where: { id: req.params.id, ownerUserId: req.user.id }, select: aiDraftSelect });
+        return record ? res.json(aiDraftResponse(record)) : res.status(404).json({ error: '照片不存在' });
+    } catch { return res.status(503).json({ error: '照片辨識狀態暫時無法讀取', errorCode: 'LISTING_AI_STATUS_UNAVAILABLE' }); }
+}
+
+export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    try {
+        const records = await prisma.listingMedia.findMany({ where: { ownerUserId: req.user.id, listingId: null, wishItemId: null,
+            createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }, orderBy: { createdAt: 'desc' }, take: 30,
+            select: { ...select, ...aiDraftSelect } });
+        return res.json({ items: records.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })) });
+    } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
 }
 
 export async function getMediaByUploadId(req: AuthRequest, res: Response) {

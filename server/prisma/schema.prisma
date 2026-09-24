@@ -323,7 +323,7 @@ model ExternalListingSource {
 }
 
 // Immutable, compact receipts for accepted admin imports. Store hashes and
-// source item IDs, not another copy of partner photos or descriptions.
+// source item ID hashes, not another copy of partner identifiers, photos or descriptions.
 model ExternalIntakeBatch {
   id                 String                @id @default(uuid())
   sourceId           String

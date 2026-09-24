@@ -130,7 +130,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     records.push({ id: record.id, sourceItemId: record.sourceItemId, status: record.status,
                         aiStatus: record.aiStatus, changed: aiChanged });
                 }
-                const observations = items.map((item, index) => ({ sourceItemId: item.sourceItemId,
+                const observations = items.map((item, index) => ({
+                    sourceItemIdSha256: createHash('sha256').update(item.sourceItemId).digest('hex'),
                     canonicalUrlSha256: createHash('sha256').update(item.canonicalUrl).digest('hex'),
                     contentHash: item.contentHash, observedAt: item.observedAt.toISOString(),
                     status: records[index].status, changed: records[index].changed }));

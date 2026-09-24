@@ -68,10 +68,12 @@ describe('admin-only attributed external supply staging', () => {
         expect(history.headers['cache-control']).toBe('private, no-store');
         expect(history.body).toMatchObject({ nextCursor: null, items: [{ id: staged.body.intakeBatchId,
             sourceId, authorizationRef: sourceBody.authorizationRef, itemCount: 1,
-            sourceEnabledAt: expect.any(String), observations: [{ sourceItemId: 'test-1',
+            sourceEnabledAt: expect.any(String), observations: [{
+                sourceItemIdSha256: createHash('sha256').update('test-1').digest('hex'),
                 canonicalUrlSha256: createHash('sha256').update(candidate().canonicalUrl).digest('hex'),
                 contentHash: expect.stringMatching(/^[0-9a-f]{64}$/), status: 'PENDING_REVIEW', changed: true }] }] });
         expect(JSON.stringify(history.body.items[0].observations)).not.toContain('二手檯燈');
+        expect(JSON.stringify(history.body.items[0].observations)).not.toContain('test-1');
         expect(JSON.stringify(history.body.items[0].observations)).not.toContain('https://partner.example.com/items/1');
         expect(await prisma.listing.count()).toBe(originalCount);
         const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
@@ -92,7 +94,7 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalIntakeBatch.createMany({ data: Array.from({ length: 26 }, (_, index) => ({
                 id: randomUUID(), sourceId: source.id, authorizationRef: source.authorizationRef,
                 sourceEnabledAt: source.enabledAt!, receivedAt: new Date(Date.now() - index * 1000),
-                itemCount: 1, observations: [{ sourceItemId: `synthetic-${index}` }],
+                itemCount: 1, observations: [{ sourceItemIdSha256: createHash('sha256').update(`synthetic-${index}`).digest('hex') }],
             })) });
             const page = await request(app).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey);
             expect(page.status).toBe(200);

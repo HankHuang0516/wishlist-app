@@ -100,7 +100,7 @@ async function waitWithScroll(label, exact = true) {
   throw new Error('Scrollable UI control missing at ' + stage);
 }
 async function screenshot(name) {
-  if (!/^(?:external-map|external-list|wish-map|wish-list)$/.test(name)) throw new Error('Unsafe screenshot name');
+  if (!/^(?:external-map|external-list|external-detail|wish-map|wish-list)$/.test(name)) throw new Error('Unsafe screenshot name');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   result.screenshots.push(target);
@@ -201,6 +201,18 @@ async function main() {
   await waitNode('Native QA 外部檯燈', { exact: false });
   await waitNode('來源售價 NT$ 590', { exact: false });
   await screenshot('external-list');
+  stage = 'external-detail';
+  await tapLabel('外部來源商品，Native QA 外部檯燈，來源售價 NT$ 590，新北市板橋區');
+  await waitNode('外部來源 · github.com');
+  await waitNode('來源商品圖片');
+  await waitWithScroll('Wishlist.ai 並非此商品賣家', false);
+  await waitWithScroll('前往來源網站查看');
+  await waitWithScroll('不提供站內賣家聊天或面交預約', false);
+  await screenshot('external-detail');
+  // The visible safety notice is below the fold; Android Back closes this
+  // modal without depending on its now off-screen header button.
+  await adb(['shell', 'input', 'keyevent', '4']);
+  await waitNode('切換地圖');
   stage = 'private-wish-tab';
   await tapLabel('願望');
   stage = 'private-wish-list-title';

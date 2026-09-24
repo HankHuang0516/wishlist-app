@@ -95,6 +95,27 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             return res.status(202).json({ items: saved, publicCount: 0 });
         } catch (error) { return fail(res, error); }
     });
+    router.post('/candidates/:id/reject', writes(), async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).sort().join(',') !== 'expectedContentHash,reason,reviewRef' ||
+                typeof body.expectedContentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.expectedContentHash) ||
+                typeof body.reviewRef !== 'string' || !/^review:[A-Za-z0-9._/-]{4,160}$/.test(body.reviewRef) ||
+                !['SOURCE_UNVERIFIED', 'ITEM_UNVERIFIED', 'PROHIBITED', 'DUPLICATE', 'MISLEADING'].includes(body.reason))
+                throw new ExternalIntakeError('review', '請提供目前內容指紋、審核紀錄 ID 與固定拒絕原因；勿填個資或憑證');
+            const now = new Date();
+            const changed = await prisma.externalListingCandidate.updateMany({ where: { id: req.params.id,
+                contentHash: body.expectedContentHash, status: 'PENDING_REVIEW', expiresAt: { gt: now }, source: { enabled: true } },
+                data: { status: 'REJECTED', rejectionRef: body.reviewRef, rejectionReason: body.reason,
+                    rejectedContentHash: body.expectedContentHash, rejectedAt: now,
+                    aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
+            return changed.count ? res.status(200).json({ id: req.params.id, status: 'REJECTED',
+                rejectedContentHash: body.expectedContentHash, rejectedAt: now }) :
+                res.status(409).json({ error: '候選內容、來源授權或審核狀態已變更；請重新確認', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
+        } catch (error) { return fail(res, error); }
+    });
     router.get('/candidates', async (req, res) => {
         try {
             const status = req.query.status === undefined ? 'PENDING_REVIEW' : req.query.status;

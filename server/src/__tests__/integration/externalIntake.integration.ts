@@ -67,7 +67,19 @@ describe('admin-only attributed external supply staging', () => {
         expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } } })).status).toBe('STALE');
         const refreshed = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(refreshed.body.items[0].status).toBe('PENDING_REVIEW');
-        await prisma.externalListingCandidate.update({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } }, data: { status: 'REJECTED' } });
+        const current = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } } });
+        const rejection = { expectedContentHash: current.contentHash, reason: 'ITEM_UNVERIFIED', reviewRef: 'review:synthetic-test-2026' };
+        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).send(rejection)).status).toBe(401);
+        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
+            .send({ ...rejection, expectedContentHash: '0'.repeat(64) })).status).toBe(409);
+        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
+            .send({ ...rejection, reviewRef: 'private raw notes' })).status).toBe(400);
+        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey).send(rejection)).status).toBe(200);
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: current.id } })).toMatchObject({
+            status: 'REJECTED', rejectionRef: rejection.reviewRef, rejectionReason: rejection.reason,
+            rejectedContentHash: current.contentHash, rejectedAt: expect.any(Date), aiStatus: 'NOT_ELIGIBLE',
+            aiInputHash: null, aiJobId: null, aiDraft: null,
+        });
         const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(repeated.body.items[0].status).toBe('REJECTED');
         const second = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)

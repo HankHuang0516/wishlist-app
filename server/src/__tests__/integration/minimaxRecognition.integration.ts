@@ -5,12 +5,15 @@ import prisma from '../../lib/prisma';
 import route from '../../routes/minimaxRecognitionRoutes';
 import { getApiUrl } from '../../config/constants';
 import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
+import { createExternalIntakeRoutes } from '../../routes/externalIntakeRoutes';
 
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated matching test database required');
 
 const app = express(); app.use(express.json()); app.use('/api/internal/minimax-vision', route);
 const token = 'synthetic-minimax-pilot-token-at-least-32-chars';
+const adminKey = 'synthetic-minimax-external-review-key';
+app.use('/api/external-intake', createExternalIntakeRoutes(() => adminKey));
 const previous = { user: process.env.MINIMAX_PILOT_USER_ID, token: process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN,
     listingEnabled: process.env.MINIMAX_LISTING_AI_ENABLED, listingPilot: process.env.MINIMAX_LISTING_AI_PILOT_USER_ID,
     externalEnabled: process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED };
@@ -60,7 +63,7 @@ async function externalCandidate() {
         canonicalUrl: 'https://partner.example.com/item/1', imageUrl: 'https://images.example.com/item/1.jpg',
         title: '二手藍色檯燈', description: '來源註記已測試可開燈', priceTwd: 590, condition: 'USED',
         county: '臺北市', district: '大安區', observedAt: new Date(), expiresAt: new Date(Date.now() + 86_400_000),
-        contentHash: 'synthetic-hash', aiInputHash: 'synthetic-hash', aiStatus: 'PENDING' } });
+        contentHash: 'a'.repeat(64), aiInputHash: 'a'.repeat(64), aiStatus: 'PENDING' } });
     return { source, candidate };
 }
 
@@ -159,5 +162,18 @@ describe('isolated MiniMax Code pull queue', () => {
         });
         expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
         expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+    });
+    it('rejects a reviewed candidate and refuses its late AI callback', async () => {
+        const { candidate } = await externalCandidate();
+        const claimed = await auth('/api/internal/minimax-vision/next');
+        expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', jobId: expect.any(String) });
+        const reviewed = await request(app).post(`/api/external-intake/candidates/${candidate.id}/reject`)
+            .set('x-admin-key', adminKey).send({ expectedContentHash: candidate.contentHash,
+                reason: 'ITEM_UNVERIFIED', reviewRef: 'review:synthetic-minimax-2026' });
+        expect(reviewed.status).toBe(200);
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+            status: 'REJECTED', aiStatus: 'NOT_ELIGIBLE', aiDraft: null, aiJobId: null,
+        });
     });
 });

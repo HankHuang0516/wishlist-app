@@ -337,6 +337,10 @@ model ExternalListingCandidate {
   lastSeenAt     DateTime                @default(now())
   contentHash    String
   status         ExternalCandidateStatus @default(PENDING_REVIEW)
+  rejectionRef   String?
+  rejectionReason String?
+  rejectedContentHash String?
+  rejectedAt     DateTime?
   aiStatus       ExternalCandidateAiStatus @default(NOT_ELIGIBLE)
   aiInputHash    String?
   aiDraft        Json?

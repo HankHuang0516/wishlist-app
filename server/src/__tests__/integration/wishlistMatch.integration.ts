@@ -34,6 +34,14 @@ describe('private explainable matching / PostgreSQL', () => {
         const keep = await seed(); await seed('Canon 相機', { price: 6000 }); await seed('二手電冰箱'); await seed('Sony 相機', { status: 'SOLD' }); await seed('Sony 相機', { status: 'REMOVED' }); await seed('Sony 相機', { publishedAt: new Date('2020-01-01'), expiresAt: new Date('2020-02-01') }); await seed('Sony 相機', { ownerUserId: buyer }); expect((await match()).body.items.map((v: { listing: { id: string } }) => v.listing.id)).toEqual([keep]);
     });
     it('matches fullwidth names using actual PostgreSQL NFKC, not only JS mocks', async () => { await seed('Ｓｏｎｙ 相機 A7'); const r = await match(); expect(r.status).toBe(200); expect(r.body.items).toHaveLength(1); });
+    it('matches a published item with an unknown brand without bypassing explicit brand filters', async () => {
+        const id = await seed('Sony 相機 A7', { brand: null });
+        const result = await match();
+        expect(result.status).toBe(200);
+        expect(result.body.items).toHaveLength(1);
+        expect(result.body.items[0].listing).toMatchObject({ id, brand: null });
+        expect((await match({ brand: 'Sony' })).body.items).toEqual([]);
+    });
     it('does not use legacy estimated price as a budget or pretend foreign currency is within budget', async () => {
         await seed(); await prisma.item.update({ where: { id: wishId }, data: { maxPrice: null } }); expect((await match()).body.items[0].budget).toBe('UNSPECIFIED'); await prisma.item.update({ where: { id: wishId }, data: { maxPrice: 1, priceCurrency: 'USD' } }); expect((await match()).body.items[0].budget).toBe('CURRENCY_UNKNOWN');
     });

@@ -54,7 +54,7 @@ fs.mkdirSync(evidence, { mode: 0o700 });
 let stopping = false, child, metro, metroExit, qa, requestedStop = false, installedApp = false, installedRunner = false;
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
-let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0;
+let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
 const ownedChildren = new Set();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); metro?.kill('SIGTERM');
@@ -111,12 +111,17 @@ async function auditListingPhoto() {
   try {
     const records = await audit.listingMedia.findMany({ where: { ownerUserId: qa.actors.buyer.id },
       select: { id: true, ownerUserId: true, listingId: true, wishItemId: true, width: true, height: true, byteSize: true,
-        contentHash: true, aiDraftStatus: true } });
+        contentHash: true, aiDraftStatus: true, sellerDraft: true, sellerDraftVersion: true } });
     listingPhotoCount = records.length;
     const expectedCount = flow === 'listing-batch-two-photos' ? 2 : 1;
     if (records.length !== expectedCount || new Set(records.map(record => record.contentHash)).size !== expectedCount ||
       records.some(record => record.listingId !== null || record.wishItemId !== null || record.width < 100 || record.height < 100 ||
         record.byteSize < 1000 || record.aiDraftStatus !== 'SKIPPED')) return;
+    if (flow === 'listing-batch-photo') {
+      const saved = records[0].sellerDraft;
+      sellerDraftVerified = records[0].sellerDraftVersion >= 1 && saved?.form?.title === 'Native QA Blue Mug' &&
+        saved?.touched?.title === true && typeof saved?.clientListingId === 'string';
+    }
     const login = async actor => {
       const response = await fetch(qa.apiUrl + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: actor.email, password: actor.password }), signal: AbortSignal.timeout(5000) });
@@ -224,6 +229,7 @@ async function main() {
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified)) ||
+      (flow === 'listing-batch-photo' && !sellerDraftVerified) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -250,7 +256,7 @@ async function main() {
     'marketplace-chat': ['product-notice', 'home', 'chat-transition', 'chat'],
     'marketplace-meetup': ['product-notice', 'home', 'meetup'],
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
-    'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo'],
+    'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
@@ -294,7 +300,7 @@ async function main() {
     failedStage: cleanupFailed ? 'exact-cleanup-failed' : failed ? failedStage : null,
     tests: summary ? { total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests } : null,
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
-    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoCount,
+    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoCount, sellerDraftVerified,
     privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

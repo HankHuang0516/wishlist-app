@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-two-selected", "qa-two-listing", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -168,7 +168,8 @@ final class NativeQaTests: XCTestCase {
     }
     private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField) throws {
         let prefixes = ["清單名稱": "public-list", "願望名稱": "public-wish", "最高預算": "public-budget", "輸入刪除帳號以確認": "deletion-confirmation",
-          "搜尋商品名稱與說明": "public-market-search", "商品聊天訊息": "public-chat-message", "私密面交地點名稱": "public-meetup-place"]
+          "搜尋商品名稱與說明": "public-market-search", "商品聊天訊息": "public-chat-message", "私密面交地點名稱": "public-meetup-place",
+          "第1件商品名稱": "public-listing-title"]
         guard let prefix = prefixes[label] else { throw Failure.invalidIdentity }
         guard [.textField, .textView, .any].contains(kind) else { throw Failure.invalidIdentity }
         let initial = kind == .any ? try publicInputControl(label) : try required(label, scroll: true, kind: kind)
@@ -529,6 +530,17 @@ final class NativeQaTests: XCTestCase {
             try required("第1件商品照片", scroll: true)
             try required("AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。", scroll: true)
             try safeScreenshot("qa-listing-photo")
+            checkpoint("listing-photo-seller-edit")
+            try publicText("第1件商品名稱", value: "Native QA Blue Mug")
+            checkpoint("listing-photo-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            checkpoint("listing-photo-reopen")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            let restored = try publicInputControl("第1件商品名稱")
+            guard restored.value as? String == "Native QA Blue Mug" else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-listing-resumed")
             app.terminate()
         } catch { reportFailure() }
     }

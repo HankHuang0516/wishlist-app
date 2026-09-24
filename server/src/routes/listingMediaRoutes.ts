@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, uploadListingMedia } from '../controllers/listingMediaController';
+import { deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
 
 const router = Router();
@@ -41,6 +41,7 @@ router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadI
 router.get('/unused', authenticateToken, myUnusedListingMedia);
 router.post('/:id/ai-draft', authenticateToken, aiRequests, requestListingAiDraft);
 router.get('/:id/ai-draft', authenticateToken, getListingAiDraft);
+router.put('/:id/seller-draft', authenticateToken, saveListingSellerDraft);
 router.get('/:id/:variant', optionalAuthenticateToken, getListingMedia);
 router.delete('/:id', authenticateToken, uploads, deleteUnusedListingMedia);
 export default router;

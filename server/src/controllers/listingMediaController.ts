@@ -9,6 +9,7 @@ import { encodeListingPhoto, PhotoInputError } from '../lib/listingPhoto';
 import { ListingMediaStorage, MediaStorageConfigurationError, PhotoVariant } from '../lib/listingMediaStorage';
 import { ListingFlickrStorage, FlickrMediaUnavailable, FlickrOrphanedUpload } from '../lib/listingFlickrStorage';
 import { isMinimaxWorker, listingAiEnabledFor } from '../lib/minimaxWorkerAuth';
+import { ListingSellerDraftError, parseListingSellerDraft } from '../lib/listingSellerDraft';
 
 const storage = new ListingMediaStorage();
 const flickrStorage = new ListingFlickrStorage();
@@ -156,13 +157,37 @@ export async function getListingAiDraft(req: AuthRequest, res: Response) {
     } catch { return res.status(503).json({ error: '照片辨識狀態暫時無法讀取', errorCode: 'LISTING_AI_STATUS_UNAVAILABLE' }); }
 }
 
+export async function saveListingSellerDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '私人商品草稿不存在' });
+    try {
+        if (!req.body || Object.keys(req.body).sort().join(',') !== 'draft,expectedVersion' ||
+            !Number.isSafeInteger(req.body.expectedVersion) || req.body.expectedVersion < 0 || req.body.expectedVersion > 1_000_000)
+            throw new ListingSellerDraftError();
+        const draft = parseListingSellerDraft(req.body.draft);
+        const where = { id: req.params.id, ownerUserId: req.user.id, listingId: null, wishItemId: null };
+        const changed = await prisma.listingMedia.updateMany({ where: { ...where, sellerDraftVersion: req.body.expectedVersion },
+            data: { sellerDraft: draft, sellerDraftVersion: { increment: 1 } } });
+        if (!changed.count) {
+            const existing = await prisma.listingMedia.findFirst({ where, select: { sellerDraftVersion: true } });
+            return existing ? res.status(409).json({ error: '草稿已在其他地方更新，請重新開啟檢查', errorCode: 'SELLER_DRAFT_CONFLICT' }) :
+                res.status(404).json({ error: '私人商品草稿不存在' });
+        }
+        return res.json({ mediaId: req.params.id, version: req.body.expectedVersion + 1 });
+    } catch (error) {
+        if (error instanceof ListingSellerDraftError) return res.status(400).json({ error: error.message, errorCode: 'INVALID_SELLER_DRAFT' });
+        return res.status(503).json({ error: '私人商品草稿暫時無法儲存', errorCode: 'SELLER_DRAFT_UNAVAILABLE' });
+    }
+}
+
 export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     res.setHeader('Cache-Control', 'private, no-store');
     try {
         const records = await prisma.listingMedia.findMany({ where: { ownerUserId: req.user.id, listingId: null, wishItemId: null,
             createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }, orderBy: { createdAt: 'desc' }, take: 30,
-            select: { ...select, ...aiDraftSelect } });
+            select: { ...select, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
         return res.json({ items: records.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })) });
     } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
 }

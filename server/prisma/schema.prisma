@@ -249,6 +249,9 @@ model ListingMedia {
   aiDraftJobId  String? @unique
   aiDraftAttempts Int @default(0)
   aiDraftUpdatedAt DateTime?
+  // Private seller edits for an unused batch photo; no precise location.
+  sellerDraft Json?
+  sellerDraftVersion Int @default(0)
   position     Int      @default(0)
   createdAt    DateTime @default(now())
   owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)

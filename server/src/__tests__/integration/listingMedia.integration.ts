@@ -113,6 +113,34 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
             }
         }
     });
+    it('restores seller edits for an unused photo and fences other users, stale versions and published media', async () => {
+        const photo = (await upload()).body;
+        const endpoint = `/api/listing-media/${photo.id}/seller-draft`;
+        const draft = { clientListingId: randomUUID(), form: { title: '藍色杯子', description: '可見杯口缺角，請買家確認。',
+            brand: '', category: 'home', condition: 'USED', price: '120' }, touched: { title: true, price: true } };
+        expect((await request(app).put(endpoint).send({ expectedVersion: 0, draft })).status).toBe(401);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(third))
+            .send({ expectedVersion: 0, draft })).status).toBe(404);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ expectedVersion: 0, draft: { ...draft, latitude: '25.033' } })).status).toBe(400);
+        const saved = await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ expectedVersion: 0, draft });
+        expect(saved.status).toBe(200); expect(saved.body).toEqual({ mediaId: photo.id, version: 1 });
+        const restored = await request(app).get('/api/listing-media/unused').set('Authorization', 'Bearer ' + token(seller));
+        expect(restored.headers['cache-control']).toBe('private, no-store');
+        expect(restored.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: photo.id,
+            sellerDraftVersion: 1, sellerDraft: draft })]));
+        expect((await request(app).get('/api/listing-media/unused').set('Authorization', 'Bearer ' + token(third))).body.items)
+            .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: photo.id })]));
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ expectedVersion: 0, draft })).status).toBe(409);
+        const listing = await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller))
+            .send(listingBody(photo.id));
+        expect(listing.status).toBe(201);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ expectedVersion: 1, draft })).status).toBe(404);
+        expect((await prisma.listingMedia.findUniqueOrThrow({ where: { id: photo.id } })).sellerDraft).toBeNull();
+    });
     it('attaches a camera/gallery upload to one wish, exposes its opaque image to EClaw, and erases it on deletion', async () => {
         const photo = (await upload()).body;
         expect((await image(photo.id)).status).toBe(404);

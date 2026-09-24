@@ -5,13 +5,13 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
 let startupStage = 'launch-guard';
 let startupFailed = false;
-const userIds = [], hashes = new Set(), roomIds = new Set();
+const userIds = [], sourceIds = [], hashes = new Set(), roomIds = new Set();
 const send = message => { if (process.connected) { try { process.send(message, () => undefined); } catch { /* Disconnect triggers owned cleanup. */ } } };
 
 async function cleanFixtures() {
@@ -31,6 +31,11 @@ async function cleanFixtures() {
     }
   }
   await prisma.$transaction(async tx => {
+    if (sourceIds.length) {
+      await tx.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: { in: sourceIds } } } });
+      await tx.externalListingCandidate.deleteMany({ where: { sourceId: { in: sourceIds } } });
+      await tx.externalListingSource.deleteMany({ where: { id: { in: sourceIds } } });
+    }
     await tx.conversation.deleteMany({ where: { id: { in: [...roomIds] } } });
     await tx.wishlist.deleteMany({ where: { userId: ids } });
     await tx.user.deleteMany({ where: { id: ids } });
@@ -45,6 +50,10 @@ async function cleanFixtures() {
     mediaTasksRemaining: await prisma.mediaErasureTask.count({ where: { identityHash: identityHashes } }),
     legacyTasksRemaining: await prisma.legacyAssetErasureTask.count({ where: { identityHash: identityHashes } }),
     photoFoldersRemaining: root ? (await fs.readdir(root)).length : 0,
+    ...(sourceIds.length ? {
+      externalCandidatesRemaining: await prisma.externalListingCandidate.count({ where: { sourceId: { in: sourceIds } } }),
+      externalSourcesRemaining: await prisma.externalListingSource.count({ where: { id: { in: sourceIds } } }),
+    } : {}),
   };
   if (Object.values(summary).some(value => value !== 0)) throw new Error('QA cleanup incomplete');
   if (root) await fs.rmdir(root); // Non-recursive; refuses any unknown leftovers.
@@ -84,7 +93,10 @@ async function main() {
   const lifetime = Number(process.env.NATIVE_QA_LIFETIME_SECONDS);
   if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 600) throw new Error('Unsafe QA lifetime');
   if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
+  if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
   const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
+  const externalListingsPilot = process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT === '1';
+  if (externalListingsPilot) process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-native-qa-'));
   startupStage = 'private-storage';
   await fs.chmod(root, 0o700);
@@ -123,6 +135,32 @@ async function main() {
     userIds.push(user.id); hashes.add(erasureIdentityHash(user.id, 0));
     actors[['buyer', 'seller', 'third'][index]] = { ...user, password };
   });
+  if (externalListingsPilot) {
+    // A review-shaped, self-owned synthetic fixture lives only in the
+    // isolated test database. It is never inserted in the seller Listing table.
+    const { parseExternalCandidate } = require('../../server/dist/lib/externalListingIntake');
+    const source = { canonicalHost: 'github.com', imageHost: 'raw.githubusercontent.com',
+      authorizationRef: 'self:synthetic-native-qa', textReuseAllowed: true, imageReuseAllowed: true };
+    const fixtureBase = 'https://raw.githubusercontent.com/HankHuang0516/wishlist-app/65f6630901a9b6eb8395b88d52d4c3d7eb20708c/mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png';
+    const input = parseExternalCandidate({ sourceItemId: 'synthetic-' + runId,
+      canonicalUrl: 'https://github.com/HankHuang0516/wishlist-app/blob/65f6630901a9b6eb8395b88d52d4c3d7eb20708c/mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png',
+      imageUrl: fixtureBase,
+      thumbnailUrl: 'https://raw.githubusercontent.com/HankHuang0516/wishlist-app/7632e69d5f03f8826aac4711d496ce54b815a4fe/mobile/qa-fixtures/synthetic-used-orange-desk-lamp-320.png',
+      title: 'Native QA 外部檯燈', description: '合成來源商品，只供隔離原生地圖測試，不是真實待售商品。',
+      priceTwd: 590, condition: 'USED', county: '新北市', district: '板橋區',
+      observedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, source);
+    const created = await prisma.$transaction(async tx => {
+      const owner = await tx.externalListingSource.create({ data: { name: 'Synthetic native QA ' + runId,
+        kind: 'SELLER_IMPORT', ...source, aiProcessingAllowed: false, enabled: true, enabledAt: new Date() } });
+      const candidate = await tx.externalListingCandidate.create({ data: { ...input, sourceId: owner.id,
+        status: 'APPROVED', approvalRef: 'review:synthetic-native-qa',
+        approvedAuthorizationRef: owner.authorizationRef, approvedContentHash: input.contentHash, approvedAt: new Date() } });
+      await tx.externalCandidateReviewEvent.create({ data: { candidateId: candidate.id, decision: 'APPROVED',
+        contentHash: input.contentHash, reviewRef: 'review:synthetic-native-qa', authorizationRef: owner.authorizationRef } });
+      return { sourceId: owner.id, candidateId: candidate.id };
+    });
+    sourceIds.push(created.sourceId);
+  }
   const callbackToken = listingAiPilot ? randomBytes(32).toString('hex') : null;
   if (listingAiPilot) {
     process.env.MINIMAX_PILOT_USER_ID = String(actors.buyer.id);
@@ -149,7 +187,8 @@ async function main() {
         req.path === '/api/users/me/password' && req.method === 'PUT' ||
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
-      const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path);
+      const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path) ||
+        externalListingsPilot && /^\/api\/external-listings(?:\/|$)/.test(req.path);
       const workerRoute = listingAiPilot && /^\/api\/internal\/minimax-vision(?:\/|$)/.test(req.path);
       if (!userRoute && !marketRoute && !workerRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
       if (req.headers['x-api-key'] !== undefined) return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' });
@@ -179,7 +218,8 @@ async function main() {
       return next();
     } catch { return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' }); }
   });
-  for (const [route, file] of [['auth', 'authRoutes'], ['users', 'userRoutes'], ['native-wishes', 'nativeWishRoutes'], ['listings', 'listingRoutes'], ['listing-media', 'listingMediaRoutes'], ['listing-reports', 'listingReportRoutes'], ['chat', 'chatRoutes']]) {
+  for (const [route, file] of [['auth', 'authRoutes'], ['users', 'userRoutes'], ['native-wishes', 'nativeWishRoutes'], ['listings', 'listingRoutes'], ['listing-media', 'listingMediaRoutes'], ['listing-reports', 'listingReportRoutes'], ['chat', 'chatRoutes'],
+    ...(externalListingsPilot ? [['external-listings', 'externalListingRoutes']] : [])]) {
     app.use('/api/' + route, require('../../server/dist/routes/' + file).default);
   }
   if (listingAiPilot) app.use('/api/internal/minimax-vision', require('../../server/dist/routes/minimaxRecognitionRoutes').default);

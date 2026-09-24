@@ -4,7 +4,8 @@ const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
-function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env, { listingAiPilot = false } = {}) {
+function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
+  { listingAiPilot = false, externalListingsPilot = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
@@ -16,6 +17,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     JWT_SECRET: randomBytes(32).toString('hex'),
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
     ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
+    ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
   };
 }
 

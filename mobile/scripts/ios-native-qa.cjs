@@ -158,7 +158,7 @@ async function main() {
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
   qaDeadline = Date.now() + 360000;
-  qa = await startNativeQa(database, 360);
+  qa = await startNativeQa(database, 360, { externalListingsPilot: flow === 'external-map' });
   if (flow?.startsWith('marketplace-')) {
     stage = 'isolated-marketplace-fixture';
     await seedNativeMarketplace(qa); marketplaceFixtureSeeded = true;
@@ -225,7 +225,7 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified)) ||
@@ -258,6 +258,7 @@ async function main() {
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
+    'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
   const names = flow ? flowAttachments[flow] : ['product-notice'];

@@ -29,12 +29,17 @@ describe('isolated listing AI QA process', () => {
       LISTING_MEDIA_STORAGE_PROVIDER: 'flickr', MINIMAX_LISTING_AI_ENABLED: '1' };
     const normal = qaEnvironment(database, 60, inherited);
     expect(normal.NATIVE_QA_LISTING_AI_PILOT).toBeUndefined();
+    expect(normal.NATIVE_QA_EXTERNAL_LISTINGS_PILOT).toBeUndefined();
     const pilot = qaEnvironment(database, 60, inherited, { listingAiPilot: true });
     expect(pilot.NATIVE_QA_LISTING_AI_PILOT).toBe('1');
     expect(pilot.ADMIN_API_KEY).toBeUndefined();
     expect(pilot.WISHLIST_MINIMAX_CALLBACK_TOKEN).toBeUndefined();
     expect(pilot.LISTING_MEDIA_STORAGE_PROVIDER).toBeUndefined();
     expect(pilot.MINIMAX_LISTING_AI_ENABLED).toBeUndefined();
+    const external = qaEnvironment(database, 60, inherited, { externalListingsPilot: true });
+    expect(external.NATIVE_QA_EXTERNAL_LISTINGS_PILOT).toBe('1');
+    expect(external.EXTERNAL_LISTINGS_PUBLIC_ENABLED).toBeUndefined();
+    expect(external.ADMIN_API_KEY).toBeUndefined();
     expect(pilot.DATABASE_URL).toBe(database);
   });
 });

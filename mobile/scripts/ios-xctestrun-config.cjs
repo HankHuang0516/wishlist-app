@@ -8,6 +8,7 @@ const AUTHENTICATED_DELETION_TESTS = ['NativeQaTests/test06RealLoginWishlistDele
 const AUTHENTICATED_LISTING_BATCH_TESTS = ['NativeQaTests/test07RealLoginListingBatchEntry'];
 const AUTHENTICATED_LISTING_PHOTO_TESTS = ['NativeQaTests/test08RealLoginListingBatchPhotoUpload'];
 const AUTHENTICATED_LISTING_TWO_PHOTO_TESTS = ['NativeQaTests/test09RealLoginListingBatchTwoPhotos'];
+const AUTHENTICATED_EXTERNAL_MAP_TESTS = ['NativeQaTests/test10RealLoginExternalSourceMapAndDetail'];
 const AUTHENTICATED_TESTS = AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS;
 const AUTHENTICATED_FLOWS = {
   'marketplace-discovery': AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS,
@@ -17,6 +18,7 @@ const AUTHENTICATED_FLOWS = {
   'listing-batch-entry': AUTHENTICATED_LISTING_BATCH_TESTS,
   'listing-batch-photo': AUTHENTICATED_LISTING_PHOTO_TESTS,
   'listing-batch-two-photos': AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
+  'external-map': AUTHENTICATED_EXTERNAL_MAP_TESTS,
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||
@@ -73,4 +75,5 @@ module.exports = { TESTS, AUTHENTICATED_TESTS, AUTHENTICATED_MARKETPLACE_DISCOVE
   AUTHENTICATED_LISTING_BATCH_TESTS,
   AUTHENTICATED_LISTING_PHOTO_TESTS,
   AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
+  AUTHENTICATED_EXTERNAL_MAP_TESTS,
   destinationTestRun, anonymousSummaryPassed, iosSummaryPassed };

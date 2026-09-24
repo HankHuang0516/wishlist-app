@@ -29,6 +29,45 @@ afterAll(async () => {
     finally { await prisma.$disconnect(); }
 });
 describe('owned local QA process lifecycle and real isolated PostgreSQL', () => {
+    it('serves only a reviewed synthetic external item in opt-in QA and exactly cleans it', async () => {
+        const qa = await startNativeQa(process.env.TEST_DATABASE_URL, 30, { externalListingsPilot: true });
+        ownedUsers.push(...Object.values(qa.actors).map((actor: any) => actor.id));
+        let sourceId: string | undefined;
+        try {
+            const publicPage = await fetch(qa.apiUrl + '/api/external-listings', { signal: AbortSignal.timeout(3000) });
+            expect(publicPage.status).toBe(200);
+            const page = await publicPage.json() as any;
+            expect(page).toMatchObject({ enabled: true, items: [expect.objectContaining({
+                title: 'Native QA 外部檯燈', priceTwd: '590', inAppSeller: false,
+                aiDerivedPublicFields: false, source: expect.objectContaining({ host: 'github.com', kind: 'SELLER_IMPORT' }),
+            })] });
+            expect(page.items).toHaveLength(1);
+            const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: page.items[0].id } });
+            sourceId = row.sourceId;
+            expect(row.sourceItemId).toBe('synthetic-' + qa.runId);
+            expect((await fetch(qa.apiUrl + '/api/external-listings/' + row.id, { signal: AbortSignal.timeout(3000) })).status).toBe(200);
+            expect((await fetch(qa.apiUrl + '/api/external-listings/matches?wishItemId=1', { signal: AbortSignal.timeout(3000) })).status).toBe(401);
+            const wishlist = await prisma.wishlist.create({ data: { userId: qa.actors.buyer.id, title: 'Synthetic private lamp wish',
+                items: { create: { name: '檯燈', maxPrice: 600, priceCurrency: 'TWD' } } }, include: { items: true } });
+            const login = async (actor: any) => {
+                const response = await fetch(qa.apiUrl + '/api/auth/login', { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: actor.email, password: actor.password }),
+                    signal: AbortSignal.timeout(3000) });
+                expect(response.status).toBe(200);
+                return (await response.json() as any).token as string;
+            };
+            const buyerToken = await login(qa.actors.buyer), otherToken = await login(qa.actors.third);
+            const matchUrl = qa.apiUrl + '/api/external-listings/matches?wishItemId=' + wishlist.items[0].id;
+            const match = await fetch(matchUrl, { headers: { Authorization: 'Bearer ' + buyerToken }, signal: AbortSignal.timeout(3000) });
+            expect(match.status).toBe(200);
+            expect((await match.json() as any).items).toEqual([expect.objectContaining({ id: row.id })]);
+            expect((await fetch(matchUrl, { headers: { Authorization: 'Bearer ' + otherToken },
+                signal: AbortSignal.timeout(3000) })).status).toBe(404);
+            const stopped = await qa.stop();
+            expect(stopped).toEqual({ ...empty, externalCandidatesRemaining: 0, externalSourcesRemaining: 0 });
+            expect(await prisma.externalListingSource.count({ where: { id: sourceId } })).toBe(0);
+        } finally { await qa.stop(); }
+    });
     it('refuses reporting another fixture owner even when the target UUID uses uppercase', async () => {
         const outsider = await prisma.user.create({ data: { phoneNumber: 'qa-report-unrelated-' + randomUUID(), password: 'synthetic-unused', isEmailVerified: true } });
         let qa: any;

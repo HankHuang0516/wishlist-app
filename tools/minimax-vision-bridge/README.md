@@ -1,6 +1,6 @@
 # MiniMax Code 本機圖片辨識橋接器（測試版）
 
-這是隔離的概念驗證，不是正式 APP 的辨識後台。它使用 Mac 上已登入的 `mcode-tools` host-managed Connector，不需要將 MiniMax 登入憑證或 API key 放進 Railway。服務只監聽 `127.0.0.1`；它**沒有**對外 webhook，也不回寫願望資料。請勿用個人 Token Plan 在此基礎上直接服務公開使用者。
+原本的 `server.mjs` 是隔離概念驗證；新增的 `poller.mjs` 可用於單一測試帳號，從 Railway 領取 APP 照片並回寫辨識結果。兩者都使用 Mac 上已登入的 `mcode-tools` host-managed Connector，不需將 MiniMax 登入憑證或 API key 放進 Railway。本機服務只監聽 `127.0.0.1`，poller 不開對外 webhook。請勿用個人 Token Plan 在此基礎上直接服務公開使用者。
 
 ## 執行
 
@@ -10,8 +10,14 @@
 
 處理過程：下載圖片至權限受限的系統暫存目錄 → `mcode-tools upload-temp-url` → `connector__matrix__describe_images` → 解析及驗證 JSON → 刪除本機暫存圖片。MiniMax 上傳的暫存 URL 由平台管理，不能視為完全不留存。執行測試：`node --test tools/minimax-vision-bridge/server.test.mjs`。
 
-## 尚未完成的雲端串接
+## 測試帳號的雲端拉取串接
 
-正式的「類 webhook」建議改為 Mac **主動向 Railway 領取**測試帳號任務並回傳結果，而不是讓 Railway 呼叫家中 Mac。Railway 必須增加具短效租約與服務端驗證的領取／回寫端點，EClaw 原工作器要排除同一批測試任務，且任務必須持久存於雲端；Mac 睡眠或離線時保持待處理，恢復後才繼續。這些功能目前都**沒有**部署，不要將本機測試版誤當正式 APP 已接入。
+Railway 設定 `MINIMAX_PILOT_USER_ID`（僅測試帳號的數字 ID）及隨機的 `WISHLIST_MINIMAX_CALLBACK_TOKEN`（至少 32 字元）；Mac 在自己的安全環境中設定相同 token，執行 `node tools/minimax-vision-bridge/poller.mjs`。本機只主動向 Railway 領取任務及回寫結果，不開對外端口。`--once` 可處理一項後退出。舊 EClaw worker 會略過該測試帳號的 APP 照片，避免同一筆任務被兩個模型同時處理。
+
+這只適用於單一測試帳號；關閉 Mac 時任務留在 Railway 排隊，超過租約才重領。正式對所有用戶開放前，必須確認 MiniMax 方案的服務用途、費用與隱私告知。不要把個人 Token Plan 當成正式服務配額。
+
+## 舊本機概念驗證
+
+原先的 `server.mjs` 仍可做單機概念驗證；請不要將其回環端口公開。新增的 poller 仍需 Railway 部署與兩端一致的私密設定，才算完成端到端串接。
 
 Mac 要保持開機、連網且不進入系統睡眠，螢幕可以關閉；MiniMax 登入及 Connector broker 也需有效。先用測試帳號、單工、人工核對回覆；正式公開使用前須確認 MiniMax 方案適用性、費用與風險。MiniMax 官方 [Token Plan FAQ](https://platform.minimax.io/subscribe/token-plan) 將其定位為個人互動使用，建議正式環境採按量付費。

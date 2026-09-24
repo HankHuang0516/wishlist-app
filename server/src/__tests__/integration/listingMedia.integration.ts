@@ -11,6 +11,7 @@ import listingRoutes from '../../routes/listingRoutes';
 import mediaRoutes from '../../routes/listingMediaRoutes';
 import wishRoutes from '../../routes/nativeWishRoutes';
 import { drainMediaErasureTasks } from '../../lib/accountErasure';
+import { ListingFlickrStorage } from '../../lib/listingFlickrStorage';
 
 const { assertTestDatabase } = require('../../../../scripts/assert-test-database.cjs');
 assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -21,6 +22,7 @@ app.use('/api/listings', listingRoutes); app.use('/api/listing-media', mediaRout
 let seller: number, third: number, root: string, jpeg: Buffer, sequence = 1;
 const savedRoot = process.env.LISTING_MEDIA_STORAGE_ROOT;
 const savedMode = process.env.NODE_ENV;
+const savedProvider = process.env.LISTING_MEDIA_STORAGE_PROVIDER;
 const token = (id: number) => jwt.sign({ id }, secret, { expiresIn: '1h' });
 const upload = (id = seller, clientUploadId: string = randomUUID(), input?: Buffer, mime = 'image/jpeg') => request(app).post('/api/listing-media')
     .set('Authorization', 'Bearer ' + token(id)).set('X-Forwarded-For', '198.51.100.' + (sequence++ % 250 + 1))
@@ -50,6 +52,7 @@ afterAll(async () => {
     await prisma.$disconnect();
     if (savedRoot === undefined) delete process.env.LISTING_MEDIA_STORAGE_ROOT; else process.env.LISTING_MEDIA_STORAGE_ROOT = savedRoot;
     if (savedMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedMode;
+    if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
     if (root) await fs.rm(root, { recursive: true, force: true }); // Exactly this suite's generated temp folder.
 });
 
@@ -152,6 +155,37 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
         const photo = (await upload()).body;
         const draft = await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id, false)); expect(draft.status).toBe(201);
         expect((await del(photo.id)).status).toBe(404); expect((await image(photo.id, 'image', seller)).status).toBe(200);
+    });
+    it('stores a new APP wish on Flickr, proxies its photo, and durably erases the remote ID', async () => {
+        process.env.LISTING_MEDIA_STORAGE_PROVIDER = 'flickr';
+        const ready = jest.spyOn(ListingFlickrStorage.prototype, 'ready').mockResolvedValue();
+        const uploadRemote = jest.spyOn(ListingFlickrStorage.prototype, 'upload').mockResolvedValue({ photoId: '123456',
+            imageSource: 'https://live.staticflickr.com/22/123456_abc_h.jpg', thumbnailSource: 'https://live.staticflickr.com/22/123456_abc_n.jpg' });
+        const readRemote = jest.spyOn(ListingFlickrStorage.prototype, 'read').mockResolvedValue(await sharp(jpeg).jpeg().toBuffer());
+        const removeRemote = jest.spyOn(ListingFlickrStorage.prototype, 'remove').mockResolvedValue();
+        try {
+            const uploaded = await upload(); expect(uploaded.status).toBe(201);
+            expect(uploadRemote).toHaveBeenCalledTimes(1);
+            const row = await prisma.listingMedia.findUniqueOrThrow({ where: { id: uploaded.body.id } });
+            expect(row).toMatchObject({ flickrPhotoId: '123456', imageUrl: uploaded.body.imageUrl });
+            await expect(fs.stat(path.join(root, row.id))).rejects.toMatchObject({ code: 'ENOENT' });
+            expect((await image(row.id)).status).toBe(404);
+            const list = await request(app).post('/api/native-wishes/lists').set('Authorization', 'Bearer ' + token(seller))
+                .send({ clientRequestId: randomUUID(), title: 'Flickr wish' });
+            const wish = await request(app).post(`/api/native-wishes/lists/${list.body.resource.id}/items`)
+                .set('Authorization', 'Bearer ' + token(seller)).send({ clientRequestId: randomUUID(), name: '待辨識', mediaId: row.id });
+            expect(wish.status).toBe(201);
+            expect((await image(row.id)).status).toBe(200);
+            expect(readRemote).toHaveBeenCalledWith(row.flickrImageUrl, '123456');
+            await request(app).delete(`/api/native-wishes/items/${wish.body.resource.id}`).set('Authorization', 'Bearer ' + token(seller));
+            expect(await prisma.mediaErasureTask.findUnique({ where: { mediaId: row.id } })).toMatchObject({ flickrPhotoId: '123456' });
+            await drainMediaErasureTasks();
+            expect(removeRemote).toHaveBeenCalledWith('123456');
+            expect(await prisma.mediaErasureTask.findUnique({ where: { mediaId: row.id } })).toBeNull();
+        } finally {
+            ready.mockRestore(); uploadRemote.mockRestore(); readRemote.mockRestore(); removeRemote.mockRestore();
+            if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
+        }
     });
     it('returns generic404 for missing/invalid variants, missing files and traversal attempts', async () => {
         expect((await image(randomUUID())).status).toBe(404); expect((await image('invalid')).status).toBe(404);

@@ -20,7 +20,7 @@
 
 `node mobile/scripts/native-qa-api-smoke.cjs` 會從真實登入走過願望、圖片、刊登期限、搜尋、配對、聊天、面交、刪除恢復與取消屏障，最後只輸出非機密檢查數和精確 cleanup 計數。這個流程與唯讀 cleanup 檢查已納入 `scripts/validate-before-push.sh`。
 
-`node mobile/scripts/listing-ai-local-e2e.cjs` 是另行明確啟用的**合成照片專用** MiniMax 商品草稿驗收，需先完成 server build，並提供同值的本機 `TEST_DATABASE_URL`／`DATABASE_URL`。腳本固定校驗橘燈與藍杯兩張無個資 fixture 的 SHA-256；子程序自行產生只供本次合成帳號使用的 callback token，未繼承正式 MiniMax／Railway／Flickr／管理憑證。兩張照片都實際走上傳、私密授權讀取、排隊、真 MiniMax Connector、結果回寫與賣家查詢；公開清單在賣家確認前必須為 0。賣家明確填入售價與地區後僅發布其中一件，另一件保持私有，完成時檢查測試資料與媒體清理。這是**本機儲存與隔離資料庫**的端到端 HTTP 驗收，不包含真實 Flickr、正式 Railway、APP 原生 UI、商店配發或真實商品授權，不可外推為正式開放條件。
+`node mobile/scripts/listing-ai-local-e2e.cjs` 是另行明確啟用的**合成照片專用** MiniMax 商品草稿驗收，需先完成 server build，並提供同值的本機 `TEST_DATABASE_URL`／`DATABASE_URL`。腳本固定校驗橘燈與藍杯兩張無個資 fixture 的 SHA-256；子程序自行產生只供本次合成帳號使用的 callback token，未繼承正式 MiniMax／Railway／Flickr／管理憑證。兩張照片都實際走上傳、私密授權讀取、排隊、真 MiniMax Connector、結果回寫與賣家查詢，且這兩張可估價的測試圖須有非空二手參考區間；公開清單在賣家確認前必須為 0。賣家明確填入售價與地區後僅發布其中一件，另一件保持私有，完成時檢查測試資料與媒體清理。這是**本機儲存與隔離資料庫**的端到端 HTTP 驗收，不包含真實 Flickr、正式 Railway、APP 原生 UI、商店配發或真實商品授權，不可外推為正式開放條件。
 
 ## 原生操作驗收與已完成證據
 

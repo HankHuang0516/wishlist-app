@@ -36,3 +36,5 @@ export function suggestedAskingPrice(draft: ListingAiDraft) {
   if (draft.estimatedPriceLowTwd === null || draft.estimatedPriceHighTwd === null) return '';
   return String(Math.round((draft.estimatedPriceLowTwd + draft.estimatedPriceHighTwd) / 2));
 }
+
+export const suggestedBrand = (draft: ListingAiDraft) => draft.brand ?? '';

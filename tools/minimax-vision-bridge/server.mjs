@@ -94,7 +94,7 @@ const PROMPT = [
 
 // Keep the vision instruction compact: the Connector has returned detailed JSON
 // for this shape, while the longer policy-style prompt repeatedly timed out.
-const LISTING_PROMPT = '只依照片像素，用繁體中文輸出 JSON 商品草稿。欄位：recognizable(true/false),name,description(詳細可見外觀、瑕疵與賣家待確認事項),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(NEW/USED/null),estimatedPriceLowTwd,estimatedPriceHighTwd,priceBasis,evidence(至少兩項陣列),uncertainties(陣列),confidence(0到1)。勿猜品牌、功能、真偽、所有權或私人聯絡資訊；沒有可靠二手估價依據就把價格與priceBasis設null。只輸出JSON。';
+const LISTING_PROMPT = '只依照片像素，以繁體中文 JSON 寫尚未公開的二手商品草稿：recognizable,name,description(可見外觀與瑕疵、賣家待確認),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(NEW/USED/null),estimatedPriceLowTwd,estimatedPriceHighTwd,priceBasis,evidence(至少2項陣列),uncertainties(陣列),confidence(0到1)。不要猜品牌或已測功能。二手價格可依可見品類與磨損作極保守、較寬的台幣參考區間；無法辨識或無法估計則null。未測試功能的電器要納入故障風險，不可用正常品價格。priceBasis註明「僅依照片粗估，非即時行情」。不得輸出私人聯絡資訊。只輸出JSON。';
 
 export function parseListingVisionDescription(description) {
     if (typeof description !== 'string') throw new Error('VISION_BAD_RESPONSE');

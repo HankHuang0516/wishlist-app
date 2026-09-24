@@ -73,10 +73,9 @@ async function main() {
     assert.match(draft.description, fixture.defect);
     assert.equal(draft.category, 'home');
     assert.ok(draft.evidence.length >= 2 && draft.uncertainties.length > 0);
-    if (draft.estimatedPriceLowTwd !== null) {
-      assert.ok(draft.estimatedPriceHighTwd >= draft.estimatedPriceLowTwd);
-      assert.match(draft.priceBasis || '', /未查詢即時市場成交價/);
-    }
+    if (draft.estimatedPriceLowTwd === null) throw new Error('QA_ESTIMATE_MISSING');
+    assert.ok(draft.estimatedPriceHighTwd >= draft.estimatedPriceLowTwd);
+    assert.match(draft.priceBasis || '', /未查詢即時市場成交價/);
     stage = 'callback-' + fixture.name;
     await call(base + '/internal/minimax-vision/' + job.jobId + '/result', { method: 'POST', headers: { ...worker, 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'COMPLETED', result: draft }) }, 204);
@@ -91,7 +90,8 @@ async function main() {
     assert.equal(row.wishItemId, null);
     assert.equal(row.aiDraftStatus, 'COMPLETED');
     report.photos.push({ fixture: fixture.name, status: state.status, name: draft.name,
-      price: draft.estimatedPriceLowTwd === null ? 'not-justified' : 'reference-only', private: true });
+      estimatedPriceLowTwd: draft.estimatedPriceLowTwd, estimatedPriceHighTwd: draft.estimatedPriceHighTwd,
+      price: 'reference-only', private: true });
     reviewed.push({ id: photo.id, imageUrl: photo.imageUrl, draft });
   }
   stage = 'not-published-before-seller-confirmation';

@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
-import { parseListingAiState, suggestedAskingPrice, type ListingAiDraft, type ListingAiState } from './listingAiDraft';
+import { parseListingAiState, suggestedAskingPrice, suggestedBrand, type ListingAiDraft, type ListingAiState } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -24,7 +24,7 @@ const applyAi = (card: Card, state: ListingAiState): Card => {
   if (!state.draft || card.edited) return { ...card, ai: state.status, draft: state.draft, error: '' };
   const d = state.draft;
   return { ...card, ai: state.status, draft: d, error: '', form: { ...card.form, title: d.title,
-    description: d.description, category: d.category, brand: d.brand ?? '未確認', condition: d.condition ?? 'USED',
+    description: d.description, category: d.category, brand: suggestedBrand(d), condition: d.condition ?? 'USED',
     price: suggestedAskingPrice(d) } };
 };
 function releaseLocal(card: Card) {

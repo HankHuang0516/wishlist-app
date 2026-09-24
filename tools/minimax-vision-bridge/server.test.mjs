@@ -84,9 +84,10 @@ test('listing pilot sends a concise private-draft prompt with a bounded connecto
     assert.equal(result.name, '橘色檯燈');
     assert.equal(connectorTimeout, 150000);
     assert.equal(connectorArgs.image_info.length, 1);
-    assert.ok(connectorArgs.image_info[0].prompt.length < 450);
+    assert.ok(connectorArgs.image_info[0].prompt.length < 600);
     assert.match(connectorArgs.image_info[0].prompt, /私人聯絡資訊/);
-    assert.match(connectorArgs.image_info[0].prompt, /估價依據/);
+    assert.match(connectorArgs.image_info[0].prompt, /非即時行情/);
+    assert.match(connectorArgs.image_info[0].prompt, /故障風險/);
 });
 
 test('loopback bridge requires auth, deduplicates jobs, and processes one at a time', async () => {

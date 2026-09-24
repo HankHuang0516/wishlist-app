@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseListingAiState, suggestedAskingPrice } from '../listingAiDraft';
+import { parseListingAiState, suggestedAskingPrice, suggestedBrand } from '../listingAiDraft';
 
 const id = '41fe5714-b31f-475d-b040-01e2a5c2e1cb';
 const draft = { title: '黑色小型相機', description: '可見黑色機身、鏡頭與背面螢幕；功能仍須賣家確認。', category: 'electronics',
@@ -14,7 +14,9 @@ describe('private listing AI draft protocol', () => {
   });
   it('keeps uncertain prices empty and rejects mismatched media', () => {
     const noPrice = { ...draft, estimatedPriceLowTwd: null, estimatedPriceHighTwd: null, priceBasis: null };
-    expect(suggestedAskingPrice(parseListingAiState({ mediaId: id, status: 'COMPLETED', draft: noPrice }, id).draft!)).toBe('');
+    const result = parseListingAiState({ mediaId: id, status: 'COMPLETED', draft: noPrice }, id);
+    expect(suggestedAskingPrice(result.draft!)).toBe('');
+    expect(suggestedBrand(result.draft!)).toBe('');
     expect(() => parseListingAiState({ mediaId: 'another', status: 'COMPLETED', draft }, id)).toThrow();
   });
   it('never accepts a pending result containing a public-looking draft', () => {

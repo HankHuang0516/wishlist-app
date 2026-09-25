@@ -13,9 +13,17 @@ const auth = { user: { id: 19, phoneNumber: 'test' }, token: 'test-session', log
 describe('web private batch listing flow', () => {
   const calls: { path: string; method: string; body?: string }[] = [];
   let loseFirstPublicationResponse = false;
+  let loseUploadResponse = false;
+  let uploadLookups = 0;
+  let unusedReads = 0;
+  let currentUploadId = '';
   beforeEach(() => {
     calls.length = 0;
     loseFirstPublicationResponse = false;
+    loseUploadResponse = false;
+    uploadLookups = 0;
+    unusedReads = 0;
+    currentUploadId = '';
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
@@ -23,9 +31,23 @@ describe('web private batch listing flow', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input), method = init?.method ?? 'GET';
       calls.push({ path, method, body: typeof init?.body === 'string' ? init.body : undefined });
-      if (path.endsWith('/listing-media/unused?purpose=BATCH_ITEM')) return { ok: true, status: 200, json: async () => ({ items: [] }) };
+      if (path.endsWith('/listing-media/unused?purpose=BATCH_ITEM')) {
+        unusedReads++;
+        const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
+          aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
+        return { ok: true, status: 200, json: async () => ({ items }) };
+      }
       if (path.endsWith(`/listing-media/${mediaId}/thumbnail`)) return { ok: true, blob: async () => new Blob(['private']) };
-      if (path.endsWith('/listing-media') && method === 'POST') return { ok: true, status: 201, json: async () => ({ id: mediaId }) };
+      if (path.endsWith('/listing-media') && method === 'POST') {
+        currentUploadId = String((init?.body as FormData).get('clientUploadId'));
+        if (loseUploadResponse) throw new Error('upload ACK lost');
+        return { ok: true, status: 201, json: async () => ({ id: mediaId }) };
+      }
+      if (path.includes('/listing-media/by-upload-id/')) {
+        uploadLookups++;
+        if (uploadLookups === 1) return { ok: false, status: 404, json: async () => ({ error: 'not yet visible' }) };
+        return { ok: true, status: 200, json: async () => ({ id: mediaId, listingId: null, wishItemId: null }) };
+      }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
       if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
       if (path.endsWith('/listings') && method === 'POST') {
@@ -81,5 +103,21 @@ describe('web private batch listing flow', () => {
     expect(posts).toHaveLength(2);
     expect(posts[1].body).toBe(posts[0].body);
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
+  });
+
+  it('recovers a committed photo after upload ACK loss and one stale private list', async () => {
+    loseUploadResponse = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText(/有 1 張照片的上傳結果待確認/);
+    expect(input).toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    fireEvent.click(screen.getByText('重新確認上傳'));
+    await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
+    expect(await screen.findByText('等待辨識或手動填寫')).toBeInTheDocument();
+    expect(input).not.toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
   });
 });

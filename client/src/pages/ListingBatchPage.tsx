@@ -6,6 +6,7 @@ import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { buildPublishedListing, emptyListingDraft, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile } from '../lib/listingBatch';
 import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingTouched, PublishDetails } from '../lib/listingBatch';
+import { forgetPendingUploads, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
 
 type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
@@ -66,22 +67,33 @@ export default function ListingBatchPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState('');
+  const [unresolvedUploads, setUnresolvedUploads] = useState<string[]>([]);
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
 
   const reload = useCallback(async () => {
-    if (!token) return;
+    if (!token || !userId) return;
     const result = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
     if (!Array.isArray(result.items)) throw new Error('私人照片資料不正確');
-    const recovered = result.items.slice(0, 12).reverse().map(fromMedia);
-    setCards(recovered);
+    const checked = await reconcilePendingUploads(userId, result.items,
+      id => api<unknown>(token, `/listing-media/by-upload-id/${id}`),
+      async () => {
+        const refreshed = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
+        return refreshed.items;
+      });
+    const recovered = checked.items.slice(0, 12).reverse().map(fromMedia);
+    setCards(old => [...recovered.map(card => old.find(previous => previous.id === card.id && previous.dirty) ?? card),
+      ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);
+    setUnresolvedUploads(checked.unresolved);
+    if (checked.unresolved.length) setMessage(`${checked.unresolved.length} 張照片的上傳結果仍待確認；請先重新確認，勿重傳同張照片。`);
+    else setMessage('');
     setReady(true);
-  }, [token]);
+  }, [token, userId]);
 
   useEffect(() => {
     if (!token || !userId) return;
-    setReady(false); setCards([]); setMessage('');
+    setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]);
     setPending(localStorage.getItem(pendingKey(userId)) ?? '');
     void reload().catch(() => setMessage('暫時無法安全恢復私人照片。請稍後重新整理。'));
   }, [token, userId, reload]);
@@ -128,7 +140,7 @@ export default function ListingBatchPage() {
   }
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || !ready || busy || pending) return;
+    if (!files || !ready || busy || pending || unresolvedUploads.length) return;
     if (cards.filter(card => !card.published).length + files.length > 12) { setMessage('一次最多處理 12 件商品。'); return; }
     setBusy(true); setMessage('');
     try {
@@ -138,6 +150,8 @@ export default function ListingBatchPage() {
         catch (error) { setMessage(`第 ${index + 1} 張照片無法處理：${(error as Error).message}；後續照片尚未上傳。`); break; }
         const uploadId = crypto.randomUUID();
         const body = new FormData(); body.append('clientUploadId', uploadId); body.append('capturePurpose', 'BATCH_ITEM'); body.append('image', prepared);
+        try { rememberPendingUpload(userId!, uploadId); }
+        catch { setMessage('無法在此瀏覽器安全記錄上傳進度；照片尚未送出，請確認瀏覽器儲存空間後重試。'); break; }
         try {
           let raw: unknown;
           try { raw = await api<unknown>(token!, '/listing-media', { method: 'POST', body }); }
@@ -145,14 +159,21 @@ export default function ListingBatchPage() {
             // A response can be lost after the private upload commits. Resolve
             // the same idempotency key before inviting a duplicate upload.
             raw = await api<unknown>(token!, `/listing-media/by-upload-id/${uploadId}`).catch(() => { throw failure; });
+            const linked = raw as { listingId?: unknown; wishItemId?: unknown };
+            if (linked.listingId !== null || linked.wishItemId !== null) throw new Error('照片已被其他操作使用，請重新載入確認');
           }
           const record = raw as { id?: unknown };
           if (!isUuid(record?.id)) throw new Error('照片上傳結果未確認');
+          forgetPendingUploads(userId!, [uploadId]);
           const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
             version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '' };
-          setCards(old => [...old, card]);
+          setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
           await requestAi(record.id);
-        } catch (error) { setMessage(`第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先重新載入檢查，再決定是否重新上傳。`); break; }
+        } catch (error) {
+          setUnresolvedUploads(readPendingUploads(userId!).map(entry => entry.clientUploadId));
+          setMessage(`第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
+          break;
+        }
       }
     } finally { setBusy(false); }
   }
@@ -232,6 +253,15 @@ export default function ListingBatchPage() {
     finally { setBusy(false); }
   }
 
+  function abandonUploadCheck() {
+    if (!userId || !unresolvedUploads.length || !window.confirm('僅放棄查詢紀錄，不會刪除後台照片。若上傳稍後完成，重選同張照片可能產生另一份私人草稿；確定繼續？')) return;
+    try {
+      forgetPendingUploads(userId, unresolvedUploads);
+      setUnresolvedUploads([]);
+      setMessage('已放棄這次上傳查詢。後台若稍後完成，重新開啟頁面仍可能看到原私人照片；請檢查後再重傳。');
+    } catch { setMessage('無法安全清除上傳查詢紀錄，請稍後重試。'); }
+  }
+
   function locate() {
     if (!navigator.geolocation) { setMessage('此瀏覽器無法取得位置；請手動填寫縣市、行政區及座標。'); return; }
     navigator.geolocation.getCurrentPosition(position => {
@@ -247,14 +277,20 @@ export default function ListingBatchPage() {
       <p className="mt-3 text-sm leading-6 text-stone-600">一次上傳多張商品照，AI 為每張產生私人草稿與參考價。請逐件確認真實狀況及售價後才公開刊登；AI 不會替你直接發布。</p>
       <div className="mt-5 flex flex-wrap gap-3">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
-          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={!ready || busy || !!pending} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={!ready || busy || !!pending || !!unresolvedUploads.length} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold"><ImagePlus size={18} />批次選照片
-          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={!ready || busy || !!pending} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={!ready || busy || !!pending || !!unresolvedUploads.length} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
       </div>
       <p className="mt-3 text-xs text-stone-500">可重複拍照；單次最多 12 件。大張照片會先在瀏覽器縮放至 5MB 以下；支援的相片格式依瀏覽器而定。上傳後仍保持私人狀態。</p>
     </div>
 
     {pending && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm"><p className="font-semibold">前次刊登結果尚未確認</p><p className="mt-1">請先查詢同一筆操作，避免重複刊登。</p><button className="mt-3 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcile()}>確認前次刊登</button></div>}
+    {!!unresolvedUploads.length && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm">
+      <p className="font-semibold">有 {unresolvedUploads.length} 張照片的上傳結果待確認</p>
+      <p className="mt-1">照片可能已私密存入後台；在確認前已暫停新上傳，避免同張照片重複建立。</p>
+      <button className="mt-3 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reload().catch(() => setMessage('暫時無法確認上傳結果，請稍後重試。'))}>重新確認上傳</button>
+      <button className="ml-3 mt-3 rounded-xl border border-amber-900 px-4 py-2 text-amber-900" disabled={busy} onClick={abandonUploadCheck}>放棄查詢並繼續</button>
+    </div>}
     {message && <div role="status" className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">{message}</div>}
     {!ready && !message && <p className="text-sm text-stone-500">正在恢復私人草稿…</p>}
 

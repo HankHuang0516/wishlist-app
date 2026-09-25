@@ -35,23 +35,41 @@ export function validExternalImageUrl(raw, host) {
 export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dnsLookup, request = https.request } = {}) {
     if (!validExternalImageUrl(raw, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
     const url = new URL(raw);
+    const activeSignal = signal ?? AbortSignal.timeout(45_000);
+    if (activeSignal.aborted) throw new Error('IMAGE_FETCH_FAILED');
+    let onLookupAbort;
+    const cancelledLookup = new Promise((_, reject) => {
+        onLookupAbort = () => reject(new Error('IMAGE_FETCH_FAILED'));
+        activeSignal.addEventListener('abort', onLookupAbort, { once: true });
+    });
     let addresses;
-    try { addresses = await lookup(imageHost, { all: true }); }
+    try { addresses = await Promise.race([lookup(imageHost, { all: true }), cancelledLookup]); }
     catch { throw new Error('IMAGE_FETCH_FAILED'); }
+    finally { activeSignal.removeEventListener('abort', onLookupAbort); }
+    if (activeSignal.aborted) throw new Error('IMAGE_FETCH_FAILED');
     const ipv4 = addresses.filter(entry => entry.family === 4);
     if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('IMAGE_HOST_UNSAFE');
     return new Promise((resolve, reject) => {
-        const req = request(url, { method: 'GET', agent: false, timeout: 20_000,
+        let req;
+        const cleanup = () => activeSignal.removeEventListener('abort', onAbort);
+        const onAbort = () => { cleanup(); req.destroy(new Error('IMAGE_FETCH_FAILED')); reject(new Error('IMAGE_FETCH_FAILED')); };
+        req = request(url, { method: 'GET', agent: false, timeout: 20_000,
             headers: { Accept: 'image/jpeg,image/png,image/webp' },
             lookup: (_hostname, options, callback) => options.all
                 ? callback(null, [{ address: ipv4[0].address, family: 4 }])
                 : callback(null, ipv4[0].address, 4) }, response => {
-            if (response.statusCode !== 200) { response.destroy(); reject(new Error('IMAGE_FETCH_FAILED')); return; }
+            response.once('end', cleanup);
+            response.once('close', cleanup);
+            response.once('error', cleanup);
+            if (response.statusCode !== 200) {
+                cleanup(); response.destroy(); reject(new Error('IMAGE_FETCH_FAILED')); return;
+            }
             resolve({ ok: true, body: response, headers: { get: key => response.headers[key]?.toString() ?? null } });
         });
-        req.on('error', () => reject(new Error('IMAGE_FETCH_FAILED')));
+        req.on('error', () => { cleanup(); reject(new Error('IMAGE_FETCH_FAILED')); });
         req.on('timeout', () => req.destroy(new Error('IMAGE_FETCH_FAILED')));
-        signal?.addEventListener('abort', () => req.destroy(new Error('IMAGE_FETCH_FAILED')), { once: true });
+        activeSignal.addEventListener('abort', onAbort, { once: true });
+        if (activeSignal.aborted) { onAbort(); return; }
         req.end();
     });
 }

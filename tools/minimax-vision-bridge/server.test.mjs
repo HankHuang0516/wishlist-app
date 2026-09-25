@@ -60,6 +60,50 @@ test('external image fetch pins the same public IPv4 for Node multi-address look
     assert.equal(Buffer.concat(chunks).toString('hex'), '89504e470d0a1a0a');
 });
 
+test('an aborted DNS lookup cannot later start an external image request', async () => {
+    const controller = new AbortController();
+    let resolveLookup;
+    let requested = false;
+    const pendingLookup = new Promise(resolve => { resolveLookup = resolve; });
+    const image = pinnedExternalFetch('https://images.example.com/item/1.jpg', {
+        imageHost: 'images.example.com', signal: controller.signal,
+        lookup: () => pendingLookup,
+        request: () => { requested = true; throw new Error('must not run'); },
+    });
+    controller.abort();
+    await assert.rejects(image, /IMAGE_FETCH_FAILED/);
+    resolveLookup([{ address: '93.184.216.34', family: 4 }]);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requested, false);
+});
+
+test('an aborted external image download closes the body stream', async () => {
+    const controller = new AbortController();
+    let destroyed = false;
+    const request = (_url, _options, callback) => {
+        const operation = new EventEmitter();
+        const response = new Readable({ read() {} });
+        response.statusCode = 200;
+        response.headers = { 'content-type': 'image/png' };
+        operation.end = () => queueMicrotask(() => {
+            callback(response);
+            response.push(Buffer.from('89504e470d0a1a0a', 'hex'));
+        });
+        operation.destroy = error => { destroyed = true; response.destroy(error); };
+        return operation;
+    };
+    const response = await pinnedExternalFetch('https://images.example.com/item/1.jpg', {
+        imageHost: 'images.example.com', signal: controller.signal,
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }], request,
+    });
+    const consumed = (async () => {
+        for await (const _chunk of response.body) { /* await the rest of the stream */ }
+    })();
+    controller.abort();
+    await assert.rejects(consumed, /IMAGE_FETCH_FAILED/);
+    assert.equal(destroyed, true);
+});
+
 test('accepts visual evidence but not unsupported price claims', () => {
     const result = parseVisionDescription(JSON.stringify({
         recognizable: true, name: '白糖粿招牌', category: '小吃招牌',

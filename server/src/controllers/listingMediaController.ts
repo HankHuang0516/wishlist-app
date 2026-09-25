@@ -201,7 +201,7 @@ export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
             createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) },
             ...(purpose ? { capturePurpose: purpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM' } : {}) },
             orderBy: { createdAt: 'desc' }, take: 30,
-            select: { ...select, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
+            select: { ...select, clientUploadId: true, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
         return res.json({ items: records.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })) });
     } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
 }
@@ -228,7 +228,8 @@ export async function getMediaByUploadId(req: AuthRequest, res: Response) {
     try {
         const clientUploadId = req.params.clientUploadId;
         if (!isListingId(clientUploadId)) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId: req.user.id, clientUploadId } }, select });
+        const record = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId: req.user.id, clientUploadId } },
+            select: { ...select, listingId: true, wishItemId: true } });
         if (!record) return res.status(404).json({ error: '照片不存在' });
         return res.json(record);
     } catch { return res.status(500).json({ error: '暫時無法確認照片', errorCode: 'PHOTO_LOOKUP_ERROR' }); }

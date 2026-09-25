@@ -64,12 +64,14 @@ afterAll(async () => {
 
 describe('real listing photo upload / private read / PostgreSQL', () => {
     it('keeps manual multi-angle photos out of batch recovery and adopts legacy photos only on explicit owner action', async () => {
-        const batch = (await upload(seller, randomUUID(), undefined, 'image/jpeg', 'BATCH_ITEM')).body;
+        const batchUploadId = randomUUID();
+        const batch = (await upload(seller, batchUploadId, undefined, 'image/jpeg', 'BATCH_ITEM')).body;
         const manual = (await upload(seller, randomUUID(), undefined, 'image/jpeg', 'MANUAL_PHOTO')).body;
         const legacy = (await upload()).body;
         const list = (purpose: string, user = seller) => request(app).get('/api/listing-media/unused')
             .set('Authorization', 'Bearer ' + token(user)).query({ purpose });
         expect((await list('BATCH_ITEM')).body.items.map((item: { id: string }) => item.id)).toEqual([batch.id]);
+        expect((await list('BATCH_ITEM')).body.items[0].clientUploadId).toBe(batchUploadId);
         expect((await list('MANUAL_PHOTO')).body.items.map((item: { id: string }) => item.id)).toEqual([manual.id]);
         expect((await list('LEGACY_UNKNOWN')).body.items.map((item: { id: string }) => item.id)).toEqual([legacy.id]);
         expect((await list('BATCH_ITEM', third)).body.items).toEqual([]);
@@ -238,7 +240,13 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
             const r = request(app).get('/api/listing-media/by-upload-id/' + value); return user ? r.set('Authorization', 'Bearer ' + token(user)) : r;
         };
         expect((await lookup()).status).toBe(401); expect((await lookup(third)).status).toBe(404);
-        expect((await lookup(seller)).body.id).toBe(photo.id); expect((await lookup(seller, randomUUID())).status).toBe(404);
+        const unused = await lookup(seller);
+        expect(unused.body).toMatchObject({ id: photo.id, listingId: null, wishItemId: null });
+        const draft = await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller))
+            .send(listingBody(photo.id, false));
+        expect(draft.status).toBe(201);
+        expect((await lookup(seller)).body).toMatchObject({ id: photo.id, listingId: draft.body.id, wishItemId: null });
+        expect((await lookup(seller, randomUUID())).status).toBe(404);
     });
     it('rejects unsupported, forged and oversized files and malformed multipart IDs', async () => {
         expect((await upload(seller, randomUUID(), Buffer.from('<svg/>'), 'image/svg+xml')).status).toBe(400);

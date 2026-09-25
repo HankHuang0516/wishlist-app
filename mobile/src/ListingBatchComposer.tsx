@@ -14,6 +14,7 @@ import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
 import { captureCameraSequence } from './listingCaptureFlow';
 import { listPrivateCaptures, preservePrivateCapture, releasePrivateCapture } from './privateCaptureStore';
+import { reconcilePrivateBatchCaptures } from './listingCaptureRecovery';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { parseSellerDraft, restoreSellerForm, sellerDraftFromCard, SellerDraftSync } from './listingSellerDraft';
 import { PrivateListingPhoto } from './PrivateListingPhoto';
@@ -82,7 +83,24 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
           olderPhotos = (legacy?.items ?? []).map(raw => parsePhotoRecord(raw, apiUrl, __DEV__));
         } catch { olderFailed = true; }
-        const recovered = restoreBatchCaptureOrder(response.items, response.items.length).map(raw => {
+        // An upload can commit after the unused-list snapshot but before its
+        // durable UUID lookup. Refresh that snapshot before discarding pixels.
+        const captureRecovery = await reconcilePrivateBatchCaptures(response.items, localCaptures,
+          async clientUploadId => {
+            const raw = await api<unknown>(`/listing-media/by-upload-id/${clientUploadId}`, { timeoutMs: 5000 });
+            const record = parsePhotoRecord(raw, apiUrl, __DEV__);
+            const row = raw as Record<string, unknown>;
+            if (!(row.listingId === null || uuid(row.listingId)) ||
+              !(row.wishItemId === null || typeof row.wishItemId === 'number' &&
+                Number.isSafeInteger(row.wishItemId) && row.wishItemId > 0)) throw new Error('PHOTO_LINK_STATE_INVALID');
+            return { ...record, linked: row.listingId !== null || row.wishItemId !== null };
+          },
+          async () => {
+            const refreshed = await api<{ items: unknown[] }>('/listing-media/unused?purpose=BATCH_ITEM');
+            if (!Array.isArray(refreshed.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
+            return refreshed.items;
+          });
+        const recovered = restoreBatchCaptureOrder(captureRecovery.items, captureRecovery.items.length).map(raw => {
           const record = parsePhotoRecord(raw, apiUrl, __DEV__);
           const row = raw as Record<string, unknown>;
           const state = parseListingAiState({ mediaId: record.id, status: row.aiDraftStatus, draft: row.aiDraft ?? null }, record.id);
@@ -93,23 +111,13 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           return restored ? { ...aiCard, clientListingId: restored.clientListingId,
             form: restoreSellerForm(aiCard.form, restored, state.draft), touched: restored.touched } : aiCard;
         });
-        // A process may die after Flickr commits but before its acknowledgement arrives.
-        // Resolve each durable local UUID before offering a retry with the same pixels.
-        const localCards = await Promise.all(localCaptures.map(async capture => {
-          try {
-            const raw = await api<unknown>(`/listing-media/by-upload-id/${capture.clientUploadId}`, { timeoutMs: 5000 });
-            parsePhotoRecord(raw, apiUrl, __DEV__);
-          } catch (failure) {
-            // A missing or temporarily unreachable lookup must not discard pixels.
-            return { ...initialCard(capture.clientUploadId, capture.uri, true),
-              error: failure instanceof ApiError && failure.status === 404 ? '照片仍在此裝置，請重試私密上傳。' : '尚無法確認雲端狀態；請重試私密上傳。' };
-          }
-          // The server copy is authoritative. A linked or expired item no
-          // longer belongs in the unpublished recovery list.
-          try { await releasePrivateCapture(apiUrl, userId, capture.clientUploadId); } catch { /* retry cleanup on next open */ }
-          return null;
+        const localCards = captureRecovery.retryCaptures.map(capture => ({
+          ...initialCard(capture.clientUploadId, capture.uri, true),
+          error: '照片仍在此裝置；雲端狀態未確認，請重試私密上傳。',
         }));
-        if (scopeActive && active.current) { keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards.filter((card): card is Card => card !== null)]);
+        for (const clientUploadId of captureRecovery.releaseUploadIds)
+          try { await releasePrivateCapture(apiUrl, userId, clientUploadId); } catch { /* retry cleanup on next open */ }
+        if (scopeActive && active.current) { keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards]);
           setLegacyPhotos(olderPhotos); setLegacyRecoveryError(olderFailed);
           setReady(true); }
       } catch { if (scopeActive && active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }

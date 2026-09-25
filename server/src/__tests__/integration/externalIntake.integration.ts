@@ -113,6 +113,8 @@ describe('admin-only attributed external supply staging', () => {
         expect(sourceRead.body).toMatchObject({ id: sourceId, enabled: false, authorizationRef: sourceBody.authorizationRef,
             canonicalHost: sourceBody.canonicalHost });
         expect((await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
+        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+            .send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] })).status).toBe(404);
         expect((await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
             .send({ authorizationRef: 'contract:wrong', confirmRights: true })).status).toBe(400);
         const enabled = await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
@@ -120,9 +122,21 @@ describe('admin-only attributed external supply staging', () => {
         expect(enabled.status).toBe(200); expect(enabled.body.enabled).toBe(true);
         expect((await request(app).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey)).body)
             .toMatchObject({ id: sourceId, enabled: true, enabledAt: expect.any(String) });
+        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`)
+            .send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] })).status).toBe(401);
     });
     it('atomically stages sourced records and never inserts public seller listings', async () => {
         const originalCount = await prisma.listing.count();
+        const preflight = await request(app).post(`${url}/sources/${sourceId}/validate-candidates`)
+            .set('x-admin-key', adminKey).send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] });
+        expect(preflight.status).toBe(200);
+        expect(preflight.body).toEqual({ validCount: 1, publicCount: 0, persistedCount: 0 });
+        expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(0);
+        expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(0);
+        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+            .send({ authorizationRef: 'contract:wrong', items: [candidate()] })).status).toBe(400);
+        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+            .send({ authorizationRef: sourceBody.authorizationRef, items: [{ ...candidate(), district: '高雄區' }] })).status).toBe(400);
         const bad = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)
             .send({ items: [candidate(), { ...candidate(), sourceItemId: 'test-2', canonicalUrl: 'https://evil.example/items/2' }] });
         expect(bad.status).toBe(400);
@@ -132,6 +146,9 @@ describe('admin-only attributed external supply staging', () => {
         expect(staged.status).toBe(202); expect(staged.body).toMatchObject({ publicCount: 0,
             intakeBatchId: expect.any(String),
             items: [{ sourceItemId: 'test-1', status: 'PENDING_REVIEW', aiStatus: 'NOT_ELIGIBLE', changed: true }] });
+        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+            .send({ authorizationRef: sourceBody.authorizationRef, items: [{ ...candidate(),
+                observedAt: new Date(Date.now() - 60_000).toISOString() }] })).status).toBe(400);
         expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`)).status).toBe(401);
         expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
             .query({ cursor: 'not-a-uuid' })).status).toBe(400);

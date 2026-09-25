@@ -91,6 +91,30 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             return changed.count ? res.status(204).send() : res.status(404).json({ error: '來源不存在' });
         } catch (error) { return fail(res, error); }
     });
+    // Read-only validation before a partner snapshot is staged. The actual
+    // candidate transaction repeats these checks under the source lock.
+    router.post('/sources/:id/validate-candidates', writes(), async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
+            const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
+            if (!source || !source.enabled || !source.enabledAt) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
+            if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
+                Object.keys(req.body).sort().join(',') !== 'authorizationRef,items' ||
+                req.body.authorizationRef !== source.authorizationRef || !Array.isArray(req.body.items) ||
+                req.body.items.length < 1 || req.body.items.length > 50) throw new ExternalIntakeError('items');
+            const now = new Date();
+            const items = req.body.items.map((raw: unknown) => parseExternalCandidate(raw, source, now));
+            const ids: string[] = items.map((item: { sourceItemId: string }) => item.sourceItemId);
+            if (new Set(ids).size !== ids.length) throw new ExternalIntakeError('sourceItemId', '同一批次不得重複商品 ID');
+            const existing = await prisma.externalListingCandidate.findMany({ where: { sourceId: source.id,
+                sourceItemId: { in: ids } }, select: { sourceItemId: true, observedAt: true } });
+            const observations = new Map(existing.map(row => [row.sourceItemId, row.observedAt]));
+            if (items.some((item: { sourceItemId: string; observedAt: Date }) =>
+                item.observedAt < (observations.get(item.sourceItemId) ?? new Date(0))))
+                throw new ExternalIntakeError('observedAt', '來源觀測時間不得倒退；整批未匯入');
+            return res.json({ validCount: items.length, publicCount: 0, persistedCount: 0 });
+        } catch (error) { return fail(res, error); }
+    });
     router.post('/sources/:id/candidates', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });

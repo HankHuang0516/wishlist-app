@@ -63,6 +63,32 @@ afterAll(async () => {
 });
 
 describe('real listing photo upload / private read / PostgreSQL', () => {
+    it('reports AI availability for the signed-in account without exposing the pilot ID', async () => {
+        const saved = { enabled: process.env.MINIMAX_LISTING_AI_ENABLED, pilot: process.env.MINIMAX_LISTING_AI_PILOT_USER_ID,
+            callback: process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN };
+        const endpoint = '/api/listing-media/ai-availability';
+        const check = (user: number) => request(app).get(endpoint).set('Authorization', 'Bearer ' + token(user));
+        try {
+            expect((await request(app).get(endpoint)).status).toBe(401);
+            delete process.env.MINIMAX_LISTING_AI_ENABLED;
+            expect((await check(seller)).body).toEqual({ available: false });
+            process.env.MINIMAX_LISTING_AI_ENABLED = '1';
+            process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = 'synthetic-listing-ai-worker-token-at-least-32-chars';
+            process.env.MINIMAX_LISTING_AI_PILOT_USER_ID = String(seller);
+            const pilot = await check(seller), other = await check(third);
+            expect(pilot.status).toBe(200); expect(pilot.body).toEqual({ available: true });
+            expect(pilot.headers['cache-control']).toBe('private, no-store');
+            expect(other.status).toBe(200); expect(other.body).toEqual({ available: false });
+            expect(JSON.stringify(other.body)).not.toContain(String(seller));
+            delete process.env.MINIMAX_LISTING_AI_PILOT_USER_ID;
+            expect((await check(third)).body).toEqual({ available: true });
+        } finally {
+            for (const [key, value] of Object.entries({ MINIMAX_LISTING_AI_ENABLED: saved.enabled,
+                MINIMAX_LISTING_AI_PILOT_USER_ID: saved.pilot, WISHLIST_MINIMAX_CALLBACK_TOKEN: saved.callback })) {
+                if (value === undefined) delete process.env[key]; else process.env[key] = value;
+            }
+        }
+    });
     it('pages every owner-only private batch draft without repeating or leaking another purpose', async () => {
         const createdAt = new Date();
         const batchIds = Array.from({ length: 32 }, () => randomUUID());

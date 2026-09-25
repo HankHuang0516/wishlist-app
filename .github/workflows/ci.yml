@@ -89,6 +89,10 @@ jobs:
     - name: Test authorized private feed bridge without partner access
       run: node --test ../tools/authorized-feed-bridge/poller.test.mjs
 
+    - name: Verify authorized feed cron image remains dormant
+      working-directory: .
+      run: node tools/authorized-feed-bridge/verify-cron-image.mjs
+
     - name: Verify native QA photo identity checks
       run: node --test ../mobile/scripts/check-native-qa-photo-fingerprint.cjs
 

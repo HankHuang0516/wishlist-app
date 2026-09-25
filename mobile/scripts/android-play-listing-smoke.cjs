@@ -13,9 +13,11 @@ if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) 
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
 const { version: versionName, android: { versionCode } } = require('../app.config.js').expo;
 const base = 'https://wishlist-app-production.up.railway.app/api';
-const cameraMode = process.argv.length === 3 && process.argv[2] === '--camera';
-const batchCount = process.argv.length === 2 || cameraMode ? 1 : process.argv.length === 3 && process.argv[2] === '--two' ? 2 : 0;
-if (!batchCount) throw new Error('Use no argument, --two, or --camera');
+const cameraCount = process.argv.length === 3 && process.argv[2] === '--camera' ? 1 :
+  process.argv.length === 3 && process.argv[2] === '--camera-two' ? 2 : 0;
+const cameraMode = cameraCount > 0;
+const batchCount = cameraCount || (process.argv.length === 2 ? 1 : process.argv.length === 3 && process.argv[2] === '--two' ? 2 : 0);
+if (!batchCount) throw new Error('Use no argument, --two, --camera, or --camera-two');
 const credentialFile = process.env.QA_CREDENTIALS_FILE;
 const runId = randomUUID();
 const fixtures = [
@@ -179,50 +181,67 @@ async function main() {
     await sleep(4500);
     const allow = find(dump(), 'While using the app') || find(dump(), 'Only this time') || find(dump(), '使用應用程式時允許');
     if (allow) { tap(allow); await sleep(4500); }
-    stage = 'camera-shutter';
-    adb(['shell', 'input', 'tap', '160', '582']);
-    await sleep(2200);
-    const preview = adb(['exec-out', 'screencap', '-p'], { binary: true });
-    const metadata = await sharp(preview).metadata();
-    if (metadata.width !== 320 || metadata.height !== 640) throw new Error('camera_layout_changed');
-    const cameraPreview = await sharp(preview).extract({ left: 0, top: 93, width: 320, height: 429 }).png().toBuffer();
-    const stats = await sharp(cameraPreview).stats();
-    if (stats.channels.slice(0, 3).every(channel => channel.stdev < 20)) throw new Error('camera_preview_blank');
-    stage = 'camera-confirmation';
-    adb(['shell', 'input', 'tap', '160', '582']);
-    uploadStarted = true;
-    for (let attempt = 0; attempt < 55; attempt++) {
-      const added = (await unused()).filter(item => !baselineIds.has(item.id));
-      if (added.length > 1) throw new Error('private_upload_ambiguous');
-      for (const item of added) candidateIds.add(item.id);
-      if (candidateIds.size === 1) break;
-      await sleep(1200);
+    const cameraPhotoDistances = [];
+    for (let index = 0; index < cameraCount; index++) {
+      stage = `camera-shutter-${index + 1}`;
+      adb(['shell', 'input', 'tap', '160', '582']);
+      await sleep(2200);
+      const preview = adb(['exec-out', 'screencap', '-p'], { binary: true });
+      const metadata = await sharp(preview).metadata();
+      if (metadata.width !== 320 || metadata.height !== 640) throw new Error('camera_layout_changed');
+      const cameraPreview = await sharp(preview).extract({ left: 0, top: 93, width: 320, height: 429 }).png().toBuffer();
+      const stats = await sharp(cameraPreview).stats();
+      if (stats.channels.slice(0, 3).every(channel => channel.stdev < 20)) throw new Error('camera_preview_blank');
+      stage = `camera-confirmation-${index + 1}`;
+      adb(['shell', 'input', 'tap', '160', '582']);
+      uploadStarted = true;
+      let candidateId;
+      for (let attempt = 0; attempt < 55; attempt++) {
+        const added = (await unused()).filter(item => !baselineIds.has(item.id));
+        if (added.length > index + 1) throw new Error('private_upload_ambiguous');
+        if (added.length === index + 1) {
+          const fresh = added.filter(item => !candidateIds.has(item.id));
+          if (fresh.length !== 1) throw new Error('private_upload_ambiguous');
+          candidateId = fresh[0].id;
+          candidateIds.add(candidateId);
+          break;
+        }
+        await sleep(1200);
+      }
+      if (!candidateId) throw new Error('private_upload_missing');
+      const anonymous = await fetch(`${base}/listing-media/${candidateId}/image`, { signal: AbortSignal.timeout(20_000) });
+      if (anonymous.status !== 404) throw new Error('private_photo_exposed');
+      const owner = await api(`/listing-media/${candidateId}/image`);
+      if (owner.status !== 200 || !owner.headers.get('content-type')?.startsWith('image/')) throw new Error('private_photo_owner_unavailable');
+      const distance = await fixtureDistance(sharp, Buffer.from(await owner.arrayBuffer()), cameraPreview);
+      if (distance >= 20) throw new Error('camera_photo_identity_mismatch');
+      ownedCandidateIds.add(candidateId); verifiedOwnedCount = ownedCandidateIds.size;
+      cameraPhotoDistances.push(Number(distance.toFixed(2)));
+      stage = `next-camera-${index + 1}`;
+      let nextCameraOpened = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const nextCamera = dump();
+        if (nextCamera.includes('Take photo') || nextCamera.includes('Shutter') || nextCamera.includes('拍照')) {
+          nextCameraOpened = true; break;
+        }
+        await sleep(750);
+      }
+      if (!nextCameraOpened) throw new Error('next_camera_not_open');
     }
-    if (candidateIds.size !== 1) throw new Error('private_upload_missing');
-    const candidateId = [...candidateIds][0];
-    const anonymous = await fetch(`${base}/listing-media/${candidateId}/image`, { signal: AbortSignal.timeout(20_000) });
-    if (anonymous.status !== 404) throw new Error('private_photo_exposed');
-    const owner = await api(`/listing-media/${candidateId}/image`);
-    if (owner.status !== 200 || !owner.headers.get('content-type')?.startsWith('image/')) throw new Error('private_photo_owner_unavailable');
-    const distance = await fixtureDistance(sharp, Buffer.from(await owner.arrayBuffer()), cameraPreview);
-    if (distance >= 20) throw new Error('camera_photo_identity_mismatch');
-    ownedCandidateIds.add(candidateId); verifiedOwnedCount = 1;
-    stage = 'next-camera';
-    const nextCamera = dump();
-    if (!nextCamera.includes('Take photo') && !nextCamera.includes('Shutter') && !nextCamera.includes('拍照'))
-      throw new Error('next_camera_not_open');
     adb(['shell', 'input', 'keyevent', '4']);
     await waitNode('連續拍照刊登');
-    await waitWithScroll(`第${baselineIds.size + 1}件商品照片`);
+    await waitWithScroll(`第${baselineIds.size + cameraCount}件商品照片`);
     const after = await api('/listings/mine');
     if (!after.ok || (await after.json()).items.some(item => !initialListings.has(item.id))) throw new Error('listing_published_without_consent');
     stage = 'cleanup';
-    if (await cleanupCandidate(candidateId) !== 'DELETE_ACCEPTED') throw new Error('private_photo_cleanup_incomplete');
-    ownedCandidateIds.delete(candidateId);
+    for (const candidateId of [...ownedCandidateIds]) {
+      if (await cleanupCandidate(candidateId) !== 'DELETE_ACCEPTED') throw new Error('private_photo_cleanup_incomplete');
+      ownedCandidateIds.delete(candidateId);
+    }
     if ((await unused()).some(item => !baselineIds.has(item.id))) throw new Error('private_photo_still_listed');
     candidateCleanupConfirmed = true;
     console.log(JSON.stringify({ result: 'PASS', scope: 'play-signed-native-continuous-camera', versionCode,
-      privateUploadCount: 1, cameraPhotoDistance: Number(distance.toFixed(2)), nextCameraOpened: true,
+      privateUploadCount: cameraCount, cameraPhotoDistances, nextCameraOpened: true,
       anonymousAccessDenied: true, unconfirmedPublicListings: 0, cleanup: 'DELETE_ACCEPTED' }));
     return;
   }

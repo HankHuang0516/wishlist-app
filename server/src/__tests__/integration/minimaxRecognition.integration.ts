@@ -59,7 +59,7 @@ afterAll(async () => {
 async function externalCandidate() {
     const source = await prisma.externalListingSource.create({ data: { name: 'Synthetic authorized source', kind: 'PARTNER_FEED',
         canonicalHost: 'partner.example.com', imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026',
-        textReuseAllowed: true, imageReuseAllowed: true, aiProcessingAllowed: true, enabled: true } });
+        textReuseAllowed: true, imageReuseAllowed: true, aiProcessingAllowed: true, enabled: true, enabledAt: new Date() } });
     sourceIds.push(source.id);
     const candidate = await prisma.externalListingCandidate.create({ data: { sourceId: source.id, sourceItemId: randomUUID(),
         canonicalUrl: 'https://partner.example.com/item/1', imageUrl: 'https://images.example.com/item/1.jpg',
@@ -180,6 +180,28 @@ describe('isolated MiniMax Code pull queue', () => {
         await prisma.externalListingCandidate.update({ where: { id: second.candidate.id },
             data: { title: 'changed', contentHash: 'changed-hash', aiStatus: 'PENDING', aiJobId: null } });
         expect((await callback(secondJob.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+    });
+    it('never leases an unactivated or expired source image and rejects a callback after rights expire', async () => {
+        const { source, candidate } = await externalCandidate();
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: { enabledAt: null } });
+        expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).aiStatus).toBe('PENDING');
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            enabledAt: new Date(), authorizationExpiresAt: new Date(Date.now() - 1000),
+        } });
+        expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            authorizationExpiresAt: new Date(Date.now() + 86_400_000),
+        } });
+        const claimed = await auth('/api/internal/minimax-vision/next');
+        expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', imageUrl: candidate.imageUrl });
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            authorizationExpiresAt: new Date(Date.now() - 1000),
+        } });
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).aiDraft).toBeNull();
+        expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).status).toBe('STALE');
     });
     it('expires an external source item and discards an in-flight private AI suggestion', async () => {
         const { candidate } = await externalCandidate();

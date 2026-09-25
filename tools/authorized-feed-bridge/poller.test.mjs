@@ -47,7 +47,7 @@ test('preflight can inspect an authorized source while sync remains explicitly d
     calls++;
     assert.equal(options.method, 'GET');
     return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
-      enabledAt: new Date().toISOString(), authorizationRef, canonicalHost: config.host }), { status: 200 });
+      enabledAt: new Date().toISOString(), authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
   };
   const fetchFeed = async () => { calls++; return { ...envelope(), generatedAt: new Date().toISOString() }; };
   assert.deepEqual(await preflightAuthorizedFeed(disabled, { fetchApi, fetchFeed }), {
@@ -155,7 +155,7 @@ test('checks current source before fetching and sends sold signals before privat
       key: options.headers['x-admin-key'] });
     if (url.endsWith('/sources/' + sourceId) && options.method === 'GET') return new Response(JSON.stringify({
       id: sourceId, kind: 'PARTNER_FEED', enabled: true, enabledAt: now.toISOString(),
-      authorizationRef, canonicalHost: config.host,
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host,
     }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0, withdrawn: 1, unknown: 1 }), { status: 200 });
     if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({ validCount: 1,
@@ -179,7 +179,7 @@ test('checks current source before fetching and sends sold signals before privat
   let feedCalled = false;
   await assert.rejects(syncAuthorizedFeed(config, {
     fetchApi: async () => new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: false,
-      authorizationRef, canonicalHost: config.host }), { status: 200 }),
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 }),
     fetchFeed: async () => { feedCalled = true; return envelope(); },
   }), /FEED_SOURCE_NOT_AUTHORIZED/);
   assert.equal(feedCalled, false);
@@ -192,7 +192,7 @@ test('preflight checks all candidate batches without staging or withdrawing', as
     calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
     if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
       kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
-      authorizationRef, canonicalHost: config.host }), { status: 200 });
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
     assert.ok(url.endsWith('/validate-candidates'));
     return new Response(JSON.stringify({ validCount: JSON.parse(options.body).items.length,
       publicCount: 0, persistedCount: 0 }), { status: 200 });
@@ -215,7 +215,7 @@ test('a later invalid batch cannot partly stage candidates, but sold signals sti
     calls.push(url);
     if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
       kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
-      authorizationRef, canonicalHost: config.host }), { status: 200 });
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
       withdrawn: 1, unknown: 0 }), { status: 200 });
     if (url.endsWith('/validate-candidates')) return calls.filter(call => call.endsWith('/validate-candidates')).length === 2
@@ -244,7 +244,7 @@ test('maximum scheduled snapshot keeps 200 items private and processes 50 explic
     calls.push({ url, method: options.method, body });
     if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
       kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
-      authorizationRef, canonicalHost: config.host }), { status: 200 });
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
       withdrawn: body.sourceItemIds.length, unknown: 0 }), { status: 200 });
     if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({
@@ -276,7 +276,7 @@ test('recurring sync rechecks source authorization and does not fetch after it i
   const fetchApi = async (_url, options) => {
     assert.equal(options.method, 'GET');
     return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled,
-      enabledAt: current, authorizationRef, canonicalHost: config.host }), { status: 200 });
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
   };
   const fetchFeed = async () => { fetched++; return { ...envelope(), generatedAt: current }; };
   assert.deepEqual(await syncAuthorizedFeed(config, { fetchApi, fetchFeed }), {
@@ -288,6 +288,19 @@ test('recurring sync rechecks source authorization and does not fetch after it i
   assert.equal(fetched, 1);
 });
 
+test('expired or missing source authorization expiry is rejected before the partner feed is fetched', async () => {
+  let fetched = 0;
+  for (const authorizationExpiresAt of [new Date(Date.now() - 1).toISOString(), undefined, 'not-a-date']) {
+    await assert.rejects(preflightAuthorizedFeed(config, {
+      fetchApi: async () => new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+        enabledAt: new Date().toISOString(), authorizationRef, authorizationExpiresAt,
+        canonicalHost: config.host }), { status: 200 }),
+      fetchFeed: async () => { fetched++; return envelope(); },
+    }), /FEED_SOURCE_NOT_AUTHORIZED/);
+  }
+  assert.equal(fetched, 0);
+});
+
 test('over-limit snapshots are rejected before any private or public write', async () => {
   const current = new Date().toISOString();
   const calls = [];
@@ -295,7 +308,7 @@ test('over-limit snapshots are rejected before any private or public write', asy
     calls.push(options.method);
     assert.equal(options.method, 'GET');
     return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
-      enabledAt: current, authorizationRef, canonicalHost: config.host }), { status: 200 });
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
   };
   for (const snapshot of [
     { ...envelope(Array.from({ length: 201 }, (_, index) => item('too-many-' + index, current))), generatedAt: current },

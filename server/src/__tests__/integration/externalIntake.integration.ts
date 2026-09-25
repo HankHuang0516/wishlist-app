@@ -99,6 +99,48 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
+    it('hides approved items and blocks new intake immediately when source authorization expires', async () => {
+        const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.212');
+        const rightsEnd = new Date(Date.now() + 86_400_000).toISOString();
+        const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic expiring rights source',
+            authorizationExpiresAt: rightsEnd });
+        expect(created.status).toBe(201);
+        const expiringSourceId: string = created.body.id;
+        try {
+            expect((await admin(`/sources/${expiringSourceId}/activate`).send({
+                authorizationRef: sourceBody.authorizationRef, confirmRights: true,
+            })).status).toBe(200);
+            const staged = await admin(`/sources/${expiringSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: staged.body.items[0].id } });
+            expect((await admin(`/candidates/${row.id}/approve`).send({ expectedContentHash: row.contentHash,
+                authorizationRef: sourceBody.authorizationRef, reviewRef: 'review:expiring-rights-test',
+                confirmRights: true, confirmItem: true })).status).toBe(200);
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(200);
+            await prisma.externalListingSource.update({ where: { id: expiringSourceId }, data: {
+                authorizationExpiresAt: new Date(Date.now() - 1000),
+            } });
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+            expect((await admin(`/sources/${expiringSourceId}/validate-candidates`).send({
+                authorizationRef: sourceBody.authorizationRef, items: [candidate()],
+            })).status).toBe(404);
+            expect((await admin(`/sources/${expiringSourceId}/candidates`).send({ items: [candidate()] })).status).toBe(404);
+            expect((await expireExternalCandidates()).valueOf()).toBeGreaterThanOrEqual(1);
+            expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('STALE');
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+        } finally {
+            if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: expiringSourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: expiringSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: expiringSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: expiringSourceId } });
+        }
+    });
     it('is closed without the header and requires separate authorization activation', async () => {
         expect((await request(app).get(url + '/sources')).status).toBe(401);
         expect((await request(app).get(url + '/sources?key=' + encodeURIComponent(adminKey)).set('x-admin-key', adminKey)).status).toBe(400);

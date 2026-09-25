@@ -5,6 +5,10 @@ export class ExternalIntakeError extends Error {
     constructor(readonly field: string, message = '外部商品資料不完整或不符合授權條件') { super(message); }
 }
 
+// Public external stock must be re-observed at least daily. The API read gate
+// hides it at this boundary even if the 15-minute status worker has not run.
+export const EXTERNAL_OBSERVATION_MAX_AGE_MS = 24 * 3_600_000;
+
 type SourcePolicy = { canonicalHost: string; imageHost: string | null; imageReuseAllowed: boolean; textReuseAllowed: boolean };
 // City-maintained administrative district lists, checked 2026-09-25:
 // https://www.gov.taipei/cp.aspx?n=1F076481DD9E556B
@@ -96,7 +100,7 @@ export function parseExternalCandidate(input: unknown, source: SourcePolicy, now
     const priceTwd = value.priceTwd;
     if (typeof priceTwd !== 'number' || !Number.isSafeInteger(priceTwd) || priceTwd < 1 || priceTwd > 10_000_000) throw new ExternalIntakeError('priceTwd', '需提供來源明示的商品售價');
     const observedAt = date(value.observedAt, 'observedAt'), expiresAt = date(value.expiresAt, 'expiresAt');
-    if (observedAt.getTime() > now.getTime() + 5 * 60_000 || now.getTime() - observedAt.getTime() > 48 * 3_600_000 ||
+    if (observedAt.getTime() > now.getTime() + 5 * 60_000 || now.getTime() - observedAt.getTime() > EXTERNAL_OBSERVATION_MAX_AGE_MS ||
         expiresAt.getTime() <= now.getTime() || expiresAt.getTime() > observedAt.getTime() + 30 * 86_400_000) throw new ExternalIntakeError('expiresAt', '來源資料須近期確認且最遲 30 天內失效');
     const data = { sourceItemId, canonicalUrl, imageUrl, thumbnailUrl, title, description, priceTwd,
         condition: value.condition as 'USED' | 'NEW',

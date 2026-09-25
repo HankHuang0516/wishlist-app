@@ -29,6 +29,12 @@ describe('authorized external supply intake', () => {
         expect(parseExternalCandidate({ ...item, county: '新北市', district: '板橋區' }, source, now))
             .toMatchObject({ county: '新北市', district: '板橋區' });
     });
+    it('accepts a daily observation at 24 hours but rejects one millisecond older', () => {
+        expect(parseExternalCandidate({ ...item, observedAt: '2026-09-23T12:00:00Z' }, source, now).observedAt)
+            .toEqual(new Date('2026-09-23T12:00:00Z'));
+        expect(() => parseExternalCandidate({ ...item, observedAt: '2026-09-23T11:59:59.999Z' }, source, now))
+            .toThrow(ExternalIntakeError);
+    });
     it('recognizes all 12 Taipei and 29 New Taipei official districts', () => {
         const districts = {
             '臺北市': '松山區 信義區 大安區 中山區 中正區 大同區 萬華區 文山區 南港區 內湖區 士林區 北投區'.split(' '),

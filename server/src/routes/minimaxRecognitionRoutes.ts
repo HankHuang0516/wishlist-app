@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../lib/externalListingIntake';
 import prisma from '../lib/prisma';
 import { getApiUrl } from '../config/constants';
 import { isMinimaxWorker, listingAiEnabledFor, listingAiPilotUserId, minimaxPilotUserId, minimaxWorkerToken } from '../lib/minimaxWorkerAuth';
@@ -89,7 +90,7 @@ router.get('/next', async (_req, res) => {
         }
         if (process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1') return res.status(204).send();
         const now = new Date();
-        const observationCutoff = new Date(now.getTime() - 48 * 3_600_000);
+        const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
             aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
             source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
@@ -162,7 +163,7 @@ router.post('/:jobId/result', async (req, res) => {
             select: { id: true, contentHash: true, imageUrl: true, observedAt: true } });
         if (!candidate) return res.status(409).json({ error: 'LEASE_EXPIRED' });
         const now = new Date();
-        const observationCutoff = new Date(now.getTime() - 48 * 3_600_000);
+        const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
         if (candidate.observedAt < observationCutoff) return res.status(409).json({ error: 'LEASE_EXPIRED' });
         const draft = failed ? null : validListingAiDraft(req.body?.result);
         if (!failed && (!draft || forbiddenListingField({ title: draft.title, description: draft.description })))

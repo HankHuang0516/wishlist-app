@@ -7,6 +7,7 @@ import { districtCenter, districtsInBounds } from '../lib/doubleNorthDistrictCen
 import { isListingId, ListingInputError } from '../lib/listingRules';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { evaluateWishMatch, parseWishMatchQuery, wishKeywords } from '../lib/wishlistMatch';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../lib/externalListingIntake';
 
 const router = Router();
 router.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false,
@@ -72,7 +73,7 @@ router.get('/', async (req, res) => {
             approvedAt: { not: null },
             condition: 'USED', imageUrl: { not: null }, thumbnailUrl: { not: null },
             description: { not: null }, priceTwd: { not: null },
-            observedAt: { gte: new Date(now.getTime() - 48 * 3_600_000) }, expiresAt: { gt: now },
+            observedAt: { gte: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) }, expiresAt: { gt: now },
             source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true },
             ...(constraints.length ? { AND: constraints } : {}),
             ...(county ? { county: county as string } : {}), ...(district ? { district: district as string } : {}),
@@ -144,7 +145,7 @@ router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
             Prisma.sql`c.status = 'APPROVED'::"ExternalCandidateStatus" AND c."approvedContentHash" = c."contentHash" AND c."approvedAuthorizationRef" = s."authorizationRef" AND c."approvedAt" IS NOT NULL`,
             Prisma.sql`s.enabled = true AND s."enabledAt" IS NOT NULL AND s."textReuseAllowed" = true AND s."imageReuseAllowed" = true`,
             Prisma.sql`c.condition = 'USED'::"ListingCondition" AND c."imageUrl" IS NOT NULL AND c."thumbnailUrl" IS NOT NULL AND c.description IS NOT NULL AND c."priceTwd" IS NOT NULL`,
-            Prisma.sql`c."observedAt" >= ${new Date(now.getTime() - 48 * 3_600_000)} AND c."expiresAt" > ${now}`,
+            Prisma.sql`c."observedAt" >= ${new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS)} AND c."expiresAt" > ${now}`,
             titleOr,
             Prisma.sql`(${Prisma.join(tokens.map(token => Prisma.sql`CASE WHEN ${title(token)} THEN 1 ELSE 0 END`), ' + ')}) >= ${Math.ceil(tokens.length / 2)}`,
         ];

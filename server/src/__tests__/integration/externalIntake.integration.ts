@@ -239,13 +239,13 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
-    it('revokes an unobserved 48-hour approval and requires a new private AI/review cycle', async () => {
+    it('revokes an unobserved 24-hour approval and requires a new private AI/review cycle', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
         const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.71');
         const created = await admin('/sources').send({ ...sourceBody,
-            name: 'Synthetic 48-hour refresh partner', aiProcessingAllowed: true });
+            name: 'Synthetic daily refresh partner', aiProcessingAllowed: true });
         expect(created.status).toBe(201);
         const refreshSourceId: string = created.body.id;
         try {
@@ -259,7 +259,7 @@ describe('admin-only attributed external supply staging', () => {
                 reviewRef: 'review:synthetic-refresh-first', confirmRights: true, confirmItem: true };
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
             await prisma.externalListingCandidate.update({ where: { id }, data: {
-                observedAt: new Date(Date.now() - 49 * 3_600_000) } });
+                observedAt: new Date(Date.now() - 25 * 3_600_000) } });
             expect((await request(app).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             // A same-content feed refresh can arrive before the 15-minute
@@ -272,7 +272,7 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval,
                 reviewRef: 'review:synthetic-refresh-second' })).status).toBe(200);
             await prisma.externalListingCandidate.update({ where: { id }, data: {
-                observedAt: new Date(Date.now() - 49 * 3_600_000), aiDraft: { title: 'stale private suggestion' } } });
+                observedAt: new Date(Date.now() - 25 * 3_600_000), aiDraft: { title: 'stale private suggestion' } } });
             expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,

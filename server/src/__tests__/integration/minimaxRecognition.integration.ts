@@ -5,6 +5,7 @@ import prisma from '../../lib/prisma';
 import route from '../../routes/minimaxRecognitionRoutes';
 import { getApiUrl } from '../../config/constants';
 import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../../lib/externalListingIntake';
 import { createExternalIntakeRoutes } from '../../routes/externalIntakeRoutes';
 
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -155,7 +156,7 @@ describe('isolated MiniMax Code pull queue', () => {
         const now = new Date();
         const staleEligible = await prisma.externalListingCandidate.count({ where: {
             status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } },
-                { observedAt: { lt: new Date(now.getTime() - 48 * 3_600_000) } }, { source: { enabled: false } }],
+                { observedAt: { lt: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) } }, { source: { enabled: false } }],
         } });
         expect(staleEligible).toBeGreaterThanOrEqual(1);
         expect(await expireExternalCandidates(now)).toBe(staleEligible);

@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { Prisma, type ExternalCandidateStatus, type ExternalCandidateAiStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
-import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
 import { eligibleExternalCandidate } from '../lib/externalListingPublication';
 import { districtCenter } from '../lib/doubleNorthDistrictCenters';
 import { isListingId } from '../lib/listingRules';
@@ -114,7 +114,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const aiReset = { aiStatus: eligible ? 'PENDING' as const : 'NOT_ELIGIBLE' as const,
                         aiInputHash: eligible ? item.contentHash : null, aiDraft: Prisma.DbNull, aiJobId: null,
                         aiAttempts: 0, aiUpdatedAt: now };
-                    const oldObservationRecent = !!old && old.observedAt.getTime() >= now.getTime() - 48 * 3_600_000;
+                    const oldObservationRecent = !!old && old.observedAt.getTime() >= now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS;
                     const retainsApproval = old?.status === 'APPROVED' && !aiChanged &&
                         oldObservationRecent &&
                         old.approvedAuthorizationRef === source.authorizationRef &&
@@ -144,7 +144,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         } catch (error) { return fail(res, error); }
     });
     // A partner's sold/removed signal must hide a previously approved item
-    // immediately; waiting for the 48-hour freshness window is unsafe.
+    // immediately; waiting for the 24-hour freshness window is unsafe.
     router.post('/sources/:id/withdraw', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
@@ -245,7 +245,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 return res.status(409).json({ error: '來源權利、商品內容或時效不符合公開條件', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
             const changed = await prisma.$transaction(async tx => {
                 const result = await tx.externalListingCandidate.updateMany({ where: { id: row.id, status: 'PENDING_REVIEW',
-                    contentHash: row.contentHash, aiStatus: row.aiStatus, observedAt: { gte: new Date(now.getTime() - 48 * 3_600_000) },
+                    contentHash: row.contentHash, aiStatus: row.aiStatus, observedAt: { gte: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) },
                     expiresAt: { gt: now }, imageUrl: row.imageUrl, thumbnailUrl: row.thumbnailUrl,
                     description: row.description, condition: 'USED',
                     source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,

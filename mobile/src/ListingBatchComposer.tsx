@@ -13,6 +13,7 @@ import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parse
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
+import { captureCameraSequence } from './listingCaptureFlow';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { parseSellerDraft, restoreSellerForm, sellerDraftFromCard, SellerDraftSync } from './listingSellerDraft';
 
@@ -136,17 +137,24 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     } finally { rendered?.release(); manipulator.release(); }
   }
   async function upload(card: Card) {
+    let privatePhotoSaved = false;
     try {
       const form = jpegPhotoUploadForm(card.key, card.uri, 'listing-photo.jpg', 'BATCH_ITEM');
       const record = await uploadPhotoRecord(api, apiUrl, card.key, form, __DEV__);
-      if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
+      privatePhotoSaved = true;
       setCards(old => old.map(current => current.key === card.key ? { ...current, record } : current));
+      if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
       const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
       setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, record }, state) : current));
+      return true;
     } catch (failure) {
-      const message = failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE'
-        ? 'AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。' : '照片上傳或 AI 排隊未完成；請重試。';
+      const message = privatePhotoSaved
+        ? failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE'
+          ? 'AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。'
+          : '照片已私密保存，但 AI 排隊未完成；請稍後重試。'
+        : '照片上傳尚未確認；已停止連拍，請重試保存。';
       setCards(old => old.map(current => current.key === card.key ? { ...current, error: message, ai: 'FAILED' } : current));
+      return privatePhotoSaved;
     }
   }
   async function select(camera: boolean) {
@@ -156,19 +164,18 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       let remaining = MAX_ITEMS - cards.filter(card => !card.published).length;
       if (remaining < 1) throw new ListingFormError('一次最多處理12件；請先確認目前商品。');
       if (camera) {
-        while (remaining > 0) {
+        const sequence = await captureCameraSequence(remaining, async () => {
           const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false });
-          if (result.canceled || result.assets.length === 0) break;
-          for (const asset of result.assets.slice(0, 1)) {
-            const card = await prepare(asset);
-            setCards(old => [...old, card]); remaining--;
-            // Persist each shot before reopening the camera. A background kill
-            // must not discard every previously captured item in this session.
-            setCaptureProgress(`正在私密儲存第 ${MAX_ITEMS - remaining} 件照片，完成後繼續拍照…`);
-            await upload(card);
-            setCaptureProgress('');
-          }
-        }
+          return result.canceled ? null : result.assets[0] ?? null;
+        }, async (asset, position) => {
+          const card = await prepare(asset);
+          setCards(old => [...old, card]);
+          setCaptureProgress(`正在私密儲存第 ${MAX_ITEMS - remaining + position} 件照片，完成後繼續拍照…`);
+          const saved = await upload(card);
+          setCaptureProgress('');
+          return saved;
+        });
+        if (sequence.stopped === 'UNSAVED') setError('最新照片尚未確認已私密保存；連拍已暫停。請在商品卡片重試上傳後再繼續。');
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: remaining, quality: 1, exif: false });
         if (result.canceled) return;
@@ -176,7 +183,10 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           const card = await prepare(asset);
           setCards(old => [...old, card]);
           setCaptureProgress(`正在私密儲存第 ${index + 1}／${Math.min(result.assets.length, remaining)} 件照片…`);
-          await upload(card);
+          if (!await upload(card)) {
+            setError('這張照片尚未確認已私密保存；批次處理已暫停。請重試後再選擇其餘照片。');
+            break;
+          }
         }
       }
     } catch (failure) { setError(failure instanceof ListingFormError ? failure.message : '無法取得或處理照片，請稍後重試。'); }

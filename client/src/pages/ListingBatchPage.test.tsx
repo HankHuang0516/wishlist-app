@@ -159,6 +159,40 @@ describe('web private batch listing flow', () => {
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
   });
 
+  it('never posts a listing when the browser cannot persist its publication journal', async () => {
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByDisplayValue('二手檯燈');
+    fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
+    fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
+    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+      if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      return realSetItem(key, value);
+    });
+    fireEvent.click(screen.getByText('確認並刊登'));
+    await screen.findByText(/商品尚未送出/);
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+    expect(screen.getByText('確認並刊登')).not.toBeDisabled();
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
+  });
+
+  it('does not enable upload or publication when an existing journal cannot be read', async () => {
+    const realGetItem = localStorage.getItem.bind(localStorage);
+    vi.spyOn(localStorage, 'getItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'SecurityError');
+      return realGetItem(key);
+    });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/無法讀取安全刊登紀錄/);
+    expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+  });
+
   it('recovers a committed photo after upload ACK loss and one stale private list', async () => {
     loseUploadResponse = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);

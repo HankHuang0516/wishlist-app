@@ -102,7 +102,8 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
   useEffect(() => {
     setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]); setAiAvailable(null);
-    setPending(localStorage.getItem(pendingKey(userId)) ?? '');
+    try { setPending(localStorage.getItem(pendingKey(userId)) ?? ''); }
+    catch { setMessage('此瀏覽器無法讀取安全刊登紀錄；為避免重複刊登，已暫停新增照片與發布。請允許網站儲存空間後重新整理。'); return; }
     void reload().catch(() => setMessage('暫時無法安全恢復私人照片。請稍後重新整理。'));
   }, [token, userId, reload]);
 
@@ -223,7 +224,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     if (card.dirty && !await save(card)) { setBusy(false); return; }
     // Keep the exact request for an uncertain network outcome. Replaying it
     // uses the server's clientListingId idempotency key, never a new listing.
-    localStorage.setItem(pendingKey(userId!), body); setPending(body);
+    try { localStorage.setItem(pendingKey(userId!), body); }
+    catch {
+      replace(card.id, current => ({ ...current, error: '此瀏覽器無法安全記錄刊登操作；商品尚未送出。請允許網站儲存空間後重試。' }));
+      setBusy(false);
+      return;
+    }
+    setPending(body);
     replace(card.id, current => ({ ...current, publishing: true, error: '' }));
     try {
       const result = await api<{ id: unknown; status: string }>(token!, '/listings', { method: 'POST', body });

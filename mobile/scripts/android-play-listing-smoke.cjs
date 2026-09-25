@@ -1,22 +1,30 @@
 #!/usr/bin/env node
-// Real Google Play App Signing APK against the production pilot. Own synthetic
-// photo only; never publishes a listing. Run inside a simulator-manager lease.
+// Real Google Play App Signing APK against the production pilot. Owned synthetic
+// photos only; never publishes a listing. Run inside a simulator-manager lease.
 const { execFileSync } = require('node:child_process');
 const { randomUUID, createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('../../server/node_modules/sharp');
+const { fixtureDistance } = require('./native-qa-photo-fingerprint.cjs');
 
 const serial = process.env.SIM_MANAGER_SERIAL;
 if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) throw new Error('Managed Android emulator required');
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
 const { version: versionName, android: { versionCode } } = require('../app.config.js').expo;
 const base = 'https://wishlist-app-production.up.railway.app/api';
-const fixture = path.resolve(__dirname, '../qa-fixtures/synthetic-used-orange-desk-lamp.png');
-const expectedFixtureHash = 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0';
+const batchCount = process.argv.length === 2 ? 1 : process.argv.length === 3 && process.argv[2] === '--two' ? 2 : 0;
+if (!batchCount) throw new Error('Use no argument or --two');
 const credentialFile = process.env.QA_CREDENTIALS_FILE;
 const runId = randomUUID();
-const gallery = `/sdcard/Pictures/wishlist-play-v${versionCode}-${runId}.png`;
+const fixtures = [
+  { kind: 'orange-lamp', path: path.resolve(__dirname, '../qa-fixtures/synthetic-used-orange-desk-lamp.png'),
+    hash: 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0',
+    gallery: `/sdcard/Pictures/wishlist-play-v${versionCode}-${runId}-lamp.png`, label: /燈|lamp/i },
+  { kind: 'blue-mug', path: path.resolve(__dirname, '../qa-fixtures/synthetic-used-blue-mug.png'),
+    hash: '4bf0d16e92bff216bdf0521ba878886b0a31c734d43ee9363dbc69dda6aa06f9',
+    gallery: `/sdcard/Pictures/wishlist-play-v${versionCode}-${runId}-mug.png`, label: /杯|mug|cup/i },
+].slice(0, batchCount);
 const ui = `/sdcard/wishlist-play-v${versionCode}-${runId}.xml`;
 const adbPath = '/Users/hank/Library/Android/sdk/platform-tools/adb';
 const adb = (args, options = {}) => execFileSync(adbPath, ['-s', serial, ...args], {
@@ -25,7 +33,9 @@ const adb = (args, options = {}) => execFileSync(adbPath, ['-s', serial, ...args
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let stage = 'preflight', bearer, candidateId, loggedIn = false, baselineIds, uploadStarted = false, candidateCleanupConfirmed = false;
+let stage = 'preflight', bearer, loggedIn = false, baselineIds, uploadStarted = false, candidateCleanupConfirmed = false, verifiedOwnedCount = 0;
+// A new ID alone is not ownership proof: only fingerprint-matched fixtures may be deleted.
+const candidateIds = new Set(), ownedCandidateIds = new Set();
 
 const nodes = xml => xml.match(/<node\b[^>]*>/g) ?? [];
 const find = (xml, label) => {
@@ -67,12 +77,33 @@ async function unused() {
   if (!Array.isArray(data.items) || data.nextCursor) throw new Error('private_drafts_ambiguous');
   return data.items;
 }
-async function cleanupCandidate() {
+async function cleanupCandidate(candidateId) {
   if (!bearer || !candidateId) return 'NOT_IDENTIFIED';
   try {
     const response = await api(`/listing-media/${candidateId}`, { method: 'DELETE' });
     return response.status === 204 || response.status === 404 ? 'DELETE_ACCEPTED' : 'MANUAL_REVIEW_REQUIRED';
   } catch { return 'MANUAL_REVIEW_REQUIRED'; }
+}
+function tileColorCounts(pixels, info, tile) {
+  let orange = 0, blue = 0;
+  for (let y = 422; y < 529; y++) for (let x = tile * 107; x < tile * 107 + 106; x++) {
+    const offset = (y * info.width + x) * info.channels;
+    const red = pixels[offset], green = pixels[offset + 1], indigo = pixels[offset + 2];
+    if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > indigo * 1.2) orange++;
+    if (indigo > 80 && indigo > red * 1.45 && indigo > green * 1.2) blue++;
+  }
+  return { orange, blue };
+}
+async function priceShownForCard(index, timeout = 45_000) {
+  const prefix = `第${index}件 AI 二手參考價：NT$ `;
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const visible = nodes(dump()).find(node => node.includes(`content-desc="${prefix}`));
+    const range = visible?.match(/AI 二手參考價：NT\$ (\d+)–(\d+)/);
+    if (range) return `${range[1]}–${range[2]}`;
+    await swipeUp();
+  }
+  throw new Error('native_reference_price_missing');
 }
 async function signOutDevice() {
   for (let attempt = 0; attempt < 9; attempt++) {
@@ -90,7 +121,8 @@ async function signOutDevice() {
 }
 async function main() {
   if (!credentialFile || !fs.existsSync(credentialFile) ||
-    createHash('sha256').update(fs.readFileSync(fixture)).digest('hex') !== expectedFixtureHash) throw new Error('private_fixture_or_credentials_missing');
+    fixtures.some(fixture => createHash('sha256').update(fs.readFileSync(fixture.path)).digest('hex') !== fixture.hash))
+    throw new Error('private_fixture_or_credentials_missing');
   const credentials = fs.readFileSync(credentialFile, 'utf8');
   const line = label => credentials.split('\n').find(value => value.startsWith(label))?.slice(label.length).trim();
   const phone = line('測試帳號：'), password = line('測試密碼：');
@@ -109,8 +141,10 @@ async function main() {
   stage = 'installed-play-apk';
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
   if (!installed.includes(`versionCode=${versionCode} `) || !installed.includes(`versionName=${versionName}`)) throw new Error('installed_build_mismatch');
-  adb(['push', fixture, gallery], { timeout: 40_000 });
-  adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + gallery]);
+  for (const fixture of fixtures) {
+    adb(['push', fixture.path, fixture.gallery], { timeout: 40_000 });
+    adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + fixture.gallery]);
+  }
   stage = 'native-login';
   adb(['shell', 'am', 'force-stop', pkg]);
   adb(['shell', 'am', 'start', '-W', '-n', pkg + '/.MainActivity']);
@@ -145,54 +179,108 @@ async function main() {
   if (!find(picker, 'Photos') && !find(picker, '相片')) throw new Error('photo_picker_not_open');
   const { data: pixels, info } = await sharp(adb(['exec-out', 'screencap', '-p'], { binary: true })).raw().toBuffer({ resolveWithObject: true });
   if (info.width !== 320 || info.height !== 640 || info.channels < 3) throw new Error('photo_picker_layout_changed');
-  let orangePixels = 0;
-  for (let y = 422; y < 529; y++) for (let x = 0; x < 106; x++) {
-    const offset = (y * info.width + x) * info.channels;
-    const red = pixels[offset], green = pixels[offset + 1], blue = pixels[offset + 2];
-    if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blue * 1.2) orangePixels++;
+  const first = tileColorCounts(pixels, info, 0);
+  const second = batchCount === 2 ? tileColorCounts(pixels, info, 1) : null;
+  if (batchCount === 1 ? first.orange <= 300 :
+    !((first.orange > 300 && second.blue > 300) || (first.blue > 300 && second.orange > 300))) {
+    console.error(JSON.stringify({ pickerFixturePixels: [first, second] }));
+    throw new Error('owned_fixture_tiles_not_verified');
   }
-  if (orangePixels <= 300) throw new Error('synthetic_lamp_not_first_tile');
   adb(['shell', 'input', 'tap', '53', '474']);
+  if (batchCount === 2) adb(['shell', 'input', 'tap', '160', '474']);
   tap(await waitNode('Done'));
   uploadStarted = true;
   stage = 'private-upload';
-  for (let attempt = 0; attempt < 25; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     const added = (await unused()).filter(item => !baselineIds.has(item.id));
-    if (added.length > 1) throw new Error('private_upload_ambiguous');
-    if (added.length === 1) { candidateId = added[0].id; break; }
+    if (added.length > batchCount) throw new Error('private_upload_ambiguous');
+    for (const item of added) candidateIds.add(item.id);
+    if (candidateIds.size === batchCount) break;
     await sleep(1200);
   }
-  if (!candidateId) throw new Error('private_upload_missing');
-  const anonymous = await fetch(`${base}/listing-media/${candidateId}/image`, { signal: AbortSignal.timeout(20_000) });
-  if (anonymous.status !== 404) throw new Error('private_photo_exposed');
-  stage = 'ai-draft';
-  let ai;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const response = await api(`/listing-media/${candidateId}/ai-draft`);
-    if (!response.ok) throw new Error('ai_status_unavailable');
-    const result = await response.json();
-    if (result.status === 'FAILED') throw new Error('ai_draft_failed');
-    if (result.status === 'COMPLETED') { ai = result.draft; break; }
-    await sleep(3500);
+  if (candidateIds.size !== batchCount) throw new Error('private_upload_missing');
+  const recognized = new Map();
+  for (const candidateId of candidateIds) {
+    const anonymous = await fetch(`${base}/listing-media/${candidateId}/image`, { signal: AbortSignal.timeout(20_000) });
+    if (anonymous.status !== 404) throw new Error('private_photo_exposed');
+    const owner = await api(`/listing-media/${candidateId}/image`);
+    if (owner.status !== 200 || !owner.headers.get('content-type')?.startsWith('image/')) throw new Error('private_photo_owner_unavailable');
+    const bytes = Buffer.from(await owner.arrayBuffer());
+    const distances = await Promise.all(fixtures.map(fixture => fixtureDistance(sharp, bytes, fs.readFileSync(fixture.path))));
+    const fixtureIndex = distances.indexOf(Math.min(...distances));
+    if (distances[fixtureIndex] >= 12 || distances.some((distance, index) => index !== fixtureIndex && distance <= 40) ||
+      recognized.has(fixtures[fixtureIndex].kind)) throw new Error('private_photo_identity_mismatch');
+    recognized.set(fixtures[fixtureIndex].kind, candidateId);
+    ownedCandidateIds.add(candidateId);
+    verifiedOwnedCount = ownedCandidateIds.size;
   }
-  if (!ai || ai.source !== 'MINIMAX_CODE_VISION' || !ai.title || !ai.description ||
-    !Number.isSafeInteger(ai.estimatedPriceLowTwd) || !Number.isSafeInteger(ai.estimatedPriceHighTwd)) throw new Error('ai_draft_incomplete');
+  if (recognized.size !== batchCount) throw new Error('distinct_private_photos_missing');
+  stage = 'ai-draft';
+  const draftFor = async candidateId => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const response = await api(`/listing-media/${candidateId}/ai-draft`);
+      if (!response.ok) throw new Error('ai_status_unavailable');
+      const result = await response.json();
+      if (result.status === 'FAILED') throw new Error('ai_draft_failed');
+      if (result.status === 'COMPLETED') return result.draft;
+      await sleep(3500);
+    }
+    throw new Error('ai_draft_timeout');
+  };
+  const drafts = new Map(await Promise.all([...recognized].map(async ([kind, candidateId]) => [kind, await draftFor(candidateId)])));
+  for (const fixture of fixtures) {
+    const ai = drafts.get(fixture.kind);
+    if (!ai || ai.source !== 'MINIMAX_CODE_VISION' || !ai.title || !ai.description ||
+      !fixture.label.test(ai.title + ' ' + ai.description) ||
+      !Number.isSafeInteger(ai.estimatedPriceLowTwd) || !Number.isSafeInteger(ai.estimatedPriceHighTwd) ||
+      ai.estimatedPriceLowTwd < 0 || ai.estimatedPriceHighTwd < ai.estimatedPriceLowTwd)
+      throw new Error('ai_draft_incomplete_or_wrong_item');
+  }
   stage = 'native-ai-display';
-  await waitWithScroll('AI 草稿已完成，請確認', 60_000);
-  await waitWithScroll(`第${baselineIds.size + 1}件 AI 二手參考價：NT$ ${ai.estimatedPriceLowTwd}–${ai.estimatedPriceHighTwd}`, 35_000);
+  const expectedRanges = fixtures.map(fixture => {
+    const ai = drafts.get(fixture.kind);
+    return `${ai.estimatedPriceLowTwd}–${ai.estimatedPriceHighTwd}`;
+  }).sort();
+  const shownRanges = [];
+  for (let index = 0; index < batchCount; index++)
+    shownRanges.push(await priceShownForCard(baselineIds.size + index + 1, 60_000));
+  if (shownRanges.sort().join('|') !== expectedRanges.join('|')) throw new Error('native_reference_prices_mismatch');
   await waitWithScroll('目前售價由 AI 參考區間中間值預填，不是已驗證行情；刊登前請確認或修改。', 35_000);
+  stage = 'seller-edit';
+  const editedIndex = baselineIds.size + batchCount;
+  const editMarker = `QA${runId.slice(0, 8)}`;
+  tap(await waitWithScroll(`第${editedIndex}件商品名稱`));
+  adb(['shell', 'input', 'keyevent', '123']);
+  adb(['shell', 'input', 'text', editMarker]);
+  adb(['shell', 'input', 'keyevent', '4']);
+  // Android Back may dismiss the keyboard or the Modal. Both paths call the
+  // composer's guarded leave/flush; tap the explicit leave control if needed.
+  const afterBack = dump();
+  if (find(afterBack, '連續拍照刊登')) tap(await waitNode('稍後繼續'));
+  stage = 'seller-draft-resume';
+  tap(await waitNode('刊登好物', 45_000));
+  await waitNode('連續拍照刊登');
+  await waitWithScroll(`第${editedIndex}件商品名稱`);
+  if (!dump().includes(editMarker))
+    throw new Error('native_seller_edit_not_restored');
+  const savedDrafts = (await unused()).filter(item => candidateIds.has(item.id));
+  if (savedDrafts.length !== batchCount ||
+    savedDrafts.filter(item => item.sellerDraft?.form?.title?.endsWith(editMarker) && item.sellerDraft?.touched?.title === true).length !== 1)
+    throw new Error('server_seller_edit_not_restored');
   const after = await api('/listings/mine');
   if (!after.ok || (await after.json()).items.some(item => !initialListings.has(item.id))) throw new Error('listing_published_without_consent');
   stage = 'cleanup';
-  const cleanup = await cleanupCandidate();
-  if (cleanup !== 'DELETE_ACCEPTED') throw new Error('private_photo_cleanup_incomplete');
+  for (const candidateId of [...ownedCandidateIds]) {
+    if (await cleanupCandidate(candidateId) !== 'DELETE_ACCEPTED') throw new Error('private_photo_cleanup_incomplete');
+    ownedCandidateIds.delete(candidateId);
+  }
   const remaining = (await unused()).filter(item => !baselineIds.has(item.id));
   if (remaining.length) throw new Error('private_photo_still_listed');
   console.log(JSON.stringify({ result: 'PASS', scope: 'play-signed-native-private-listing-ai', versionCode,
-    fixture: 'owned-synthetic-used-orange-lamp', privateUpload: true, anonymousAccessDenied: true,
-    aiDraftDisplayed: true, referencePriceDisplayed: true, unconfirmedPublicListings: 0, cleanup }));
+    fixtures: fixtures.map(fixture => fixture.kind), privateUploadCount: batchCount, anonymousAccessDenied: true,
+    aiDraftDisplayed: true, referencePriceDisplayed: true, sellerEditRestored: true,
+    unconfirmedPublicListings: 0, cleanup: 'DELETE_ACCEPTED' }));
   candidateCleanupConfirmed = true;
-  candidateId = undefined;
 }
 
 main().catch(error => {
@@ -206,15 +294,15 @@ main().catch(error => {
   console.error(`Play listing smoke failed (${stage}; ${code}; markers=${JSON.stringify(markers)}).`);
   process.exitCode = 1;
 }).finally(async () => {
-  if (uploadStarted && !candidateId && !candidateCleanupConfirmed) {
-    console.error('Uploaded test photo was not identified; manual review is required. Existing private drafts were not touched.');
+  if (uploadStarted && verifiedOwnedCount < batchCount && !candidateCleanupConfirmed) {
+    console.error('One or more uploaded test photos were not verified as owned fixtures; manual review is required. Existing private drafts were not touched.');
     process.exitCode = 1;
   }
-  if (candidateId) {
-    const cleanup = await cleanupCandidate();
+  for (const candidateId of ownedCandidateIds) {
+    const cleanup = await cleanupCandidate(candidateId);
     if (cleanup === 'MANUAL_REVIEW_REQUIRED') { console.error('Test photo cleanup needs manual review.'); process.exitCode = 1; }
   }
-  try { adb(['shell', 'rm', '-f', gallery, ui]); } catch { /* Device lease is still released. */ }
+  try { adb(['shell', 'rm', '-f', ...fixtures.map(fixture => fixture.gallery), ui]); } catch { /* Device lease is still released. */ }
   if (loggedIn) {
     try {
       if (!await signOutDevice()) { console.error('QA emulator remains signed in; local private captures were preserved.'); process.exitCode = 1; }

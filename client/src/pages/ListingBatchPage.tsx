@@ -60,7 +60,13 @@ function PrivatePhoto({ id, token }: { id: string; token: string }) {
 
 export default function ListingBatchPage() {
   const { token, user } = useAuth();
-  const userId = user?.id;
+  if (!token || !user) return <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 text-center shadow-sm">請先 <Link to="/login" className="text-blue-600 underline">登入</Link> 再刊登商品。</div>;
+  // A new account gets a new component instance. Late responses from the
+  // previous account cannot populate the replacement account's draft state.
+  return <ListingBatchSession key={user.id} token={token} userId={user.id} />;
+}
+
+function ListingBatchSession({ token, userId }: { token: string; userId: number }) {
   const [cards, setCards] = useState<Card[]>([]);
   const [details, setDetails] = useState<PublishDetails>(emptyDetails);
   const [ready, setReady] = useState(false);
@@ -73,7 +79,6 @@ export default function ListingBatchPage() {
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
 
   const reload = useCallback(async () => {
-    if (!token || !userId) return;
     const result = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
     if (!Array.isArray(result.items)) throw new Error('私人照片資料不正確');
     const checked = await reconcilePendingUploads(userId, result.items,
@@ -92,7 +97,6 @@ export default function ListingBatchPage() {
   }, [token, userId]);
 
   useEffect(() => {
-    if (!token || !userId) return;
     setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]);
     setPending(localStorage.getItem(pendingKey(userId)) ?? '');
     void reload().catch(() => setMessage('暫時無法安全恢復私人照片。請稍後重新整理。'));
@@ -123,8 +127,6 @@ export default function ListingBatchPage() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [busy, pending, cards]);
-
-  if (!token || !user) return <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 text-center shadow-sm">請先 <Link to="/login" className="text-blue-600 underline">登入</Link> 再刊登商品。</div>;
 
   const replace = (id: string, change: (card: Card) => Card) => setCards(old => old.map(card => card.id === id ? change(card) : card));
   const updateField = (id: string, field: ListingField, value: string) => replace(id, card => ({ ...card,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
@@ -17,6 +17,8 @@ describe('web private batch listing flow', () => {
   let uploadLookups = 0;
   let unusedReads = 0;
   let currentUploadId = '';
+  let holdOldAccountList = false;
+  let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
     loseFirstPublicationResponse = false;
@@ -24,6 +26,8 @@ describe('web private batch listing flow', () => {
     uploadLookups = 0;
     unusedReads = 0;
     currentUploadId = '';
+    holdOldAccountList = false;
+    releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
@@ -32,6 +36,10 @@ describe('web private batch listing flow', () => {
       const path = String(input), method = init?.method ?? 'GET';
       calls.push({ path, method, body: typeof init?.body === 'string' ? init.body : undefined });
       if (path.endsWith('/listing-media/unused?purpose=BATCH_ITEM')) {
+        if (holdOldAccountList && (init?.headers as Record<string, string>)?.Authorization === 'Bearer test-session') {
+          await new Promise<void>(resolve => { releaseOldAccountList = resolve; });
+          return { ok: true, status: 200, json: async () => ({ items: [{ id: mediaId, aiDraftStatus: 'COMPLETED', aiDraft: { ...ai, title: '舊帳號私有商品' }, sellerDraft: null, sellerDraftVersion: 0 }] }) };
+        }
         unusedReads++;
         const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
           aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
@@ -119,5 +127,15 @@ describe('web private batch listing flow', () => {
     expect(input).not.toBeDisabled();
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
+  });
+
+  it('does not display a late old-account private draft after switching accounts', async () => {
+    holdOldAccountList = true;
+    const view = render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await waitFor(() => expect(releaseOldAccountList).toBeDefined());
+    view.rerender(<MemoryRouter><AuthContext.Provider value={{ ...auth, user: { id: 20, phoneNumber: 'other' }, token: 'other-session' }}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText('還沒有私人商品照片，現在就拍第一件吧。');
+    await act(async () => { releaseOldAccountList!(); });
+    expect(screen.queryByText('舊帳號私有商品')).toBeNull();
   });
 });

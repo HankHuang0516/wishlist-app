@@ -49,93 +49,115 @@ router.use((req, res, next) => {
     next();
 });
 
+async function claimWish(userId: number | null, prefix: string) {
+    if (!userId) return null;
+    await prisma.item.updateMany({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: { startsWith: 'MINIMAX_JOB_' },
+        updatedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { aiStatus: 'PENDING', aiError: 'MINIMAX_RETRY' } });
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
+            imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true,
+                wishMedia: { select: { imageUrl: true } } } });
+        if (!item?.imageUrl) break;
+        const suffix = item.imageUrl.slice(prefix.length);
+        if (!/^[0-9a-f-]{36}\/image$/.test(suffix) || item.wishMedia?.imageUrl !== item.imageUrl) {
+            await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
+                data: { aiStatus: 'FAILED', aiError: 'MINIMAX_INVALID_IMAGE_LINK' } });
+            continue;
+        }
+        const jobId = randomUUID();
+        const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
+            data: { aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` } });
+        if (claimed.count) return { kind: 'WISH', jobId, imageUrl: item.imageUrl };
+    }
+    return null;
+}
+
+async function claimListing(prefix: string) {
+    const listingPilot = listingAiPilotUserId();
+    if (process.env.MINIMAX_LISTING_AI_ENABLED !== '1' || listingPilot === -1) return null;
+    await prisma.listingMedia.updateMany({ where: { aiDraftStatus: 'PROCESSING', aiDraftUpdatedAt: { lt: new Date(Date.now() - LEASE_MS) },
+        ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
+        data: { aiDraftStatus: 'PENDING', aiDraftJobId: null, aiDraftError: 'MINIMAX_RETRY', aiDraftUpdatedAt: new Date() } });
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const media = await prisma.listingMedia.findFirst({ where: { aiDraftStatus: 'PENDING', listingId: null, wishItemId: null,
+            ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
+            orderBy: { createdAt: 'asc' }, select: { id: true, ownerUserId: true, imageUrl: true } });
+        if (!media) break;
+        if (!listingAiEnabledFor(media.ownerUserId) || media.imageUrl !== `${prefix}${media.id}/image`) {
+            await prisma.listingMedia.updateMany({ where: { id: media.id, aiDraftStatus: 'PENDING' },
+                data: { aiDraftStatus: 'FAILED', aiDraftError: 'MINIMAX_INVALID_IMAGE_LINK', aiDraftUpdatedAt: new Date() } });
+            continue;
+        }
+        const jobId = randomUUID();
+        const claimed = await prisma.listingMedia.updateMany({ where: { id: media.id, aiDraftStatus: 'PENDING', listingId: null, wishItemId: null },
+            data: { aiDraftStatus: 'PROCESSING', aiDraftJobId: jobId, aiDraftError: null, aiDraftUpdatedAt: new Date() } });
+        if (claimed.count) return { kind: 'LISTING_DRAFT', jobId, imageUrl: media.imageUrl };
+    }
+    return null;
+}
+
+async function claimExternalCandidate() {
+    if (process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1') return null;
+    const now = new Date();
+    const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
+    await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
+        aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
+        source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+            OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
+        data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
+    await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
+        aiAttempts: { gte: 3 } }, data: { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } });
+    await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'FAILED', aiAttempts: { lt: 3 },
+        aiUpdatedAt: { lt: new Date(now.getTime() - 30 * 60_000) }, status: 'PENDING_REVIEW',
+        expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
+        source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+            OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
+        data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = await prisma.externalListingCandidate.findFirst({ where: { aiStatus: 'PENDING', aiAttempts: { lt: 3 },
+            status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff }, imageUrl: { not: null },
+            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
+            orderBy: { createdAt: 'asc' }, include: { source: { select: { imageHost: true } } } });
+        if (!candidate?.imageUrl) break;
+        let validImage = false;
+        try {
+            const url = new URL(candidate.imageUrl);
+            validImage = url.protocol === 'https:' && !!candidate.source.imageHost && url.hostname === candidate.source.imageHost &&
+                !url.port && !url.username && !url.password && candidate.aiInputHash === candidate.contentHash;
+        } catch { /* invalid imported image */ }
+        if (!validImage) {
+            await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING', contentHash: candidate.contentHash },
+                data: { aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiUpdatedAt: now } });
+            continue;
+        }
+        const jobId = randomUUID();
+        const claimed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING',
+            contentHash: candidate.contentHash, aiInputHash: candidate.contentHash, imageUrl: candidate.imageUrl,
+            status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
+            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
+            data: { aiStatus: 'PROCESSING', aiJobId: jobId, aiAttempts: { increment: 1 }, aiUpdatedAt: now } });
+        if (claimed.count) return { kind: 'EXTERNAL_CANDIDATE', jobId, imageUrl: candidate.imageUrl,
+            imageHost: candidate.source.imageHost };
+    }
+    return null;
+}
+
+// Reserve the first lane synchronously per request in this API process. Each
+// enabled lane gets first priority every third local poll despite backlogs.
+// UpdateMany remains the cross-request guard against leasing the same row.
+let nextLaneIndex = 0;
 router.get('/next', async (_req, res) => {
     const { userId, prefix } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
+    const firstLane = nextLaneIndex;
+    nextLaneIndex = (nextLaneIndex + 1) % 3;
     try {
-        if (userId) {
-            await prisma.item.updateMany({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: { startsWith: 'MINIMAX_JOB_' },
-                updatedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { aiStatus: 'PENDING', aiError: 'MINIMAX_RETRY' } });
-            for (let attempt = 0; attempt < 3; attempt++) {
-                const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
-                    imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true,
-                        wishMedia: { select: { imageUrl: true } } } });
-                if (!item?.imageUrl) break;
-                const suffix = item.imageUrl.slice(prefix.length);
-                if (!/^[0-9a-f-]{36}\/image$/.test(suffix) || item.wishMedia?.imageUrl !== item.imageUrl) {
-                    await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
-                        data: { aiStatus: 'FAILED', aiError: 'MINIMAX_INVALID_IMAGE_LINK' } });
-                    continue;
-                }
-                const jobId = randomUUID();
-                const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
-                    data: { aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` } });
-                if (claimed.count) return res.json({ kind: 'WISH', jobId, imageUrl: item.imageUrl });
-            }
-        }
-        const listingPilot = listingAiPilotUserId();
-        if (process.env.MINIMAX_LISTING_AI_ENABLED === '1' && listingPilot !== -1) {
-        await prisma.listingMedia.updateMany({ where: { aiDraftStatus: 'PROCESSING', aiDraftUpdatedAt: { lt: new Date(Date.now() - LEASE_MS) },
-            ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
-            data: { aiDraftStatus: 'PENDING', aiDraftJobId: null, aiDraftError: 'MINIMAX_RETRY', aiDraftUpdatedAt: new Date() } });
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const media = await prisma.listingMedia.findFirst({ where: { aiDraftStatus: 'PENDING', listingId: null, wishItemId: null,
-                ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
-                orderBy: { createdAt: 'asc' }, select: { id: true, ownerUserId: true, imageUrl: true } });
-            if (!media) break;
-            if (!listingAiEnabledFor(media.ownerUserId) || media.imageUrl !== `${prefix}${media.id}/image`) {
-                await prisma.listingMedia.updateMany({ where: { id: media.id, aiDraftStatus: 'PENDING' },
-                    data: { aiDraftStatus: 'FAILED', aiDraftError: 'MINIMAX_INVALID_IMAGE_LINK', aiDraftUpdatedAt: new Date() } });
-                continue;
-            }
-            const jobId = randomUUID();
-            const claimed = await prisma.listingMedia.updateMany({ where: { id: media.id, aiDraftStatus: 'PENDING', listingId: null, wishItemId: null },
-                data: { aiDraftStatus: 'PROCESSING', aiDraftJobId: jobId, aiDraftError: null, aiDraftUpdatedAt: new Date() } });
-            if (claimed.count) return res.json({ kind: 'LISTING_DRAFT', jobId, imageUrl: media.imageUrl });
-        }
-        }
-        if (process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1') return res.status(204).send();
-        const now = new Date();
-        const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
-        await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
-            aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
-                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
-            data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
-        await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
-            aiAttempts: { gte: 3 } }, data: { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } });
-        await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'FAILED', aiAttempts: { lt: 3 },
-            aiUpdatedAt: { lt: new Date(now.getTime() - 30 * 60_000) }, status: 'PENDING_REVIEW',
-            expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
-                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
-            data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const candidate = await prisma.externalListingCandidate.findFirst({ where: { aiStatus: 'PENDING', aiAttempts: { lt: 3 },
-                status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff }, imageUrl: { not: null },
-                source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
-                    OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
-                orderBy: { createdAt: 'asc' }, include: { source: { select: { imageHost: true } } } });
-            if (!candidate?.imageUrl) break;
-            let validImage = false;
-            try {
-                const url = new URL(candidate.imageUrl);
-                validImage = url.protocol === 'https:' && !!candidate.source.imageHost && url.hostname === candidate.source.imageHost &&
-                    !url.port && !url.username && !url.password && candidate.aiInputHash === candidate.contentHash;
-            } catch { /* invalid imported image */ }
-            if (!validImage) {
-                await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING', contentHash: candidate.contentHash },
-                    data: { aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiUpdatedAt: now } });
-                continue;
-            }
-            const jobId = randomUUID();
-            const claimed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING',
-                contentHash: candidate.contentHash, aiInputHash: candidate.contentHash, imageUrl: candidate.imageUrl,
-                status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-                source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
-                    OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
-                data: { aiStatus: 'PROCESSING', aiJobId: jobId, aiAttempts: { increment: 1 }, aiUpdatedAt: now } });
-            if (claimed.count) return res.json({ kind: 'EXTERNAL_CANDIDATE', jobId, imageUrl: candidate.imageUrl,
-                imageHost: candidate.source.imageHost });
+        for (let offset = 0; offset < 3; offset++) {
+            const lane = (firstLane + offset) % 3;
+            const job = lane === 0 ? await claimWish(userId, prefix) :
+                lane === 1 ? await claimListing(prefix) : await claimExternalCandidate();
+            if (job) return res.json(job);
         }
         return res.status(204).send();
     } catch { return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' }); }

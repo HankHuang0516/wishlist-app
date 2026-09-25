@@ -158,7 +158,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       if (camera) {
         while (remaining > 0) {
           const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false });
-          if (result.canceled) break;
+          if (result.canceled || result.assets.length === 0) break;
           for (const asset of result.assets.slice(0, 1)) {
             const card = await prepare(asset);
             setCards(old => [...old, card]); remaining--;

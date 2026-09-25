@@ -5,6 +5,7 @@ import { abandonDeletion, deletionApi, DELETION_IMPACT_LABELS, encodeDeletionJou
 import { DELETION_STORAGE_ISSUE, clearErasedSession } from './deletionRecovery';
 import { nativeDeletionRecovery, deletionPrivateStore } from './nativeDeletionRecovery';
 import { erasePrivatePendingData } from './nativePendingStore';
+import { erasePrivateCaptures } from './privateCaptureStore';
 import { createAuthOperationGate } from './authOperation';
 import { createApi } from './api';
 import { securityPayload } from './accountSecurity';
@@ -29,6 +30,7 @@ export function AccountDeletionScreen({ apiUrl, userId, token, initialJournal, o
     try {
       await (await nativeDeletionRecovery(apiUrl)).saveProof(binding, ack);
       const pending = await erasePrivatePendingData(apiUrl, binding.userId);
+      await erasePrivateCaptures(apiUrl, binding.userId);
       await clearErasedSession(deletionPrivateStore, binding, __DEV__);
       if (pending.remaining !== 0) throw new Error(DELETION_STORAGE_ISSUE);
       if (active.current) setDeviceClean(true);

@@ -6,7 +6,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
-import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
 import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, taiwanDate, type ListingForm, type PhotoRecord, uuid } from './listingForm';
@@ -14,6 +13,7 @@ import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
 import { captureCameraSequence } from './listingCaptureFlow';
+import { listPrivateCaptures, preservePrivateCapture, releasePrivateCapture } from './privateCaptureStore';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { parseSellerDraft, restoreSellerForm, sellerDraftFromCard, SellerDraftSync } from './listingSellerDraft';
 
@@ -31,14 +31,6 @@ const applyAi = (card: Card, state: ListingAiState): Card => {
 const itemForm = (card: Card, shared: ListingForm): ListingForm => ({ ...card.form,
   county: shared.county, district: shared.district, latitude: shared.latitude, longitude: shared.longitude,
   meetup: shared.meetup, shipping: shared.shipping, negotiable: shared.negotiable, consent: shared.consent, expiryDate: shared.expiryDate });
-function releaseLocal(card: Card) {
-  if (!card.local) return;
-  const root = Paths.cache.uri.replace(/\/$/, '') + '/';
-  if (card.uri.startsWith(root) && !card.uri.includes('/../')) {
-    try { const file = new File(card.uri); if (file.exists) file.delete(); } catch { /* cache may already be gone */ }
-  }
-}
-
 export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAdvanced, onPublished }: {
   api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string;
   onClose: () => void; onAdvanced: () => void; onPublished: (count: number) => void;
@@ -64,28 +56,32 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
 
   useEffect(() => {
     active.current = true;
+    let scopeActive = true;
+    keyRef.current = null; setReady(false); setCards([]); setPending(null);
+    setLegacyPhotos([]); setLegacyRecoveryError(false); setError('');
     const sync = new SellerDraftSync(async (mediaId, expectedVersion, draft) => {
       const reply = await api<{ mediaId: string; version: number }>(`/listing-media/${mediaId}/seller-draft`,
         { method: 'PUT', body: JSON.stringify({ expectedVersion, draft }) });
       if (reply.mediaId !== mediaId) throw new Error('PRIVATE_DRAFT_BAD_ACK');
       return reply.version;
-    }, failure => { if (active.current) setError(failure instanceof ApiError && failure.code === 'SELLER_DRAFT_CONFLICT'
+    }, failure => { if (scopeActive && active.current) setError(failure instanceof ApiError && failure.code === 'SELLER_DRAFT_CONFLICT'
       ? '這件商品已在其他裝置更新；目前編輯尚未儲存，請勿直接離開，先確認內容。'
       : '商品編輯尚未安全儲存；請保持此畫面並稍後重試。'); });
     sellerSync.current = sync;
     void (async () => {
       try {
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
-        const [journal, response, legacy] = await Promise.all([privatePendingStore.get(key),
+        const [journal, response, legacy, localCaptures] = await Promise.all([privatePendingStore.get(key),
           api<{ items: unknown[] }>('/listing-media/unused?purpose=BATCH_ITEM'),
-          api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null)]);
+          api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null),
+          listPrivateCaptures(apiUrl, userId)]);
         if (!Array.isArray(response.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
         let olderPhotos: PhotoRecord[] = [], olderFailed = !legacy;
         try {
           if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
           olderPhotos = (legacy?.items ?? []).map(raw => parsePhotoRecord(raw, apiUrl, __DEV__));
         } catch { olderFailed = true; }
-        const recovered = restoreBatchCaptureOrder(response.items, MAX_ITEMS).map(raw => {
+        const recovered = restoreBatchCaptureOrder(response.items, response.items.length).map(raw => {
           const record = parsePhotoRecord(raw, apiUrl, __DEV__);
           const row = raw as Record<string, unknown>;
           const state = parseListingAiState({ mediaId: record.id, status: row.aiDraftStatus, draft: row.aiDraft ?? null }, record.id);
@@ -96,12 +92,28 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           return restored ? { ...aiCard, clientListingId: restored.clientListingId,
             form: restoreSellerForm(aiCard.form, restored, state.draft), touched: restored.touched } : aiCard;
         });
-        if (active.current) { keyRef.current = key; setPending(journal); setCards(recovered);
+        // A process may die after Flickr commits but before its acknowledgement arrives.
+        // Resolve each durable local UUID before offering a retry with the same pixels.
+        const localCards = await Promise.all(localCaptures.map(async capture => {
+          try {
+            const raw = await api<unknown>(`/listing-media/by-upload-id/${capture.clientUploadId}`, { timeoutMs: 5000 });
+            parsePhotoRecord(raw, apiUrl, __DEV__);
+          } catch (failure) {
+            // A missing or temporarily unreachable lookup must not discard pixels.
+            return { ...initialCard(capture.clientUploadId, capture.uri, true),
+              error: failure instanceof ApiError && failure.status === 404 ? '照片仍在此裝置，請重試私密上傳。' : '尚無法確認雲端狀態；請重試私密上傳。' };
+          }
+          // The server copy is authoritative. A linked or expired item no
+          // longer belongs in the unpublished recovery list.
+          try { await releasePrivateCapture(apiUrl, userId, capture.clientUploadId); } catch { /* retry cleanup on next open */ }
+          return null;
+        }));
+        if (scopeActive && active.current) { keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards.filter((card): card is Card => card !== null)]);
           setLegacyPhotos(olderPhotos); setLegacyRecoveryError(olderFailed);
           setReady(true); }
-      } catch { if (active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }
+      } catch { if (scopeActive && active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }
     })();
-    return () => { active.current = false; sync.dispose(); if (sellerSync.current === sync) sellerSync.current = null; };
+    return () => { scopeActive = false; active.current = false; sync.dispose(); if (sellerSync.current === sync) sellerSync.current = null; };
   }, [api, apiUrl, userId]);
 
   useEffect(() => {
@@ -133,7 +145,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       if (Math.max(asset.width, asset.height) > 1600) manipulator.resize(asset.width >= asset.height ? { width: 1600 } : { height: 1600 });
       rendered = await manipulator.renderAsync();
       const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.85, base64: false });
-      return initialCard(Crypto.randomUUID(), saved.uri, true);
+      const clientUploadId = Crypto.randomUUID();
+      return initialCard(clientUploadId, await preservePrivateCapture(apiUrl, userId, clientUploadId, saved.uri), true);
     } finally { rendered?.release(); manipulator.release(); }
   }
   async function upload(card: Card) {
@@ -142,10 +155,11 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       const form = jpegPhotoUploadForm(card.key, card.uri, 'listing-photo.jpg', 'BATCH_ITEM');
       const record = await uploadPhotoRecord(api, apiUrl, card.key, form, __DEV__);
       privatePhotoSaved = true;
-      setCards(old => old.map(current => current.key === card.key ? { ...current, record } : current));
+      setCards(old => old.map(current => current.key === card.key ? { ...current, record, uri: record.imageUrl, local: false } : current));
+      try { await releasePrivateCapture(apiUrl, userId, card.key); } catch { /* reconcile the redundant local copy on next open */ }
       if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
       const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
-      setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, record }, state) : current));
+      setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, record, uri: record.imageUrl, local: false }, state) : current));
       return true;
     } catch (failure) {
       const message = privatePhotoSaved
@@ -224,7 +238,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     try {
       if (card.record) await api(`/listing-media/${card.record.id}`, { method: 'DELETE' });
       if (card.record) sellerSync.current?.discard(card.record.id);
-      releaseLocal(card); setCards(old => old.filter(current => current.key !== card.key));
+      if (card.local) await releasePrivateCapture(apiUrl, userId, card.key);
+      setCards(old => old.filter(current => current.key !== card.key));
     } catch { setError('尚未確認照片已移除；請稍後重試。'); } finally { end(); }
   }
   async function locate() {
@@ -283,7 +298,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         await privatePendingStore.clear(keyRef.current, body);
         setPending(null); candidate = null; count++;
         sellerSync.current?.discard(card.record.id);
-        releaseLocal(card); setCards(old => old.map(current => current.key === card.key ? { ...current, published: true } : current));
+        setCards(old => old.map(current => current.key === card.key ? { ...current, published: true } : current));
       }
       if (count) onPublished(count);
     } catch (failure) {
@@ -298,8 +313,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   async function leave(action: () => void) {
     if (busyRef.current) return;
     if (cards.some(card => card.local && !card.record)) {
-      Alert.alert('照片尚未上傳', '尚未上傳成功的照片在離開後可能無法恢復。請先重試，或確認捨棄這些本機照片。',
-        [{ text: '繼續編輯', style: 'cancel' }, { text: '仍要離開', style: 'destructive', onPress: () => void leaveAfterFlush(action) }]);
+      Alert.alert('照片尚未上傳', '照片已保存在這台裝置的私人草稿中，重開 App 可重試；卸載 App 會遺失尚未上傳的照片。',
+        [{ text: '繼續編輯', style: 'cancel' }, { text: '稍後繼續', onPress: () => void leaveAfterFlush(action) }]);
       return;
     }
     await leaveAfterFlush(action);
@@ -355,7 +370,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {!!card.error && <Text style={s.error}>{card.error}</Text>}
         {!card.published && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: card.confirmed, disabled: busy || !!pending || !card.record }}
           disabled={busy || !!pending || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
-        {!card.published && <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>重試 AI</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
+        {!card.published && <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
       </View>)}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
       {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}

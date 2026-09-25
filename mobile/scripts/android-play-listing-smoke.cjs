@@ -10,13 +10,14 @@ const sharp = require('../../server/node_modules/sharp');
 const serial = process.env.SIM_MANAGER_SERIAL;
 if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) throw new Error('Managed Android emulator required');
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
+const { version: versionName, android: { versionCode } } = require('../app.config.js').expo;
 const base = 'https://wishlist-app-production.up.railway.app/api';
 const fixture = path.resolve(__dirname, '../qa-fixtures/synthetic-used-orange-desk-lamp.png');
 const expectedFixtureHash = 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0';
 const credentialFile = process.env.QA_CREDENTIALS_FILE;
 const runId = randomUUID();
-const gallery = `/sdcard/Pictures/wishlist-play-v21-${runId}.png`;
-const ui = `/sdcard/wishlist-play-v21-${runId}.xml`;
+const gallery = `/sdcard/Pictures/wishlist-play-v${versionCode}-${runId}.png`;
+const ui = `/sdcard/wishlist-play-v${versionCode}-${runId}.xml`;
 const adbPath = '/Users/hank/Library/Android/sdk/platform-tools/adb';
 const adb = (args, options = {}) => execFileSync(adbPath, ['-s', serial, ...args], {
   encoding: options.binary ? undefined : 'utf8', timeout: options.timeout ?? 25_000,
@@ -24,7 +25,7 @@ const adb = (args, options = {}) => execFileSync(adbPath, ['-s', serial, ...args
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let stage = 'preflight', bearer, candidateId, loggedIn = false, baselineIds;
+let stage = 'preflight', bearer, candidateId, loggedIn = false, baselineIds, uploadStarted = false, candidateCleanupConfirmed = false;
 
 const nodes = xml => xml.match(/<node\b[^>]*>/g) ?? [];
 const find = (xml, label) => {
@@ -67,14 +68,8 @@ async function unused() {
   return data.items;
 }
 async function cleanupCandidate() {
-  if (!bearer) return 'NOT_CREATED';
+  if (!bearer || !candidateId) return 'NOT_IDENTIFIED';
   try {
-    if (!candidateId && baselineIds) {
-      const added = (await unused()).filter(item => !baselineIds.has(item.id));
-      if (added.length === 1) candidateId = added[0].id;
-      else if (added.length > 1) return 'MANUAL_REVIEW_REQUIRED';
-    }
-    if (!candidateId) return 'NOT_CREATED';
     const response = await api(`/listing-media/${candidateId}`, { method: 'DELETE' });
     return response.status === 204 || response.status === 404 ? 'DELETE_ACCEPTED' : 'MANUAL_REVIEW_REQUIRED';
   } catch { return 'MANUAL_REVIEW_REQUIRED'; }
@@ -94,13 +89,12 @@ async function main() {
   if (!bearer) throw new Error('test_token_missing');
   stage = 'baseline';
   baselineIds = new Set((await unused()).map(item => item.id));
-  if (baselineIds.size) throw new Error('test_account_has_existing_batch_drafts');
   const before = await api('/listings/mine');
   if (!before.ok) throw new Error('seller_listings_unavailable');
   const initialListings = new Set((await before.json()).items.map(item => item.id));
   stage = 'installed-play-apk';
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
-  if (!/versionCode=21\b/.test(installed) || !/versionName=2\.0\.6\b/.test(installed)) throw new Error('installed_build_mismatch');
+  if (!installed.includes(`versionCode=${versionCode} `) || !installed.includes(`versionName=${versionName}`)) throw new Error('installed_build_mismatch');
   adb(['push', fixture, gallery], { timeout: 40_000 });
   adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://' + gallery]);
   stage = 'native-login';
@@ -144,6 +138,7 @@ async function main() {
   if (orangePixels <= 300) throw new Error('synthetic_lamp_not_first_tile');
   adb(['shell', 'input', 'tap', '53', '474']);
   tap(await waitNode('Done'));
+  uploadStarted = true;
   stage = 'private-upload';
   for (let attempt = 0; attempt < 25; attempt++) {
     const added = (await unused()).filter(item => !baselineIds.has(item.id));
@@ -168,7 +163,8 @@ async function main() {
     !Number.isSafeInteger(ai.estimatedPriceLowTwd) || !Number.isSafeInteger(ai.estimatedPriceHighTwd)) throw new Error('ai_draft_incomplete');
   stage = 'native-ai-display';
   await waitWithScroll('AI 草稿已完成，請確認', 60_000);
-  await waitWithScroll(`第1件 AI 二手參考價：NT$ ${ai.estimatedPriceLowTwd}–${ai.estimatedPriceHighTwd}`, 35_000);
+  await waitWithScroll(`第${baselineIds.size + 1}件 AI 二手參考價：NT$ ${ai.estimatedPriceLowTwd}–${ai.estimatedPriceHighTwd}`, 35_000);
+  await waitWithScroll('目前售價由 AI 參考區間中間值預填，不是已驗證行情；刊登前請確認或修改。', 35_000);
   const after = await api('/listings/mine');
   if (!after.ok || (await after.json()).items.some(item => !initialListings.has(item.id))) throw new Error('listing_published_without_consent');
   stage = 'cleanup';
@@ -176,9 +172,10 @@ async function main() {
   if (cleanup !== 'DELETE_ACCEPTED') throw new Error('private_photo_cleanup_incomplete');
   const remaining = (await unused()).filter(item => !baselineIds.has(item.id));
   if (remaining.length) throw new Error('private_photo_still_listed');
-  console.log(JSON.stringify({ result: 'PASS', scope: 'play-signed-native-private-listing-ai', versionCode: 21,
+  console.log(JSON.stringify({ result: 'PASS', scope: 'play-signed-native-private-listing-ai', versionCode,
     fixture: 'owned-synthetic-used-orange-lamp', privateUpload: true, anonymousAccessDenied: true,
     aiDraftDisplayed: true, referencePriceDisplayed: true, unconfirmedPublicListings: 0, cleanup }));
+  candidateCleanupConfirmed = true;
   candidateId = undefined;
 }
 
@@ -193,7 +190,11 @@ main().catch(error => {
   console.error(`Play listing smoke failed (${stage}; ${code}; markers=${JSON.stringify(markers)}).`);
   process.exitCode = 1;
 }).finally(async () => {
-  if (candidateId || baselineIds) {
+  if (uploadStarted && !candidateId && !candidateCleanupConfirmed) {
+    console.error('Uploaded test photo was not identified; manual review is required. Existing private drafts were not touched.');
+    process.exitCode = 1;
+  }
+  if (candidateId) {
     const cleanup = await cleanupCandidate();
     if (cleanup === 'MANUAL_REVIEW_REQUIRED') { console.error('Test photo cleanup needs manual review.'); process.exitCode = 1; }
   }

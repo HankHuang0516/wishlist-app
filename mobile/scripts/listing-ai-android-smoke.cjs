@@ -9,6 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('../../server/node_modules/sharp');
 const { startNativeQa } = require('./native-qa.cjs');
+const { nativeQaFailureCode } = require('./native-qa-failure.cjs');
 const { assignedSerial, hostEnvironment, metroArguments, METRO_PORT, qaLabel, qaPackage } = require('./android-qa-config.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
@@ -490,7 +491,7 @@ async function main() {
 (async () => {
   try { await main(); } catch (error) {
     report.failedStage = stage;
-    report.failure = /^QA_[A-Z0-9_]+$/.test(error?.message || '') ? error.message : 'QA_ASSERTION_FAILED';
+    report.failure = nativeQaFailureCode(error);
     if (launched) try {
       const xml = await dump();
       report.uiMarkers = { notice: !!findNode(xml, '我了解，繼續使用'), login: !!findNode(xml, '手機號碼或 Email'),

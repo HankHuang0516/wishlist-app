@@ -32,7 +32,7 @@ export function validExternalImageUrl(raw, host) {
     } catch { return false; }
 }
 
-export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dnsLookup } = {}) {
+export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dnsLookup, request = https.request } = {}) {
     if (!validExternalImageUrl(raw, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
     const url = new URL(raw);
     let addresses;
@@ -41,9 +41,11 @@ export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dns
     const ipv4 = addresses.filter(entry => entry.family === 4);
     if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('IMAGE_HOST_UNSAFE');
     return new Promise((resolve, reject) => {
-        const req = https.request(url, { method: 'GET', agent: false, timeout: 20_000,
+        const req = request(url, { method: 'GET', agent: false, timeout: 20_000,
             headers: { Accept: 'image/jpeg,image/png,image/webp' },
-            lookup: (_hostname, _options, callback) => callback(null, ipv4[0].address, 4) }, response => {
+            lookup: (_hostname, options, callback) => options.all
+                ? callback(null, [{ address: ipv4[0].address, family: 4 }])
+                : callback(null, ipv4[0].address, 4) }, response => {
             if (response.statusCode !== 200) { response.destroy(); reject(new Error('IMAGE_FETCH_FAILED')); return; }
             resolve({ ok: true, body: response, headers: { get: key => response.headers[key]?.toString() ?? null } });
         });
@@ -93,9 +95,9 @@ export function parseVisionDescription(description) {
     return { name, category: category || null, visibleText, listedPriceTwd, evidence, uncertainties, confidence };
 }
 
-async function boundedImage(url, fetchImpl, authToken) {
+async function boundedImage(url, fetchImpl, authToken, timeoutMs = 20000) {
     let response;
-    try { response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000),
+    try { response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
         ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}) }); }
     catch { throw new Error('IMAGE_FETCH_FAILED'); }
     if (!response.ok || !response.body) throw new Error('IMAGE_FETCH_FAILED');
@@ -164,8 +166,8 @@ export function parseListingVisionDescription(description) {
 }
 
 async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken, execCommand = execFileAsync,
-    connectorTimeoutMs = 90000 } = {}) {
-    const { bytes, extension } = await boundedImage(url, fetchImpl, authToken);
+    connectorTimeoutMs = 90000, imageTimeoutMs = 20000 } = {}) {
+    const { bytes, extension } = await boundedImage(url, fetchImpl, authToken, imageTimeoutMs);
     const directory = await mkdtemp(join(tmpdir(), 'wishlist-minimax-vision-'));
     const imagePath = join(directory, `image.${extension}`);
     try {
@@ -197,7 +199,7 @@ export async function recognizeListingImage(url, options = {}) {
 export async function recognizeExternalCandidateImage(url, imageHost, options = {}) {
     if (!validExternalImageUrl(url, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
     return describeImage(url, EXTERNAL_CANDIDATE_PROMPT, parseListingVisionDescription,
-        { connectorTimeoutMs: 150000, ...options, authToken: undefined,
+        { connectorTimeoutMs: 150000, imageTimeoutMs: 45000, ...options, authToken: undefined,
             fetchImpl: (target, init) => pinnedExternalFetch(target, { imageHost, signal: init.signal }) });
 }
 

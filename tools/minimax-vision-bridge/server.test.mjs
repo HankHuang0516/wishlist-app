@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
+import { once, EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import { createBridge, isPublicIpv4, pinnedExternalFetch, parseListingVisionDescription, parseVisionDescription, recognizeListingImage,
     recognizeExternalCandidateImage, safeVisionError, validExternalImageUrl, validImageUrl } from './server.mjs';
 
@@ -28,6 +29,35 @@ test('external image fetch requires exact authorized HTTPS host and public IPv4'
         lookup: async () => [{ address: '1.1.1.1', family: 4 }, { address: '127.0.0.1', family: 4 }] }), /IMAGE_HOST_UNSAFE/);
     await assert.rejects(recognizeExternalCandidateImage('https://images.example.com.evil.test/item/1.jpg', 'images.example.com',
         { authToken: 'must-not-leak' }), /IMAGE_HOST_UNSAFE/);
+});
+
+test('external image fetch pins the same public IPv4 for Node multi-address lookups', async () => {
+    const url = 'https://images.example.com/item/fixture.png';
+    const request = (_url, options, callback) => {
+        assert.equal(_url.href, url);
+        const operation = new EventEmitter();
+        operation.end = () => {
+            options.lookup('images.example.com', {}, (_error, address, family) => {
+                assert.equal(address, '93.184.216.34');
+                assert.equal(family, 4);
+            });
+            options.lookup('images.example.com', { all: true }, (_error, addresses) =>
+                assert.deepEqual(addresses, [{ address: '93.184.216.34', family: 4 }]));
+            const response = Readable.from([Buffer.from('89504e470d0a1a0a', 'hex')]);
+            response.statusCode = 200;
+            response.headers = { 'content-type': 'image/png' };
+            queueMicrotask(() => callback(response));
+        };
+        operation.destroy = () => {};
+        return operation;
+    };
+    const response = await pinnedExternalFetch(url, { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }], request });
+    assert.equal(response.ok, true);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    const chunks = [];
+    for await (const chunk of response.body) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString('hex'), '89504e470d0a1a0a');
 });
 
 test('accepts visual evidence but not unsupported price claims', () => {

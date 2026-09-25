@@ -63,6 +63,8 @@ test('pins a public DNS answer and rejects redirects and oversized bodies', asyn
     const request = new EventEmitter();
     request.end = () => {
       options.lookup(config.host, {}, (_error, address) => assert.equal(address, '93.184.216.34'));
+      options.lookup(config.host, { all: true }, (_error, addresses) =>
+        assert.deepEqual(addresses, [{ address: '93.184.216.34', family: 4 }]));
       const response = Readable.from([bytes]);
       response.statusCode = status;
       response.headers = { 'content-type': 'application/json' };

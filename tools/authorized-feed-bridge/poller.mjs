@@ -75,7 +75,9 @@ export async function pinnedFeedJson(url, host, { lookup = dnsLookup, request = 
   return new Promise((resolve, reject) => {
     const req = request(url, { method: 'GET', agent: false, timeout: 20_000,
       headers: { Accept: 'application/json' },
-      lookup: (_hostname, _options, callback) => callback(null, ipv4[0].address, 4) }, response => {
+      lookup: (_hostname, options, callback) => options.all
+        ? callback(null, [{ address: ipv4[0].address, family: 4 }])
+        : callback(null, ipv4[0].address, 4) }, response => {
       const type = String(response.headers['content-type'] || '').split(';')[0].toLowerCase();
       if (response.statusCode !== 200 || type !== 'application/json' ||
         Number(response.headers['content-length'] || 0) > MAX_FEED_BYTES) {

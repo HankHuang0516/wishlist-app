@@ -20,7 +20,7 @@ try {
     if (!database.DATABASE_PUBLIC_URL) throw new Error('public_database_url_missing');
     const child = spawnSync(process.execPath, [path.join(__dirname, 'smoke_listing_pilot.cjs')], {
         env: { ...process.env, ...app, DATABASE_URL: database.DATABASE_PUBLIC_URL },
-        stdio: 'inherit', timeout: 180_000
+        stdio: 'inherit', timeout: process.env.QA_TEST_AI === '1' ? 420_000 : 180_000
     });
     if (child.error || child.status !== 0) process.exitCode = child.status || 1;
 } catch {

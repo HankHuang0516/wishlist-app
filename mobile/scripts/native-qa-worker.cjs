@@ -92,7 +92,7 @@ async function main() {
   if (!process.send || process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL || process.env.NODE_ENV !== 'test' ||
       Object.keys(process.env).some(key => !allowedEnv.has(key)) || !/^[0-9a-f]{64}$/.test(process.env.JWT_SECRET || '')) throw new Error('Unsafe QA launch');
   const lifetime = Number(process.env.NATIVE_QA_LIFETIME_SECONDS);
-  if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 600) throw new Error('Unsafe QA lifetime');
+  if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 900) throw new Error('Unsafe QA lifetime');
   if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
   if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
   if (process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== undefined && process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== '1') throw new Error('Unsafe QA upload interruption mode');

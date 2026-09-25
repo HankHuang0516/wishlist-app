@@ -8,7 +8,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
   { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false,
     staleBatchRecoverySnapshot = false } = {}) {
   assertTestDatabase(databaseUrl);
-  if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
+  if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 900) throw new Error('QA lifetime must be 1–900 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
   // values, NODE_OPTIONS, PGHOST or dotenv configuration can enter this child.
   return {

@@ -44,6 +44,8 @@ describe('isolated listing AI QA process', () => {
     expect(external.EXTERNAL_LISTINGS_PUBLIC_ENABLED).toBeUndefined();
     expect(external.ADMIN_API_KEY).toBeUndefined();
     expect(pilot.DATABASE_URL).toBe(database);
+    expect(qaEnvironment(database, 750, inherited, { listingAiPilot: true }).NATIVE_QA_LIFETIME_SECONDS).toBe('750');
+    expect(() => qaEnvironment(database, 901, inherited, { listingAiPilot: true })).toThrow('QA lifetime');
   });
 });
 

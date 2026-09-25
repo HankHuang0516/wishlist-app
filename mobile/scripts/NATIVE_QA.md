@@ -14,7 +14,7 @@
 
 ## 執行與生命週期
 
-先執行 server build，確保使用最新 `server/dist`。控制程序透過 `startNativeQa(TEST_DATABASE_URL, lifetimeSeconds)` 取得 API 位址、合成 actor 與 `stop()`／`exited`；生命週期設定為 1–600 秒，啟動有 30 秒觀察期限。服務到期、控制 IPC 中斷、SIGTERM 或 SIGINT 都會停止接受新請求，等待正在進行的請求結束後清理。
+先執行 server build，確保使用最新 `server/dist`。控制程序透過 `startNativeQa(TEST_DATABASE_URL, lifetimeSeconds)` 取得 API 位址、合成 actor 與 `stop()`／`exited`；生命週期設定為 1–900 秒（iOS 雙件 AI 後逐件刊登使用 750 秒），啟動有 30 秒觀察期限。服務到期、控制 IPC 中斷、SIGTERM 或 SIGINT 都會停止接受新請求，等待正在進行的請求結束後清理。
 
 啟動時會先比較原始碼中的遷移清單與隔離資料庫已完成的遷移；少套、重複或多出不符來源的版本會在建立合成使用者之前以 `schema-preflight` 停止。此檢查只防止舊 QA 資料庫被誤當 APP 回歸，並不自動修改資料庫，也不取代完整的 `prisma migrate diff` 結構比對。應在確認是空置的指定測試庫後，先由 `server/` 對它執行 `prisma migrate deploy`，再重跑 QA；絕不可因此對正式資料庫套用未發布 migration。
 

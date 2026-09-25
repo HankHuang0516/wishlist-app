@@ -74,6 +74,20 @@ async function cleanupCandidate() {
     return response.status === 204 || response.status === 404 ? 'DELETE_ACCEPTED' : 'MANUAL_REVIEW_REQUIRED';
   } catch { return 'MANUAL_REVIEW_REQUIRED'; }
 }
+async function signOutDevice() {
+  for (let attempt = 0; attempt < 9; attempt++) {
+    const screen = dump();
+    if (find(screen, '手機號碼或 Email')) return true;
+    const signOut = find(screen, '登出此裝置');
+    if (signOut) { tap(signOut); await sleep(900); continue; }
+    if (find(screen, '帳號安全') || find(screen, '刊登好物')) { await swipeUp(); continue; }
+    const account = find(screen, '我的');
+    if (account) { tap(account); await sleep(600); continue; }
+    adb(['shell', 'input', 'keyevent', '4']);
+    await sleep(600);
+  }
+  return !!find(dump(), '手機號碼或 Email');
+}
 async function main() {
   if (!credentialFile || !fs.existsSync(credentialFile) ||
     createHash('sha256').update(fs.readFileSync(fixture)).digest('hex') !== expectedFixtureHash) throw new Error('private_fixture_or_credentials_missing');
@@ -106,6 +120,8 @@ async function main() {
     if (screen.includes('新的願望，附近的好物')) {
       const accept = find(screen, '我了解，繼續使用');
       if (accept) tap(accept); else await swipeUp();
+    } else if (find(screen, '我的')) {
+      if (!await signOutDevice()) throw new Error('existing_device_session_logout_failed');
     } else await sleep(700);
   }
   tap(await waitNode('手機號碼或 Email'));
@@ -199,5 +215,9 @@ main().catch(error => {
     if (cleanup === 'MANUAL_REVIEW_REQUIRED') { console.error('Test photo cleanup needs manual review.'); process.exitCode = 1; }
   }
   try { adb(['shell', 'rm', '-f', gallery, ui]); } catch { /* Device lease is still released. */ }
-  if (loggedIn) try { adb(['shell', 'pm', 'clear', pkg]); } catch { console.error('QA emulator login state could not be cleared.'); process.exitCode = 1; }
+  if (loggedIn) {
+    try {
+      if (!await signOutDevice()) { console.error('QA emulator remains signed in; local private captures were preserved.'); process.exitCode = 1; }
+    } catch { console.error('QA emulator sign-out needs manual review; local private captures were preserved.'); process.exitCode = 1; }
+  }
 });

@@ -1,0 +1,12 @@
+FROM node:22-alpine
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+# The feed bridge uses only Node built-ins. Keep the cron image separate from
+# the web server and omit source URLs, credentials, and application databases.
+COPY --chown=node:node tools/authorized-feed-bridge/poller.mjs tools/authorized-feed-bridge/poller.mjs
+COPY --chown=node:node tools/minimax-vision-bridge/server.mjs tools/minimax-vision-bridge/server.mjs
+
+USER node
+CMD ["node", "tools/authorized-feed-bridge/poller.mjs", "--once"]

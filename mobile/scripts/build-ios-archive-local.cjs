@@ -12,6 +12,7 @@ const uuid = 'd172b211-c59e-4c19-9177-3c48f6e17ba3';
 const keychain = '/Users/hank/Library/Keychains/login.keychain-db';
 const profilePath = '/Users/hank/.local/share/AiHankApps/credentials/weesh/Wishlist-ai-Weesh-AppStore-Login-20260915.mobileprovision';
 const appConfig = require('../app.config.js').expo;
+const motionPurpose = appConfig.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === 'expo-location')?.[1]?.motionUsagePermission;
 const buildPaths = require('./local-ios-paths.cjs').localIosPaths(mobile, 'archive', process.argv[2]);
 const archivePath = buildPaths.archive;
 const resultPath = buildPaths.result;
@@ -62,8 +63,9 @@ build.on('close', code => {
       && readPlist('CFBundleVersion') === appConfig.ios.buildNumber
       && Array.isArray(families) && families.includes(1) && (!appConfig.ios.supportsTablet || families.includes(2))
       && (!appConfig.ios.supportsTablet || appConfig.ios.infoPlist['UISupportedInterfaceOrientations~ipad'].every(orientation => ipadOrientations.includes(orientation)))
+      && typeof motionPurpose === 'string' && readPlist('NSMotionUsageDescription') === motionPurpose
       && signature.status === 0;
-    if (!verified) console.error('Archive identity, iPad family/orientations or deep code signature verification failed');
+    if (!verified) console.error('Archive identity, iPad family/orientations, motion purpose or deep code signature verification failed');
   }
   console.log(JSON.stringify({ scope: 'local-distribution-archive-only-not-full-acceptance-or-upload', exitCode: code, archiveVerified: verified, warnings, errors, archivePath, fullResultBundle: resultPath }));
   process.exitCode = code === 0 && verified ? 0 : 1;

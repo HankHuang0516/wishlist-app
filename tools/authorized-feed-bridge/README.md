@@ -2,7 +2,7 @@
 
 This bridge does not crawl Facebook, LINE, or public pages. It polls **one explicitly configured partner JSON feed** whose host equals the registered source's `canonicalHost`. No source is configured or scheduled by the repository. Use it only after the source owner supplies S01–S03 (real item examples, stable IDs, rights to use text/images and optionally AI, and sold/removed updates) and an operator verifies the authorization record.
 
-The feed must be HTTPS with no redirect, URL credential, query secret, or private-network DNS answer. It must return `application/json` and at most 2 MiB. A snapshot may contain up to 200 current items and 50 explicit withdrawals. Omitted items are **not** treated as sold; they expire through the server's 24-hour observation gate. Every item carries a fresh source-provided `observedAt` and `expiresAt`, and must satisfy the server's double-north, price, image-host, prohibited-content, and rights checks.
+The feed must be HTTPS with no redirect, URL credential, query secret, or private-network DNS answer. It must return `application/json` and at most 2 MiB. The entire DNS-and-download operation has a 30-second deadline, including a server that keeps trickling bytes; a timed-out snapshot is not staged. A snapshot may contain up to 200 current items and 50 explicit withdrawals. Omitted items are **not** treated as sold; they expire through the server's 24-hour observation gate. Every item carries a fresh source-provided `observedAt` and `expiresAt`, and must satisfy the server's double-north, price, image-host, prohibited-content, and rights checks.
 
 Envelope version 1:
 

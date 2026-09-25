@@ -119,7 +119,7 @@ export async function pinnedFeedJson(url, host, { lookup = dnsLookup, request = 
   } finally { clearTimeout(deadline); }
 }
 
-export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, fetchApi = fetch } = {}) {
+async function authorizedSnapshot(config, { fetchFeed = pinnedFeedJson, fetchApi = fetch } = {}) {
   if (!SOURCE_ID.test(config?.sourceId || '') || !AUTH_REF.test(config?.authorizationRef || '') ||
     config?.apiOrigin !== 'https://wishlist-app-production.up.railway.app' ||
     typeof config?.adminKey !== 'string' || !config.adminKey || /[\u0000-\u001f\u007f]/.test(config.adminKey))
@@ -138,6 +138,28 @@ export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, f
     !source.enabledAt || source.authorizationRef !== config.authorizationRef ||
     source.canonicalHost !== config.host) throw new Error('FEED_SOURCE_NOT_AUTHORIZED');
   const envelope = parseFeedEnvelope(await fetchFeed(config.url, config.host), config);
+  return { api, envelope };
+}
+
+async function validateCandidates(config, api, items) {
+  for (let index = 0; index < items.length; index += 50) {
+    const batch = items.slice(index, index + 50);
+    const result = await api('/sources/' + config.sourceId + '/validate-candidates', 'POST',
+      { authorizationRef: config.authorizationRef, items: batch });
+    if (result?.validCount !== batch.length || result.publicCount !== 0 || result.persistedCount !== 0)
+      throw new Error('FEED_VALIDATION_ACK_INVALID');
+  }
+}
+
+export async function preflightAuthorizedFeed(config, dependencies = {}) {
+  const { api, envelope } = await authorizedSnapshot(config, dependencies);
+  await validateCandidates(config, api, envelope.items);
+  return { kind: 'authorized-feed-preflight', validItems: envelope.items.length,
+    withdrawalSignals: envelope.withdrawals.length, persistedByBridge: 0, publishedByBridge: 0 };
+}
+
+export async function syncAuthorizedFeed(config, dependencies = {}) {
+  const { api, envelope } = await authorizedSnapshot(config, dependencies);
   let withdrawn = 0, unmatchedWithdrawals = 0, staged = 0;
   for (const reason of ['SOLD', 'REMOVED']) {
     const sourceItemIds = envelope.withdrawals.filter(item => item.reason === reason).map(item => item.sourceItemId);
@@ -150,6 +172,9 @@ export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, f
     withdrawn += result.withdrawn;
     unmatchedWithdrawals += result.unknown ?? 0;
   }
+  // Withdrawals are safety-critical and precede validation. Validate every
+  // candidate batch before staging any one batch, avoiding partial intake.
+  await validateCandidates(config, api, envelope.items);
   for (let index = 0; index < envelope.items.length; index += 50) {
     const items = envelope.items.slice(index, index + 50);
     const result = await api('/sources/' + config.sourceId + '/candidates', 'POST', { items });
@@ -162,14 +187,16 @@ export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, f
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  if (process.argv.length !== 3 || !['--once', '--run'].includes(process.argv[2])) throw new Error('Explicit --once or --run required');
+  if (process.argv.length !== 3 || !['--preflight', '--once', '--run'].includes(process.argv[2]))
+    throw new Error('Explicit --preflight, --once or --run required');
   const config = feedConfig(process.env);
   do {
-    try { process.stdout.write(JSON.stringify(await syncAuthorizedFeed(config)) + '\n'); }
+    try { process.stdout.write(JSON.stringify(await (process.argv[2] === '--preflight' ?
+      preflightAuthorizedFeed(config) : syncAuthorizedFeed(config))) + '\n'); }
     catch (error) {
       const code = /^FEED_[A-Z_]+(?:\d{3})?$/.test(error?.message || '') ? error.message : 'FEED_UNAVAILABLE';
       process.stderr.write('Authorized feed sync unavailable: ' + code + '\n');
-      if (process.argv[2] === '--once') process.exitCode = 1;
+      if (process.argv[2] !== '--run') process.exitCode = 1;
     }
     if (process.argv[2] === '--run') await new Promise(resolve => setTimeout(resolve, config.intervalMinutes * 60_000));
   } while (process.argv[2] === '--run');

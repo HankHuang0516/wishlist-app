@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
-import { feedConfig, feedUrl, parseFeedEnvelope, pinnedFeedJson, syncAuthorizedFeed } from './poller.mjs';
+import { feedConfig, feedUrl, parseFeedEnvelope, pinnedFeedJson, preflightAuthorizedFeed, syncAuthorizedFeed } from './poller.mjs';
 
 const sourceId = 'f38a84b3-82e8-44a3-9cc0-1f2667655f02';
 const authorizationRef = 'contract:synthetic-bridge-test';
@@ -133,6 +133,8 @@ test('checks current source before fetching and sends sold signals before privat
       authorizationRef, canonicalHost: config.host,
     }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0, withdrawn: 1, unknown: 1 }), { status: 200 });
+    if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({ validCount: 1,
+      publicCount: 0, persistedCount: 0 }), { status: 200 });
     if (url.endsWith('/candidates')) return new Response(JSON.stringify({ publicCount: 0,
       items: [{ sourceItemId: 'one', status: 'PENDING_REVIEW' }] }), { status: 202 });
     throw new Error('unexpected API call');
@@ -142,9 +144,11 @@ test('checks current source before fetching and sends sold signals before privat
     fetchFeed: async () => ({ ...envelope([item('one', current)], [{ sourceItemId: 'sold-1', reason: 'SOLD' },
       { sourceItemId: 'never-imported', reason: 'SOLD' }]), generatedAt: current }) });
   assert.deepEqual(result, { kind: 'authorized-private-feed-sync', staged: 1, withdrawn: 1, unmatchedWithdrawals: 1, publishedByBridge: 0 });
-  assert.deepEqual(calls.map(call => call.method), ['GET', 'POST', 'POST']);
+  assert.deepEqual(calls.map(call => call.method), ['GET', 'POST', 'POST', 'POST']);
   assert.ok(calls[1].url.endsWith('/withdraw'));
-  assert.ok(calls[2].url.endsWith('/candidates'));
+  assert.ok(calls[2].url.endsWith('/validate-candidates'));
+  assert.equal(calls[2].body.authorizationRef, authorizationRef);
+  assert.ok(calls[3].url.endsWith('/candidates'));
   assert.ok(calls.every(call => call.key === environment.WISHLIST_FEED_ADMIN_KEY));
   assert.ok(calls.every(call => !call.url.includes(config.host)));
   let feedCalled = false;
@@ -154,4 +158,51 @@ test('checks current source before fetching and sends sold signals before privat
     fetchFeed: async () => { feedCalled = true; return envelope(); },
   }), /FEED_SOURCE_NOT_AUTHORIZED/);
   assert.equal(feedCalled, false);
+});
+
+test('preflight checks all candidate batches without staging or withdrawing', async () => {
+  const calls = [];
+  const current = new Date().toISOString();
+  const fetchApi = async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
+    if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
+      kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
+      authorizationRef, canonicalHost: config.host }), { status: 200 });
+    assert.ok(url.endsWith('/validate-candidates'));
+    return new Response(JSON.stringify({ validCount: JSON.parse(options.body).items.length,
+      publicCount: 0, persistedCount: 0 }), { status: 200 });
+  };
+  const items = Array.from({ length: 51 }, (_, index) => item('item-' + index, current));
+  const result = await preflightAuthorizedFeed(config, { fetchApi, fetchFeed: async () => ({
+    ...envelope(items, [{ sourceItemId: 'sold-1', reason: 'SOLD' }]), generatedAt: current,
+  }) });
+  assert.deepEqual(result, { kind: 'authorized-feed-preflight', validItems: 51,
+    withdrawalSignals: 1, persistedByBridge: 0, publishedByBridge: 0 });
+  assert.deepEqual(calls.map(call => call.method), ['GET', 'POST', 'POST']);
+  assert.deepEqual(calls.slice(1).map(call => call.body.items.length), [50, 1]);
+  assert.ok(calls.slice(1).every(call => call.body.authorizationRef === authorizationRef));
+});
+
+test('a later invalid batch cannot partly stage candidates, but sold signals still withdraw', async () => {
+  const calls = [];
+  const current = new Date().toISOString();
+  const fetchApi = async (url, options) => {
+    calls.push(url);
+    if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
+      kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
+      authorizationRef, canonicalHost: config.host }), { status: 200 });
+    if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
+      withdrawn: 1, unknown: 0 }), { status: 200 });
+    if (url.endsWith('/validate-candidates')) return calls.filter(call => call.endsWith('/validate-candidates')).length === 2
+      ? new Response('{}', { status: 400 }) : new Response(JSON.stringify({ validCount: 50,
+        publicCount: 0, persistedCount: 0 }), { status: 200 });
+    throw new Error('Candidates must not be staged after failed validation');
+  };
+  const items = Array.from({ length: 51 }, (_, index) => item('item-' + index, current));
+  await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed: async () => ({
+    ...envelope(items, [{ sourceItemId: 'sold-1', reason: 'SOLD' }]), generatedAt: current,
+  }) }), /FEED_API_400/);
+  assert.ok(calls[1].endsWith('/withdraw'));
+  assert.equal(calls.filter(call => call.endsWith('/validate-candidates')).length, 2);
+  assert.equal(calls.some(call => call.endsWith('/candidates')), false);
 });

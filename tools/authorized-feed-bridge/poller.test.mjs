@@ -206,3 +206,77 @@ test('a later invalid batch cannot partly stage candidates, but sold signals sti
   assert.equal(calls.filter(call => call.endsWith('/validate-candidates')).length, 2);
   assert.equal(calls.some(call => call.endsWith('/candidates')), false);
 });
+
+test('maximum scheduled snapshot keeps 200 items private and processes 50 explicit withdrawals first', async () => {
+  const current = new Date().toISOString();
+  const items = Array.from({ length: 200 }, (_, index) => item('current-' + index, current));
+  const withdrawals = Array.from({ length: 50 }, (_, index) => ({
+    sourceItemId: 'retired-' + index, reason: index < 25 ? 'SOLD' : 'REMOVED',
+  }));
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ url, method: options.method, body });
+    if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
+      kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
+      authorizationRef, canonicalHost: config.host }), { status: 200 });
+    if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
+      withdrawn: body.sourceItemIds.length, unknown: 0 }), { status: 200 });
+    if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({
+      validCount: body.items.length, publicCount: 0, persistedCount: 0,
+    }), { status: 200 });
+    if (url.endsWith('/candidates')) return new Response(JSON.stringify({ publicCount: 0,
+      items: body.items.map(entry => ({ sourceItemId: entry.sourceItemId, status: 'PENDING_REVIEW' })),
+    }), { status: 202 });
+    throw new Error('unexpected API call');
+  };
+  const result = await syncAuthorizedFeed(config, { fetchApi,
+    fetchFeed: async () => ({ ...envelope(items, withdrawals), generatedAt: current }) });
+  assert.deepEqual(result, { kind: 'authorized-private-feed-sync', staged: 200,
+    withdrawn: 50, unmatchedWithdrawals: 0, publishedByBridge: 0 });
+  assert.deepEqual(calls.map(call => call.url.split('/').at(-1)), [sourceId, 'withdraw', 'withdraw',
+    'validate-candidates', 'validate-candidates', 'validate-candidates', 'validate-candidates',
+    'candidates', 'candidates', 'candidates', 'candidates']);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/withdraw')).map(call =>
+    [call.body.reason, call.body.sourceItemIds.length]), [['SOLD', 25], ['REMOVED', 25]]);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/candidates')).map(call => call.body.items.length),
+    [50, 50, 50, 50]);
+  assert.ok(calls.every(call => !call.url.endsWith('/approve')));
+});
+
+test('recurring sync rechecks source authorization and does not fetch after it is paused', async () => {
+  const current = new Date().toISOString();
+  let enabled = true;
+  let fetched = 0;
+  const fetchApi = async (_url, options) => {
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled,
+      enabledAt: current, authorizationRef, canonicalHost: config.host }), { status: 200 });
+  };
+  const fetchFeed = async () => { fetched++; return { ...envelope(), generatedAt: current }; };
+  assert.deepEqual(await syncAuthorizedFeed(config, { fetchApi, fetchFeed }), {
+    kind: 'authorized-private-feed-sync', staged: 0, withdrawn: 0,
+    unmatchedWithdrawals: 0, publishedByBridge: 0,
+  });
+  enabled = false;
+  await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed }), /FEED_SOURCE_NOT_AUTHORIZED/);
+  assert.equal(fetched, 1);
+});
+
+test('over-limit snapshots are rejected before any private or public write', async () => {
+  const current = new Date().toISOString();
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    calls.push(options.method);
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: current, authorizationRef, canonicalHost: config.host }), { status: 200 });
+  };
+  for (const snapshot of [
+    { ...envelope(Array.from({ length: 201 }, (_, index) => item('too-many-' + index, current))), generatedAt: current },
+    { ...envelope([], Array.from({ length: 51 }, (_, index) => ({ sourceItemId: 'sold-' + index,
+      reason: 'SOLD' }))), generatedAt: current },
+  ]) await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed: async () => snapshot }),
+    /FEED_ENVELOPE_INVALID/);
+  assert.deepEqual(calls, ['GET', 'GET']);
+});

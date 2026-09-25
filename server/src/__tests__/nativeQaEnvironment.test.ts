@@ -19,10 +19,10 @@ describe('native QA child environment, before process or DB creation', () => {
         'postgresql://localhost/wishlist', 'postgresql://localhost/wishlist_marketplace_test_qa?host=production.example'])('rejects unsafe DB before forking %p', databaseUrl => {
         expect(() => qaEnvironment(databaseUrl)).toThrow();
     });
-    it.each([0, -1, 601, 1.5, NaN, Infinity, '60', null])('rejects unbounded or coercible lifetime %p', duration => {
+    it.each([0, -1, 901, 1.5, NaN, Infinity, '60', null])('rejects unbounded or coercible lifetime %p', duration => {
         expect(() => qaEnvironment(database, duration)).toThrow();
     });
-    it.each([1, 300, 600])('accepts explicit bounded lifetime %p', duration => {
+    it.each([1, 300, 600, 750, 900])('accepts explicit bounded lifetime %p', duration => {
         expect(qaEnvironment(database, duration).NATIVE_QA_LIFETIME_SECONDS).toBe(String(duration));
     });
     it('enables commit-before-ACK interruption only by explicit isolated QA option', () => {

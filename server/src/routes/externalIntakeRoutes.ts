@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { Prisma, type ExternalCandidateStatus, type ExternalCandidateAiStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
-import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, externalSourceAuthorizationActive, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, externalSourceAuthorizationActive, parseExternalCandidate, parseExternalSource, parseExternalSourceItemId } from '../lib/externalListingIntake';
 import { eligibleExternalCandidate } from '../lib/externalListingPublication';
 import { districtCenter } from '../lib/doubleNorthDistrictCenters';
 import { isListingId } from '../lib/listingRules';
@@ -189,10 +189,10 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             if (!body || typeof body !== 'object' || Array.isArray(body) ||
                 Object.keys(body).sort().join(',') !== 'reason,sourceItemIds' ||
                 !['SOLD', 'REMOVED'].includes(body.reason) || !Array.isArray(body.sourceItemIds) ||
-                body.sourceItemIds.length < 1 || body.sourceItemIds.length > 50 ||
-                body.sourceItemIds.some((id: unknown) => typeof id !== 'string' || id.length < 1 || id.length > 160 ||
-                    id.trim() !== id || /[\u0000-\u001f\u007f]/.test(id)) ||
-                new Set(body.sourceItemIds).size !== body.sourceItemIds.length)
+                body.sourceItemIds.length < 1 || body.sourceItemIds.length > 50)
+                throw new ExternalIntakeError('sourceItemIds', '請提供 1–50 個不重複的來源商品 ID 與 SOLD/REMOVED 原因');
+            const sourceItemIds: string[] = body.sourceItemIds.map((id: unknown) => parseExternalSourceItemId(id));
+            if (new Set(sourceItemIds).size !== sourceItemIds.length)
                 throw new ExternalIntakeError('sourceItemIds', '請提供 1–50 個不重複的來源商品 ID 與 SOLD/REMOVED 原因');
             const sourceId = String(req.params.id);
             const now = new Date();
@@ -205,10 +205,10 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 if (!locked[0]) return null;
                 if (!locked[0].enabledAt) throw new ExternalIntakeError('source', '來源從未啟用');
                 const rows = await tx.externalListingCandidate.findMany({ where: { sourceId,
-                    sourceItemId: { in: body.sourceItemIds } } });
+                    sourceItemId: { in: sourceItemIds } } });
                 const bySourceItemId = new Map(rows.map(row => [row.sourceItemId, row]));
                 const observations = [];
-                for (const sourceItemId of body.sourceItemIds as string[]) {
+                for (const sourceItemId of sourceItemIds) {
                     const row = bySourceItemId.get(sourceItemId);
                     if (!row) {
                         // A partner can report a sold item that never entered

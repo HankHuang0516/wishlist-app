@@ -528,6 +528,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-photo-private-draft")
             try required("商品草稿 1/12", scroll: true)
             try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
             try required("AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。", scroll: true)
             try safeScreenshot("qa-listing-photo")
             checkpoint("listing-photo-seller-edit")
@@ -566,7 +567,9 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-two-private-drafts")
             try required("商品草稿 2/12", scroll: true)
             try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
             try required("第2件商品照片", scroll: true)
+            try required("第2件商品照片預覽已載入", scroll: true)
             let unavailable = "AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。"
             let deadline = Date().addingTimeInterval(30)
             while app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count < 2 && Date() < deadline {
@@ -601,6 +604,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-ai-private-upload")
             try required("商品草稿 1/12", scroll: true)
             try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
             checkpoint("listing-ai-result-await")
             let deadline = Date().addingTimeInterval(145)
             var completed = false

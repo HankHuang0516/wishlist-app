@@ -332,7 +332,7 @@ async function main() {
     // 320x640 viewport even when recovery has already succeeded.
     await waitWithScroll('商品草稿 1/12');
     await waitWithScroll('第1件商品照片');
-    await waitNode('照片預覽已載入', { timeout: 25_000 });
+    await waitNode('第1件商品照片預覽已載入', { timeout: 25_000 });
     await waitNode('照片已私密保存，可開始 AI 辨識', { timeout: 10_000 });
     if (!qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode === 200 && read.hasAuthorization) ||
       qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode !== 200))

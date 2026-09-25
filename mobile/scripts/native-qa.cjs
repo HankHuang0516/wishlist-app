@@ -5,7 +5,7 @@ const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
-  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false } = {}) {
+  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
@@ -19,6 +19,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
     ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
     ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
+    ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
   };
 }
 
@@ -27,9 +28,10 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     env: qaEnvironment(databaseUrl, lifetimeSeconds, process.env, options),
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
-  let summary, uploadAckHeldResolve;
+  let summary, uploadAckHeldResolve, listingUploadRejectedResolve;
   const imageReads = [];
   const uploadAckHeld = new Promise(resolve => { uploadAckHeldResolve = resolve; });
+  const listingUploadRejected = new Promise(resolve => { listingUploadRejectedResolve = resolve; });
   const requestStop = () => {
     if (child.connected) { try { child.send({ kind: 'stop' }, () => undefined); } catch { /* Await authoritative exit below. */ } }
   };
@@ -48,6 +50,7 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     child.on('message', message => {
       if (message?.kind === 'ready') { clearTimeout(timer); resolve(message); }
       if (message?.kind === 'listing-upload-ack-held') uploadAckHeldResolve(message.mediaId);
+      if (message?.kind === 'listing-upload-rejected') listingUploadRejectedResolve(true);
       if (message?.kind === 'private-image-read') imageReads.push({ variant: message.variant, statusCode: message.statusCode,
         hasAuthorization: message.hasAuthorization });
       if (message?.kind === 'stopped') summary = message.summary;
@@ -84,7 +87,8 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     apiUrl: fixture.apiUrl, runId: fixture.runId, actors: fixture.actors,
     ...(options.listingAiPilot ? { callbackToken: fixture.callbackToken } : {}),
     ...(options.holdListingUploadAck ? { uploadAckHeld } : {}),
-    ...(options.holdListingUploadAck ? { imageReads } : {}),
+    ...(options.rejectFirstListingUpload ? { listingUploadRejected } : {}),
+    ...(options.holdListingUploadAck || options.rejectFirstListingUpload ? { imageReads } : {}),
     async stop() {
       if (child.exitCode === null) requestStop();
       return exited;

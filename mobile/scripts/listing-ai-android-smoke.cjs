@@ -17,7 +17,7 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload', '--retry-uncommitted'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
 const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
@@ -149,7 +149,7 @@ async function fillVisibleInput(label, value, field) {
   if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_PUBLISH_EDITOR_CLOSED');
 }
 async function shot(name) {
-  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'recovered', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
+  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'recovered', 'failed-upload', 'retried-upload', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   report.screenshots.push(target);
@@ -212,8 +212,8 @@ async function main() {
   await preflight();
   await fs.mkdir(evidence, { mode: 0o700 });
   await freeMetroPort();
-  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: mode !== '--interrupt-upload',
-    holdListingUploadAck: mode === '--interrupt-upload' });
+  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: !['--interrupt-upload', '--retry-uncommitted'].includes(mode),
+    holdListingUploadAck: mode === '--interrupt-upload', rejectFirstListingUpload: mode === '--retry-uncommitted' });
   const environment = hostEnvironment(process.execPath, '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
     '/Users/hank/Library/Android/sdk', os.homedir());
   stage = 'metro';
@@ -249,8 +249,17 @@ async function main() {
   await tapLabel('密碼'); await adb(['shell', 'input', 'text', qa.actors.buyer.password]);
   await adb(['shell', 'input', 'keyevent', '4']);
   await tapLabel('登入');
-  stage = 'composer'; await tapLabel('我的'); await tapLabel('刊登好物');
-  await waitNode('連續拍照刊登');
+  stage = 'composer';
+  let composerOpened = false;
+  for (let attempt = 0; attempt < 2 && !composerOpened && !stopping; attempt++) {
+    if (findNode(await dump(), '連續拍照刊登')) { composerOpened = true; break; }
+    await tapLabel('我的'); await sleep(900);
+    if (!findNode(await dump(), '刊登好物')) continue;
+    await tapLabel('刊登好物');
+    try { await waitNode('連續拍照刊登', { timeout: 12_000 }); composerOpened = true; }
+    catch { /* Pure navigation may be retried once; no upload or publication has occurred. */ }
+  }
+  if (!composerOpened) throw new Error('QA_COMPOSER_NOT_OPEN');
   stage = 'picker'; await tapLabel('批次選照片');
   await sleep(3500);
   const picker = await dump();
@@ -303,6 +312,66 @@ async function main() {
     return { Authorization: 'Bearer ' + reply.token };
   };
   const owner = await login(qa.actors.buyer), outsider = await login(qa.actors.third);
+  if (mode === '--retry-uncommitted') {
+    stage = 'precommit-upload-rejected';
+    await Promise.race([qa.listingUploadRejected, sleep(20_000).then(() => { throw new Error('QA_REJECTION_MISSING'); })]);
+    await waitWithScroll('照片上傳尚未確認；已停止連拍，請重試保存。');
+    await shot('failed-upload');
+    const before = await privateCaptureFiles(qa.apiUrl, qa.actors.buyer.id);
+    const captureId = before.length === 1 && before[0].match(/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.jpg$/i)?.[1];
+    if (!captureId || (await json(base + '/listing-media/unused?purpose=BATCH_ITEM', { headers: owner })).items?.length !== 0 ||
+      (await json(base + '/listings')).items?.length !== 0) throw new Error('QA_UNCOMMITTED_PHOTO_NOT_PRESERVED');
+    const missing = await fetch(base + '/listing-media/by-upload-id/' + captureId, { headers: owner, signal: AbortSignal.timeout(10000) });
+    if (missing.status !== 404) throw new Error('QA_PRECOMMIT_MEDIA_EXISTS');
+    stage = 'precommit-force-stop';
+    await adb(['shell', 'am', 'force-stop', packageName]);
+    await adb(['shell', 'am', 'start', '-n', `${packageName}/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity`]);
+    stage = 'precommit-recovery';
+    await waitNode('我的', { timeout: 50_000 });
+    await tapLabel('我的'); await tapLabel('刊登好物');
+    await waitWithScroll('商品草稿 1/12');
+    await waitWithScroll('第1件商品照片預覽已載入');
+    await waitWithScroll('重試儲存照片');
+    stage = 'precommit-retry';
+    await tapVisibleWithScroll('重試儲存照片');
+    let saved;
+    const retryDeadline = Date.now() + 45_000;
+    while (Date.now() < retryDeadline && !stopping) {
+      const unused = await json(base + '/listing-media/unused?purpose=BATCH_ITEM', { headers: owner });
+      if (unused.items?.length > 1) throw new Error('QA_PRECOMMIT_DUPLICATE');
+      if (unused.items?.length === 1) { saved = unused.items[0]; break; }
+      await sleep(900);
+    }
+    if (!saved?.id || (await json(base + '/listing-media/by-upload-id/' + captureId, { headers: owner })).id !== saved.id)
+      throw new Error('QA_PRECOMMIT_UPLOAD_ID_CHANGED');
+    let previewLoaded = false;
+    for (let attempt = 0; attempt < 9 && !stopping; attempt++) {
+      if (findNode(await dump(), '第1件商品照片預覽已載入')) { previewLoaded = true; break; }
+      await swipeDown(); await sleep(600);
+    }
+    if (!previewLoaded) throw new Error('QA_PRECOMMIT_THUMBNAIL_NOT_VISIBLE');
+    await shot('retried-upload');
+    const image = await fetch(saved.imageUrl, { headers: owner, signal: AbortSignal.timeout(15000) });
+    const outsiderImage = await fetch(saved.imageUrl, { headers: outsider, signal: AbortSignal.timeout(15000) });
+    const anonymousImage = await fetch(saved.imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (image.status !== 200 || outsiderImage.status !== 404 || anonymousImage.status !== 404 ||
+      saved.aiDraftStatus !== 'SKIPPED' || (await json(base + '/listings')).items?.length !== 0)
+      throw new Error('QA_PRECOMMIT_RETRY_PRIVACY');
+    const { data: pixels, info } = await sharp(Buffer.from(await image.arrayBuffer())).resize(64, 64).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    let orange = 0;
+    for (let offset = 0; offset < pixels.length; offset += info.channels) {
+      const red = pixels[offset], green = pixels[offset + 1], blue = pixels[offset + 2];
+      if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blue * 1.2) orange++;
+    }
+    const after = await privateCaptureFiles(qa.apiUrl, qa.actors.buyer.id);
+    if (orange <= 400 || after.length !== 0 || !qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode === 200 && read.hasAuthorization))
+      throw new Error('QA_PRECOMMIT_RETRY_INCOMPLETE');
+    report.interruption = { rejectedBeforeCommit: true, appForceStopped: true, retainedCaptureBefore: before.length,
+      retainedCaptureAfter: after.length, sameUploadIdAfterRetry: true, privatePhotoVerified: true,
+      authenticatedThumbnailVerified: true, publicCount: 0 };
+    report.passed = true;
+    return;
+  }
   let photos;
   const uploadDeadline = Date.now() + 45_000;
   while (Date.now() < uploadDeadline && !stopping) {

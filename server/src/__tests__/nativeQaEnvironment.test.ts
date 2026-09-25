@@ -31,4 +31,11 @@ describe('native QA child environment, before process or DB creation', () => {
             { holdListingUploadAck: true })).toMatchObject({ NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1',
                 PATH: '/safe/runtime' });
     });
+    it('enables a first-upload precommit failure only by explicit isolated QA option', () => {
+        expect(qaEnvironment(database, 60).NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD).toBeUndefined();
+        const env = qaEnvironment(database, 60, { PATH: '/safe/runtime', FLICKR_API_KEY: 'never-forward' },
+            { rejectFirstListingUpload: true });
+        expect(env).toMatchObject({ NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1', PATH: '/safe/runtime' });
+        expect(env.FLICKR_API_KEY).toBeUndefined();
+    });
 });

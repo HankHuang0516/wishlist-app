@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
 const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
@@ -96,9 +96,12 @@ async function main() {
   if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
   if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
   if (process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== undefined && process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== '1') throw new Error('Unsafe QA upload interruption mode');
+  if (process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== undefined && process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== '1') throw new Error('Unsafe QA upload rejection mode');
   const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
   const externalListingsPilot = process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT === '1';
   const holdListingUploadAck = process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK === '1';
+  const rejectFirstListingUpload = process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD === '1';
+  if (holdListingUploadAck && rejectFirstListingUpload) throw new Error('Conflicting QA upload interruption modes');
   if (externalListingsPilot) process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-native-qa-'));
   startupStage = 'private-storage';
@@ -185,11 +188,18 @@ async function main() {
   app.disable('x-powered-by');
   // Do not trust X-Forwarded-For: the real route rate limits remain effective.
   app.use(express.json({ limit: '64kb' }));
-  if (holdListingUploadAck) app.use((req, res, next) => {
+  if (holdListingUploadAck || rejectFirstListingUpload) app.use((req, res, next) => {
     if (req.method === 'GET' && /^\/api\/listing-media\/[0-9a-f-]{36}\/(?:image|thumbnail)$/.test(req.path))
       res.once('finish', () => send({ kind: 'private-image-read', variant: req.path.endsWith('/thumbnail') ? 'thumbnail' : 'image',
         statusCode: res.statusCode, hasAuthorization: typeof req.headers.authorization === 'string' }));
     next();
+  });
+  let uploadRejected = false;
+  if (rejectFirstListingUpload) app.use((req, res, next) => {
+    if (req.method !== 'POST' || req.path !== '/api/listing-media' || uploadRejected) return next();
+    uploadRejected = true;
+    send({ kind: 'listing-upload-rejected' });
+    return res.status(503).json({ error: '隔離測試：首次照片上傳未寫入', errorCode: 'PHOTO_STORAGE_UNAVAILABLE' });
   });
   let uploadAckAlreadyHeld = false;
   if (holdListingUploadAck) app.use((req, res, next) => {

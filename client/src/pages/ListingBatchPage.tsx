@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Camera, ImagePlus, MapPin, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
-import { buildPublishedListing, emptyListingDraft, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile } from '../lib/listingBatch';
+import { buildPublishedListing, emptyListingDraft, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile, sameSellerContent } from '../lib/listingBatch';
 import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingTouched, PublishDetails } from '../lib/listingBatch';
 import { forgetPendingUploads, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
 
@@ -38,7 +38,7 @@ function fromMedia(raw: unknown): Card {
   const touched = saved?.touched ?? {};
   const form = ai.draft ? mergeAiDraft(saved?.form ?? emptyListingDraft(), touched, ai.draft) : saved?.form ?? emptyListingDraft();
   return { id: row.id, clientListingId: saved?.clientListingId ?? crypto.randomUUID(), form, touched,
-    version: row.sellerDraftVersion as number, ai: ai.status, draft: ai.draft, dirty: !saved || JSON.stringify(form) !== JSON.stringify(saved.form),
+    version: row.sellerDraftVersion as number, ai: ai.status, draft: ai.draft, dirty: !saved || !sameSellerContent({ form, touched }, saved),
     saving: false, publishing: false, published: false, error: '' };
 }
 
@@ -189,7 +189,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         method: 'PUT', body: JSON.stringify({ expectedVersion: card.version, draft }) });
       if (result.mediaId !== card.id || result.version !== card.version + 1) throw new Error('私人草稿儲存結果不正確');
       replace(card.id, current => ({ ...current, version: result.version, saving: false,
-        dirty: JSON.stringify(current.form) !== JSON.stringify(card.form) || JSON.stringify(current.touched) !== JSON.stringify(card.touched) }));
+        dirty: !sameSellerContent(current, card) }));
       return true;
     } catch (error) {
       replace(card.id, current => ({ ...current, saving: false, error: `草稿尚未儲存：${(error as Error).message}` }));

@@ -7,6 +7,10 @@ export type ListingField = 'title' | 'description' | 'brand' | 'category' | 'con
 export type ListingDraftForm = { title: string; description: string; brand: string; category: string; condition: 'NEW' | 'USED'; price: string };
 export type ListingTouched = Partial<Record<ListingField, true>>;
 export type SellerDraft = { clientListingId: string; form: ListingDraftForm; touched: ListingTouched };
+const sellerFields: readonly ListingField[] = ['title', 'description', 'brand', 'category', 'condition', 'price'];
+export function sameSellerContent(a: Pick<SellerDraft, 'form' | 'touched'>, b: Pick<SellerDraft, 'form' | 'touched'>) {
+  return sellerFields.every(field => a.form[field] === b.form[field] && !!a.touched[field] === !!b.touched[field]);
+}
 export type AiDraft = Pick<ListingDraftForm, 'title' | 'description' | 'category'> & {
   brand: string | null; condition: 'NEW' | 'USED' | null;
   estimatedPriceLowTwd: number | null; estimatedPriceHighTwd: number | null;

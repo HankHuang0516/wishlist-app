@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildPublishedListing, emptyListingDraft, mergeAiDraft, parseAiState, prepareListingUploadFile } from './listingBatch';
+import { buildPublishedListing, emptyListingDraft, mergeAiDraft, parseAiState, prepareListingUploadFile, sameSellerContent } from './listingBatch';
 import type { AiDraft, PublishDetails, SellerDraft } from './listingBatch';
 
 const mediaId = '11111111-1111-4111-8111-111111111111';
@@ -16,6 +16,13 @@ describe('web listing batch publication boundary', () => {
     const form = mergeAiDraft(draft.form, draft.touched, ai);
     expect(form.price).toBe('350');
     expect(form.title).toBe('二手檯燈');
+  });
+
+  it('treats reordered JSON keys as the same persisted seller draft', () => {
+    const reordered = { form: { price: '350', condition: 'USED' as const, category: 'other', brand: '', description: '已確認正常發光', title: '二手檯燈' },
+      touched: { price: true as const } };
+    expect(sameSellerContent(draft, reordered)).toBe(true);
+    expect(sameSellerContent(draft, { ...reordered, form: { ...reordered.form, price: '351' } })).toBe(false);
   });
 
   it('parses a real private AI draft and rejects a malformed price range', () => {

@@ -82,6 +82,47 @@ test('pins a public DNS answer and rejects redirects and oversized bodies', asyn
     { ...transport, request: requestFor(200, Buffer.alloc(2 * 1024 * 1024 + 1)) }), /FEED_TOO_LARGE/);
 });
 
+test('total deadline stops a trickling feed, not just an idle socket', async () => {
+  let destroyed = false;
+  let ticks = 0;
+  const request = (_url, _options, callback) => {
+    const req = new EventEmitter();
+    let interval;
+    req.end = () => {
+      const response = new EventEmitter();
+      response.statusCode = 200;
+      response.headers = { 'content-type': 'application/json' };
+      response.destroy = () => {};
+      callback(response);
+      ticks++;
+      response.emit('data', Buffer.from(' '));
+      interval = setInterval(() => { ticks++; response.emit('data', Buffer.from(' ')); }, 5);
+    };
+    req.destroy = () => { destroyed = true; clearInterval(interval); };
+    return req;
+  };
+  await assert.rejects(pinnedFeedJson(config.url, config.host, {
+    lookup: async () => [{ family: 4, address: '93.184.216.34' }],
+    request, deadlineMs: 50,
+  }), /FEED_FETCH_TIMEOUT/);
+  assert.equal(destroyed, true);
+  assert.ok(ticks > 0);
+});
+
+test('DNS resolving after the total deadline cannot start a request', async () => {
+  let resolveLookup;
+  let requested = false;
+  const pendingLookup = new Promise(resolve => { resolveLookup = resolve; });
+  await assert.rejects(pinnedFeedJson(config.url, config.host, {
+    lookup: () => pendingLookup,
+    request: () => { requested = true; throw new Error('must not run'); },
+    deadlineMs: 10,
+  }), /FEED_FETCH_TIMEOUT/);
+  resolveLookup([{ family: 4, address: '93.184.216.34' }]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requested, false);
+});
+
 test('checks current source before fetching and sends sold signals before private candidates', async () => {
   const calls = [];
   const fetchApi = async (url, options) => {

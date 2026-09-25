@@ -66,39 +66,57 @@ export function parseFeedEnvelope(raw, config, now = new Date()) {
   return { items: raw.items, withdrawals: raw.withdrawals };
 }
 
-export async function pinnedFeedJson(url, host, { lookup = dnsLookup, request = https.request } = {}) {
+export async function pinnedFeedJson(url, host, { lookup = dnsLookup, request = https.request,
+  deadlineMs = 30_000 } = {}) {
   feedUrl(url.href, host);
-  let addresses;
-  try { addresses = await lookup(host, { all: true }); } catch { throw new Error('FEED_FETCH_FAILED'); }
-  const ipv4 = addresses.filter(entry => entry.family === 4);
-  if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('FEED_HOST_UNSAFE');
-  return new Promise((resolve, reject) => {
-    const req = request(url, { method: 'GET', agent: false, timeout: 20_000,
-      headers: { Accept: 'application/json' },
-      lookup: (_hostname, options, callback) => options.all
-        ? callback(null, [{ address: ipv4[0].address, family: 4 }])
-        : callback(null, ipv4[0].address, 4) }, response => {
-      const type = String(response.headers['content-type'] || '').split(';')[0].toLowerCase();
-      if (response.statusCode !== 200 || type !== 'application/json' ||
-        Number(response.headers['content-length'] || 0) > MAX_FEED_BYTES) {
-        response.destroy(); reject(new Error('FEED_FETCH_FAILED')); return;
-      }
-      const chunks = []; let length = 0;
-      response.on('data', chunk => {
-        length += chunk.length;
-        if (length > MAX_FEED_BYTES) { response.destroy(); reject(new Error('FEED_TOO_LARGE')); }
-        else chunks.push(chunk);
+  if (!Number.isInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > 30_000)
+    throw new Error('FEED_CONFIG_INVALID');
+  let req;
+  let timedOut = false;
+  let deadline;
+  const fetchPromise = (async () => {
+    let addresses;
+    try { addresses = await lookup(host, { all: true }); } catch { throw new Error('FEED_FETCH_FAILED'); }
+    if (timedOut) throw new Error('FEED_FETCH_TIMEOUT');
+    const ipv4 = addresses.filter(entry => entry.family === 4);
+    if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('FEED_HOST_UNSAFE');
+    return new Promise((resolve, reject) => {
+      req = request(url, { method: 'GET', agent: false, timeout: 20_000,
+        headers: { Accept: 'application/json' },
+        lookup: (_hostname, options, callback) => options.all
+          ? callback(null, [{ address: ipv4[0].address, family: 4 }])
+          : callback(null, ipv4[0].address, 4) }, response => {
+        const type = String(response.headers['content-type'] || '').split(';')[0].toLowerCase();
+        if (response.statusCode !== 200 || type !== 'application/json' ||
+          Number(response.headers['content-length'] || 0) > MAX_FEED_BYTES) {
+          response.destroy(); reject(new Error('FEED_FETCH_FAILED')); return;
+        }
+        const chunks = []; let length = 0;
+        response.on('data', chunk => {
+          length += chunk.length;
+          if (length > MAX_FEED_BYTES) { response.destroy(); reject(new Error('FEED_TOO_LARGE')); }
+          else chunks.push(chunk);
+        });
+        response.on('end', () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+          catch { reject(new Error('FEED_JSON_INVALID')); }
+        });
+        response.on('error', () => reject(new Error('FEED_FETCH_FAILED')));
       });
-      response.on('end', () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-        catch { reject(new Error('FEED_JSON_INVALID')); }
-      });
-      response.on('error', () => reject(new Error('FEED_FETCH_FAILED')));
+      req.on('error', () => reject(new Error('FEED_FETCH_FAILED')));
+      req.on('timeout', () => req.destroy(new Error('FEED_FETCH_FAILED')));
+      req.end();
     });
-    req.on('error', () => reject(new Error('FEED_FETCH_FAILED')));
-    req.on('timeout', () => req.destroy(new Error('FEED_FETCH_FAILED')));
-    req.end();
-  });
+  })();
+  try {
+    return await Promise.race([fetchPromise, new Promise((_, reject) => {
+      deadline = setTimeout(() => {
+        timedOut = true;
+        req?.destroy();
+        reject(new Error('FEED_FETCH_TIMEOUT'));
+      }, deadlineMs);
+    })]);
+  } finally { clearTimeout(deadline); }
 }
 
 export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, fetchApi = fetch } = {}) {

@@ -61,6 +61,14 @@ export function reviewStateAfterAi(card: { form: ListingForm; touched: ListingAi
     confirmed: false };
 }
 
+// A poll may finish while the seller's confirmed body is being persisted and
+// published. Keep that reviewed card unchanged until the operation finishes;
+// if publication failed, the next poll can apply the current AI state.
+export function polledReviewStateAfterAi(card: { form: ListingForm; touched: ListingAiTouched; published: boolean },
+  state: ListingAiState, publishing: boolean) {
+  return publishing || card.published ? null : reviewStateAfterAi(card, state);
+}
+
 export function confirmedBatchCandidates<T extends { published: boolean; confirmed: boolean }>(cards: readonly T[]): T[] {
   return cards.filter(card => !card.published && card.confirmed);
 }

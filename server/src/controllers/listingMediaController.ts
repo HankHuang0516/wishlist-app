@@ -131,6 +131,11 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
 }
 
 const aiDraftSelect = { id: true, aiDraftStatus: true, aiDraft: true, aiDraftUpdatedAt: true, aiDraftAttempts: true } satisfies Prisma.ListingMediaSelect;
+export function getListingAiAvailability(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({ available: listingAiEnabledFor(req.user.id) });
+}
 function aiDraftResponse(record: { id: string; aiDraftStatus: string; aiDraft: Prisma.JsonValue | null; aiDraftUpdatedAt: Date | null }) {
     return { mediaId: record.id, status: record.aiDraftStatus, draft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null,
         updatedAt: record.aiDraftUpdatedAt };

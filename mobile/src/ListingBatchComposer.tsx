@@ -43,6 +43,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const [shared, setShared] = useState<ListingForm>({ ...emptyListingForm });
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState('');
   const [captureProgress, setCaptureProgress] = useState('');
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
+  const aiAvailableRef = useRef<boolean | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [expiryPicker, setExpiryPicker] = useState(false);
   const keyRef = useRef<string | null>(null), polling = useRef(false), active = useRef(true), busyRef = useRef(false);
@@ -59,7 +61,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   useEffect(() => {
     active.current = true;
     let scopeActive = true;
-    keyRef.current = null; setReady(false); setCards([]); setPending(null);
+    keyRef.current = null; setReady(false); setCards([]); setPending(null); setAiAvailable(null); aiAvailableRef.current = null;
     setLegacyPhotos([]); setLegacyRecoveryError(false); setError('');
     const sync = new SellerDraftSync(async (mediaId, expectedVersion, draft) => {
       const reply = await api<{ mediaId: string; version: number }>(`/listing-media/${mediaId}/seller-draft`,
@@ -75,10 +77,11 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
         const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>('/listing-media/unused?purpose=BATCH_ITEM' +
           (cursor ? `&cursor=${cursor}` : '')));
-        const [journal, batchItems, legacy, localCaptures] = await Promise.all([privatePendingStore.get(key),
+        const [journal, batchItems, legacy, localCaptures, availability] = await Promise.all([privatePendingStore.get(key),
           loadBatch(),
           api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null),
-          listPrivateCaptures(apiUrl, userId)]);
+          listPrivateCaptures(apiUrl, userId),
+          api<{ available: boolean }>('/listing-media/ai-availability').catch(() => null)]);
         let olderPhotos: PhotoRecord[] = [], olderFailed = !legacy;
         try {
           if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
@@ -115,6 +118,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         for (const clientUploadId of captureRecovery.releaseUploadIds)
           try { await releasePrivateCapture(apiUrl, userId, clientUploadId); } catch { /* retry cleanup on next open */ }
         if (scopeActive && active.current) { keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards]);
+          const enabled = typeof availability?.available === 'boolean' ? availability.available : null;
+          aiAvailableRef.current = enabled; setAiAvailable(enabled);
           setLegacyPhotos(olderPhotos); setLegacyRecoveryError(olderFailed);
           setReady(true); }
       } catch { if (scopeActive && active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }
@@ -164,10 +169,14 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       setCards(old => old.map(current => current.key === card.key ? { ...current, record, uri: record.imageUrl, local: false } : current));
       try { await releasePrivateCapture(apiUrl, userId, card.key); } catch { /* reconcile the redundant local copy on next open */ }
       if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
+      if (aiAvailableRef.current === false) return true;
       const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
       setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, record, uri: record.imageUrl, local: false }, state) : current));
       return true;
     } catch (failure) {
+      if (failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE') {
+        aiAvailableRef.current = false; setAiAvailable(false);
+      }
       const message = privatePhotoSaved
         ? failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE'
           ? 'AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。'
@@ -213,6 +222,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     finally { setCaptureProgress(''); end(); }
   }
   async function retry(card: Card) {
+    if (card.record && aiAvailableRef.current === false) return;
     if (!begin()) return;
     try {
       if (!card.record) await upload(card);
@@ -231,9 +241,14 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       sellerSync.current?.hydrate(record.id, 0, null);
       setCards(old => [...old, initialCard(record.id, record.imageUrl, false, record)]);
       setLegacyPhotos(old => old.filter(photo => photo.id !== record.id));
-      const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
-      setCards(old => old.map(card => card.key === record.id ? applyAi(card, state) : card));
+      if (aiAvailableRef.current !== false) {
+        const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
+        setCards(old => old.map(card => card.key === record.id ? applyAi(card, state) : card));
+      }
     } catch (failure) {
+      if (failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE') {
+        aiAvailableRef.current = false; setAiAvailable(false);
+      }
       setError(failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE'
         ? '舊照片已加入私人批次；AI 尚未開放，可手動編輯或稍後重試。'
         : '舊照片加入狀態未確認；請重新開啟後檢查，避免重複操作。');
@@ -338,7 +353,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   return <Modal visible animationType="slide" onRequestClose={() => void leave(onClose)}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text accessibilityRole="header" testID="listing-batch-title" style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onClose)} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
     <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'} contentContainerStyle={s.content}>
-      <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。AI 逐件產生私人草稿，你確認後才會公開。</Text>
+      <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。照片先成為私人草稿，你確認後才會公開。</Text>
+      {aiAvailable === false && <Text accessibilityRole="alert" style={s.small}>此帳號的 AI 辨識尚未開放；照片仍可私密上傳、手動填寫並刊登，不會進入 AI 隊列。</Text>}
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
       {!!pending && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}
       <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
@@ -368,7 +384,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       {cards.map((card, index) => <View key={card.key} style={s.card}>
         <View style={s.row}><PrivateListingPhoto localUri={card.local ? card.uri : undefined}
           thumbnailUrl={card.record?.thumbnailUrl} apiUrl={apiUrl} token={token} style={s.image} label={`第${index + 1}件商品照片`} />
-          <View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : card.record ? '照片已私密保存，可開始 AI 辨識' : '等待上傳'}</Text></View></View>
+          <View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : card.record ? aiAvailable === false ? '照片已私密保存，可手動編輯' : '照片已私密保存，可開始 AI 辨識' : '等待上傳'}</Text></View></View>
         {!!card.draft && <><Text accessibilityLabel={`第${index + 1}件 AI 二手參考價：${card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}`} style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
         {input(card.form.title, `第${index + 1}件商品名稱`, value => changeCard(card.key, 'title', value))}
         {input(card.form.description, `第${index + 1}件商品描述`, value => changeCard(card.key, 'description', value), false, true)}
@@ -378,7 +394,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {!!card.error && <Text style={s.error}>{card.error}</Text>}
         {!card.published && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: card.confirmed, disabled: busy || !!pending || !card.record }}
           disabled={busy || !!pending || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
-        {!card.published && <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
+        {!card.published && <View style={s.row}>{(!card.record || aiAvailable !== false) && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
       </View>)}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
       {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}

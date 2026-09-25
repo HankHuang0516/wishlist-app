@@ -164,9 +164,11 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       const form = jpegPhotoUploadForm(card.key, card.uri, 'listing-photo.jpg', 'BATCH_ITEM');
       const record = await uploadPhotoRecord(api, apiUrl, card.key, form, __DEV__);
       privatePhotoSaved = true;
+      // Register the private draft before exposing the saved card to React's
+      // effect, which queues seller edits as soon as `record` is present.
+      if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
       setCards(old => old.map(current => current.key === card.key ? { ...current, record, uri: record.imageUrl, local: false } : current));
       try { await releasePrivateCapture(apiUrl, userId, card.key); } catch { /* reconcile the redundant local copy on next open */ }
-      if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
       if (aiAvailableRef.current === false) return true;
       const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
       setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, record, uri: record.imageUrl, local: false }, state) : current));

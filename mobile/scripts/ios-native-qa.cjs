@@ -21,8 +21,9 @@ const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]), udid = assignedUdid(process.env);
 const option = process.argv[3];
 const flow = option?.startsWith('--authenticated-') ? option.slice('--authenticated-'.length) : null;
-const listingAiFlow = flow === 'listing-batch-ai-photo' || flow === 'listing-batch-two-ai-photos';
-const twoPhotoFlow = flow === 'listing-batch-two-photos' || flow === 'listing-batch-two-ai-photos';
+const publishOneAiFlow = flow === 'listing-batch-two-ai-publish-one';
+const listingAiFlow = flow === 'listing-batch-ai-photo' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
+const twoPhotoFlow = flow === 'listing-batch-two-photos' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
 const authenticated = flow !== null;
 if ((option && (!authenticated || !Object.hasOwn(AUTHENTICATED_FLOWS, flow))) || process.argv[4]) throw new Error('Unexpected runtime option');
 const selectedTests = authenticated ? AUTHENTICATED_FLOWS[flow] : null;
@@ -61,6 +62,7 @@ let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, clea
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
 let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
 let listingPhotoFixtureVerified = false, listingAiDraftVerified = false, listingAiTask = null, listingAiTaskFailed = false;
+let listingPublicationVerified = false;
 const listingAiDrafts = new Map();
 const ownedChildren = new Set();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
@@ -121,12 +123,29 @@ async function auditListingPhoto() {
         contentHash: true, aiDraftStatus: true, sellerDraft: true, sellerDraftVersion: true } });
     listingPhotoCount = records.length;
     const expectedCount = twoPhotoFlow ? 2 : 1;
+    const listings = await audit.listing.findMany({ where: { ownerUserId: qa.actors.buyer.id },
+      select: { id: true, title: true, status: true, price: true, currency: true, condition: true, expiryMode: true,
+        publishedAt: true, expiresAt: true, location: true } });
+    const published = publishOneAiFlow && listings.length === 1 ? listings[0] : null;
     if (records.length !== expectedCount || new Set(records.map(record => record.contentHash)).size !== expectedCount ||
-      records.some(record => record.listingId !== null || record.wishItemId !== null || record.width < 100 || record.height < 100 ||
-        record.byteSize < 1000 || record.aiDraftStatus !== (listingAiFlow ? 'COMPLETED' : 'SKIPPED'))) return;
+      listings.length !== (publishOneAiFlow ? 1 : 0) ||
+      records.some(record => (!publishOneAiFlow && record.listingId !== null) || record.wishItemId !== null || record.width < 100 ||
+        record.height < 100 || record.byteSize < 1000 || record.aiDraftStatus !== (listingAiFlow ? 'COMPLETED' : 'SKIPPED')) ||
+      (publishOneAiFlow && records.filter(record => record.listingId === published?.id).length !== 1)) return;
+    if (publishOneAiFlow) {
+      listingPublicationVerified = published?.status === 'ACTIVE' && published.title.includes('NativeQA') &&
+        Number(published.price) === 450 && published.currency === 'TWD' && published.condition === 'USED' &&
+        published.expiryMode === 'DEFAULT_30_DAYS' && published.publishedAt instanceof Date &&
+        published.expiresAt instanceof Date && published.expiresAt.getTime() - published.publishedAt.getTime() === 30 * 86_400_000 &&
+        published.location?.county === '台北市' && published.location?.district === '中正區' &&
+        published.location?.precisionMeters === 2200 && published.location?.publicLatitude === 25.03 &&
+        published.location?.publicLongitude === 121.57;
+    }
     if (flow === 'listing-batch-photo' || listingAiFlow) {
       const saved = records[0].sellerDraft;
-      sellerDraftVerified = twoPhotoFlow ? records.filter(record =>
+      sellerDraftVerified = publishOneAiFlow ? listingPublicationVerified && records.some(record =>
+        record.listingId === null && record.sellerDraftVersion >= 1 && typeof record.sellerDraft?.form?.title === 'string' &&
+        record.sellerDraft.form.title.includes('杯') && typeof record.sellerDraft?.clientListingId === 'string') : twoPhotoFlow ? records.filter(record =>
         record.sellerDraftVersion >= 1 && typeof record.sellerDraft?.form?.title === 'string' &&
         record.sellerDraft.form.title.includes('NativeQA') && record.sellerDraft?.touched?.title === true &&
         typeof record.sellerDraft?.clientListingId === 'string').length === 1 :
@@ -160,14 +179,18 @@ async function auditListingPhoto() {
       }
       const outsider = await fetch(url, { headers: { Authorization: 'Bearer ' + outsiderToken }, signal: AbortSignal.timeout(5000) });
       const anonymous = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      listingPhotoPrivacyVerified &&= outsider.status === 404 && anonymous.status === 404;
+      listingPhotoPrivacyVerified &&= record.listingId === null ?
+        outsider.status === 404 && anonymous.status === 404 :
+        record.listingId === published?.id && outsider.status === 200 && anonymous.status === 200;
+      if (record.listingId !== null) listingPublicationVerified &&= identities.at(-1) === 'ORANGE_LAMP';
     }
     listingPhotoFixtureVerified = !twoPhotoFlow ? identities.length === 1 && identities[0] === 'BLUE_MUG' :
       identities.length === 2 && identities.sort().join(',') === 'BLUE_MUG,ORANGE_LAMP';
     if (listingAiFlow && listingAiDrafts.size === expectedCount && sellerDraftVerified) {
       const publicListings = await fetch(qa.apiUrl + '/api/listings', { signal: AbortSignal.timeout(5000) });
       const publicBody = publicListings.status === 200 ? await publicListings.json() : null;
-      listingAiDraftVerified = Array.isArray(publicBody?.items) && publicBody.items.length === 0;
+      listingAiDraftVerified = Array.isArray(publicBody?.items) && publicBody.items.length === (publishOneAiFlow ? 1 : 0) &&
+        (!publishOneAiFlow || publicBody.items[0]?.id === published?.id);
       for (const record of records) {
         const expected = listingAiDrafts.get(record.id);
         const state = await fetch(qa.apiUrl + '/api/listing-media/' + record.id + '/ai-draft',
@@ -240,7 +263,7 @@ async function main() {
     server.once('error', () => reject(new Error('Private Metro port occupied; no existing server changed')));
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
-  const serviceLifetimeSeconds = flow === 'listing-batch-two-ai-photos' ? 600 : 360;
+  const serviceLifetimeSeconds = publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow });
@@ -301,8 +324,8 @@ async function main() {
       '-collect-test-diagnostics', 'never',
       '-maximum-concurrent-test-simulator-destinations', '1', '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '180', '-maximum-test-execution-time-allowance',
-      flow === 'listing-batch-two-ai-photos' ? '500' : '240', 'test-without-building'],
-    flow === 'listing-batch-two-ai-photos' ? 520000 : 300000);
+      publishOneAiFlow ? '620' : twoPhotoFlow && listingAiFlow ? '500' : '240', 'test-without-building'],
+    publishOneAiFlow ? 650000 : twoPhotoFlow && listingAiFlow ? 520000 : 300000);
     testCommandSucceeded = true;
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));
@@ -323,6 +346,7 @@ async function main() {
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       ((flow === 'listing-batch-photo' || listingAiFlow) && !sellerDraftVerified) ||
       (listingAiFlow && (!listingAiDraftVerified || listingAiTaskFailed)) ||
+      (publishOneAiFlow && !listingPublicationVerified) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -353,6 +377,7 @@ async function main() {
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
     'listing-batch-ai-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'ai-photo', 'ai-resumed'],
     'listing-batch-two-ai-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-ai-photo', 'two-ai-resumed'],
+    'listing-batch-two-ai-publish-one': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-ai-photo', 'two-ai-resumed', 'two-ai-published'],
     'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail', 'external-wish-map', 'external-wish-list'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
@@ -397,7 +422,7 @@ async function main() {
     tests: summary ? { total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests } : null,
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
     nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoFixtureVerified, listingPhotoCount, sellerDraftVerified,
-    listingAiDraftVerified, listingAiTaskFailed,
+    listingAiDraftVerified, listingAiTaskFailed, listingPublicationVerified,
     privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

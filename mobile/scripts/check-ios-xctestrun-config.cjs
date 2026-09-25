@@ -24,8 +24,12 @@ test('two serial MiniMax images get an extended native-test budget only for that
     'listing-batch-two-ai-photos').WishlistNativeQa;
   const oneAi = destinationTestRun(template, '202609251125', '/tmp/isolated-ios-test-products', 34567,
     'listing-batch-ai-photo').WishlistNativeQa;
+  const publishOne = destinationTestRun(template, '202609251125', '/tmp/isolated-ios-test-products', 34567,
+    'listing-batch-two-ai-publish-one').WishlistNativeQa;
   assert.deepEqual(twoAi.OnlyTestIdentifiers, ['NativeQaTests/test12RealLoginListingBatchTwoAiPhotos']);
+  assert.deepEqual(publishOne.OnlyTestIdentifiers, ['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne']);
   assert.equal(twoAi.MaximumTestExecutionTimeAllowance, 500);
+  assert.equal(publishOne.MaximumTestExecutionTimeAllowance, 620);
   assert.equal(oneAi.MaximumTestExecutionTimeAllowance, 240);
   assert.equal(template.WishlistNativeQa.MaximumTestExecutionTimeAllowance, undefined);
 });

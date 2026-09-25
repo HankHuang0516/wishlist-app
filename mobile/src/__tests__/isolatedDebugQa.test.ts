@@ -111,5 +111,11 @@ describe('isolated iOS two-item AI acceptance selection', () => {
     expect(configured.WishlistNativeQa.TestHostBundleIdentifier).toBe(iosQaRunnerBundle(label) + '.xctrunner');
     expect(configured.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_INPUT_PORT).toBe('34123');
     expect(template.WishlistNativeQa.EnvironmentVariables).toEqual({});
+    expect(AUTHENTICATED_FLOWS['listing-batch-two-ai-publish-one']).toEqual(['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne']);
+    const publishOne = destinationTestRun(template, label, '/tmp/isolated-ios-qa-products', 34123, 'listing-batch-two-ai-publish-one');
+    expect(publishOne.WishlistNativeQa.OnlyTestIdentifiers).toEqual(['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne']);
+    expect(publishOne.WishlistNativeQa.MaximumTestExecutionTimeAllowance).toBe(620);
+    expect(publishOne.WishlistNativeQa.TestHostBundleIdentifier).toBe(iosQaRunnerBundle(label) + '.xctrunner');
+    expect(template.WishlistNativeQa.EnvironmentVariables).toEqual({});
   });
 });

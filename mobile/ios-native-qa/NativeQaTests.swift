@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -166,10 +166,11 @@ final class NativeQaTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         guard !hasCollapsedDebugWarningToast(app.screenshot()) else { throw Failure.unstableControl }
     }
-    private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField) throws {
+    private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField, replace: Bool = false) throws {
         let prefixes = ["清單名稱": "public-list", "願望名稱": "public-wish", "最高預算": "public-budget", "輸入刪除帳號以確認": "deletion-confirmation",
           "搜尋商品名稱與說明": "public-market-search", "商品聊天訊息": "public-chat-message", "私密面交地點名稱": "public-meetup-place",
-          "第1件商品名稱": "public-listing-title"]
+          "第1件商品名稱": "public-listing-title", "縣市": "public-listing-county", "行政區": "public-listing-district",
+          "位置緯度": "public-listing-latitude", "位置經度": "public-listing-longitude", "第1件售價 TWD": "public-listing-price"]
         guard let prefix = prefixes[label] else { throw Failure.invalidIdentity }
         guard [.textField, .textView, .any].contains(kind) else { throw Failure.invalidIdentity }
         let initial = kind == .any ? try publicInputControl(label) : try required(label, scroll: true, kind: kind)
@@ -211,6 +212,11 @@ final class NativeQaTests: XCTestCase {
         let deletionConfirmation = label == "輸入刪除帳號以確認"
         let searchSubmission = label == "搜尋商品名稱與說明"
         if deletionConfirmation { checkpoint("deletion-confirmation-typing") }
+        if replace {
+            guard label == "第1件售價 TWD", let old = control.value as? String, old.count <= 8,
+                  old.range(of: "^[0-9]*$", options: .regularExpression) != nil else { throw Failure.invalidIdentity }
+            if !old.isEmpty { control.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count)) }
+        }
         control.typeText(value)
         func publicValueState() -> String {
             return PublicInputState.classify(control.value as? String, label: label, expected: value).rawValue
@@ -637,10 +643,12 @@ final class NativeQaTests: XCTestCase {
             app.terminate()
         } catch { reportFailure() }
     }
-    func test12RealLoginListingBatchTwoAiPhotos() {
+    func test12RealLoginListingBatchTwoAiPhotos() { runTwoAiPhotos(publishOne: false) }
+    func test13RealLoginListingBatchTwoAiPublishOne() { runTwoAiPhotos(publishOne: true) }
+    private func runTwoAiPhotos(publishOne: Bool) {
         // Two real connector calls are serialized by the private worker and
         // can each take up to 150 seconds without indicating an app failure.
-        executionTimeAllowance = 480
+        executionTimeAllowance = publishOne ? 590 : 480
         do {
             try prepare()
             try loginBuyerAndRequireTabs()
@@ -695,6 +703,32 @@ final class NativeQaTests: XCTestCase {
             guard try publicInputControl("第1件商品名稱").value as? String == edited,
                   try publicInputControl("第2件商品名稱").value as? String == secondName else { throw Failure.invalidIdentity }
             try safeScreenshot("qa-two-ai-resumed")
+            if publishOne {
+                checkpoint("listing-two-ai-publish-preconditions")
+                guard !(try required("刊登已逐件確認的商品（0）", scroll: true, kind: .button)).isEnabled else { throw Failure.invalidIdentity }
+                let county = element("縣市", kind: .textField)
+                for _ in 0..<12 where !county.isHittable {
+                    guard let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) else { throw Failure.missingControl }
+                    scroller.swipeDown()
+                }
+                guard county.isHittable else { throw Failure.missingControl }
+                try publicText("縣市", value: "台北市")
+                try publicText("行政區", value: "中正區")
+                try publicText("位置緯度", value: "25.033")
+                try publicText("位置經度", value: "121.565")
+                try tap("☐ 可面交", kind: .any)
+                try tap("☐ 我確認資料屬實並同意公開照片與約略位置", kind: .any)
+                try publicText("第1件售價 TWD", value: "450", replace: true)
+                checkpoint("listing-two-ai-publish-confirm-one")
+                try tap("☐ 我已逐欄確認第 1 件商品的照片、內容及售價", kind: .any)
+                guard try required("刊登已逐件確認的商品（1）", scroll: true, kind: .button).isEnabled else { throw Failure.invalidIdentity }
+                checkpoint("listing-two-ai-publish-one")
+                try tap("刊登已逐件確認的商品（1）")
+                try required("商品草稿 1/12", scroll: true)
+                try required("第 1 件 · 已刊登", scroll: true)
+                try required("第 2 件", scroll: true)
+                try safeScreenshot("qa-two-ai-published")
+            }
             app.terminate()
         } catch { reportFailure() }
     }

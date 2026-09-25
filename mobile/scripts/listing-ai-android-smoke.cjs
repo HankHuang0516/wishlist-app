@@ -16,8 +16,8 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
-const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two';
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
 assertTestDatabase(database);
@@ -89,6 +89,13 @@ async function swipeUp() {
   await adb(['shell', 'input', 'swipe', String(Math.floor(+match[1] / 2)), String(Math.floor(+match[2] * 0.82)),
     String(Math.floor(+match[1] / 2)), String(Math.floor(+match[2] * 0.22)), '360']);
 }
+async function swipeDown() {
+  const size = await adb(['shell', 'wm', 'size']);
+  const match = size.match(/(?:Physical|Override) size: (\d+)x(\d+)/);
+  if (!match) throw new Error('QA_DEVICE_SIZE');
+  await adb(['shell', 'input', 'swipe', '10', String(Math.floor(+match[2] * 0.26)),
+    '10', String(Math.floor(+match[2] * 0.84)), '400']);
+}
 async function waitWithScroll(label, exact = true) {
   for (let attempt = 0; attempt < 8 && !stopping; attempt++) {
     const node = findNode(await dump(), label, exact);
@@ -97,8 +104,39 @@ async function waitWithScroll(label, exact = true) {
   }
   throw new Error('QA_SCROLLED_CONTROL_MISSING');
 }
+function visibleControl(xml, label, exact = true) {
+  const term = escapeXml(label);
+  const matches = nodes(xml).filter(node => ['text', 'content-desc'].some(key => exact
+    ? node.includes(`${key}="${term}"`) : node.includes(`${key}="`) && node.includes(term)));
+  const visible = matches.filter(node => {
+    const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    return bounds && +bounds[1] >= 0 && +bounds[3] <= 320 && +bounds[2] >= 82 && +bounds[4] <= 625 &&
+      +bounds[3] > +bounds[1] && +bounds[4] > +bounds[2];
+  });
+  return visible.find(node => node.includes('clickable="true"')) || visible[0] || null;
+}
+async function tapVisibleWithScroll(label, exact = true) {
+  for (const direction of [swipeUp, swipeDown]) {
+    for (let attempt = 0; attempt < 16 && !stopping; attempt++) {
+      const node = visibleControl(await dump(), label, exact);
+      if (node) { await tap(node); return; }
+      await direction(); await sleep(700);
+    }
+  }
+  throw new Error('QA_VISIBLE_CONTROL_MISSING');
+}
+async function fillVisibleInput(label, value, field) {
+  stage = 'native-publish-form-' + field;
+  await tapVisibleWithScroll(label);
+  await adb(['shell', 'input', 'text', value]);
+  if (!(await dump()).includes(`text="${value}"`)) throw new Error('QA_PUBLISH_INPUT_MISSING');
+  report.formInputs ??= [];
+  report.formInputs.push(field);
+  await adb(['shell', 'input', 'keyevent', '66']); // IME Done; Android Back closes the listing modal here.
+  if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_PUBLISH_EDITOR_CLOSED');
+}
 async function shot(name) {
-  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'pre-edit', 'edited'].includes(name)) throw new Error('QA_SHOT_NAME');
+  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   report.screenshots.push(target);
@@ -316,9 +354,18 @@ async function main() {
     stage = 'native-second-ai-result';
     await waitWithScroll('第2件商品名稱');
     const mug = recognized.get('mug');
-    const mugScreen = await dump();
-    if (!mugScreen.includes(mug.name) || !mugScreen.includes(`NT$ ${mug.estimatedPriceLowTwd}–${mug.estimatedPriceHighTwd}`))
+    const mugPrice = `NT$ ${mug.estimatedPriceLowTwd}–${mug.estimatedPriceHighTwd}`;
+    const secondDeadline = Date.now() + 35_000;
+    let secondVisible = false;
+    while (Date.now() < secondDeadline && !stopping) {
+      const mugScreen = await dump();
+      if (mugScreen.includes(escapeXml(mug.name)) && mugScreen.includes(mugPrice)) { secondVisible = true; break; }
+      await sleep(1200);
+    }
+    if (!secondVisible) {
+      await shot('second-pending');
       throw new Error('QA_NATIVE_SECOND_AI_MISSING');
+    }
     await shot('ai-second-draft');
   }
   if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
@@ -385,7 +432,58 @@ async function main() {
   if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
   report.ai = { status: 'COMPLETED', items: [...recognized].map(([fixture, result]) => ({ fixture, name: result.name,
     referencePriceTwd: [result.estimatedPriceLowTwd, result.estimatedPriceHighTwd] })),
-    nativePriceVisible: true, sellerEditRestored: true, unpublished: true, ownerOnly: true };
+    nativePriceVisible: true, sellerEditRestored: true, unpublishedUntilConfirmation: true, ownerOnly: true };
+  if (mode === '--publish-one') {
+    stage = 'native-publish-form';
+    // Reopening intentionally clears precise location and consent. Enter only
+    // synthetic QA values through the native form, never via a test-only API.
+    await tapLabel('稍後繼續');
+    await waitNode('刊登好物');
+    await tapLabel('刊登好物');
+    await waitNode('連續拍照刊登');
+    await fillVisibleInput('縣市', 'QA_Taipei', 'county');
+    await fillVisibleInput('行政區', 'QA_Zhongshan', 'district');
+    await fillVisibleInput('位置緯度', '25.052349', 'latitude');
+    await fillVisibleInput('位置經度', '121.523456', 'longitude');
+    await tapVisibleWithScroll('我確認資料屬實並同意公開照片與約略位置', false);
+    await waitNode('☑ 我確認資料屬實並同意公開照片與約略位置');
+    const saved = await json(base + '/listing-media/unused', { headers: owner });
+    const lampForm = saved.items?.find(item => item.id === classified.get('lamp').id)?.sellerDraft?.form;
+    if (lampForm?.title !== editedTitle || !lampForm.description ||
+      !/^\d+(?:\.\d{1,2})?$/.test(lampForm.price || '')) throw new Error('QA_SELLER_DRAFT_INCOMPLETE');
+    stage = 'native-confirm-one';
+    await tapVisibleWithScroll('我已逐欄確認第 1 件商品的照片、內容及售價', false);
+    await waitNode('☑ 我已逐欄確認第 1 件商品的照片、內容及售價');
+    if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
+    await shot('pre-publish');
+    stage = 'native-publish-one';
+    await tapVisibleWithScroll('刊登已逐件確認的商品（1）');
+    let listing;
+    const publishDeadline = Date.now() + 30_000;
+    while (Date.now() < publishDeadline && !stopping) {
+      const publicResult = await json(base + '/listings');
+      if (publicResult.items?.length > 1) throw new Error('QA_TOO_MANY_PUBLIC_LISTINGS');
+      if (publicResult.items?.length === 1) { listing = publicResult.items[0]; break; }
+      await sleep(900);
+    }
+    if (listing?.status !== 'ACTIVE' || listing.title !== editedTitle ||
+      listing.ownerUserId !== qa.actors.buyer.id || listing.media?.length !== 1 ||
+      listing.media[0].id !== classified.get('lamp').id ||
+      Number(listing.price) !== Number(lampForm.price)) throw new Error('QA_WRONG_ITEM_PUBLISHED');
+    if (listing.expiryMode !== 'DEFAULT_30_DAYS' || listing.location?.precisionMeters !== 2200 ||
+      listing.location.publicLatitude === 25.052349 || listing.location.publicLongitude === 121.523456)
+      throw new Error('QA_PUBLICATION_PRIVACY_OR_EXPIRY');
+    const remaining = await json(base + '/listing-media/unused', { headers: owner });
+    if (remaining.items?.length !== 1 || remaining.items[0].id !== classified.get('mug').id)
+      throw new Error('QA_UNCONFIRMED_ITEM_NOT_PRIVATE');
+    const publishedImage = await fetch(classified.get('lamp').imageUrl, { signal: AbortSignal.timeout(15_000) });
+    const privateImage = await fetch(classified.get('mug').imageUrl, { signal: AbortSignal.timeout(15_000) });
+    if (publishedImage.status !== 200 || privateImage.status !== 404) throw new Error('QA_PUBLICATION_IMAGE_ACCESS');
+    await publishedImage.arrayBuffer();
+    await shot('published');
+    report.publication = { publicCount: 1, publishedFixture: 'lamp', askingPriceTwd: Number(lampForm.price),
+      remainingPrivateFixture: 'mug', approximateLocationOnly: true, expiryMode: 'DEFAULT_30_DAYS' };
+  }
   report.passed = true;
 }
 
@@ -400,6 +498,7 @@ async function main() {
         composer: !!findNode(xml, '連續拍照刊登'), draftCount: !!findNode(xml, '商品草稿 1/12'),
         recoveryError: xml.includes('暫時無法安全恢復先前的商品照片'),
         picker: !!findNode(xml, 'Photos') || !!findNode(xml, '相片') };
+      await shot('failure');
     } catch { report.uiMarkers = { unavailable: true }; }
   }
   let cleanupFailed = false;
@@ -422,6 +521,7 @@ async function main() {
   console.log(JSON.stringify({ kind: report.kind, passed: report.passed, stage: report.stage,
     evidenceDirectory: evidence, pickerMarkers: report.pickerMarkers, selectionMarkers: report.selectionMarkers, ai: report.ai,
     screenshots: report.screenshots.length,
-    cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers, editObserved: report.editObserved }));
+    cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers, editObserved: report.editObserved,
+    publication: report.publication, formInputs: report.formInputs }));
   if (!report.passed) process.exitCode = 1;
 })().catch(() => { console.error('Isolated Android listing AI QA could not complete; private input withheld'); process.exitCode = 1; });

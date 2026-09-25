@@ -10,8 +10,17 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      supportsTablet: false,
-      infoPlist: { ITSAppUsesNonExemptEncryption: false },
+      buildNumber: '4',
+      supportsTablet: true,
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+        'UISupportedInterfaceOrientations~ipad': [
+          'UIInterfaceOrientationPortrait',
+          'UIInterfaceOrientationPortraitUpsideDown',
+          'UIInterfaceOrientationLandscapeLeft',
+          'UIInterfaceOrientationLandscapeRight',
+        ],
+      },
     },
     android: {
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
@@ -34,7 +43,7 @@ module.exports = {
         locationWhenInUsePermission: '用於查找附近商品；也可拒絕定位並手動選擇地區。',
         locationAlwaysAndWhenInUsePermission: false,
         locationAlwaysPermission: false,
-        motionUsagePermission: false,
+        motionUsagePermission: '使用附近商品地圖定位時，定位元件可能使用裝置動作資訊協助判定方向與移動狀態；不會儲存活動紀錄。',
         isIosBackgroundLocationEnabled: false,
         isAndroidBackgroundLocationEnabled: false,
         isAndroidForegroundServiceEnabled: false,

@@ -12,11 +12,22 @@ describe('native identity and minimal permissions', () => {
     expect(expo.extra.eas.projectId).toBe('1f7233de-f650-4938-a46d-97b419832519');
   });
 
-  it('does not request background location, motion or unnecessary biometrics', () => {
+  it('keeps iPad support required by the previously published iOS app', () => {
+    expect(expo.ios.supportsTablet).toBe(true);
+    expect(Number(expo.ios.buildNumber)).toBeGreaterThan(3);
+    expect(expo.ios.infoPlist['UISupportedInterfaceOrientations~ipad']).toEqual([
+      'UIInterfaceOrientationPortrait',
+      'UIInterfaceOrientationPortraitUpsideDown',
+      'UIInterfaceOrientationLandscapeLeft',
+      'UIInterfaceOrientationLandscapeRight',
+    ]);
+  });
+
+  it('does not request background location or unnecessary biometrics', () => {
     expect(options('expo-location')).toMatchObject({
       locationAlwaysAndWhenInUsePermission: false,
       locationAlwaysPermission: false,
-      motionUsagePermission: false,
+      motionUsagePermission: expect.stringContaining('附近商品地圖'),
       isIosBackgroundLocationEnabled: false,
       isAndroidBackgroundLocationEnabled: false,
       isAndroidForegroundServiceEnabled: false,

@@ -11,6 +11,8 @@ const identity = '7BB00E492F5E2ED726245DAE0B9D8998D5BC98F4';
 const uuid = 'd172b211-c59e-4c19-9177-3c48f6e17ba3';
 const keychain = '/Users/hank/Library/Keychains/login.keychain-db';
 const profilePath = '/Users/hank/.local/share/AiHankApps/credentials/weesh/Wishlist-ai-Weesh-AppStore-Login-20260915.mobileprovision';
+const appConfig = require('../app.config.js').expo;
+const motionPurpose = appConfig.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === 'expo-location')?.[1]?.motionUsagePermission;
 const buildPaths = require('./local-ios-paths.cjs').localIosPaths(mobile, 'archive', process.argv[2]);
 const archivePath = buildPaths.archive;
 const resultPath = buildPaths.result;
@@ -43,6 +45,28 @@ for (const stream of [build.stdout, build.stderr]) {
 }
 build.on('error', () => { console.error('The local archive process could not start'); process.exitCode = 1; });
 build.on('close', code => {
-  console.log(JSON.stringify({ scope: 'local-distribution-archive-only-not-full-acceptance-or-upload', exitCode: code, warnings, errors, archivePath, fullResultBundle: resultPath }));
-  process.exitCode = code ?? 1;
+  let verified = false;
+  if (code === 0) {
+    const app = path.join(archivePath, 'Products/Applications/Wishlistai.app');
+    const info = path.join(app, 'Info.plist');
+    const readPlist = (key, format = 'raw') => {
+      const result = spawnSync('/usr/bin/plutil', ['-extract', key, format, '-o', '-', info], { encoding: 'utf8' });
+      return result.status === 0 ? result.stdout.trim() : '';
+    };
+    const signature = spawnSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { encoding: 'utf8' });
+    let families = [];
+    let ipadOrientations = [];
+    try { families = JSON.parse(readPlist('UIDeviceFamily', 'json')); } catch { /* reject malformed archive */ }
+    try { ipadOrientations = JSON.parse(readPlist('UISupportedInterfaceOrientations~ipad', 'json')); } catch { /* reject malformed archive */ }
+    verified = readPlist('CFBundleIdentifier') === appConfig.ios.bundleIdentifier
+      && readPlist('CFBundleShortVersionString') === appConfig.version
+      && readPlist('CFBundleVersion') === appConfig.ios.buildNumber
+      && Array.isArray(families) && families.includes(1) && (!appConfig.ios.supportsTablet || families.includes(2))
+      && (!appConfig.ios.supportsTablet || appConfig.ios.infoPlist['UISupportedInterfaceOrientations~ipad'].every(orientation => ipadOrientations.includes(orientation)))
+      && typeof motionPurpose === 'string' && readPlist('NSMotionUsageDescription') === motionPurpose
+      && signature.status === 0;
+    if (!verified) console.error('Archive identity, iPad family/orientations, motion purpose or deep code signature verification failed');
+  }
+  console.log(JSON.stringify({ scope: 'local-distribution-archive-only-not-full-acceptance-or-upload', exitCode: code, archiveVerified: verified, warnings, errors, archivePath, fullResultBundle: resultPath }));
+  process.exitCode = code === 0 && verified ? 0 : 1;
 });

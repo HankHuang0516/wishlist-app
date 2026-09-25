@@ -45,6 +45,14 @@ describe('authorized external supply intake', () => {
         expect(parseExternalCandidate({ ...item, county: '新北市', district: '板橋區' }, source, now))
             .toMatchObject({ county: '新北市', district: '板橋區' });
     });
+    it('requires a canonical source ID so a later sold signal addresses the same item', () => {
+        expect(parseExternalCandidate({ ...item, sourceItemId: 'seller 123' }, source, now).sourceItemId).toBe('seller 123');
+        for (const unstableId of [' taipei-123', 'taipei-123 ', 'taipei  123', 'taipei\t123',
+            'taipei\u0000123', 'x'.repeat(161)]) {
+            try { parseExternalCandidate({ ...item, sourceItemId: unstableId }, source, now); throw new Error('accepted unstable ID'); }
+            catch (error) { expect(error).toBeInstanceOf(ExternalIntakeError); expect((error as ExternalIntakeError).field).toBe('sourceItemId'); }
+        }
+    });
     it('accepts a daily observation at 24 hours but rejects one millisecond older', () => {
         expect(parseExternalCandidate({ ...item, observedAt: '2026-09-23T12:00:00Z' }, source, now).observedAt)
             .toEqual(new Date('2026-09-23T12:00:00Z'));

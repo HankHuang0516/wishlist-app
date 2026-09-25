@@ -267,6 +267,9 @@ describe('admin-only attributed external supply staging', () => {
             const endpoint = `/sources/${soldSourceId}/withdraw`;
             expect((await request(app).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
             expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'sold-item'], reason: 'SOLD' })).status).toBe(400);
+            const unstableSoldId = await admin(endpoint).send({ sourceItemIds: ['sold-item '], reason: 'SOLD' });
+            expect(unstableSoldId.status).toBe(400);
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' });
             expect(withdrawn.status).toBe(200);
             expect(withdrawn.body).toMatchObject({ withdrawn: 1, unknown: 1, intakeBatchId: expect.any(String), publicCount: 0 });

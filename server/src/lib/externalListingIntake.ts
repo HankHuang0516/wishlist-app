@@ -33,6 +33,13 @@ const word = (value: unknown, field: string, min: number, max: number) => {
     if (normalized.length < min || normalized.length > max) throw new ExternalIntakeError(field);
     return normalized;
 };
+// Candidate intake and sold/removed callbacks must address the same exact
+// partner key. Silently normalizing only one side can leave sold stock public.
+export const parseExternalSourceItemId = (value: unknown) => {
+    const id = word(value, 'sourceItemId', 1, 160);
+    if (id !== value) throw new ExternalIntakeError('sourceItemId', '來源商品 ID 不得含前後空白、重複空白或控制字元');
+    return id;
+};
 const host = (value: unknown, field: string) => {
     const hostname = word(value, field, 4, 253).toLowerCase();
     if (!/^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname) ||
@@ -88,7 +95,7 @@ export function externalSourceAuthorizationActive(source: { enabled: boolean; en
 export function parseExternalCandidate(input: unknown, source: SourcePolicy, now = new Date()) {
     const value = own(input);
     exactKeys(value, ['sourceItemId', 'canonicalUrl', 'imageUrl', 'thumbnailUrl', 'title', 'description', 'priceTwd', 'condition', 'county', 'district', 'observedAt', 'expiresAt']);
-    const sourceItemId = word(value.sourceItemId, 'sourceItemId', 1, 160);
+    const sourceItemId = parseExternalSourceItemId(value.sourceItemId);
     const canonicalUrl = httpsOnHost(value.canonicalUrl, 'canonicalUrl', source.canonicalHost);
     const imageUrl = value.imageUrl === undefined || value.imageUrl === null ? null :
         source.imageReuseAllowed && source.imageHost ? httpsOnHost(value.imageUrl, 'imageUrl', source.imageHost) : (() => { throw new ExternalIntakeError('imageUrl', '來源尚未授權顯示圖片'); })();

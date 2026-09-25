@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import { API_URL } from '../config';
@@ -21,12 +21,14 @@ export default function Login() {
     const [resendSuccess, setResendSuccess] = useState("");
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const returnTo: '/dashboard' | '/account-deletion' = searchParams.get('next') === '/account-deletion' ? '/account-deletion' : '/dashboard';
 
     useEffect(() => {
         if (isAuthenticated) {
-            navigate('/dashboard');
+            navigate(returnTo);
         }
-    }, [isAuthenticated, navigate]);
+    }, [isAuthenticated, navigate, returnTo]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -60,7 +62,7 @@ export default function Login() {
                 throw new Error(data.error || 'Login failed');
             }
 
-            login(data.token, data.user);
+            login(data.token, data.user, returnTo);
             Analytics.logLogin(identifier.includes('@') ? 'email' : 'phone');
         } catch (err: any) {
             setError(err.message);

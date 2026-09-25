@@ -47,6 +47,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const [legacyRecoveryError, setLegacyRecoveryError] = useState(false);
   const [shared, setShared] = useState<ListingForm>({ ...emptyListingForm });
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState('');
+  const [captureProgress, setCaptureProgress] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [expiryPicker, setExpiryPicker] = useState(false);
   const keyRef = useRef<string | null>(null), polling = useRef(false), active = useRef(true), busyRef = useRef(false);
@@ -154,21 +155,32 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) throw new ListingFormError('未授予相機權限；也可以批次選擇相簿照片。');
       let remaining = MAX_ITEMS - cards.filter(card => !card.published).length;
       if (remaining < 1) throw new ListingFormError('一次最多處理12件；請先確認目前商品。');
-      const prepared: Card[] = [];
       if (camera) {
         while (remaining > 0) {
           const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false });
           if (result.canceled) break;
-          for (const asset of result.assets.slice(0, 1)) { const card = await prepare(asset); prepared.push(card); setCards(old => [...old, card]); remaining--; }
+          for (const asset of result.assets.slice(0, 1)) {
+            const card = await prepare(asset);
+            setCards(old => [...old, card]); remaining--;
+            // Persist each shot before reopening the camera. A background kill
+            // must not discard every previously captured item in this session.
+            setCaptureProgress(`正在私密儲存第 ${MAX_ITEMS - remaining} 件照片，完成後繼續拍照…`);
+            await upload(card);
+            setCaptureProgress('');
+          }
         }
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: remaining, quality: 1, exif: false });
         if (result.canceled) return;
-        for (const asset of result.assets.slice(0, remaining)) { const card = await prepare(asset); prepared.push(card); setCards(old => [...old, card]); }
+        for (const [index, asset] of result.assets.slice(0, remaining).entries()) {
+          const card = await prepare(asset);
+          setCards(old => [...old, card]);
+          setCaptureProgress(`正在私密儲存第 ${index + 1}／${Math.min(result.assets.length, remaining)} 件照片…`);
+          await upload(card);
+        }
       }
-      for (const card of prepared) await upload(card);
     } catch (failure) { setError(failure instanceof ListingFormError ? failure.message : '無法取得或處理照片，請稍後重試。'); }
-    finally { end(); }
+    finally { setCaptureProgress(''); end(); }
   }
   async function retry(card: Card) {
     if (!begin()) return;
@@ -299,6 +311,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
       {!!pending && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}
       <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
+      {!!captureProgress && <Text accessibilityLiveRegion="polite" style={s.small}>{captureProgress}</Text>}
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onAdvanced)} style={s.chip}><Text style={s.text}>同件商品多角度拍攝／手動精細刊登</Text></Pressable>
       <Text style={s.section}>共用刊登位置與交付方式</Text>
       <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置並自動填行政區</Text></Pressable>

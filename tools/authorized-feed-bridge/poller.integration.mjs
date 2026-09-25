@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { feedConfig, syncAuthorizedFeed } from './poller.mjs';
+import { feedConfig, preflightAuthorizedFeed, syncAuthorizedFeed } from './poller.mjs';
 
 const require = createRequire(import.meta.url);
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
@@ -67,6 +67,13 @@ test('authorized feed bridge keeps AI suggestions private, rejects sold callback
       expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() };
     const envelope = (items, withdrawals) => ({ version: 1, sourceId, authorizationRef,
       generatedAt: new Date().toISOString(), items, withdrawals });
+    const preflight = await preflightAuthorizedFeed(config, { fetchApi: routeFetch,
+      fetchFeed: async () => envelope([candidate], []) });
+    assert.deepEqual(preflight, { kind: 'authorized-feed-preflight', validItems: 1,
+      withdrawalSignals: 0, persistedByBridge: 0, publishedByBridge: 0 });
+    assert.equal(await prisma.externalListingCandidate.count({ where: { sourceId } }), 0);
+    assert.equal(await prisma.externalIntakeBatch.count({ where: { sourceId } }), 0);
+    assert.equal(await prisma.listing.count(), originalPublicCount);
     const staged = await syncAuthorizedFeed(config, { fetchApi: routeFetch,
       fetchFeed: async () => envelope([candidate], []) });
     assert.deepEqual(staged, { kind: 'authorized-private-feed-sync', staged: 1, withdrawn: 0,

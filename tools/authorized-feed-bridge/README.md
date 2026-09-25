@@ -4,6 +4,8 @@ This bridge does not crawl Facebook, LINE, or public pages. It polls **one expli
 
 The feed must be HTTPS with no redirect, URL credential, query secret, or private-network DNS answer. It must return `application/json` and at most 2 MiB. The entire DNS-and-download operation has a 30-second deadline, including a server that keeps trickling bytes; a timed-out snapshot is not staged. A snapshot may contain up to 200 current items and 50 explicit withdrawals. Omitted items are **not** treated as sold; they expire through the server's 24-hour observation gate. Every item carries a fresh source-provided `observedAt` and `expiresAt`, and must satisfy the server's double-north, price, image-host, prohibited-content, and rights checks.
 
+Use the same canonical `sourceItemId` (1–160 characters) for an item and all later `SOLD`/`REMOVED` signals. Leading/trailing spaces, repeated whitespace and control characters are rejected before any intake write; otherwise the API could normalize two feed strings into one database key across separate batches.
+
 Envelope version 1:
 
 ```json

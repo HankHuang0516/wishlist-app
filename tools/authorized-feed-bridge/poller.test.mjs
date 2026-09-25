@@ -66,11 +66,32 @@ test('preflight can inspect an authorized source while sync remains explicitly d
 test('accepts only attributed fresh snapshots and explicit disjoint withdrawal signals', () => {
   assert.deepEqual(parseFeedEnvelope(envelope([item('one')]), config, now).withdrawals, []);
   assert.throws(() => parseFeedEnvelope(envelope([item('one'), item('one')]), config, now), /FEED_ITEM_INVALID/);
+  for (const unstableId of [' item', 'item ', 'item  two', 'item\t two', 'item\u0000two', 'x'.repeat(161)]) {
+    assert.throws(() => parseFeedEnvelope(envelope([item(unstableId)]), config, now), /FEED_ITEM_INVALID/);
+    assert.throws(() => parseFeedEnvelope(envelope([], [{ sourceItemId: unstableId, reason: 'SOLD' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
+  }
   assert.throws(() => parseFeedEnvelope(envelope([item('one')], [{ sourceItemId: 'one', reason: 'SOLD' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([], [{ sourceItemId: 'two', reason: 'UNKNOWN' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope({ ...envelope(), authorizationRef: 'contract:other-ref' }, config, now), /FEED_ENVELOPE_INVALID/);
   assert.throws(() => parseFeedEnvelope({ ...envelope(), generatedAt: '2026-09-23T03:00:00Z' }, config, now), /FEED_ENVELOPE_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([item('one', '2026-09-26T03:00:00Z')]), config, now), /FEED_ITEM_INVALID/);
+});
+
+test('preflight refuses unstable source keys before validating or staging any batch', async () => {
+  const current = new Date().toISOString();
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    calls.push({ url, method: options.method });
+    if (options.method !== 'GET') throw new Error('invalid snapshot must not reach intake API');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+  };
+  const items = Array.from({ length: 51 }, (_, index) => item('item-' + index, current));
+  items[50].sourceItemId = ' item-0 ';
+  await assert.rejects(preflightAuthorizedFeed(config, { fetchApi, fetchFeed: async () => ({
+    ...envelope(items), generatedAt: current,
+  }) }), /FEED_ITEM_INVALID/);
+  assert.deepEqual(calls.map(call => call.method), ['GET']);
 });
 
 test('refuses private DNS answers before making an HTTPS request', async () => {

@@ -69,6 +69,34 @@ async function waitWithScroll(label, timeout = 45_000) {
   while (Date.now() < deadline) { const found = find(dump(), label); if (found) return found; await swipeUp(); }
   throw new Error('scrollable_control_not_found');
 }
+function fieldText(label) {
+  const node = find(dump(), label);
+  if (!node || node.includes('hint="true"')) return '';
+  const value = node.match(/\btext="([^"]*)"/)?.[1] ?? '';
+  // Android's UI dump reports the placeholder as text when the field is empty.
+  return value === label ? '' : value;
+}
+async function enterLoginField(label, value, secure = false) {
+  tap(await waitNode(label));
+  await sleep(400); // Let the Android keyboard finish focusing before typing.
+  const clear = () => {
+    const length = fieldText(label).length;
+    if (length > 254) throw new Error('native_login_field_unexpected_length');
+    adb(['shell', 'input', 'keyevent', '123']); // Move cursor to end.
+    for (let index = 0; index < length; index++) adb(['shell', 'input', 'keyevent', '67']);
+    const remaining = fieldText(label).length;
+    if (remaining) throw new Error('native_login_field_not_cleared');
+  };
+  const matches = () => secure ? fieldText(label).length === value.length : fieldText(label) === value;
+  clear();
+  adb(['shell', 'input', 'text', value]);
+  await sleep(400);
+  if (matches()) return;
+  clear();
+  for (const character of value) { adb(['shell', 'input', 'text', character]); await sleep(90); }
+  await sleep(400);
+  if (!matches()) throw new Error('native_login_input_incomplete');
+}
 async function api(route, options = {}) {
   const response = await fetch(base + route, { ...options, headers: { Authorization: `Bearer ${bearer}`, ...options.headers }, signal: AbortSignal.timeout(20_000) });
   return response;
@@ -174,10 +202,8 @@ async function main() {
       if (!await signOutDevice()) throw new Error('existing_device_session_logout_failed');
     } else await sleep(700);
   }
-  tap(await waitNode('手機號碼或 Email'));
-  adb(['shell', 'input', 'text', phone]);
-  tap(await waitNode('密碼'));
-  adb(['shell', 'input', 'text', password]);
+  await enterLoginField('手機號碼或 Email', phone);
+  await enterLoginField('密碼', password, true);
   adb(['shell', 'input', 'keyevent', '4']);
   stage = 'native-login-submit';
   tap(await waitNode('登入'));

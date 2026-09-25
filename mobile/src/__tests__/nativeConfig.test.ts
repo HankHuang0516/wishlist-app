@@ -12,6 +12,11 @@ describe('native identity and minimal permissions', () => {
     expect(expo.extra.eas.projectId).toBe('1f7233de-f650-4938-a46d-97b419832519');
   });
 
+  it('keeps iPad support required by the previously published iOS app', () => {
+    expect(expo.ios.supportsTablet).toBe(true);
+    expect(Number(expo.ios.buildNumber)).toBeGreaterThan(1);
+  });
+
   it('does not request background location, motion or unnecessary biometrics', () => {
     expect(options('expo-location')).toMatchObject({
       locationAlwaysAndWhenInUsePermission: false,

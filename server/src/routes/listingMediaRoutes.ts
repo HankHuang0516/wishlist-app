@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { adoptLegacyBatchPhoto, deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
+import { adoptLegacyBatchPhoto, deleteUnusedListingMedia, getListingAiAvailability, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
 
 const router = Router();
@@ -39,6 +39,7 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
 });
 router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadId);
 router.get('/unused', authenticateToken, myUnusedListingMedia);
+router.get('/ai-availability', authenticateToken, getListingAiAvailability);
 router.put('/:id/capture-purpose', authenticateToken, adoptLegacyBatchPhoto);
 router.post('/:id/ai-draft', authenticateToken, aiRequests, requestListingAiDraft);
 router.get('/:id/ai-draft', authenticateToken, getListingAiDraft);

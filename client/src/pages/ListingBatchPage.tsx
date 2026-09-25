@@ -15,7 +15,8 @@ const emptyDetails: PublishDetails = { county: '', district: '', latitude: '', l
 const pendingKey = (userId: number) => `wishlist:listing-pending:${userId}`;
 class ApiFailure extends Error {
   readonly status: number;
-  constructor(message: string, status: number) { super(message); this.status = status; }
+  readonly code: string;
+  constructor(message: string, status: number, code = '') { super(message); this.status = status; this.code = code; }
 }
 
 async function api<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -23,8 +24,8 @@ async function api<T>(token: string, path: string, init: RequestInit = {}): Prom
     Authorization: `Bearer ${token}`, ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers,
   } });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status);
+    const body = await response.json().catch(() => ({})) as { error?: string; errorCode?: string };
+    throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status, body.errorCode);
   }
   return response.status === 204 ? undefined as T : await response.json() as T;
 }
@@ -73,6 +74,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState('');
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [unresolvedUploads, setUnresolvedUploads] = useState<string[]>([]);
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
@@ -81,7 +83,8 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const reload = useCallback(async () => {
     const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>(token,
       '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
-    const items = await loadBatch();
+    const [items, availability] = await Promise.all([loadBatch(),
+      api<{ available: boolean }>(token, '/listing-media/ai-availability').catch(() => null)]);
     const checked = await reconcilePendingUploads(userId, items,
       id => api<unknown>(token, `/listing-media/by-upload-id/${id}`),
       loadBatch);
@@ -91,13 +94,14 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     setCards(old => [...recovered.map(card => old.find(previous => previous.id === card.id && previous.dirty) ?? card),
       ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);
     setUnresolvedUploads(checked.unresolved);
+    setAiAvailable(typeof availability?.available === 'boolean' ? availability.available : null);
     if (checked.unresolved.length) setMessage(`${checked.unresolved.length} 張照片的上傳結果仍待確認；請先重新確認，勿重傳同張照片。`);
     else setMessage('');
     setReady(true);
   }, [token, userId]);
 
   useEffect(() => {
-    setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]);
+    setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]); setAiAvailable(null);
     setPending(localStorage.getItem(pendingKey(userId)) ?? '');
     void reload().catch(() => setMessage('暫時無法安全恢復私人照片。請稍後重新整理。'));
   }, [token, userId, reload]);
@@ -132,19 +136,25 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const updateField = (id: string, field: ListingField, value: string) => replace(id, card => ({ ...card,
     form: { ...card.form, [field]: value }, touched: { ...card.touched, [field]: true }, dirty: true, error: '' }));
 
-  async function requestAi(id: string) {
+  async function requestAi(id: string): Promise<boolean> {
     try {
       const state = parseAiState(await api<unknown>(token!, `/listing-media/${id}/ai-draft`, { method: 'POST' }), id);
       replace(id, card => ({ ...card, ai: state.status, draft: state.draft,
         form: state.draft ? mergeAiDraft(card.form, card.touched, state.draft) : card.form,
         dirty: card.dirty || !!state.draft, error: '' }));
-    } catch (error) { replace(id, card => ({ ...card, error: (error as Error).message })); }
+      return true;
+    } catch (error) {
+      if (error instanceof ApiFailure && error.code === 'LISTING_AI_UNAVAILABLE') setAiAvailable(false);
+      replace(id, card => ({ ...card, error: (error as Error).message }));
+      return !(error instanceof ApiFailure && error.code === 'LISTING_AI_UNAVAILABLE');
+    }
   }
 
   async function uploadFiles(files: FileList | null) {
     if (!files || !ready || busy || pending || unresolvedUploads.length) return;
     if (cards.filter(card => !card.published).length + files.length > 12) { setMessage('一次最多處理 12 件商品。'); return; }
     setBusy(true); setMessage('');
+    let aiCanQueue = aiAvailable !== false;
     try {
       for (const [index, file] of Array.from(files).entries()) {
         let prepared: File;
@@ -170,7 +180,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
             version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '' };
           setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
-          await requestAi(record.id);
+          if (aiCanQueue) aiCanQueue = await requestAi(record.id);
         } catch (error) {
           setUnresolvedUploads(readPendingUploads(userId!).map(entry => entry.clientUploadId));
           setMessage(`第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
@@ -275,8 +285,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   return <div className="mx-auto max-w-4xl space-y-6 pb-8 text-stone-800">
     <div className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
       <p className="text-sm font-semibold tracking-widest text-orange-600">商品刊登 · Beta</p>
-      <h1 className="mt-2 text-3xl font-semibold">連拍上架，把細節交給 AI</h1>
-      <p className="mt-3 text-sm leading-6 text-stone-600">一次上傳多張商品照，AI 為每張產生私人草稿與參考價。請逐件確認真實狀況及售價後才公開刊登；AI 不會替你直接發布。</p>
+      <h1 className="mt-2 text-3xl font-semibold">連拍上架，逐件確認再發布</h1>
+      <p className="mt-3 text-sm leading-6 text-stone-600">一次上傳多張商品照，先存成私人草稿；AI 開放時會逐件產生商品資訊與參考價。請確認真實狀況及售價後才公開刊登。</p>
+      {aiAvailable === false && <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">此帳號的 AI 辨識尚未開放。照片仍可私密上傳、手動填寫並刊登；不會進入 AI 隊列。</p>}
       <div className="mt-5 flex flex-wrap gap-3">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
           <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={!ready || busy || !!pending || !!unresolvedUploads.length || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
@@ -323,7 +334,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         <div className="flex flex-wrap items-start gap-5"><PrivatePhoto id={card.id} token={token} />
           <div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-widest text-stone-500">第 {index + 1} 件 · {card.published ? '已公開' : '私人草稿'}</p>
             <h3 className="mt-2 text-lg font-semibold">{card.form.title || '等待辨識或手動填寫'}</h3>
-            <p className="mt-2 text-sm text-stone-600">{card.ai === 'PENDING' || card.ai === 'PROCESSING' ? 'AI 正在排隊辨識…' : card.ai === 'COMPLETED' ? 'AI 已提供建議，請核對商品實況' : card.ai === 'FAILED' ? 'AI 暫時無法辨識，可重試或手動填寫' : '可請 AI 辨識'}</p>
+            <p className="mt-2 text-sm text-stone-600">{card.ai === 'PENDING' || card.ai === 'PROCESSING' ? 'AI 正在排隊辨識…' : card.ai === 'COMPLETED' ? 'AI 已提供建議，請核對商品實況' : card.ai === 'FAILED' ? 'AI 暫時無法辨識，可重試或手動填寫' : aiAvailable === false ? '可手動填寫私人草稿' : '可請 AI 辨識'}</p>
             {card.draft && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">AI 參考價格：{card.draft.estimatedPriceLowTwd === null ? '無足夠依據' : `NT$${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}<br />{card.draft.priceBasis || '請自行核對市場價格'}<p className="mt-1 text-xs">AI 可能辨識錯誤；下方售價由賣家決定。</p></div>}
           </div>
         </div>
@@ -338,7 +349,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
           {card.error && <p role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
-            {(card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
+            {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
             <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
             <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={busy || !!pending || card.saving || card.publishing} onClick={() => void publish(card)}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
             <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={busy || !!pending} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>

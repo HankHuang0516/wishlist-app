@@ -14,15 +14,33 @@
 
 ## 執行與生命週期
 
-先執行 server build，確保使用最新 `server/dist`。控制程序透過 `startNativeQa(TEST_DATABASE_URL, lifetimeSeconds)` 取得 API 位址、合成 actor 與 `stop()`／`exited`；生命週期設定為 1–600 秒，啟動有 30 秒觀察期限。服務到期、控制 IPC 中斷、SIGTERM 或 SIGINT 都會停止接受新請求，等待正在進行的請求結束後清理。
+先執行 server build，確保使用最新 `server/dist`。控制程序透過 `startNativeQa(TEST_DATABASE_URL, lifetimeSeconds)` 取得 API 位址、合成 actor 與 `stop()`／`exited`；生命週期設定為 1–900 秒（iOS 雙件 AI 後逐件刊登使用 750 秒），啟動有 30 秒觀察期限。服務到期、控制 IPC 中斷、SIGTERM 或 SIGINT 都會停止接受新請求，等待正在進行的請求結束後清理。
+
+啟動時會先比較原始碼中的遷移清單與隔離資料庫已完成的遷移；少套、重複或多出不符來源的版本會在建立合成使用者之前以 `schema-preflight` 停止。此檢查只防止舊 QA 資料庫被誤當 APP 回歸，並不自動修改資料庫，也不取代完整的 `prisma migrate diff` 結構比對。應在確認是空置的指定測試庫後，先由 `server/` 對它執行 `prisma migrate deploy`，再重跑 QA；絕不可因此對正式資料庫套用未發布 migration。
 
 清理只作用於此程序實際建立的 User ID、追蹤的聊天室 UUID、已驗證的身份／操作摘要，以及私有 `mkdtemp` 儲存空間。圖片只移除合法 UUID 子目錄中的兩個既知 WebP 檔；不遞迴刪除、不掃除一般 App 儲存、未知檔案會保留並讓驗證失敗。啟動失敗回傳非零退出狀態，即使已完成部分啟動的安全清理也不冒充成功。
 
 `node mobile/scripts/native-qa-api-smoke.cjs` 會從真實登入走過願望、圖片、刊登期限、搜尋、配對、聊天、面交、刪除恢復與取消屏障，最後只輸出非機密檢查數和精確 cleanup 計數。這個流程與唯讀 cleanup 檢查已納入 `scripts/validate-before-push.sh`。
 
+`node mobile/scripts/listing-ai-local-e2e.cjs` 是另行明確啟用的**合成照片專用** MiniMax 商品草稿驗收，需先完成 server build，並提供同值的本機 `TEST_DATABASE_URL`／`DATABASE_URL`。腳本固定校驗橘燈與藍杯兩張無個資 fixture 的 SHA-256；子程序自行產生只供本次合成帳號使用的 callback token，未繼承正式 MiniMax／Railway／Flickr／管理憑證。兩張照片都實際走上傳、私密授權讀取、排隊、真 MiniMax Connector、結果回寫與賣家查詢，且這兩張可估價的測試圖須有非空二手參考區間；公開清單在賣家確認前必須為 0。賣家明確填入售價與地區後僅發布其中一件，另一件保持私有，完成時檢查測試資料與媒體清理。這是**本機儲存與隔離資料庫**的端到端 HTTP 驗收，不包含真實 Flickr、正式 Railway、APP 原生 UI、商店配發或真實商品授權，不可外推為正式開放條件。
+
+`node mobile/scripts/listing-ai-android-smoke.cjs 202609241637 --recognize-one` 補驗 Android 原生 UI：必須在 Simulator Manager 的本任務私有裝置內執行，使用既有、雜湊與先前成功收據均核對的不同 package Debug 外殼及最新 Metro JS，並明確指定相同的隔離 `TEST_DATABASE_URL`／`DATABASE_URL`。只把固定 SHA-256 的無個資合成檯燈放入該裝置相簿；以已人工檢視的 320×640 畫面及橘色像素門檻防止錯選，再經原生登入、相簿選圖、本人私密上傳、真 MiniMax Connector 排隊／回寫，檢查畫面有商品照、草稿內容和參考價。另在手機改名稱、確認私人草稿持久化、按「稍後繼續」再開啟並核對修改，過程公開商品必為 0；匿名及另一測試帳號不能讀私人照片。原生照片、連線、服務、合成帳號及資料庫須精確清理並留非機密 `result.json`／畫面截圖。`--inspect-picker` 與 `--inspect-selection` 只診斷系統選圖畫面，不能當作 AI 通過。此模式**僅一張合成圖、既有 Debug 外殼、本機照片儲存**；未證明賣家 UI 最終發布、Flickr／Railway、iOS 或 Play 內測配發版本。
+
+`--recognize-two` 在相同隔離條件下，固定校驗橘燈和藍杯兩張 fixture 的 SHA-256、系統選圖器第一／第二格顏色、選取數 2、APP 私有上傳及兩筆 MiniMax job 與回寫。依實際上傳圖片顏色辨別商品，不依賴後台回傳順序；原生畫面逐件核對照片、AI 名稱與不同參考價格。退出後重新開啟，兩件應維持原拍攝順序；再修改第一件名稱、確認後台版本與內容及第二次重新開啟後的恢復，公開清單始終為 0。最終通過證據：`mobile/build/android-listing-ai-e6f425ec-ad6c-400c-80fb-0225d74d9188/result.json` 和六張原生截圖；私人媒體、合成帳號與測試資料的六類清理計數皆為 0，臨時相簿檔逐一確認不存在。`--inspect-picker-two` 僅供核對選圖畫面。測試過程發現恢復端點以最新照片在前，APP 現保留最新 12 筆但以拍攝順序顯示，避免兩件重新開啟後對調。**仍非新編 Play 內測包、正式 Flickr／Railway 或 iOS 商品 AI 驗收，也未測賣家 UI 最終發布。**
+
+`--publish-one` 在上述雙件原生 AI 與草稿編輯／恢復之後，透過手機 UI 輸入合成地點與座標、勾選公開同意，**僅**逐欄確認並發布第一件。驗收在按發布前再次確認公開清單為 0；發布後公開清單必恰有第一件橘燈，刊登標題與賣家改名一致、售價為賣家草稿值、預設 30 天、約略位置而非精確座標、公開照片可讀；第二件藍杯仍在本人私有草稿，匿名取圖為 404。最終通過證據：`mobile/build/android-listing-ai-db98dc9c-8ac2-423b-afb4-69580a7a3608/result.json` 與八張截圖，包含第一件勾選與原生「商品已刊登」確認畫面；六類測試資料清理 0，兩張臨時相簿照片確認刪除，模擬器權限已釋放。這是**本機 QA 服務中的合成商品**，不是在正式地圖刊登，也不是新編 Play 內測包、正式 Flickr／Railway 或 iOS 發布流程驗收。
+
+`--interrupt-upload` 是 Android 另一個獨立模式：隔離服務先完成私人照片儲存，僅暫停成功回覆；QA 在仍有一份本機私人照片時強制關閉 App，再重開驗證只恢復原 media ID、本人可看見經驗證的私人縮圖、其他人與匿名取原圖為 404，且不產生公開商品或多餘本機副本。此模式不啟動 AI，不能代替 `--recognize-two`／`--publish-one`。私人縮圖載入函式另有來源、轉址、內容類型與大小上限的主機測試；iOS XCTest 已要求可見的逐件縮圖載入狀態，但**修改後 iOS 原生 App 尚未重新建置與執行**。
+
+`--retry-uncommitted` 驗證另一個不可混淆的失敗邊界：僅在隔離 QA 服務中拒絕**第一次**照片 POST，且拒絕發生在真實儲存路由之前；控制器須同時看到前台停止批次、後台私人照片／公開商品皆 0、本人裝置的私有 JPEG 副本仍為 1。強制關閉並重開 App 後由前台按「重試儲存照片」，以原本 `clientUploadId` 寫入恰好 1 張本人私照，驗證圖片內容、帶驗證縮圖、第三人／匿名 404、沒有公開商品，最後裝置多餘副本及六類隔離資料都清為 0。`mobile/build/android-listing-ai-859a9f3f-5da7-46e0-8136-4701938c2051/result.json` 為 `passed:true`；`failed-upload.png` 與 `retried-upload.png` 已人工核對。先前兩輪失敗收據保留：第一輪因測試器在卡片底部向錯誤方向捲動，第二輪尚未操作照片時導航未成功；它們不得算通過。此通過仍是既有獨立 Debug 外殼＋新 Metro JS／本機儲存，不是商店配發版、iOS 或正式 Flickr 上傳失敗驗收。
+
+`--authenticated-listing-batch-two-ai-photos` 是待重新建置後執行的 iOS 雙件 AI 驗收：相簿依次選合成橘燈、藍杯，逐件檢查私密縮圖、MiniMax 草稿名稱及不同參考價；賣家修改第一件名稱、離開再開後兩件順序和內容須保持。控制器對兩個工作逐一驗證其本人私密圖片確實對應不同 fixture，回寫後後台兩份 AI 草稿與畫面一致、未經賣家確認前公開清單為 0，最後清理測試資料。此流程已有主機單元測試和 Swift 語法檢查；**尚未新編 iOS QA App 並執行 XCTest，不能算 iOS 雙件 AI 通過**。2026-09-25 當下磁碟約餘 9.6 GiB，低於原生 QA 建置的 15 GiB 安全門檻；不得用舊來源 build 冒充新來源測試。
+
+`--authenticated-listing-batch-two-ai-publish-one` 是新增且**尚未執行**的 iOS 高規格關卡：沿用上項雙件私照、真 MiniMax AI 回填與賣家編輯／重開，再於原生畫面填入合成雙北位置、明確賣家售價及公開同意，只逐件確認橘燈後按刊登。後台核對恰一件 ACTIVE、售價 NT$450、預設 30 天、約 2 公里模糊座標與橘燈照片已公開；藍杯仍是私人草稿，匿名及其他帳號均不能取圖。新截圖與收據只有實際原生執行且清理成功才可算通過。2026-09-25 本輪磁碟約餘 14.5 GiB，仍不足 15 GiB 建置門檻；保留既有簽章測試 App 與結果，不用舊來源 build 代替新關卡。
+
 ## 原生操作驗收與已完成證據
 
-Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及四種單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-22 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1；Android `202609220440` 為2／2。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。
+Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及多個單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-24 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1、連拍刊登入口1／1、相簿商品照單張私有上傳1／1、相簿同批兩張不同商品私有上傳1／1；Android 兩張連拍私有上傳已在獨立流程通過。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。
 
 ### iOS 隔離匿名基線
 
@@ -50,6 +68,10 @@ Broker僅loopback＋精確QA bundle header／Host、禁止Origin／body／任意
 
 在完成相同 host build、完整回歸及明確 session／project 租用之後，每次只執行一個真登入流程：`--authenticated-deletion`、`--authenticated-marketplace-discovery`、`--authenticated-marketplace-chat` 或 `--authenticated-marketplace-meetup`。單一流程設計可保留明確失敗邊界，也避免前一個有狀態流程污染後一個流程。QA App 內的文字輸入引擎僅在 **Debug＋WISHLIST_NATIVE_QA＋Simulator** 條件編譯，且再次核對唯一 bundle／scheme、動作／一次性 job、loopback 埠與可見的空白 UIKit 欄位；不直接寫入 user／JWT／session，也不跳過後端 admission 或真實提交。
 
+新增 `--authenticated-listing-batch-entry` 與 `--authenticated-listing-batch-photo`，後者只在受管理、402×874 的隔離 iOS Simulator 使用固定 SHA-256 的合成杯子照片；先以 `simctl addmedia` 放入相簿，XCTest 只點選剛檢視過的最前端圖片格，選取狀態與私有草稿各保留一張安全截圖。系統相簿是另一個程序，iOS 26 的圖片格在 App 的 XCTest 查詢中不可見，故座標操作限定該尺寸並以後端真實結果作為通過條件，不可外推到其他裝置。`202609242305` 的精確結果為 1／1：本人可讀原圖、其他合成帳號與匿名均為 404，資料庫僅 1 張未刊登的賣家照片，憑證日誌稽核通過，六類後端清理殘留 0。此隔離服務未開 MiniMax 或 Flickr，所以只證明照片上傳與權限，**不證明正式辨識、Flickr、兩張 iOS 連拍或公開刊登**。`simctl addmedia` 的相簿測試圖可能仍留在該隔離 Simulator；後端 cleanup 的 `photoFoldersRemaining: 0` 不包含系統相簿。
+
+`--authenticated-listing-batch-two-photos` 將固定雜湊的合成橘色檯燈與藍色杯子加入相簿；因反覆測試會保留同款照片，iOS 26 的外部 Photos picker 不能靠第一、第二格推定不同商品。此 QA 方法以固定尺寸畫面截圖的橘／藍像素特徵定位兩種商品，找不到即拒絕，不讀取或上傳其他照片；後端再要求恰好兩筆不同 `contentHash`、兩筆都未刊登且本人可讀／其他帳號與匿名 404。`202609242333` 為 **1／1 passed**、隱私日誌稽核通過、六類後端清理 0，五張安全截圖及 `result.json` 位於 `mobile/build/ios-native-qa-202609242333/qa-67321736-1925-4530-a3bc-6e727ba16738/`。前兩輪誤選重複檯燈被不同內容門檻擋下，失敗結果保留。此流程不代表 MiniMax AI、Flickr、iOS 相機連拍或公開刊登已驗收。
+
 XCTest 只取得公開動態埠，向本機 broker 請求 enum 動作；broker 透過私有一次性 capability 讓 QA App 取得合成帳密、填入真正文字欄位並送出正常 editingChanged。XCTest 只收到布林完成狀態，不把帳密放入 launch environment、typeText、剪貼簿、測試設定或畫面附件。通道逾時／已取用／順序錯誤不自動重送；停止時取消待處理工作並關閉自己的 listener。
 
 成功必須是所選單一方法 **1 passed／0 failed／0 skipped**、結果 device 匹配租用、該 flow 預期的私密輸入動作完整完成，以及 SDK 匯出的 action／方法 activity／可取得 console 日誌沒有合成帳密或已知編碼。`deletion` 另要求 fixture 清理前同查詢證明買家已刪且另外兩位仍存活；其他 marketplace flow 要求既定 fixture 與輸入動作精確完成。只有 SDK 明確回報 `Error: No console log available` 可記錄該欄不存在，再檢查 action／方法；未知錯誤、空白／缺漏活動或不同裝置均失敗。這是 **SDK 匯出日誌**的有限檢查，不是所有不透明 OS 日誌／正式服務的全面憑證掃描。
@@ -57,6 +79,8 @@ XCTest 只取得公開動態埠，向本機 broker 請求 enum 動作；broker �
 只保存該 flow 白名單內、已確認無憑證欄位的刻意命名畫面；未知附件不接受。各 cleanup 獨立執行，保留 App 安裝資料及失敗證據。控制器新增不代表方法已通過，須看各次 result.json／主代理畫面檢視；Simulator 成功仍不等於實體相機／定位、真斷網／推播、Play 配發安裝或商店審查完成。
 
 ### Android 隔離介面測試
+
+外部來源地圖／私密願望的 Android Debug UI smoke 可先以 `node mobile/scripts/build-android-debug-qa.cjs YYYYMMDDHHmm` 建置新的獨立 package；此流程只編譯 `assembleDebug`，不需要已缺失的 `NativeQaTest.kt`，不產生 `androidTest` APK，也不讀取正式 upload key。需至少 15 GiB 可用空間；不繞過門檻。新包、來源 SHA-256 與「不可當商店交付品」標記保存在 `mobile/build/android-debug-qa-LABEL/`，每個 label 僅能使用一次。建置後仍須透過受管理 Android 模擬器執行 `external-map-android-smoke.cjs LABEL`，由腳本驗證 package、Debug 身分、APK 雜湊及建置來源未變；實際 UI 運行結果另存證據。**只建置或只載入舊 Debug 包都不等於 Play 內測版驗收。**
 
 先以 `node mobile/scripts/build-android-qa.cjs YYYYMMDDHHmm` 編譯。label 必須是未使用過的 12 位識別碼，產物保存在新的 `mobile/build/android-qa-LABEL/`。只編譯 app 的 arm64 debug 與 androidTest，不讀取正式 keystore／密碼，不生成新 key。原 package 只在明確 `wishlistNativeQa=true` 的 debug assemble 工作加上 `.qaLABEL`，QA 連結 scheme 為 `wishlistqaLABEL`，避免攔截正式 `weesh` 連結；混合／Release 工作拒絕 QA 參數。正常 Release 的識別碼、scheme 與簽章設定保持不變。
 

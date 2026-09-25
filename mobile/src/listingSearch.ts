@@ -8,7 +8,7 @@ export type SearchFilters = { q: string; brand: string; category: string; condit
 export const emptySearchFilters: SearchFilters = { q: '', brand: '', category: '', condition: '', delivery: '', minPrice: '', maxPrice: '' };
 export class ListingSearchError extends Error {}
 export type PublicListing = {
-  id: string; title: string; description: string; brand: string; category: string; condition: 'NEW' | 'USED';
+  id: string; title: string; description: string; brand: string | null; category: string; condition: 'NEW' | 'USED';
   price: number; deliveryMethods: ('MEETUP' | 'SHIPPING')[]; negotiable: boolean; status: 'ACTIVE' | 'RESERVED'; expiresAt: string;
   owner: { id: number; name: string | null };
   location: { county: string; district: string; publicLatitude: number; publicLongitude: number; precisionMeters: number };
@@ -54,7 +54,7 @@ export function listingSearchPath(filters: SearchFilters, bounds: Bounds, cursor
 export function parsePublicListing(value: unknown, apiUrl: string, local = false): PublicListing {
   const row = object(value); const owner = object(row.owner); const location = object(row.location);
   const price = typeof row.price === 'string' && /^\d+(?:\.\d{1,2})?$/.test(row.price) ? Number(row.price) : row.price;
-  if (!uuid(row.id) || !text(row.title, 100) || !text(row.description, 3000) || !text(row.brand, 60) || !CATEGORIES.some(c => c[0] === row.category) ||
+  if (!uuid(row.id) || !text(row.title, 100) || !text(row.description, 3000) || !(row.brand === null || text(row.brand, 60)) || !CATEGORIES.some(c => c[0] === row.category) ||
       !['NEW', 'USED'].includes(row.condition as string) || !finite(price) || price < 0 || price > 9_999_999_999.99 || row.currency !== 'TWD' ||
       !['ACTIVE', 'RESERVED'].includes(row.status as string) || typeof row.negotiable !== 'boolean' || typeof row.expiresAt !== 'string' || !Number.isFinite(Date.parse(row.expiresAt)) ||
       !Number.isSafeInteger(owner.id) || (owner.id as number) < 1 || !(owner.name === null || (typeof owner.name === 'string' && owner.name.length <= 100)) ||
@@ -70,7 +70,7 @@ export function parsePublicListing(value: unknown, apiUrl: string, local = false
   });
   if (new Set(media.map(m => m.id)).size !== media.length) throw new ListingSearchError('商品照片重複');
   // Only public allowlisted fields enter map/card state. Ignore profile/private extras.
-  return { id: row.id, title: row.title, description: row.description, brand: row.brand, category: row.category as string, condition: row.condition as PublicListing['condition'],
+  return { id: row.id, title: row.title, description: row.description, brand: row.brand as string | null, category: row.category as string, condition: row.condition as PublicListing['condition'],
     price, deliveryMethods: row.deliveryMethods as PublicListing['deliveryMethods'], negotiable: row.negotiable, status: row.status as PublicListing['status'], expiresAt: row.expiresAt,
     owner: { id: owner.id as number, name: owner.name as string | null },
     location: { county: location.county, district: location.district, publicLatitude: location.publicLatitude, publicLongitude: location.publicLongitude, precisionMeters: location.precisionMeters }, media };

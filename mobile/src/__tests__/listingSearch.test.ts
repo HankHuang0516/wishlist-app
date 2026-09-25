@@ -44,6 +44,9 @@ describe('untrusted public listing response', () => {
     const parsed = parsePublicListing({ ...raw, requestHash: 'private', exactLatitude: 25.034567, owner: { ...raw.owner, email: 'private@example.com', password: 'synthetic-only' }, location: { ...raw.location, latitude: 25.034567 } }, apiUrl);
     expect(parsed.price).toBe(1250.5); expect(parsed).not.toHaveProperty('requestHash'); expect(parsed.owner).not.toHaveProperty('email'); expect(parsed.location).not.toHaveProperty('latitude');
   });
+  it('keeps an unknown brand empty without dropping a valid map listing', () => {
+    expect(parsePublicListing({ ...raw, brand: null }, apiUrl).brand).toBeNull();
+  });
   it.each([
     { id: '../private' }, { title: '' }, { description: '' }, { brand: '' }, { category: 'invalid' }, { condition: 'BROKEN' },
     { price: '-1' }, { price: NaN }, { price: null }, { price: 'secret' }, { price: '10000000000' }, { currency: 'USD' },

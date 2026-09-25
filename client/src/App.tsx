@@ -21,6 +21,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiShowcasePage from "./pages/ApiShowcasePage";
 import ChangelogPage from "./pages/ChangelogPage";
+import ListingBatchPage from "./pages/ListingBatchPage";
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -59,6 +60,7 @@ function App() {
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
+            <Route path="sell" element={<ListingBatchPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsPage />} />

@@ -21,6 +21,18 @@ final class NativeQaTests: XCTestCase {
     private func element(_ label: String, kind: XCUIElement.ElementType = .any) -> XCUIElement {
         app.descendants(matching: kind).matching(identifier: label).firstMatch
     }
+    private func scrollToward(_ control: XCUIElement, in scroller: XCUIElement) {
+        let target = control.frame
+        let viewport = scroller.frame
+        // Dismissing the keyboard can expand the viewport while keeping the
+        // old content offset. An offscreen field may then be above us; blindly
+        // swiping up makes it impossible to reach.
+        if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
+            scroller.swipeDown()
+        } else {
+            scroller.swipeUp()
+        }
+    }
     @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any) throws -> XCUIElement {
         let deadline = Date().addingTimeInterval(12)
         repeat {
@@ -30,7 +42,7 @@ final class NativeQaTests: XCTestCase {
                 // Do not swipe a background/covered scroll view belonging to
                 // a screen underneath a native Modal or keyboard.
                 let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
-                scroller?.swipeUp()
+                if let scroller { scrollToward(control, in: scroller) }
                 let observed = element(label, kind: kind)
                 if observed.exists && observed.isHittable { return observed }
             }
@@ -49,7 +61,10 @@ final class NativeQaTests: XCTestCase {
                 if control.exists && control.isHittable && (control.isEnabled || label == "商品聊天訊息") { return control }
             }
             let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
-            scroller?.swipeUp()
+            if let scroller {
+                let field = element(label, kind: .textField)
+                scrollToward(field.exists ? field : element(label, kind: .textView), in: scroller)
+            }
             Thread.sleep(forTimeInterval: 0.12)
         } while Date() < deadline
         throw Failure.missingControl
@@ -91,7 +106,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -110,10 +125,47 @@ final class NativeQaTests: XCTestCase {
             checkpoint("unexpected-logbox-warning")
             throw Failure.invalidIdentity
         }
-        if ["qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
+        if ["qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+    private func syntheticBatchPhotoOffsets(requireOrange: Bool = true) throws -> (CGVector?, CGVector) {
+        guard abs(app.frame.width - 402) < 1, abs(app.frame.height - 874) < 1,
+              let image = app.screenshot().image.cgImage, image.width == 1206, image.height == 2622 else { throw Failure.invalidIdentity }
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        return try pixels.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { throw Failure.invalidIdentity }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            let bytes = raw.bindMemory(to: UInt8.self)
+            for upsideDown in [false, true] {
+                var orange: CGVector?, blue: CGVector?
+                for row in 0..<4 {
+                    for column in 0..<3 {
+                        var orangePixels = 0, bluePixels = 0
+                        for y in stride(from: Int((326 + row * 134 + 10) * 3), to: Int((326 + row * 134 + 120) * 3), by: 15) {
+                            for x in stride(from: (column * 134 + 10) * 3, to: (column * 134 + 120) * 3, by: 15) {
+                                let offset = ((upsideDown ? height - 1 - y : y) * width + x) * 4
+                                let red = Int(bytes[offset]), green = Int(bytes[offset + 1]), cobalt = Int(bytes[offset + 2])
+                                if red > 120 && red * 10 > green * 14 && green * 10 > cobalt * 12 { orangePixels += 1 }
+                                if cobalt > 80 && cobalt * 10 > red * 12 && cobalt * 10 > green * 12 { bluePixels += 1 }
+                            }
+                        }
+                        // The picker's bottom selection tray covers the
+                        // fourth row's center. Tap its visible upper third.
+                        let tile = CGVector(dx: Double(column * 134 + 67) / 402, dy: Double(326 + row * 134 + (row >= 3 ? 35 : 67)) / 874)
+                        if orange == nil && orangePixels >= 30 && bluePixels < 30 { orange = tile }
+                        if blue == nil && bluePixels >= 80 && orangePixels < 30 { blue = tile }
+                    }
+                }
+                if let blue, !requireOrange || orange != nil { return (orange, blue) }
+            }
+            throw Failure.missingControl
+        }
     }
     private func hasCollapsedDebugWarningToast(_ screenshot: XCUIScreenshot) -> Bool {
         guard let image = screenshot.image.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data), image.bitsPerComponent == 8,
@@ -131,9 +183,11 @@ final class NativeQaTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         guard !hasCollapsedDebugWarningToast(app.screenshot()) else { throw Failure.unstableControl }
     }
-    private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField) throws {
+    private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField, replace: Bool = false) throws {
         let prefixes = ["清單名稱": "public-list", "願望名稱": "public-wish", "最高預算": "public-budget", "輸入刪除帳號以確認": "deletion-confirmation",
-          "搜尋商品名稱與說明": "public-market-search", "商品聊天訊息": "public-chat-message", "私密面交地點名稱": "public-meetup-place"]
+          "搜尋商品名稱與說明": "public-market-search", "商品聊天訊息": "public-chat-message", "私密面交地點名稱": "public-meetup-place",
+          "第1件商品名稱": "public-listing-title", "縣市": "public-listing-county", "行政區": "public-listing-district",
+          "位置緯度": "public-listing-latitude", "位置經度": "public-listing-longitude", "第1件售價 TWD": "public-listing-price"]
         guard let prefix = prefixes[label] else { throw Failure.invalidIdentity }
         guard [.textField, .textView, .any].contains(kind) else { throw Failure.invalidIdentity }
         let initial = kind == .any ? try publicInputControl(label) : try required(label, scroll: true, kind: kind)
@@ -175,6 +229,11 @@ final class NativeQaTests: XCTestCase {
         let deletionConfirmation = label == "輸入刪除帳號以確認"
         let searchSubmission = label == "搜尋商品名稱與說明"
         if deletionConfirmation { checkpoint("deletion-confirmation-typing") }
+        if replace {
+            guard label == "第1件售價 TWD", let old = control.value as? String, old.count <= 8,
+                  old.range(of: "^[0-9]*$", options: .regularExpression) != nil else { throw Failure.invalidIdentity }
+            if !old.isEmpty { control.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count)) }
+        }
         control.typeText(value)
         func publicValueState() -> String {
             return PublicInputState.classify(control.value as? String, label: label, expected: value).rawValue
@@ -207,6 +266,16 @@ final class NativeQaTests: XCTestCase {
             checkpoint(valueCheckpoint + "retry-" + valueState)
         }
         guard valueState == "matched" else { throw Failure.invalidIdentity }
+        if label == "縣市" || label == "行政區" {
+            // The next location field can be below the iOS keyboard after
+            // KeyboardAvoidingView resizes the modal. Submit only this
+            // already-verified, public single-line field, then re-verify it.
+            checkpoint(prefix + "-return")
+            control.typeText("\n")
+            valueState = awaitedPublicValueState()
+            checkpoint(valueCheckpoint + "return-" + valueState)
+            guard valueState == "matched" else { throw Failure.invalidIdentity }
+        }
         if deletionConfirmation || searchSubmission {
             // Submit this single-line public text field through the real
             // keyboard Return key. Search runs its read-only submit callback;
@@ -445,6 +514,301 @@ final class NativeQaTests: XCTestCase {
             app.terminate(); app.launch()
             try required("手機號碼或 Email")
             guard !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
+        } catch { reportFailure() }
+    }
+    func test07RealLoginListingBatchEntry() {
+        executionTimeAllowance = 120
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-batch-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            checkpoint("listing-batch-screen")
+            try safeScreenshot("qa-listing-batch")
+            checkpoint("listing-batch-controls")
+            for label in ["listing-batch-title", "連續拍照", "批次選照片", "共用刊登位置與交付方式", "商品草稿 0/12"] {
+                try required(label, scroll: true)
+            }
+            guard try required("連續拍照", kind: .button).isEnabled,
+                  try required("批次選照片", kind: .button).isEnabled else { throw Failure.unstableControl }
+            checkpoint("listing-batch-entry-complete")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test08RealLoginListingBatchPhotoUpload() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-photo-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-photo-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            checkpoint("listing-photo-picker-selection")
+            // PHPicker runs in a different process: its image elements appear
+            // in the diagnostic hierarchy but not in app.images queries.
+            // Prior isolated tests can leave other synthetic photos in this
+            // private library. Select the blue mug by observed tile pixels.
+            let (_, blue) = try syntheticBatchPhotoOffsets(requireOrange: false)
+            app.coordinate(withNormalizedOffset: blue).tap()
+            checkpoint("listing-photo-picker-selected")
+            try safeScreenshot("qa-photo-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-photo-private-draft")
+            try required("商品草稿 1/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
+            try required("AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。", scroll: true)
+            try safeScreenshot("qa-listing-photo")
+            checkpoint("listing-photo-seller-edit")
+            try publicText("第1件商品名稱", value: "Native QA Blue Mug")
+            checkpoint("listing-photo-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            checkpoint("listing-photo-reopen")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            let restored = try publicInputControl("第1件商品名稱")
+            guard restored.value as? String == "Native QA Blue Mug" else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-listing-resumed")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test09RealLoginListingBatchTwoPhotos() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-two-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-two-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (maybeOrange, blue) = try syntheticBatchPhotoOffsets()
+            guard let orange = maybeOrange else { throw Failure.missingControl }
+            checkpoint("listing-two-picker-selection")
+            app.coordinate(withNormalizedOffset: orange).tap()
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-two-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-two-private-drafts")
+            try required("商品草稿 2/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
+            try required("第2件商品照片", scroll: true)
+            try required("第2件商品照片預覽已載入", scroll: true)
+            let unavailable = "AI 尚未對此帳號開放；照片已私密保存，可稍後重試或手動編輯。"
+            let deadline = Date().addingTimeInterval(30)
+            while app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count < 2 && Date() < deadline {
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+            try safeScreenshot("qa-two-listing")
+            // React Native may expose both a text wrapper and its child to
+            // XCTest. The exact AX count is not the exact card count; the
+            // backend separately requires two distinct private records.
+            guard app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count >= 2 else { throw Failure.missingControl }
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test11RealLoginListingBatchAiPhoto() {
+        executionTimeAllowance = 230
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-ai-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-ai-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (_, blue) = try syntheticBatchPhotoOffsets(requireOrange: false)
+            checkpoint("listing-ai-picker-selection")
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-photo-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-ai-private-upload")
+            try required("商品草稿 1/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
+            checkpoint("listing-ai-result-await")
+            let deadline = Date().addingTimeInterval(145)
+            var completed = false
+            repeat {
+                let status = element("AI 草稿已完成，請確認")
+                if status.exists { completed = true; break }
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.5)
+            } while Date() < deadline
+            guard completed else { throw Failure.missingControl }
+            let price = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第1件 AI 二手參考價：NT$ ")).firstMatch
+            guard price.exists else { throw Failure.missingControl }
+            checkpoint("listing-ai-result-visible")
+            try safeScreenshot("qa-ai-photo")
+            checkpoint("listing-ai-seller-edit")
+            let field = try publicInputControl("第1件商品名稱")
+            guard let original = field.value as? String, original.contains("杯"), original.count < 70 else { throw Failure.invalidIdentity }
+            field.tap()
+            field.typeText("NativeQA")
+            guard let edited = try publicInputControl("第1件商品名稱").value as? String,
+                  edited != original, edited.contains("NativeQA") else { throw Failure.invalidIdentity }
+            checkpoint("listing-ai-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            checkpoint("listing-ai-reopen")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            guard try publicInputControl("第1件商品名稱").value as? String == edited else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-ai-resumed")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test12RealLoginListingBatchTwoAiPhotos() { runTwoAiPhotos(publishOne: false) }
+    func test13RealLoginListingBatchTwoAiPublishOne() { runTwoAiPhotos(publishOne: true) }
+    private func runTwoAiPhotos(publishOne: Bool) {
+        // Two real connector calls are serialized by the private worker and
+        // can each take up to 150 seconds without indicating an app failure.
+        executionTimeAllowance = publishOne ? 590 : 480
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-two-ai-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (maybeOrange, blue) = try syntheticBatchPhotoOffsets()
+            guard let orange = maybeOrange else { throw Failure.missingControl }
+            checkpoint("listing-two-ai-picker-selection")
+            app.coordinate(withNormalizedOffset: orange).tap()
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-two-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-two-ai-private-upload")
+            try required("商品草稿 2/12", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
+            try required("第2件商品照片預覽已載入", scroll: true)
+            checkpoint("listing-two-ai-results-await")
+            let firstPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第1件 AI 二手參考價：NT$ ")).firstMatch
+            let secondPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第2件 AI 二手參考價：NT$ ")).firstMatch
+            let deadline = Date().addingTimeInterval(390)
+            while !(firstPrice.exists && secondPrice.exists) && Date() < deadline {
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+            guard firstPrice.exists && secondPrice.exists else { throw Failure.missingControl }
+            let firstReference = firstPrice.label.components(separatedBy: "NT$ ").last
+            let secondReference = secondPrice.label.components(separatedBy: "NT$ ").last
+            guard let firstReference, let secondReference, firstReference != secondReference else { throw Failure.invalidIdentity }
+            let firstName = element("第1件商品名稱", kind: .textField).value as? String
+            let secondName = element("第2件商品名稱", kind: .textField).value as? String
+            guard let firstName, let secondName, firstName.contains("燈"), secondName.contains("杯") else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-two-ai-photo")
+            checkpoint("listing-two-ai-seller-edit")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            try tap("刊登好物")
+            let field = try publicInputControl("第1件商品名稱")
+            guard field.value as? String == firstName else { throw Failure.invalidIdentity }
+            field.tap()
+            field.typeText("NativeQA")
+            guard let edited = try publicInputControl("第1件商品名稱").value as? String,
+                  edited != firstName, edited.contains("NativeQA") else { throw Failure.invalidIdentity }
+            checkpoint("listing-two-ai-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            try tap("刊登好物")
+            try required("商品草稿 2/12", scroll: true)
+            guard try publicInputControl("第1件商品名稱").value as? String == edited,
+                  try publicInputControl("第2件商品名稱").value as? String == secondName else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-two-ai-resumed")
+            if publishOne {
+                checkpoint("listing-two-ai-publish-preconditions")
+                guard !(try required("刊登已逐件確認的商品（0）", scroll: true, kind: .button)).isEnabled else { throw Failure.invalidIdentity }
+                let county = element("縣市", kind: .textField)
+                for _ in 0..<12 where !county.isHittable {
+                    guard let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) else { throw Failure.missingControl }
+                    scroller.swipeDown()
+                }
+                guard county.isHittable else { throw Failure.missingControl }
+                try publicText("縣市", value: "台北市")
+                try publicText("行政區", value: "中正區")
+                try publicText("位置緯度", value: "25.033")
+                try publicText("位置經度", value: "121.565")
+                // The seller form defaults to in-person handoff. Verify that
+                // state instead of toggling it off during publication QA.
+                guard element("☑ 可面交", kind: .any).exists else { throw Failure.invalidIdentity }
+                try tap("☐ 我確認資料屬實並同意公開照片與約略位置", kind: .any)
+                try publicText("第1件售價 TWD", value: "450", replace: true)
+                checkpoint("listing-two-ai-publish-confirm-one")
+                try tap("☐ 我已逐欄確認第 1 件商品的照片、內容及售價", kind: .any)
+                guard try required("刊登已逐件確認的商品（1）", scroll: true, kind: .button).isEnabled else { throw Failure.invalidIdentity }
+                checkpoint("listing-two-ai-publish-one")
+                try tap("刊登已逐件確認的商品（1）")
+                let publishedAlert = app.alerts["商品已刊登"]
+                guard publishedAlert.waitForExistence(timeout: 25),
+                      publishedAlert.staticTexts["已確認 1 件商品，可在探索地圖查看。"].exists else { throw Failure.missingControl }
+                try safeScreenshot("qa-two-ai-published")
+                publishedAlert.buttons["OK"].tap()
+                let publicCount = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "站內 1 件")).firstMatch
+                guard publicCount.waitForExistence(timeout: 25), publicCount.isHittable else { throw Failure.missingControl }
+                try tap("切換清單")
+                let publishedCard = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "NativeQA")).firstMatch
+                guard publishedCard.waitForExistence(timeout: 20), publishedCard.isHittable else { throw Failure.missingControl }
+            }
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test10RealLoginExternalSourceMapAndDetail() {
+        executionTimeAllowance = 210
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("external-map-open")
+            try tapTab("探索")
+            // This is one React Native Text node: its accessibility label is
+            // "站內 0 件 · 外部 1 件", not a standalone "外部 1 件" identifier.
+            let externalCount = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "外部 1 件")).firstMatch
+            guard externalCount.waitForExistence(timeout: 20), externalCount.isHittable else { throw Failure.missingControl }
+            try safeScreenshot("qa-external-map")
+            checkpoint("external-list-open")
+            try tap("切換清單")
+            let card = "外部來源商品，Native QA 外部檯燈，來源售價 NT$ 590，新北市板橋區"
+            try required(card, scroll: true, kind: .button)
+            try safeScreenshot("qa-external-list")
+            checkpoint("external-detail-open")
+            try tap(card)
+            try required("外部來源 · github.com", scroll: true)
+            try required("來源售價 NT$ 590", scroll: true)
+            try required("地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。", scroll: true)
+            try required("前往來源網站查看", scroll: true, kind: .button)
+            guard !app.buttons["聯絡賣家"].exists else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-external-detail")
+            try tap("返回探索")
+            try tapTab("願望")
+            try required("Native QA 外部比對清單", scroll: true)
+            try tap("查看清單")
+            try required("檯燈", scroll: true)
+            try required("最高預算 TWD 600", scroll: true)
+            try tap("查附近符合商品")
+            checkpoint("external-wish-map-open")
+            let wishBanner = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "符合所選願望")).firstMatch
+            guard wishBanner.waitForExistence(timeout: 20) else { throw Failure.missingControl }
+            guard externalCount.waitForExistence(timeout: 20), externalCount.isHittable else { throw Failure.missingControl }
+            try safeScreenshot("qa-external-wish-map")
+            checkpoint("external-wish-list-open")
+            try tap("切換清單")
+            try required(card, scroll: true, kind: .button)
+            try safeScreenshot("qa-external-wish-list")
+            app.terminate()
         } catch { reportFailure() }
     }
 }

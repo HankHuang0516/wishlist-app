@@ -4,9 +4,11 @@ const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
-function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env) {
+function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
+  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false,
+    staleBatchRecoverySnapshot = false } = {}) {
   assertTestDatabase(databaseUrl);
-  if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
+  if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 900) throw new Error('QA lifetime must be 1–900 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
   // values, NODE_OPTIONS, PGHOST or dotenv configuration can enter this child.
   return {
@@ -15,15 +17,24 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     TEST_DATABASE_URL: databaseUrl, DATABASE_URL: databaseUrl,
     JWT_SECRET: randomBytes(32).toString('hex'),
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
+    ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
+    ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
+    ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
+    ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
+    ...(staleBatchRecoverySnapshot ? { NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1' } : {}),
   };
 }
 
-async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
+async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
   const child = fork(path.join(__dirname, 'native-qa-worker.cjs'), [], {
-    env: qaEnvironment(databaseUrl, lifetimeSeconds),
+    env: qaEnvironment(databaseUrl, lifetimeSeconds, process.env, options),
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
-  let summary;
+  let summary, uploadAckHeldResolve, listingUploadRejectedResolve;
+  const imageReads = [];
+  const batchRecoverySnapshots = [];
+  const uploadAckHeld = new Promise(resolve => { uploadAckHeldResolve = resolve; });
+  const listingUploadRejected = new Promise(resolve => { listingUploadRejectedResolve = resolve; });
   const requestStop = () => {
     if (child.connected) { try { child.send({ kind: 'stop' }, () => undefined); } catch { /* Await authoritative exit below. */ } }
   };
@@ -41,11 +52,17 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
     }, 30_000);
     child.on('message', message => {
       if (message?.kind === 'ready') { clearTimeout(timer); resolve(message); }
+      if (message?.kind === 'listing-upload-ack-held') uploadAckHeldResolve(message.mediaId);
+      if (message?.kind === 'listing-upload-rejected') listingUploadRejectedResolve(true);
+      if (message?.kind === 'private-image-read') imageReads.push({ variant: message.variant, statusCode: message.statusCode,
+        hasAuthorization: message.hasAuthorization });
+      if (message?.kind === 'batch-recovery-snapshot' && ['stale', 'fresh'].includes(message.phase))
+        batchRecoverySnapshots.push(message.phase);
       if (message?.kind === 'stopped') summary = message.summary;
       if (message?.kind === 'failed') {
         clearTimeout(timer);
         // Enum stage and environment NAMES only, never values or raw exceptions.
-        const stages = ['launch-guard', 'private-storage', 'module-express', 'module-jwt', 'module-bcrypt', 'module-prisma',
+        const stages = ['launch-guard', 'private-storage', 'module-express', 'module-jwt', 'module-bcrypt', 'module-prisma', 'schema-preflight',
           'module-jwt-config', 'module-listing-rules', 'module-account-erasure', 'module-listing-storage', 'listing-storage-ready',
           'synthetic-seed', 'actual-routes', 'loopback-listener'];
         const stage = stages.includes(message.stage) ? message.stage : 'cleanup';
@@ -64,10 +81,20 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300) {
     await exited.catch(() => undefined);
     throw failure;
   }
+  if (options.listingAiPilot && (typeof fixture.callbackToken !== 'string' || !/^[0-9a-f]{64}$/.test(fixture.callbackToken))) {
+    requestStop();
+    await exited.catch(() => undefined);
+    throw new Error('QA worker capability missing; details withheld');
+  }
   // Actors are synthetic credentials carried only over private IPC and held in
   // the caller's memory. Never serialize this object into a QA report/screenshot.
   return {
     apiUrl: fixture.apiUrl, runId: fixture.runId, actors: fixture.actors,
+    ...(options.listingAiPilot ? { callbackToken: fixture.callbackToken } : {}),
+    ...(options.holdListingUploadAck ? { uploadAckHeld } : {}),
+    ...(options.rejectFirstListingUpload ? { listingUploadRejected } : {}),
+    ...(options.holdListingUploadAck || options.rejectFirstListingUpload ? { imageReads } : {}),
+    ...(options.staleBatchRecoverySnapshot ? { batchRecoverySnapshots } : {}),
     async stop() {
       if (child.exitCode === null) requestStop();
       return exited;

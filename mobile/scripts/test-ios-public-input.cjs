@@ -14,5 +14,5 @@ if (compile.error || compile.status !== 0 || compile.signal) throw new Error('Ho
 const result = spawnSync(executable, [], { env, encoding: 'utf8', timeout: 3000, maxBuffer: 4096 });
 if (result.error || result.status !== 0 || result.signal) throw new Error('Host public input enum tests failed; raw diagnostics withheld');
 const report = JSON.parse(result.stdout);
-if (report.kind !== 'host-public-input-enum' || report.checks !== 31 || report.passed !== true || report.rawValuesSerialized !== false || report.deviceOperations !== 0) throw new Error('Unexpected host enum result');
+if (report.kind !== 'host-public-input-enum' || report.checks !== 37 || report.passed !== true || report.rawValuesSerialized !== false || report.deviceOperations !== 0) throw new Error('Unexpected host enum result');
 console.log(JSON.stringify({ ...report, executable }));

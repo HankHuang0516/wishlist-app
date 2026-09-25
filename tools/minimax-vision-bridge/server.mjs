@@ -6,12 +6,55 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import https from 'node:https';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
 
 const execFileAsync = promisify(execFile);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 4096;
 const JOB_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_IMAGE_HOST = 'wishlist-app-production.up.railway.app';
+const blockedIpv4 = new BlockList();
+for (const [network, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+    ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24],
+    ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
+    ['224.0.0.0', 4], ['240.0.0.0', 4]]) blockedIpv4.addSubnet(network, prefix, 'ipv4');
+
+export function isPublicIpv4(address) { return isIP(address) === 4 && !blockedIpv4.check(address, 'ipv4'); }
+
+export function validExternalImageUrl(raw, host) {
+    try {
+        const url = new URL(raw);
+        return typeof host === 'string' && /^(?:[a-z0-9-]+\.)+[a-z]{2,63}$/.test(host) &&
+            url.protocol === 'https:' && url.hostname === host && !url.port && !url.username && !url.password &&
+            url.pathname !== '/' && !url.hash;
+    } catch { return false; }
+}
+
+export async function pinnedExternalFetch(raw, { imageHost, signal, lookup = dnsLookup, request = https.request } = {}) {
+    if (!validExternalImageUrl(raw, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
+    const url = new URL(raw);
+    let addresses;
+    try { addresses = await lookup(imageHost, { all: true }); }
+    catch { throw new Error('IMAGE_FETCH_FAILED'); }
+    const ipv4 = addresses.filter(entry => entry.family === 4);
+    if (!ipv4.length || ipv4.some(entry => !isPublicIpv4(entry.address))) throw new Error('IMAGE_HOST_UNSAFE');
+    return new Promise((resolve, reject) => {
+        const req = request(url, { method: 'GET', agent: false, timeout: 20_000,
+            headers: { Accept: 'image/jpeg,image/png,image/webp' },
+            lookup: (_hostname, options, callback) => options.all
+                ? callback(null, [{ address: ipv4[0].address, family: 4 }])
+                : callback(null, ipv4[0].address, 4) }, response => {
+            if (response.statusCode !== 200) { response.destroy(); reject(new Error('IMAGE_FETCH_FAILED')); return; }
+            resolve({ ok: true, body: response, headers: { get: key => response.headers[key]?.toString() ?? null } });
+        });
+        req.on('error', () => reject(new Error('IMAGE_FETCH_FAILED')));
+        req.on('timeout', () => req.destroy(new Error('IMAGE_FETCH_FAILED')));
+        signal?.addEventListener('abort', () => req.destroy(new Error('IMAGE_FETCH_FAILED')), { once: true });
+        req.end();
+    });
+}
 
 export function validImageUrl(raw, host = DEFAULT_IMAGE_HOST) {
     try {
@@ -52,8 +95,11 @@ export function parseVisionDescription(description) {
     return { name, category: category || null, visibleText, listedPriceTwd, evidence, uncertainties, confidence };
 }
 
-async function boundedImage(url, fetchImpl) {
-    const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(20000) });
+async function boundedImage(url, fetchImpl, authToken, timeoutMs = 20000) {
+    let response;
+    try { response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+        ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}) }); }
+    catch { throw new Error('IMAGE_FETCH_FAILED'); }
     if (!response.ok || !response.body) throw new Error('IMAGE_FETCH_FAILED');
     const mime = response.headers.get('content-type')?.split(';')[0].toLowerCase();
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime];
@@ -61,10 +107,15 @@ async function boundedImage(url, fetchImpl) {
     if (Number(response.headers.get('content-length') || 0) > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
     const chunks = [];
     let length = 0;
-    for await (const chunk of response.body) {
-        length += chunk.length;
-        if (length > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
-        chunks.push(chunk);
+    try {
+        for await (const chunk of response.body) {
+            length += chunk.length;
+            if (length > MAX_IMAGE_BYTES) throw new Error('IMAGE_TOO_LARGE');
+            chunks.push(chunk);
+        }
+    } catch (error) {
+        if (error?.message === 'IMAGE_TOO_LARGE') throw error;
+        throw new Error('IMAGE_FETCH_FAILED');
     }
     const bytes = Buffer.concat(chunks, length);
     const validMagic = mime === 'image/jpeg' ? bytes[0] === 0xff && bytes[1] === 0xd8 :
@@ -84,26 +135,78 @@ const PROMPT = [
     '{"recognizable":true,"name":"主體名稱","category":"品類","visibleText":["確實可讀的文字"],"listedPriceTwd":null,"evidence":["可見證據1","可見證據2"],"uncertainties":["無法確認的部分"],"confidence":0.8}',
 ].join('\n');
 
-export async function recognizeImage(url, { fetchImpl = fetch, command = 'mcode-tools' } = {}) {
-    const { bytes, extension } = await boundedImage(url, fetchImpl);
+// Keep the vision instruction compact: the Connector has returned detailed JSON
+// for this shape, while the longer policy-style prompt repeatedly timed out.
+const LISTING_PROMPT = '只依照片像素，以繁體中文 JSON 寫尚未公開的二手商品草稿：recognizable,name,description(可見外觀與瑕疵、賣家待確認),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(NEW/USED/null),estimatedPriceLowTwd,estimatedPriceHighTwd,priceBasis,evidence(至少2項陣列),uncertainties(陣列),confidence(0到1)。不要猜品牌或已測功能。二手價格可依可見品類與磨損作極保守、較寬的台幣參考區間；無法辨識或無法估計則null。未測試功能的電器要納入故障風險，不可用正常品價格。priceBasis註明「僅依照片粗估，非即時行情」。不得輸出私人聯絡資訊。只輸出JSON。';
+const EXTERNAL_CANDIDATE_PROMPT = '只依照片像素，用繁體中文 JSON 寫供後台人工審查的二手商品圖片補充建議：recognizable,name,description(可見外觀與瑕疵，不要捏造測試結果),category(electronics/home/fashion/sports/books/toys/other),brand(不確定null),condition(null),estimatedPriceLowTwd(null),estimatedPriceHighTwd(null),priceBasis(null),evidence(至少2項陣列),uncertainties(陣列),confidence(0到1)。不可臆測價格、賣家、地點或授權；不可輸出聯絡資訊。只輸出JSON。';
+
+export function parseListingVisionDescription(description) {
+    if (typeof description !== 'string') throw new Error('VISION_BAD_RESPONSE');
+    const start = description.indexOf('{'), end = description.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('VISION_BAD_RESPONSE');
+    let raw;
+    try { raw = JSON.parse(description.slice(start, end + 1)); }
+    catch { throw new Error('VISION_BAD_RESPONSE'); }
+    const name = clean(raw.name, 100), details = clean(raw.description, 1500);
+    const evidence = textArray(raw.evidence, 6, 160);
+    const uncertainties = textArray(Array.isArray(raw.uncertainties) ? raw.uncertainties : [raw.uncertainties], 6, 160);
+    const confidence = Number(raw.confidence);
+    if (raw.recognizable !== true || name.length < 3 || details.length < 16 || evidence.length < 2 ||
+        !Number.isFinite(confidence) || confidence < 0.7 || confidence > 1) throw new Error('VISION_UNCERTAIN');
+    if (/(?:^|\D)09\d{8}(?:\D|$)/.test(`${name} ${details}`) || /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(`${name} ${details}`)) throw new Error('VISION_PRIVATE_CONTACT');
+    const categories = new Set(['electronics', 'home', 'fashion', 'sports', 'books', 'toys', 'other']);
+    const amount = x => Number.isSafeInteger(x) && x >= 0 && x <= 1_000_000 ? x : null;
+    const low = amount(raw.estimatedPriceLowTwd), high = amount(raw.estimatedPriceHighTwd);
+    const priceValid = confidence >= 0.8 && low !== null && high !== null && high >= low && high <= Math.max(100, low * 10);
+    return { recognizable: true, name, description: details, category: categories.has(raw.category) ? raw.category : 'other',
+        brand: clean(raw.brand, 60) || null, condition: ['NEW', 'USED'].includes(raw.condition) ? raw.condition : null,
+        estimatedPriceLowTwd: priceValid ? low : null, estimatedPriceHighTwd: priceValid ? high : null,
+        priceBasis: priceValid ? '僅依照片外觀與模型既有知識粗估；未查詢即時市場成交價，請賣家確認' : null,
+        evidence, uncertainties, confidence };
+}
+
+async function describeImage(url, prompt, parse, { fetchImpl = fetch, command = 'mcode-tools', authToken, execCommand = execFileAsync,
+    connectorTimeoutMs = 90000, imageTimeoutMs = 20000 } = {}) {
+    const { bytes, extension } = await boundedImage(url, fetchImpl, authToken, imageTimeoutMs);
     const directory = await mkdtemp(join(tmpdir(), 'wishlist-minimax-vision-'));
     const imagePath = join(directory, `image.${extension}`);
     try {
         await writeFile(imagePath, bytes, { mode: 0o600 });
-        const upload = await execFileAsync(command, ['upload-temp-url', imagePath], { timeout: 30000, maxBuffer: 1024 * 1024 });
+        let upload;
+        try { upload = await execCommand(command, ['upload-temp-url', imagePath], { timeout: 30000, maxBuffer: 1024 * 1024 }); }
+        catch { throw new Error('TEMP_UPLOAD_FAILED'); }
         let uploaded;
         try { uploaded = JSON.parse(upload.stdout); } catch { throw new Error('TEMP_UPLOAD_FAILED'); }
         if (typeof uploaded.temp_url !== 'string' || !uploaded.temp_url.startsWith('https://')) throw new Error('TEMP_UPLOAD_FAILED');
-        const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt: PROMPT }] });
-        const call = await execFileAsync(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
-            { timeout: 90000, maxBuffer: 1024 * 1024 });
+        const args = JSON.stringify({ image_info: [{ url: uploaded.temp_url, prompt }] });
+        let call;
+        try { call = await execCommand(command, ['connector', 'call', 'connector__matrix__describe_images', '--args', args],
+            { timeout: connectorTimeoutMs, maxBuffer: 1024 * 1024 }); }
+        catch { throw new Error('VISION_UPSTREAM_FAILED'); }
         let response;
         try { response = JSON.parse(call.stdout); } catch { throw new Error('VISION_BAD_RESPONSE'); }
         if (response.code !== 0 || response.results?.[0]?.success !== true) throw new Error('VISION_UPSTREAM_FAILED');
-        return parseVisionDescription(response.results[0].description);
+        return parse(response.results[0].description);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
+}
+
+export async function recognizeImage(url, options = {}) { return describeImage(url, PROMPT, parseVisionDescription, options); }
+export async function recognizeListingImage(url, options = {}) {
+    return describeImage(url, LISTING_PROMPT, parseListingVisionDescription, { connectorTimeoutMs: 150000, ...options });
+}
+export async function recognizeExternalCandidateImage(url, imageHost, options = {}) {
+    if (!validExternalImageUrl(url, imageHost)) throw new Error('IMAGE_HOST_UNSAFE');
+    return describeImage(url, EXTERNAL_CANDIDATE_PROMPT, parseListingVisionDescription,
+        { connectorTimeoutMs: 150000, imageTimeoutMs: 45000, ...options, authToken: undefined,
+            fetchImpl: (target, init) => pinnedExternalFetch(target, { imageHost, signal: init.signal }) });
+}
+
+const SAFE_VISION_ERRORS = new Set(['IMAGE_FETCH_FAILED', 'IMAGE_HOST_UNSAFE', 'IMAGE_FORMAT_UNSUPPORTED', 'IMAGE_TOO_LARGE',
+    'TEMP_UPLOAD_FAILED', 'VISION_UPSTREAM_FAILED', 'VISION_BAD_RESPONSE', 'VISION_UNCERTAIN', 'VISION_PRIVATE_CONTACT']);
+export function safeVisionError(error) {
+    return SAFE_VISION_ERRORS.has(error?.message) ? error.message : 'VISION_UNAVAILABLE';
 }
 
 function authorized(value, token) {
@@ -142,7 +245,7 @@ export function createBridge({ token, imageHost = DEFAULT_IMAGE_HOST, recognize 
             const job = waiting.shift();
             job.status = 'PROCESSING';
             try { job.result = await recognize(job.imageUrl); job.status = 'COMPLETED'; }
-            catch (error) { job.error = /^([A-Z_]+)$/.test(error?.message || '') ? error.message : 'VISION_UNAVAILABLE'; job.status = 'FAILED'; }
+            catch (error) { job.error = safeVisionError(error); job.status = 'FAILED'; }
             job.updatedAt = Date.now();
         }
         running = false;

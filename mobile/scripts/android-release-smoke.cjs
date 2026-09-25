@@ -9,7 +9,8 @@ const serial = process.env.SIM_MANAGER_SERIAL;
 if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) throw new Error('A real simulator-manager Android lease is required');
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
 const apk = path.resolve(__dirname, '../android/app/build/outputs/apk/release/app-release.apk');
-const screenshot = process.argv[2];
+const reuseInstalled = process.argv.includes('--reuse-installed');
+const screenshot = process.argv.slice(2).find(argument => argument !== '--reuse-installed');
 if (!fs.existsSync(apk)) throw new Error('Build the release APK before acquiring a simulator');
 if (screenshot && (!path.isAbsolute(screenshot) || path.extname(screenshot) !== '.png' || !fs.existsSync(path.dirname(screenshot)) || fs.existsSync(screenshot))) throw new Error('Screenshot must be a new file in an existing absolute output directory');
 const adb = (args, timeout = 20_000) => execFileSync('/Users/hank/Library/Android/sdk/platform-tools/adb', ['-s', serial, ...args], { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -20,9 +21,11 @@ const devicePhoto = deviceXml.replace('.xml', '.png');
   const model = adb(['shell', 'getprop', 'ro.product.model']).trim();
   const sdk = adb(['shell', 'getprop', 'ro.build.version.sdk']).trim();
   const pageSize = adb(['shell', 'getconf', 'PAGESIZE']).trim();
-  adb(['install', '-r', apk], 60_000);
+  const alreadyInstalled = adb(['shell', 'pm', 'list', 'packages', pkg]).split(/\r?\n/).includes('package:' + pkg);
+  if (alreadyInstalled !== reuseInstalled) throw new Error(reuseInstalled ? 'Expected previously installed release package is missing' : 'The release package is already installed; refusing to overwrite existing app data');
+  if (!reuseInstalled) adb(['install', apk], 60_000);
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
-  if (!/versionCode=20\b/.test(installed) || !/versionName=2\.0\.5\b/.test(installed)) throw new Error('Installed build identity/version did not match');
+  if (!/versionCode=21\b/.test(installed) || !/versionName=2\.0\.6\b/.test(installed)) throw new Error('Installed build identity/version did not match');
   adb(['shell', 'am', 'force-stop', pkg]);
   const start = adb(['shell', 'am', 'start', '-W', '-n', pkg + '/.MainActivity'], 30_000);
   if (!/Status: ok/.test(start)) throw new Error('Android did not report a successful launch');
@@ -35,14 +38,20 @@ const devicePhoto = deviceXml.replace('.xml', '.png');
     authenticatedNavigationRendered = xml.includes('content-desc="首頁"') && xml.includes('content-desc="願望"');
     rendered = xml.includes('text="Wishlist.ai"') && (loginRendered || authenticatedNavigationRendered);
     if (rendered) break;
-    if (!productNoticeAcknowledged && xml.includes('新的願望，附近的好物') && xml.includes('我了解，繼續使用')) {
+    if (!productNoticeAcknowledged && xml.includes('新的願望，附近的好物')) {
       const node = xml.match(/<node\b[^>]*(?:text|content-desc)="我了解，繼續使用"[^>]*>/)?.[0];
       const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bounds) throw new Error('Product notice rendered without an actionable acknowledgement');
-      const x = Math.floor((Number(bounds[1]) + Number(bounds[3])) / 2);
-      const y = Math.floor((Number(bounds[2]) + Number(bounds[4])) / 2);
-      adb(['shell', 'input', 'tap', String(x), String(y)]);
-      productNoticeAcknowledged = true;
+      if (bounds) {
+        const x = Math.floor((Number(bounds[1]) + Number(bounds[3])) / 2);
+        const y = Math.floor((Number(bounds[2]) + Number(bounds[4])) / 2);
+        adb(['shell', 'input', 'tap', String(x), String(y)]);
+        productNoticeAcknowledged = true;
+      } else {
+        const size = adb(['shell', 'wm', 'size']).match(/(?:Physical|Override) size: (\d+)x(\d+)/);
+        if (!size) throw new Error('Cannot scroll product notice without device dimensions');
+        const width = Number(size[1]), height = Number(size[2]);
+        adb(['shell', 'input', 'swipe', String(Math.floor(width / 2)), String(Math.floor(height * 0.82)), String(Math.floor(width / 2)), String(Math.floor(height * 0.24)), '360']);
+      }
     }
   }
   if (!rendered) throw new Error('Neither the native login form nor authenticated navigation rendered; this is a runtime failure, not a passing build');
@@ -54,7 +63,7 @@ const devicePhoto = deviceXml.replace('.xml', '.png');
   const logs = adb(['logcat', '-d', '--pid=' + pid, '-v', 'brief']);
   if (/FATAL EXCEPTION|Fatal signal|ReactNativeJS.*(?:TypeError|ReferenceError|Invariant Violation)/i.test(logs)) throw new Error('A native or JavaScript fatal error occurred');
   if (screenshot) { adb(['shell', 'screencap', '-p', devicePhoto]); adb(['pull', devicePhoto, screenshot]); }
-  console.log(JSON.stringify({ scope: 'release-native-cold-launch-only', serial, model, sdk: Number(sdk), pageSize: Number(pageSize), package: pkg, versionCode: 20, versionName: '2.0.5', apkSha256: createHash('sha256').update(fs.readFileSync(apk)).digest('hex'), productNoticeAcknowledged, nativeLoginRendered: loginRendered, authenticatedNavigationRendered, tenSecondStability: true, fatalErrors: false, launchTiming: start.match(/(?:TotalTime|WaitTime|ThisTime): \d+/g), screenshot: screenshot ?? null }));
+  console.log(JSON.stringify({ scope: 'release-native-cold-launch-only', serial, model, sdk: Number(sdk), pageSize: Number(pageSize), package: pkg, versionCode: 21, versionName: '2.0.6', apkSha256: createHash('sha256').update(fs.readFileSync(apk)).digest('hex'), productNoticeAcknowledged, nativeLoginRendered: loginRendered, authenticatedNavigationRendered, tenSecondStability: true, fatalErrors: false, launchTiming: start.match(/(?:TotalTime|WaitTime|ThisTime): \d+/g), screenshot: screenshot ?? null }));
 })().catch(error => { console.error(error instanceof Error ? error.message : 'Release smoke failed'); process.exitCode = 1; }).finally(() => {
   // Only remove artifacts created by this test, not device data or other apps.
   try { adb(['shell', 'rm', '-f', deviceXml, devicePhoto]); } catch { /* The supervisor still releases the lease. */ }

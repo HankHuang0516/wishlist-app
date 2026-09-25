@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
-import { forbiddenListingField } from '../lib/listingPolicy';
+import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 
 // Explicit projection: no credentials, request hashes, private profile/contact
 // fields or future exact meetup locations can escape through a relation include.
@@ -31,6 +31,8 @@ function fail(res: Response, error: unknown) {
 function assertListingPolicy(input: Parameters<typeof forbiddenListingField>[0]) {
     const field = forbiddenListingField(input);
     if (field) throw new ListingInputError(field, '此商品不符合禁售商品政策');
+    const contact = privateContactField(input);
+    if (contact) throw new ListingInputError(contact, '請勿在公開商品資訊填入電話、Email 或 LINE ID；請使用站內聊天');
 }
 
 export async function createListing(req: AuthRequest, res: Response) {
@@ -61,7 +63,8 @@ export async function createListing(req: AuthRequest, res: Response) {
             const media = await tx.listingMedia.findMany({ where: { id: { in: input.mediaIds }, ownerUserId, listingId: null, wishItemId: null }, select: { id: true } });
             if (media.length !== input.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
             for (const [position, id] of input.mediaIds.entries()) {
-                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null, wishItemId: null }, data: { listingId: created.id, position } });
+                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null, wishItemId: null },
+                    data: { listingId: created.id, position, sellerDraft: Prisma.DbNull } });
                 if (bound.count !== 1) throw new ListingConflict();
             }
             return tx.listing.findUniqueOrThrow({ where: { id: created.id }, select: publicListingSelect });
@@ -209,7 +212,8 @@ export async function editListing(req: AuthRequest, res: Response) {
             if (body.location !== undefined && parsed.location) await tx.listingLocation.upsert({ where: { listingId: id }, create: { listingId: id, ...parsed.location }, update: parsed.location });
             await tx.listingMedia.updateMany({ where: { listingId: id, ownerUserId, id: { notIn: parsed.mediaIds } }, data: { listingId: null } });
             for (const [position, mediaId] of parsed.mediaIds.entries()) {
-                const bound = await tx.listingMedia.updateMany({ where: { id: mediaId, ownerUserId, wishItemId: null, OR: [{ listingId: null }, { listingId: id }] }, data: { listingId: id, position } });
+                const bound = await tx.listingMedia.updateMany({ where: { id: mediaId, ownerUserId, wishItemId: null, OR: [{ listingId: null }, { listingId: id }] },
+                    data: { listingId: id, position, sellerDraft: Prisma.DbNull } });
                 if (bound.count !== 1) throw new ListingConflict();
             }
             return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });

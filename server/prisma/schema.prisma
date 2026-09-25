@@ -96,6 +96,20 @@ enum ListingExpiryMode {
   CUSTOM_DATE
 }
 
+enum ListingAiStatus {
+  SKIPPED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ListingMediaPurpose {
+  LEGACY_UNKNOWN
+  MANUAL_PHOTO
+  BATCH_ITEM
+}
+
 model Listing {
   id              String                  @id @default(uuid())
   ownerUserId     Int
@@ -227,6 +241,7 @@ model ListingMedia {
   thumbnailUrl String
   contentHash  String
   clientUploadId String?
+  capturePurpose ListingMediaPurpose @default(LEGACY_UNKNOWN)
   width        Int?
   height       Int?
   byteSize     Int?
@@ -234,6 +249,16 @@ model ListingMedia {
   flickrPhotoId String?
   flickrImageUrl String?
   flickrThumbnailUrl String?
+  // Private, seller-owned AI suggestion. It never publishes a listing by itself.
+  aiDraftStatus ListingAiStatus @default(SKIPPED)
+  aiDraft       Json?
+  aiDraftError  String?
+  aiDraftJobId  String? @unique
+  aiDraftAttempts Int @default(0)
+  aiDraftUpdatedAt DateTime?
+  // Private seller edits for an unused batch photo; no precise location.
+  sellerDraft Json?
+  sellerDraftVersion Int @default(0)
   position     Int      @default(0)
   createdAt    DateTime @default(now())
   owner        User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -242,6 +267,8 @@ model ListingMedia {
 
   @@index([listingId, position])
   @@index([ownerUserId, createdAt])
+  @@index([ownerUserId, capturePurpose, createdAt])
+  @@index([aiDraftStatus, aiDraftUpdatedAt])
   @@unique([ownerUserId, clientUploadId])
 }
 
@@ -258,6 +285,123 @@ model ListingLocation {
   listing         Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([publicLatitude, publicLongitude])
+}
+
+// External supply is an attributed index, never an invented in-app seller.
+// Intake stays private until a separate review and map publication flow exists.
+enum ExternalSourceKind {
+  PARTNER_FEED
+  LINE_OPT_IN
+  SELLER_IMPORT
+}
+
+enum ExternalCandidateStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  STALE
+}
+
+enum ExternalCandidateAiStatus {
+  NOT_ELIGIBLE
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ExternalListingSource {
+  id               String                     @id @default(uuid())
+  name             String
+  kind             ExternalSourceKind
+  canonicalHost    String
+  imageHost        String?
+  authorizationRef String
+  textReuseAllowed Boolean                    @default(false)
+  imageReuseAllowed Boolean                   @default(false)
+  aiProcessingAllowed Boolean                 @default(false)
+  enabled          Boolean                    @default(false)
+  enabledAt        DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  candidates       ExternalListingCandidate[]
+  intakeBatches    ExternalIntakeBatch[]
+
+  @@index([enabled, kind])
+}
+
+// Immutable, compact receipts for accepted admin imports. Store hashes and
+// source item ID hashes, not another copy of partner identifiers, photos or descriptions.
+model ExternalIntakeBatch {
+  id                 String                @id @default(uuid())
+  sourceId           String
+  authorizationRef   String
+  sourceEnabledAt    DateTime
+  receivedAt         DateTime              @default(now())
+  itemCount          Int
+  observations       Json
+  source             ExternalListingSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@index([sourceId, receivedAt, id])
+}
+
+model ExternalListingCandidate {
+  id             String                  @id @default(uuid())
+  sourceId       String
+  sourceItemId   String
+  canonicalUrl   String
+  imageUrl       String?
+  thumbnailUrl   String?
+  title          String
+  description    String?
+  priceTwd       Decimal?                @db.Decimal(12, 2)
+  condition      ListingCondition
+  county         String
+  district       String
+  observedAt     DateTime
+  expiresAt      DateTime
+  lastSeenAt     DateTime                @default(now())
+  contentHash    String
+  status         ExternalCandidateStatus @default(PENDING_REVIEW)
+  approvalRef    String?
+  approvedAuthorizationRef String?
+  approvedContentHash String?
+  approvedAt     DateTime?
+  approvedAiSupplement String?
+  approvedAiInputHash String?
+  rejectionRef   String?
+  rejectionReason String?
+  rejectedContentHash String?
+  rejectedAt     DateTime?
+  aiStatus       ExternalCandidateAiStatus @default(NOT_ELIGIBLE)
+  aiInputHash    String?
+  aiDraft        Json?
+  aiJobId        String?
+  aiAttempts     Int @default(0)
+  aiUpdatedAt    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  source         ExternalListingSource   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  reviewEvents   ExternalCandidateReviewEvent[]
+
+  @@unique([sourceId, sourceItemId])
+  @@index([status, expiresAt])
+  @@index([sourceId, lastSeenAt])
+  @@index([aiStatus, aiUpdatedAt])
+}
+
+model ExternalCandidateReviewEvent {
+  id            String                   @id @default(uuid())
+  candidateId   String
+  decision      ExternalCandidateStatus
+  contentHash   String
+  reviewRef     String
+  reason        String?
+  authorizationRef String?
+  createdAt     DateTime                 @default(now())
+  candidate     ExternalListingCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, createdAt])
 }
 
 enum ConversationRole {

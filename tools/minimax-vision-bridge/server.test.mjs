@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import { createBridge, parseVisionDescription, validImageUrl } from './server.mjs';
+import { once, EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
+import { createBridge, isPublicIpv4, pinnedExternalFetch, parseListingVisionDescription, parseVisionDescription, recognizeListingImage,
+    recognizeExternalCandidateImage, safeVisionError, validExternalImageUrl, validImageUrl } from './server.mjs';
 
 const imageUrl = 'https://wishlist-app-production.up.railway.app/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image';
 const token = 'local-pilot-test-token-1234567890';
@@ -11,6 +13,51 @@ test('only a public approved wishlist image URL may be submitted', () => {
     assert.equal(validImageUrl('http://127.0.0.1/private.jpg'), false);
     assert.equal(validImageUrl('https://wishlist-app-production.up.railway.app.evil.test/api/listing-media/41fe5714-b31f-475d-b040-01e2a5c2e1cb/image'), false);
     assert.equal(validImageUrl(`${imageUrl}?token=secret`), false);
+});
+
+test('external image fetch requires exact authorized HTTPS host and public IPv4', async () => {
+    assert.equal(validExternalImageUrl('https://images.example.com/item/1.jpg', 'images.example.com'), true);
+    for (const url of ['http://images.example.com/item/1.jpg', 'https://images.example.com.evil.test/item/1.jpg',
+        'https://images.example.com:8443/item/1.jpg', 'https://user:pass@images.example.com/item/1.jpg',
+        'https://images.example.com/item/1.jpg#fragment']) assert.equal(validExternalImageUrl(url, 'images.example.com'), false);
+    for (const ip of ['127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '100.64.0.1',
+        '198.51.100.1', '203.0.113.1', '224.0.0.1', '::1']) assert.equal(isPublicIpv4(ip), false);
+    assert.equal(isPublicIpv4('1.1.1.1'), true);
+    await assert.rejects(pinnedExternalFetch('https://images.example.com/item/1.jpg', { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '169.254.169.254', family: 4 }] }), /IMAGE_HOST_UNSAFE/);
+    await assert.rejects(pinnedExternalFetch('https://images.example.com/item/1.jpg', { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '1.1.1.1', family: 4 }, { address: '127.0.0.1', family: 4 }] }), /IMAGE_HOST_UNSAFE/);
+    await assert.rejects(recognizeExternalCandidateImage('https://images.example.com.evil.test/item/1.jpg', 'images.example.com',
+        { authToken: 'must-not-leak' }), /IMAGE_HOST_UNSAFE/);
+});
+
+test('external image fetch pins the same public IPv4 for Node multi-address lookups', async () => {
+    const url = 'https://images.example.com/item/fixture.png';
+    const request = (_url, options, callback) => {
+        assert.equal(_url.href, url);
+        const operation = new EventEmitter();
+        operation.end = () => {
+            options.lookup('images.example.com', {}, (_error, address, family) => {
+                assert.equal(address, '93.184.216.34');
+                assert.equal(family, 4);
+            });
+            options.lookup('images.example.com', { all: true }, (_error, addresses) =>
+                assert.deepEqual(addresses, [{ address: '93.184.216.34', family: 4 }]));
+            const response = Readable.from([Buffer.from('89504e470d0a1a0a', 'hex')]);
+            response.statusCode = 200;
+            response.headers = { 'content-type': 'image/png' };
+            queueMicrotask(() => callback(response));
+        };
+        operation.destroy = () => {};
+        return operation;
+    };
+    const response = await pinnedExternalFetch(url, { imageHost: 'images.example.com',
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }], request });
+    assert.equal(response.ok, true);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    const chunks = [];
+    for await (const chunk of response.body) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString('hex'), '89504e470d0a1a0a');
 });
 
 test('accepts visual evidence but not unsupported price claims', () => {
@@ -30,6 +77,64 @@ test('accepts visual evidence but not unsupported price claims', () => {
         evidence: ['有雙翼', '彩色底座'], confidence: 0.8,
     })).listedPriceTwd, null);
     assert.throws(() => parseVisionDescription('{"recognizable":true,"name":"相機","evidence":[],"confidence":0.9}'), /VISION_UNCERTAIN/);
+});
+
+test('listing AI creates only a private seller suggestion with conservative pricing', () => {
+    const result = parseListingVisionDescription(JSON.stringify({ recognizable: true, name: '黑色小型相機',
+        description: '可見黑色機身、鏡頭與背面螢幕，功能和型號需要賣家確認。', category: 'electronics',
+        brand: null, condition: null, estimatedPriceLowTwd: 800, estimatedPriceHighTwd: 2000,
+        evidence: ['可見鏡頭', '可見螢幕'], uncertainties: ['功能未驗證'], confidence: 0.86 }));
+    assert.equal(result.estimatedPriceLowTwd, 800);
+    assert.match(result.priceBasis, /未查詢即時市場成交價/);
+    const uncertain = parseListingVisionDescription(JSON.stringify({ ...result, confidence: 0.75 }));
+    assert.equal(uncertain.estimatedPriceLowTwd, null);
+    assert.deepEqual(parseListingVisionDescription(JSON.stringify({ ...result,
+        uncertainties: '照片無法確認杯底品牌' })).uncertainties, ['照片無法確認杯底品牌']);
+    assert.throws(() => parseListingVisionDescription('{"recognizable":false}'), /VISION_UNCERTAIN/);
+});
+
+test('connector failures cannot expose a signed temporary image URL or prompt in errors', async () => {
+    const signed = 'https://temporary.example.invalid/image?signature=secret-value';
+    const fakeImage = () => new Response(Buffer.from('89504e470d0a1a0a', 'hex'), { headers: { 'content-type': 'image/png' } });
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', { fetchImpl: fakeImage,
+        execCommand: async (_command, args) => args[0] === 'upload-temp-url'
+            ? { stdout: JSON.stringify({ temp_url: signed }) }
+            : Promise.reject(new Error(`Command failed: ${signed} private prompt`)),
+    }), error => error.message === 'VISION_UPSTREAM_FAILED' && !error.message.includes(signed));
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', { fetchImpl: fakeImage,
+        execCommand: async () => { throw new Error('Command failed: private file path'); },
+    }), error => error.message === 'TEMP_UPLOAD_FAILED' && !error.message.includes('private'));
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => { throw new Error('Authorization: Bearer private-token'); },
+    }), error => error.message === 'IMAGE_FETCH_FAILED' && !error.message.includes('private-token'));
+    const brokenBody = new ReadableStream({ start(controller) { controller.error(new Error('private signed stream URL')); } });
+    await assert.rejects(recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => new Response(brokenBody, { headers: { 'content-type': 'image/png' } }),
+    }), error => error.message === 'IMAGE_FETCH_FAILED' && !error.message.includes('private'));
+    assert.equal(safeVisionError(new Error('private signed image URL')), 'VISION_UNAVAILABLE');
+    assert.equal(safeVisionError(new Error('VISION_UPSTREAM_FAILED')), 'VISION_UPSTREAM_FAILED');
+});
+
+test('listing pilot sends a concise private-draft prompt with a bounded connector timeout', async () => {
+    let connectorArgs, connectorTimeout;
+    const result = await recognizeListingImage('https://fixture.invalid/image', {
+        fetchImpl: async () => new Response(Buffer.from('89504e470d0a1a0a', 'hex'), { headers: { 'content-type': 'image/png' } }),
+        execCommand: async (_command, args, options) => {
+            if (args[0] === 'upload-temp-url') return { stdout: JSON.stringify({ temp_url: 'https://fixture.invalid/temporary' }) };
+            connectorArgs = JSON.parse(args.at(-1)); connectorTimeout = options.timeout;
+            return { stdout: JSON.stringify({ code: 0, results: [{ success: true, description: JSON.stringify({
+                recognizable: true, name: '橘色檯燈', description: '可見橘色燈罩、底座與刮痕，功能須賣家確認。',
+                category: 'home', evidence: ['橘色燈罩', '底座刮痕'], uncertainties: ['是否通電'], confidence: 0.9,
+            }) }] }) };
+        },
+    });
+    assert.equal(result.name, '橘色檯燈');
+    assert.equal(connectorTimeout, 150000);
+    assert.equal(connectorArgs.image_info.length, 1);
+    assert.ok(connectorArgs.image_info[0].prompt.length < 600);
+    assert.match(connectorArgs.image_info[0].prompt, /私人聯絡資訊/);
+    assert.match(connectorArgs.image_info[0].prompt, /非即時行情/);
+    assert.match(connectorArgs.image_info[0].prompt, /故障風險/);
 });
 
 test('loopback bridge requires auth, deduplicates jobs, and processes one at a time', async () => {
@@ -81,5 +186,23 @@ test('a failed MiniMax call stays failed and never becomes a fabricated result',
         }
         assert.deepEqual({ status: result.status, result: result.result, error: result.error },
             { status: 'FAILED', result: null, error: 'VISION_UPSTREAM_FAILED' });
+    } finally { server.close(); }
+});
+
+test('loopback bridge never returns an unrecognized uppercase upstream secret', async () => {
+    const server = createBridge({ token, recognize: async () => { throw new Error('PRIVATE_TOKEN'); } });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+    try {
+        await fetch(`${base}/jobs`, { method: 'POST', headers, body: JSON.stringify({ jobId: 'wish-secret', imageUrl }) });
+        let result;
+        for (let attempt = 0; attempt < 20; attempt++) {
+            result = await (await fetch(`${base}/jobs/wish-secret`, { headers })).json();
+            if (result.status === 'FAILED') break;
+            await new Promise(resolve => setTimeout(resolve, 5));
+        }
+        assert.equal(result?.error, 'VISION_UNAVAILABLE');
     } finally { server.close(); }
 });

@@ -31,4 +31,11 @@ describe('jpegPhotoUploadForm', () => {
     expect(() => jpegPhotoUploadForm('id', 'file:///cache/missing.jpg', 'wish.jpg')).toThrow();
     expect(() => jpegPhotoUploadForm('id', 'file:///cache/image.png', 'wish.jpg')).toThrow();
   });
+  it('tags batch items separately from manual multi-angle photos', () => {
+    const batch = jpegPhotoUploadForm('batch-id', 'file:///cache/processed.jpg', 'listing-photo.jpg', 'BATCH_ITEM');
+    const manual = jpegPhotoUploadForm('manual-id', 'file:///cache/processed.jpg', 'listing-photo.jpg', 'MANUAL_PHOTO');
+    expect(batch.get('capturePurpose')).toBe('BATCH_ITEM');
+    expect(manual.get('capturePurpose')).toBe('MANUAL_PHOTO');
+    expect(jpegPhotoUploadForm('legacy-id', 'file:///cache/processed.jpg', 'wish-photo.jpg').get('capturePurpose')).toBeNull();
+  });
 });

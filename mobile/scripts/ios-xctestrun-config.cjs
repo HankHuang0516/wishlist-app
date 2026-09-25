@@ -5,12 +5,26 @@ const AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS = ['NativeQaTests/test03RealLogi
 const AUTHENTICATED_MARKETPLACE_CHAT_TESTS = ['NativeQaTests/test04RealLoginMarketplaceChat'];
 const AUTHENTICATED_MARKETPLACE_MEETUP_TESTS = ['NativeQaTests/test05RealLoginMarketplaceMeetup'];
 const AUTHENTICATED_DELETION_TESTS = ['NativeQaTests/test06RealLoginWishlistDeletionAndRestart'];
+const AUTHENTICATED_LISTING_BATCH_TESTS = ['NativeQaTests/test07RealLoginListingBatchEntry'];
+const AUTHENTICATED_LISTING_PHOTO_TESTS = ['NativeQaTests/test08RealLoginListingBatchPhotoUpload'];
+const AUTHENTICATED_LISTING_TWO_PHOTO_TESTS = ['NativeQaTests/test09RealLoginListingBatchTwoPhotos'];
+const AUTHENTICATED_LISTING_AI_PHOTO_TESTS = ['NativeQaTests/test11RealLoginListingBatchAiPhoto'];
+const AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS = ['NativeQaTests/test12RealLoginListingBatchTwoAiPhotos'];
+const AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS = ['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne'];
+const AUTHENTICATED_EXTERNAL_MAP_TESTS = ['NativeQaTests/test10RealLoginExternalSourceMapAndDetail'];
 const AUTHENTICATED_TESTS = AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS;
 const AUTHENTICATED_FLOWS = {
   'marketplace-discovery': AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS,
   'marketplace-chat': AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
   'marketplace-meetup': AUTHENTICATED_MARKETPLACE_MEETUP_TESTS,
   deletion: AUTHENTICATED_DELETION_TESTS,
+  'listing-batch-entry': AUTHENTICATED_LISTING_BATCH_TESTS,
+  'listing-batch-photo': AUTHENTICATED_LISTING_PHOTO_TESTS,
+  'listing-batch-two-photos': AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
+  'listing-batch-ai-photo': AUTHENTICATED_LISTING_AI_PHOTO_TESTS,
+  'listing-batch-two-ai-photos': AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS,
+  'listing-batch-two-ai-publish-one': AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS,
+  'external-map': AUTHENTICATED_EXTERNAL_MAP_TESTS,
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||
@@ -47,7 +61,9 @@ function destinationTestRun(template, label, testRoot, inputPort, flow) {
   delete qa.UITargetAppPath;
   qa.OnlyTestIdentifiers = [...(inputPort === undefined ? TESTS : AUTHENTICATED_FLOWS[flow])];
   qa.ParallelizationEnabled = false;
-  qa.TestTimeoutsEnabled = true; qa.DefaultTestExecutionTimeAllowance = 180; qa.MaximumTestExecutionTimeAllowance = 240;
+  qa.TestTimeoutsEnabled = true; qa.DefaultTestExecutionTimeAllowance = 180;
+  qa.MaximumTestExecutionTimeAllowance = flow === 'listing-batch-two-ai-publish-one' ? 620 :
+    flow === 'listing-batch-two-ai-photos' ? 500 : 240;
   qa.SystemAttachmentLifetime = 'keepNever';
   qa.UserAttachmentLifetime = 'keepAlways';
   return copy;
@@ -64,4 +80,11 @@ function iosSummaryPassed(summary, udid, count) {
 }
 module.exports = { TESTS, AUTHENTICATED_TESTS, AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS, AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
   AUTHENTICATED_MARKETPLACE_MEETUP_TESTS, AUTHENTICATED_DELETION_TESTS, AUTHENTICATED_FLOWS,
+  AUTHENTICATED_LISTING_BATCH_TESTS,
+  AUTHENTICATED_LISTING_PHOTO_TESTS,
+  AUTHENTICATED_LISTING_TWO_PHOTO_TESTS,
+  AUTHENTICATED_LISTING_AI_PHOTO_TESTS,
+  AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS,
+  AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS,
+  AUTHENTICATED_EXTERNAL_MAP_TESTS,
   destinationTestRun, anonymousSummaryPassed, iosSummaryPassed };

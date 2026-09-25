@@ -1,4 +1,4 @@
-import { recognizeImage } from './server.mjs';
+import { recognizeImage, recognizeListingImage, recognizeExternalCandidateImage, validExternalImageUrl, safeVisionError } from './server.mjs';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
@@ -18,11 +18,18 @@ async function cycle() {
     if (response.status === 204) return false;
     if (!response.ok) throw new Error(`POLL_HTTP_${response.status}`);
     const job = await response.json();
-    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string') throw new Error('POLL_BAD_JOB');
+    // Old Railway versions omit kind; treat them as the original wish job so
+    // the worker can be updated before the backend without interrupting wishes.
+    const kind = job.kind ?? 'WISH';
+    if (!/^[0-9a-f-]{36}$/.test(job.jobId) || typeof job.imageUrl !== 'string' ||
+        !['WISH', 'LISTING_DRAFT', 'EXTERNAL_CANDIDATE'].includes(kind) ||
+        (kind === 'EXTERNAL_CANDIDATE' && !validExternalImageUrl(job.imageUrl, job.imageHost))) throw new Error('POLL_BAD_JOB');
     let body;
-    try { body = { status: 'COMPLETED', result: await recognizeImage(job.imageUrl) }; }
+    try { body = { status: 'COMPLETED', result: kind === 'LISTING_DRAFT'
+        ? await recognizeListingImage(job.imageUrl, { authToken: token }) : kind === 'EXTERNAL_CANDIDATE'
+            ? await recognizeExternalCandidateImage(job.imageUrl, job.imageHost) : await recognizeImage(job.imageUrl) }; }
     catch (error) {
-        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${String(error?.message || 'VISION_UNAVAILABLE')}\n`);
+        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${safeVisionError(error)}\n`);
         body = { status: 'FAILED' };
     }
     const delivered = await api(`/${job.jobId}/result`, { method: 'POST', body: JSON.stringify(body) });
@@ -37,7 +44,9 @@ do {
         if (once) break;
         if (!worked) await new Promise(resolve => setTimeout(resolve, 3000));
     } catch (error) {
-        process.stderr.write(`MiniMax pilot poll unavailable: ${String(error?.message || error)}\n`);
+        const reason = /^(?:POLL_HTTP_|CALLBACK_HTTP_)\d{3}$/.test(error?.message || '') || error?.message === 'POLL_BAD_JOB'
+            ? error.message : 'POLL_UNAVAILABLE';
+        process.stderr.write(`MiniMax pilot poll unavailable: ${reason}\n`);
         if (once) process.exitCode = 1;
         else await new Promise(resolve => setTimeout(resolve, 10000));
     }

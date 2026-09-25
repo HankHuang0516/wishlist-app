@@ -79,7 +79,7 @@ export function parseListingCreate(input: unknown, now: Date) {
     if (!Array.isArray(mediaIds) || mediaIds.length > 8 || mediaIds.some(v => !isListingId(v)) || new Set(mediaIds).size !== mediaIds.length) throw new ListingInputError('mediaIds');
     const location = body.location === undefined ? undefined : publicLocation(body.location);
     const expiry = body.expiryDate === undefined && !body.publish ? { expiresAt: null, expiryMode: 'DEFAULT_30_DAYS' as const } : publicationExpiry(now, body.expiryDate);
-    if (body.publish && (!description || !category || !brand || price === null || !methods.length || !mediaIds.length || !location)) throw new ListingInputError('publish', '上架前請完成商品資訊、實拍圖與地區');
+    if (body.publish && (!description || !category || price === null || !methods.length || !mediaIds.length || !location)) throw new ListingInputError('publish', '上架前請完成商品資訊、實拍圖與地區');
     const data = {
         title, description, condition: condition as 'NEW' | 'USED', category, brand, price, currency: 'TWD',
         deliveryMethods: methods as ('MEETUP' | 'SHIPPING')[], negotiable: body.negotiable === true,

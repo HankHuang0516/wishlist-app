@@ -21,3 +21,13 @@ export function forbiddenListingField(input: { title: string; description?: stri
     }
     return null;
 }
+
+export function privateContactField(input: { title: string; description?: string | null; brand?: string | null }): 'title' | 'description' | 'brand' | null {
+    for (const field of ['title', 'description', 'brand'] as const) {
+        const value = input[field];
+        if (typeof value !== 'string') continue;
+        if (/(?:^|\D)09\d{8}(?:\D|$)/.test(value) || /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) ||
+            /\bLINE\s*(?:ID|帳號)\s*[:：]?\s*[A-Z0-9._-]{3,}/i.test(value)) return field;
+    }
+    return null;
+}

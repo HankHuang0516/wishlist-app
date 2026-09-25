@@ -25,6 +25,9 @@ import { createLegacyUploadRoutes } from './routes/legacyUploadRoutes';
 import chatRoutes from './routes/chatRoutes';
 import nativeWishRoutes from './routes/nativeWishRoutes';
 import listingReportRoutes, { createListingModerationRoutes } from './routes/listingReportRoutes';
+import { createExternalIntakeRoutes } from './routes/externalIntakeRoutes';
+import externalListingRoutes from './routes/externalListingRoutes';
+import { startExternalCandidateExpiryWorker } from './lib/externalCandidateExpiry';
 import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
@@ -93,6 +96,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/native-wishes', nativeWishRoutes);
 app.use('/api/listing-reports', listingReportRoutes);
 app.use('/api/moderation', createListingModerationRoutes());
+app.use('/api/external-intake', createExternalIntakeRoutes());
+app.use('/api/external-listings', externalListingRoutes);
 app.use('/uploads', createLegacyUploadRoutes());
 
 // Serve AI Guide JSON for external AI agents
@@ -223,4 +228,5 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 const stopMediaErasureWorker = startMediaErasureWorker();
 const stopEclawRecognitionWorker = startEclawRecognitionWorker();
-server.once('close', () => { stopMediaErasureWorker(); stopEclawRecognitionWorker(); });
+const stopExternalCandidateExpiryWorker = startExternalCandidateExpiryWorker();
+server.once('close', () => { stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });

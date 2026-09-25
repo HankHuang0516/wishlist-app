@@ -27,13 +27,26 @@ const sourceFiles = ['App.tsx', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.
   'ios-native-qa/WishlistNativeQa.xcodeproj/project.pbxproj', 'ios-native-qa/WishlistNativeQa.xcodeproj/xcshareddata/xcschemes/WishlistNativeQa.xcscheme',
   'scripts/ios-qa-build-guard.cjs', 'scripts/ios-qa-config.cjs', 'scripts/ios-simulator-entitlements.cjs', 'scripts/build-ios-qa.cjs',
   'scripts/ios-qa-input.cjs', 'scripts/ios-qa-result-privacy.cjs', 'scripts/ios-xctestrun-config.cjs', 'scripts/ios-native-qa.cjs',
+  'scripts/native-qa.cjs', 'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
   'scripts/native-qa-marketplace-fixture.cjs', 'scripts/test-native-qa-marketplace-fixture.cjs', 'scripts/test-ios-public-input.cjs',
-  'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json',
+  'scripts/native-qa-photo-fingerprint.cjs', 'scripts/check-native-qa-photo-fingerprint.cjs',
+  'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json',
   ...fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name)];
 const fingerprint = () => Object.fromEntries(sourceFiles.map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(mobile, file))).digest('hex')]));
 const sourceHashes = fingerprint();
 const qaGroup = 'KLBQRT47CT.' + iosQaBundle(label);
 const entitlements = path.join(output, 'qa.entitlements');
+const qaInfo = path.join(output, 'qa.Info.plist');
+const originalInfo = fs.readFileSync(path.join(mobile, 'ios/Wishlistai/Info.plist'), 'utf8');
+if ((originalInfo.match(/<string>weesh<\/string>/g) || []).length !== 1 ||
+  (originalInfo.match(/<string>com\.hankhuang\.weesh<\/string>/g) || []).length !== 1) {
+  throw new Error('Unexpected iOS URL schemes; no QA build');
+}
+const qaInfoContents = originalInfo.replace('<string>weesh</string>', `<string>wishlistqa${label}</string>`)
+  .replace('<string>com.hankhuang.weesh</string>', `<string>${iosQaBundle(label)}</string>`);
+if (fs.existsSync(qaInfo)) {
+  if (fs.readFileSync(qaInfo, 'utf8') !== qaInfoContents) throw new Error('QA Info.plist changed; no overwrite');
+} else fs.writeFileSync(qaInfo, qaInfoContents, { flag: 'wx', mode: 0o600 });
 // Explicit unique access group isolates SecureStore from the original App even
 // for ad-hoc simulator signatures. Public identifiers only, not private keys.
 if (!resume) fs.writeFileSync(entitlements, JSON.stringify({ 'application-identifier': qaGroup, 'keychain-access-groups': [qaGroup], 'get-task-allow': true }), { flag: 'wx', mode: 0o600 });
@@ -75,7 +88,9 @@ async function main() {
     '-derivedDataPath', path.join(output, 'app-derived'), '-resultBundlePath', path.join(output, 'app-build' + resultSuffix + '.xcresult'), '-jobs', '4',
     'WISHLIST_NATIVE_QA=1', 'WISHLIST_QA_SUFFIX=.qa' + label, 'WISHLIST_QA_SWIFT_FLAGS=-D WISHLIST_NATIVE_QA',
     'WISHLIST_URL_SCHEME=wishlistqa' + label, 'WISHLIST_DISPLAY_NAME=Wishlist.ai QA', 'SKIP_BUNDLING=1', 'RCT_METRO_PORT=18887',
-    'CODE_SIGN_ENTITLEMENTS=' + entitlements, ...signing, 'build'], 'isolated-app-debug-build');
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG WISHLIST_NATIVE_QA',
+    'CODE_SIGN_ENTITLEMENTS=' + entitlements, 'INFOPLIST_FILE=' + qaInfo,
+    'PRODUCT_BUNDLE_IDENTIFIER=' + iosQaBundle(label), ...signing, 'build'], 'isolated-app-debug-build');
   if (JSON.stringify(fingerprint()) !== JSON.stringify(sourceHashes)) throw new Error('QA source changed during host compilation');
   const app = path.join(output, 'app-derived/Build/Products/Debug-iphonesimulator/Wishlistai.app');
   const runner = path.join(output, 'runner-derived/Build/Products/Debug-iphonesimulator/WishlistNativeQa-Runner.app');

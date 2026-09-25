@@ -8,6 +8,8 @@ import { isDiscoverable, isListingId } from '../lib/listingRules';
 import { encodeListingPhoto, PhotoInputError } from '../lib/listingPhoto';
 import { ListingMediaStorage, MediaStorageConfigurationError, PhotoVariant } from '../lib/listingMediaStorage';
 import { ListingFlickrStorage, FlickrMediaUnavailable, FlickrOrphanedUpload } from '../lib/listingFlickrStorage';
+import { isMinimaxWorker, listingAiEnabledFor } from '../lib/minimaxWorkerAuth';
+import { ListingSellerDraftError, parseListingSellerDraft } from '../lib/listingSellerDraft';
 
 const storage = new ListingMediaStorage();
 const flickrStorage = new ListingFlickrStorage();
@@ -43,7 +45,12 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
     let flickrPhotoId: string | undefined;
     try {
         const clientUploadId = req.body?.clientUploadId;
-        if (!isListingId(clientUploadId) || Object.keys(req.body ?? {}).some(k => k !== 'clientUploadId') || !req.file) throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼');
+        const purposeSpecified = req.body?.capturePurpose !== undefined;
+        const capturePurpose = req.body?.capturePurpose ?? 'LEGACY_UNKNOWN';
+        if (!isListingId(clientUploadId) || typeof capturePurpose !== 'string' ||
+            !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(capturePurpose) ||
+            Object.keys(req.body ?? {}).some(k => k !== 'clientUploadId' && k !== 'capturePurpose') || !req.file)
+            throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼與用途');
         const ownerUserId = req.user.id;
         if (!await prisma.user.findUnique({ where: { id: ownerUserId }, select: { id: true } })) return res.status(401).json({ error: '帳號已失效' });
         const provider = uploadProvider(ownerUserId);
@@ -53,7 +60,8 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         const photo = await encodeListingPhoto(req.file.buffer, req.file.mimetype);
         const existing = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId, clientUploadId } } });
         if (existing) {
-            if (existing.contentHash !== photo.contentHash) return res.status(409).json({ error: '上傳識別碼已被不同照片使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
+            if (existing.contentHash !== photo.contentHash || (purposeSpecified && existing.capturePurpose !== capturePurpose))
+                return res.status(409).json({ error: '上傳識別碼已被不同照片或用途使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
             return res.json(await prisma.listingMedia.findUnique({ where: { id: existing.id }, select }));
         }
         id = randomUUID();
@@ -64,6 +72,7 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         const base = `${getApiUrl().trim().replace(/\/$/, '')}/listing-media/${id}`;
         try {
             const record = await prisma.listingMedia.create({ data: { id, ownerUserId, clientUploadId, contentHash: photo.contentHash,
+                capturePurpose: capturePurpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM',
                 width: photo.width, height: photo.height, byteSize: photo.byteSize, imageUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`,
                 flickrPhotoId, flickrImageUrl: remote?.imageSource, flickrThumbnailUrl: remote?.thumbnailSource }, select });
             return res.status(201).json(record);
@@ -72,7 +81,8 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
             persisted = false;
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
                 const winner = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId, clientUploadId } } });
-                if (winner?.contentHash === photo.contentHash) return res.json(await prisma.listingMedia.findUnique({ where: { id: winner.id }, select }));
+                if (winner?.contentHash === photo.contentHash && (!purposeSpecified || winner.capturePurpose === capturePurpose))
+                    return res.json(await prisma.listingMedia.findUnique({ where: { id: winner.id }, select }));
                 return res.status(409).json({ error: '上傳識別碼已被使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
             }
             throw error;
@@ -93,11 +103,13 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
     try {
         const { id, variant } = req.params;
         if (!isListingId(id) || (variant !== 'image' && variant !== 'thumbnail')) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, flickrPhotoId: true,
+        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, aiDraftStatus: true, flickrPhotoId: true,
             flickrImageUrl: true, flickrThumbnailUrl: true, listing: { select: { status: true, expiresAt: true } } } });
         // The opaque URL is shared with EClaw for recognition after attachment.
         const publicAccess = record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date()));
-        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '照片不存在' });
+        const workerAccess = variant === 'image' && record?.aiDraftStatus === 'PROCESSING' &&
+            listingAiEnabledFor(record.ownerUserId) && isMinimaxWorker(req.headers.authorization);
+        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id && !workerAccess)) return res.status(404).json({ error: '照片不存在' });
         if (record.flickrPhotoId) {
             const source = variant === 'image' ? record.flickrImageUrl : record.flickrThumbnailUrl;
             if (!source) throw new FlickrMediaUnavailable();
@@ -118,12 +130,120 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
     } catch { return res.status(404).json({ error: '照片不存在' }); }
 }
 
+const aiDraftSelect = { id: true, aiDraftStatus: true, aiDraft: true, aiDraftUpdatedAt: true, aiDraftAttempts: true } satisfies Prisma.ListingMediaSelect;
+function aiDraftResponse(record: { id: string; aiDraftStatus: string; aiDraft: Prisma.JsonValue | null; aiDraftUpdatedAt: Date | null }) {
+    return { mediaId: record.id, status: record.aiDraftStatus, draft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null,
+        updatedAt: record.aiDraftUpdatedAt };
+}
+
+export async function requestListingAiDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '照片不存在' });
+    try {
+        const where = { id: req.params.id, ownerUserId: req.user.id, listingId: null, wishItemId: null };
+        const record = await prisma.listingMedia.findFirst({ where, select: aiDraftSelect });
+        if (!record) return res.status(404).json({ error: '照片不存在或已被使用' });
+        if (!listingAiEnabledFor(req.user.id)) return res.status(503).json({ error: '照片 AI 刊登暫未開放此帳號', errorCode: 'LISTING_AI_UNAVAILABLE' });
+        if (record.aiDraftStatus === 'COMPLETED' || record.aiDraftStatus === 'PENDING' || record.aiDraftStatus === 'PROCESSING') return res.json(aiDraftResponse(record));
+        if (record.aiDraftAttempts >= 3) return res.status(429).json({ error: '此照片已達辨識重試上限', errorCode: 'LISTING_AI_RETRY_LIMIT' });
+        await prisma.listingMedia.updateMany({ where: { ...where, aiDraftStatus: record.aiDraftStatus, aiDraftAttempts: { lt: 3 } },
+            data: { aiDraftStatus: 'PENDING', aiDraft: Prisma.DbNull, aiDraftError: null, aiDraftJobId: null,
+                aiDraftAttempts: { increment: 1 }, aiDraftUpdatedAt: new Date() } });
+        const updated = await prisma.listingMedia.findFirst({ where, select: aiDraftSelect });
+        return updated ? res.status(202).json(aiDraftResponse(updated)) : res.status(404).json({ error: '照片不存在' });
+    } catch { return res.status(503).json({ error: '照片辨識暫時無法排隊', errorCode: 'LISTING_AI_QUEUE_UNAVAILABLE' }); }
+}
+
+export async function getListingAiDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '照片不存在' });
+    try {
+        const record = await prisma.listingMedia.findFirst({ where: { id: req.params.id, ownerUserId: req.user.id }, select: aiDraftSelect });
+        return record ? res.json(aiDraftResponse(record)) : res.status(404).json({ error: '照片不存在' });
+    } catch { return res.status(503).json({ error: '照片辨識狀態暫時無法讀取', errorCode: 'LISTING_AI_STATUS_UNAVAILABLE' }); }
+}
+
+export async function saveListingSellerDraft(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '私人商品草稿不存在' });
+    try {
+        if (!req.body || Object.keys(req.body).sort().join(',') !== 'draft,expectedVersion' ||
+            !Number.isSafeInteger(req.body.expectedVersion) || req.body.expectedVersion < 0 || req.body.expectedVersion > 1_000_000)
+            throw new ListingSellerDraftError();
+        const draft = parseListingSellerDraft(req.body.draft);
+        const where = { id: req.params.id, ownerUserId: req.user.id, listingId: null, wishItemId: null };
+        const changed = await prisma.listingMedia.updateMany({ where: { ...where, sellerDraftVersion: req.body.expectedVersion },
+            data: { sellerDraft: draft, sellerDraftVersion: { increment: 1 } } });
+        if (!changed.count) {
+            const existing = await prisma.listingMedia.findFirst({ where, select: { sellerDraftVersion: true } });
+            return existing ? res.status(409).json({ error: '草稿已在其他地方更新，請重新開啟檢查', errorCode: 'SELLER_DRAFT_CONFLICT' }) :
+                res.status(404).json({ error: '私人商品草稿不存在' });
+        }
+        return res.json({ mediaId: req.params.id, version: req.body.expectedVersion + 1 });
+    } catch (error) {
+        if (error instanceof ListingSellerDraftError) return res.status(400).json({ error: error.message, errorCode: 'INVALID_SELLER_DRAFT' });
+        return res.status(503).json({ error: '私人商品草稿暫時無法儲存', errorCode: 'SELLER_DRAFT_UNAVAILABLE' });
+    }
+}
+
+export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    try {
+        const purpose = req.query.purpose;
+        const cursor = req.query.cursor;
+        if (Object.keys(req.query).some(key => key !== 'purpose' && key !== 'cursor') ||
+            (cursor !== undefined && (typeof cursor !== 'string' || !isListingId(cursor))))
+            return res.status(400).json({ error: '私人照片分頁識別碼不正確', errorCode: 'INVALID_MEDIA_CURSOR' });
+        if (purpose !== undefined && (typeof purpose !== 'string' ||
+            !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(purpose)))
+            return res.status(400).json({ error: '照片用途不正確', errorCode: 'INVALID_MEDIA_PURPOSE' });
+        const base: Prisma.ListingMediaWhereInput = { ownerUserId: req.user.id, listingId: null, wishItemId: null,
+            // Explicit batch drafts remain recoverable until the owner links
+            // or removes them. A 30-day listing expiry is not draft deletion.
+            ...(purpose === 'BATCH_ITEM' ? {} : { createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }),
+            ...(purpose ? { capturePurpose: purpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM' } : {}) };
+        const anchor = cursor ? await prisma.listingMedia.findFirst({ where: { ...base, id: cursor },
+            select: { id: true, createdAt: true } }) : null;
+        if (cursor && !anchor) return res.status(400).json({ error: '私人照片分頁已失效', errorCode: 'INVALID_MEDIA_CURSOR' });
+        const records = await prisma.listingMedia.findMany({ where: { ...base,
+            ...(anchor ? { OR: [{ createdAt: { lt: anchor.createdAt } },
+                { createdAt: anchor.createdAt, id: { lt: anchor.id } }] } : {}) },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 31,
+            select: { ...select, clientUploadId: true, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
+        const page = records.slice(0, 30);
+        return res.json({ items: page.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })),
+            nextCursor: records.length > 30 ? page[29].id : null });
+    } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
+}
+
+// An older upload has no trustworthy workflow tag. Only its owner may
+// explicitly adopt it as one batch item; never infer this from a photo alone.
+export async function adoptLegacyBatchPhoto(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '未分類照片不存在' });
+    if (!req.body || Object.keys(req.body).join(',') !== 'capturePurpose' || req.body.capturePurpose !== 'BATCH_ITEM')
+        return res.status(400).json({ error: '只能明確選擇加入批次商品', errorCode: 'INVALID_MEDIA_PURPOSE' });
+    try {
+        const changed = await prisma.listingMedia.updateMany({ where: { id: req.params.id, ownerUserId: req.user.id,
+            capturePurpose: 'LEGACY_UNKNOWN', listingId: null, wishItemId: null, aiDraftStatus: 'SKIPPED', sellerDraft: { equals: Prisma.DbNull } },
+            data: { capturePurpose: 'BATCH_ITEM' } });
+        return changed.count ? res.json({ mediaId: req.params.id, capturePurpose: 'BATCH_ITEM' }) :
+            res.status(404).json({ error: '未分類照片不存在或已被使用' });
+    } catch { return res.status(503).json({ error: '照片暫時無法加入批次', errorCode: 'MEDIA_ADOPTION_UNAVAILABLE' }); }
+}
+
 export async function getMediaByUploadId(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     try {
         const clientUploadId = req.params.clientUploadId;
         if (!isListingId(clientUploadId)) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId: req.user.id, clientUploadId } }, select });
+        const record = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId: req.user.id, clientUploadId } },
+            select: { ...select, listingId: true, wishItemId: true } });
         if (!record) return res.status(404).json({ error: '照片不存在' });
         return res.json(record);
     } catch { return res.status(500).json({ error: '暫時無法確認照片', errorCode: 'PHOTO_LOOKUP_ERROR' }); }

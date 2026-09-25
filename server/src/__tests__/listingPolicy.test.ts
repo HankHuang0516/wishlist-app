@@ -1,4 +1,4 @@
-import { forbiddenListingField, LISTING_POLICY_VERSION } from '../lib/listingPolicy';
+import { forbiddenListingField, privateContactField, LISTING_POLICY_VERSION } from '../lib/listingPolicy';
 
 describe('shared pilot marketplace listing policy', () => {
     it.each(['槍枝', '槍支', '彈藥', '毒品', '大麻', '海洛因', '個人資料販售', '色情服務'])('preserves existing restricted phrase %s', title => {
@@ -19,5 +19,11 @@ describe('shared pilot marketplace listing policy', () => {
     it('has a public version without describing itself as complete moderation', () => {
         expect(LISTING_POLICY_VERSION).toBe('2026-09-15-pilot-v1');
         expect(forbiddenListingField({ title: '安全商品', description: null, brand: null })).toBeNull();
+    });
+    it('keeps private contact details out of AI-assisted public listing copy', () => {
+        expect(privateContactField({ title: '二手相機', description: '可私訊 0912345678' })).toBe('description');
+        expect(privateContactField({ title: '二手相機', description: '請寄 seller@example.com' })).toBe('description');
+        expect(privateContactField({ title: '二手相機', description: 'LINE ID: seller.123' })).toBe('description');
+        expect(privateContactField({ title: '二手相機', description: '功能待確認，請透過站內聊天聯絡' })).toBeNull();
     });
 });

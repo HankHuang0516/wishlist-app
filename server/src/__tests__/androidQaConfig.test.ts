@@ -1,5 +1,18 @@
 const { qaLabel, qaPackage, hostEnvironment, metroArguments, assignedSerial, ORIGINAL_PACKAGE, METRO_PORT, buyerErasureProof } = require('../../../mobile/scripts/android-qa-config.cjs');
+const { androidQaSources } = require('../../../mobile/scripts/android-qa-sources.cjs');
+const path = require('node:path');
 describe('Android native QA build and lease boundaries', () => {
+    it('keeps the Debug-only app build independent of the missing instrumentation source', () => {
+        // CI does not generate Expo's ignored android/ tree; compilation still
+        // uses the default strict file verification on the actual build host.
+        const sources: string[] = androidQaSources(path.resolve(__dirname, '../../../mobile'),
+            { includeInstrumentation: false, verifyFiles: false });
+        expect(sources).toContain('scripts/build-android-debug-qa.cjs');
+        expect(sources).toContain('android/app/build.gradle');
+        expect(sources).toContain('src/ExploreScreen.tsx');
+        expect(sources.some(source => source.endsWith('/NativeQaTest.kt'))).toBe(false);
+        expect(new Set(sources).size).toBe(sources.length);
+    });
     it('separates a unique local QA identity from the unchanged store identity', () => {
         expect(qaPackage('202609152101')).toBe(ORIGINAL_PACKAGE + '.qa202609152101');
         expect(METRO_PORT).toBe(18887);

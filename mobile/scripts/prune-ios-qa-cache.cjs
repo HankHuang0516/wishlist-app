@@ -46,6 +46,7 @@ for (const label of labels) {
   for (const relative of ['app-derived/Build/Intermediates.noindex', 'app-derived/ModuleCache.noindex',
     'app-derived/Index.noindex', 'app-derived/CompilationCache.noindex', 'app-derived/SDKStatCaches.noindex',
     'app-derived/SDKExplicitPrecompiledModules', 'app-derived/SourcePackages',
+    'app-derived/Build/Products/Debug-iphonesimulator/XCFrameworkIntermediates',
     'runner-derived/Build/Intermediates.noindex', 'runner-derived/ModuleCache.noindex',
     'runner-derived/Index.noindex', 'runner-derived/CompilationCache.noindex', 'runner-derived/SDKStatCaches.noindex',
     'runner-derived/SDKExplicitPrecompiledModules']) {

@@ -165,6 +165,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         const body = new FormData(); body.append('clientUploadId', uploadId); body.append('capturePurpose', 'BATCH_ITEM'); body.append('image', prepared);
         try { rememberPendingUpload(userId!, uploadId); }
         catch { setMessage('無法在此瀏覽器安全記錄上傳進度；照片尚未送出，請確認瀏覽器儲存空間後重試。'); break; }
+        let confirmedPrivate = false;
         try {
           let raw: unknown;
           try { raw = await api<unknown>(token!, '/listing-media', { method: 'POST', body }); }
@@ -177,14 +178,20 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           }
           const record = raw as { id?: unknown };
           if (!isUuid(record?.id)) throw new Error('照片上傳結果未確認');
-          forgetPendingUploads(userId!, [uploadId]);
+          confirmedPrivate = true;
           const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
             version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '' };
           setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
           if (aiCanQueue) aiCanQueue = await requestAi(record.id);
+          forgetPendingUploads(userId!, [uploadId]);
         } catch (error) {
-          setUnresolvedUploads(readPendingUploads(userId!).map(entry => entry.clientUploadId));
-          setMessage(`第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
+          let pendingIds: string[] = [];
+          try { pendingIds = readPendingUploads(userId!).map(entry => entry.clientUploadId); }
+          catch { /* The known upload ID still blocks a duplicate in this session. */ }
+          setUnresolvedUploads(pendingIds.length ? pendingIds : [uploadId]);
+          setMessage(confirmedPrivate
+            ? `第 ${index + 1} 張照片已由後台確認私密保存，但瀏覽器無法更新恢復紀錄。請先按「重新確認上傳」，不要重傳同張照片。`
+            : `第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
           break;
         }
       }

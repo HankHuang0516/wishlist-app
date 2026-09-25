@@ -19,6 +19,7 @@ describe('web private batch listing flow', () => {
   let currentUploadId = '';
   let holdOldAccountList = false;
   let manyPrivateDrafts = 0;
+  let showUploadedPrivatePhoto = false;
   let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
@@ -29,6 +30,7 @@ describe('web private batch listing flow', () => {
     currentUploadId = '';
     holdOldAccountList = false;
     manyPrivateDrafts = 0;
+    showUploadedPrivatePhoto = false;
     releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -54,8 +56,9 @@ describe('web private batch listing flow', () => {
             nextCursor: start + 30 < rows.length ? items[items.length - 1].id : null }) };
         }
         unusedReads++;
-        const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
-          aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
+        const items = (loseUploadResponse && unusedReads >= 3 || showUploadedPrivatePhoto) ? [{ id: mediaId, clientUploadId: currentUploadId,
+          aiDraftStatus: showUploadedPrivatePhoto ? 'COMPLETED' : 'SKIPPED', aiDraft: showUploadedPrivatePhoto ? ai : null,
+          sellerDraft: null, sellerDraftVersion: 0 }] : [];
         return { ok: true, status: 200, json: async () => ({ items }) };
       }
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
@@ -205,6 +208,45 @@ describe('web private batch listing flow', () => {
     await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
     expect(await screen.findByText('等待辨識或手動填寫')).toBeInTheDocument();
     expect(input).not.toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
+  });
+
+  it('keeps a confirmed private photo visible and stops the batch when clearing its browser journal fails', async () => {
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    await waitFor(() => expect(input).not.toBeDisabled());
+    showUploadedPrivatePhoto = true;
+    const realRemoveItem = localStorage.removeItem.bind(localStorage);
+    const realGetItem = localStorage.getItem.bind(localStorage);
+    let denyJournalRead = false;
+    vi.spyOn(localStorage, 'getItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-upload-pending:19' && denyJournalRead)
+        throw new DOMException('Storage unavailable', 'SecurityError');
+      return realGetItem(key);
+    });
+    vi.spyOn(localStorage, 'removeItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-upload-pending:19') {
+        denyJournalRead = true;
+        throw new DOMException('Storage unavailable', 'SecurityError');
+      }
+      return realRemoveItem(key);
+    });
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' }),
+      new File(['second'], 'cup.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByDisplayValue('二手檯燈');
+    expect(await screen.findByText(/已由後台確認私密保存/)).toBeInTheDocument();
+    expect(screen.getByText(/有 1 張照片的上傳結果待確認/)).toBeInTheDocument();
+    expect(input).toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+    vi.mocked(localStorage.removeItem).mockRestore();
+    vi.mocked(localStorage.getItem).mockRestore();
+    fireEvent.click(screen.getByText('重新確認上傳'));
+    await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
+    expect(input).not.toBeDisabled();
+    expect(screen.getByDisplayValue('二手檯燈')).toBeInTheDocument();
+    expect(calls.filter(call => call.path.endsWith(`/listing-media/${mediaId}/ai-draft`) && call.method === 'POST')).toHaveLength(1);
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
   });

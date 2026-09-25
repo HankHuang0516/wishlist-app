@@ -292,6 +292,57 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: refreshSourceId } });
         }
     });
+    it('never revives an expired approval or accepts an older replayed observation', async () => {
+        const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.72');
+        const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic expiry and replay partner' });
+        expect(created.status).toBe(201);
+        const replaySourceId: string = created.body.id;
+        try {
+            expect((await admin(`/sources/${replaySourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
+                confirmRights: true })).status).toBe(200);
+            const staged = await admin(`/sources/${replaySourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            const id: string = staged.body.items[0].id;
+            const first = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
+            const approval = { expectedContentHash: first.contentHash, authorizationRef: sourceBody.authorizationRef,
+                reviewRef: 'review:synthetic-expiry-first', confirmRights: true, confirmItem: true };
+            expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
+            await prisma.externalListingCandidate.update({ where: { id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+            expect((await request(app).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(false);
+            // The expiry worker has not run yet. A same-content refresh must
+            // still require review instead of silently restoring publication.
+            const freshObservation = candidate();
+            const refreshed = await admin(`/sources/${replaySourceId}/candidates`).send({ items: [freshObservation] });
+            expect(refreshed.status).toBe(202);
+            expect(refreshed.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', changed: false });
+            const current = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
+            expect(current).toMatchObject({ approvalRef: null, approvedContentHash: null });
+            expect((await request(app).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(false);
+            const receiptsBeforeReplay = await prisma.externalIntakeBatch.count({ where: { sourceId: replaySourceId } });
+            const replayed = await admin(`/sources/${replaySourceId}/candidates`).send({ items: [
+                { ...candidate(), sourceItemId: 'another', canonicalUrl: 'https://partner.example.com/items/2' },
+                { ...candidate(), observedAt: new Date(current.observedAt.getTime() - 60_000).toISOString() },
+            ] });
+            expect(replayed.status).toBe(400);
+            expect(replayed.body.field).toBe('observedAt');
+            expect(await prisma.externalListingCandidate.count({ where: { sourceId: replaySourceId } })).toBe(1);
+            expect(await prisma.externalIntakeBatch.count({ where: { sourceId: replaySourceId } })).toBe(receiptsBeforeReplay);
+            expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).observedAt)
+                .toEqual(current.observedAt);
+        } finally {
+            if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: replaySourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: replaySourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: replaySourceId } });
+            await prisma.externalListingSource.delete({ where: { id: replaySourceId } });
+        }
+    });
     it('publishes only a freshly observed, explicitly reviewed source item and revokes stale approval', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         const priorJwt = process.env.JWT_SECRET;

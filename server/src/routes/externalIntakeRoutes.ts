@@ -109,6 +109,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     aiStatus: ExternalCandidateAiStatus; changed: boolean }> = [];
                 for (const item of items) {
                     const old = await tx.externalListingCandidate.findUnique({ where: { sourceId_sourceItemId: { sourceId: source.id, sourceItemId: item.sourceItemId } } });
+                    if (old && item.observedAt < old.observedAt)
+                        throw new ExternalIntakeError('observedAt', '來源觀測時間不得倒退；整批未匯入');
                     const eligible = source.aiProcessingAllowed && source.imageReuseAllowed && !!item.imageUrl && old?.status !== 'REJECTED';
                     const aiChanged = old?.contentHash !== item.contentHash;
                     const aiReset = { aiStatus: eligible ? 'PENDING' as const : 'NOT_ELIGIBLE' as const,
@@ -116,7 +118,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                         aiAttempts: 0, aiUpdatedAt: now };
                     const oldObservationRecent = !!old && old.observedAt.getTime() >= now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS;
                     const retainsApproval = old?.status === 'APPROVED' && !aiChanged &&
-                        oldObservationRecent &&
+                        oldObservationRecent && old.expiresAt > now &&
                         old.approvedAuthorizationRef === source.authorizationRef &&
                         source.textReuseAllowed && source.imageReuseAllowed;
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,

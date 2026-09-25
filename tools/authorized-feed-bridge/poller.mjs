@@ -30,13 +30,15 @@ export function feedConfig(environment) {
   const apiOrigin = environment.WISHLIST_FEED_API_ORIGIN;
   const adminKey = environment.WISHLIST_FEED_ADMIN_KEY;
   const intervalMinutes = Number(environment.WISHLIST_FEED_INTERVAL_MINUTES || '15');
+  const syncFlag = environment.WISHLIST_FEED_SYNC_ENABLED;
   if (!SOURCE_ID.test(sourceId || '') || !AUTH_REF.test(authorizationRef || '') ||
     apiOrigin !== 'https://wishlist-app-production.up.railway.app' ||
     typeof adminKey !== 'string' || !adminKey || adminKey.length > 4096 || /[\u0000-\u001f\u007f]/.test(adminKey) ||
+    (syncFlag !== undefined && syncFlag !== '0' && syncFlag !== '1') ||
     !Number.isInteger(intervalMinutes) || intervalMinutes < 15 || intervalMinutes > 1440)
     throw new Error('FEED_CONFIG_INVALID');
   return { sourceId, authorizationRef, host, url: feedUrl(environment.WISHLIST_FEED_URL, host),
-    apiOrigin, adminKey, intervalMinutes };
+    apiOrigin, adminKey, intervalMinutes, syncEnabled: syncFlag === '1' };
 }
 
 export function parseFeedEnvelope(raw, config, now = new Date()) {
@@ -159,6 +161,9 @@ export async function preflightAuthorizedFeed(config, dependencies = {}) {
 }
 
 export async function syncAuthorizedFeed(config, dependencies = {}) {
+  // A scheduled process can be deployed with credentials for preflight without
+  // accidentally starting intake. This gate is separate from source activation.
+  if (config?.syncEnabled !== true) throw new Error('FEED_SYNC_DISABLED');
   const { api, envelope } = await authorizedSnapshot(config, dependencies);
   let withdrawn = 0, unmatchedWithdrawals = 0, staged = 0;
   for (const reason of ['SOLD', 'REMOVED']) {

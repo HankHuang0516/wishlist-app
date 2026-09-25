@@ -32,6 +32,8 @@
 
 `--interrupt-upload` 是 Android 另一個獨立模式：隔離服務先完成私人照片儲存，僅暫停成功回覆；QA 在仍有一份本機私人照片時強制關閉 App，再重開驗證只恢復原 media ID、本人可看見經驗證的私人縮圖、其他人與匿名取原圖為 404，且不產生公開商品或多餘本機副本。此模式不啟動 AI，不能代替 `--recognize-two`／`--publish-one`。私人縮圖載入函式另有來源、轉址、內容類型與大小上限的主機測試；iOS XCTest 已要求可見的逐件縮圖載入狀態，但**修改後 iOS 原生 App 尚未重新建置與執行**。
 
+`--authenticated-listing-batch-two-ai-photos` 是待重新建置後執行的 iOS 雙件 AI 驗收：相簿依次選合成橘燈、藍杯，逐件檢查私密縮圖、MiniMax 草稿名稱及不同參考價；賣家修改第一件名稱、離開再開後兩件順序和內容須保持。控制器對兩個工作逐一驗證其本人私密圖片確實對應不同 fixture，回寫後後台兩份 AI 草稿與畫面一致、未經賣家確認前公開清單為 0，最後清理測試資料。此流程已有主機單元測試和 Swift 語法檢查；**尚未新編 iOS QA App 並執行 XCTest，不能算 iOS 雙件 AI 通過**。2026-09-25 當下磁碟約餘 9.6 GiB，低於原生 QA 建置的 15 GiB 安全門檻；不得用舊來源 build 冒充新來源測試。
+
 ## 原生操作驗收與已完成證據
 
 Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及多個單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-24 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1、連拍刊登入口1／1、相簿商品照單張私有上傳1／1、相簿同批兩張不同商品私有上傳1／1；Android 兩張連拍私有上傳已在獨立流程通過。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。

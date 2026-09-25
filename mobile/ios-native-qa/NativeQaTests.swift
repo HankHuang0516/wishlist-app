@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -615,7 +615,7 @@ final class NativeQaTests: XCTestCase {
                 Thread.sleep(forTimeInterval: 0.5)
             } while Date() < deadline
             guard completed else { throw Failure.missingControl }
-            let price = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "AI 二手參考價：NT$ ")).firstMatch
+            let price = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第1件 AI 二手參考價：NT$ ")).firstMatch
             guard price.exists else { throw Failure.missingControl }
             checkpoint("listing-ai-result-visible")
             try safeScreenshot("qa-ai-photo")
@@ -634,6 +634,65 @@ final class NativeQaTests: XCTestCase {
             try required("listing-batch-title")
             guard try publicInputControl("第1件商品名稱").value as? String == edited else { throw Failure.invalidIdentity }
             try safeScreenshot("qa-ai-resumed")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test12RealLoginListingBatchTwoAiPhotos() {
+        executionTimeAllowance = 235
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-two-ai-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (maybeOrange, blue) = try syntheticBatchPhotoOffsets()
+            guard let orange = maybeOrange else { throw Failure.missingControl }
+            checkpoint("listing-two-ai-picker-selection")
+            app.coordinate(withNormalizedOffset: orange).tap()
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-two-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-two-ai-private-upload")
+            try required("商品草稿 2/12", scroll: true)
+            try required("第1件商品照片預覽已載入", scroll: true)
+            try required("第2件商品照片預覽已載入", scroll: true)
+            checkpoint("listing-two-ai-results-await")
+            let firstPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第1件 AI 二手參考價：NT$ ")).firstMatch
+            let secondPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第2件 AI 二手參考價：NT$ ")).firstMatch
+            let deadline = Date().addingTimeInterval(145)
+            while !(firstPrice.exists && secondPrice.exists) && Date() < deadline {
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+            guard firstPrice.exists && secondPrice.exists else { throw Failure.missingControl }
+            let firstReference = firstPrice.label.components(separatedBy: "NT$ ").last
+            let secondReference = secondPrice.label.components(separatedBy: "NT$ ").last
+            guard let firstReference, let secondReference, firstReference != secondReference else { throw Failure.invalidIdentity }
+            let firstName = element("第1件商品名稱", kind: .textField).value as? String
+            let secondName = element("第2件商品名稱", kind: .textField).value as? String
+            guard let firstName, let secondName, firstName.contains("燈"), secondName.contains("杯") else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-two-ai-photo")
+            checkpoint("listing-two-ai-seller-edit")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            try tap("刊登好物")
+            let field = try publicInputControl("第1件商品名稱")
+            guard field.value as? String == firstName else { throw Failure.invalidIdentity }
+            field.tap()
+            field.typeText("NativeQA")
+            guard let edited = try publicInputControl("第1件商品名稱").value as? String,
+                  edited != firstName, edited.contains("NativeQA") else { throw Failure.invalidIdentity }
+            checkpoint("listing-two-ai-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            try tap("刊登好物")
+            try required("商品草稿 2/12", scroll: true)
+            guard try publicInputControl("第1件商品名稱").value as? String == edited,
+                  try publicInputControl("第2件商品名稱").value as? String == secondName else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-two-ai-resumed")
             app.terminate()
         } catch { reportFailure() }
     }

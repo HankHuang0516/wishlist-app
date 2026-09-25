@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 const { isolatedDebugQa, isolatedIosQaMetro, isolatedIosQaInput } = require('../../plugins/withIsolatedDebugQa.js');
 const { qaEnvironment } = require('../../scripts/native-qa.cjs');
 const { assertNativeQaMigrations } = require('../../scripts/native-qa-migrations.cjs');
+const { AUTHENTICATED_FLOWS, destinationTestRun } = require('../../scripts/ios-xctestrun-config.cjs');
+const { iosQaRunnerBundle } = require('../../scripts/ios-qa-config.cjs');
 
 const template = `android { buildTypes {
     debug {
@@ -90,5 +92,24 @@ class AppDelegate: ExpoAppDelegate {
     expect(isolatedIosQaInput(generated)).toBe(generated);
     expect(isolatedIosQaInput(isolatedIosQaMetro(generated))).toBe(generated);
     expect(() => isolatedIosQaInput(generated.replace('startIfEnabled(bundle: qaIdentity)', 'removed'))).toThrow();
+  });
+});
+
+describe('isolated iOS two-item AI acceptance selection', () => {
+  it('selects only the dedicated two-photo AI test without weakening the runner identity', () => {
+    const label = '202609251234';
+    const template = { __xctestrun_metadata__: { FormatVersion: 1 }, WishlistNativeQa: {
+      IsUITestBundle: true, UseUITargetAppProvidedByTests: true, BlueprintName: 'WishlistNativeQa',
+      TestHostBundleIdentifier: iosQaRunnerBundle(label) + '.xctrunner',
+      TestingEnvironmentVariables: {}, UITargetAppEnvironmentVariables: {}, EnvironmentVariables: {},
+      TestHostPath: '__TESTROOT__/runner', TestBundlePath: '__TESTROOT__/tests',
+      DependentProductPaths: ['__TESTROOT__/app'],
+    } };
+    expect(AUTHENTICATED_FLOWS['listing-batch-two-ai-photos']).toEqual(['NativeQaTests/test12RealLoginListingBatchTwoAiPhotos']);
+    const configured = destinationTestRun(template, label, '/tmp/isolated-ios-qa-products', 34123, 'listing-batch-two-ai-photos');
+    expect(configured.WishlistNativeQa.OnlyTestIdentifiers).toEqual(['NativeQaTests/test12RealLoginListingBatchTwoAiPhotos']);
+    expect(configured.WishlistNativeQa.TestHostBundleIdentifier).toBe(iosQaRunnerBundle(label) + '.xctrunner');
+    expect(configured.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_INPUT_PORT).toBe('34123');
+    expect(template.WishlistNativeQa.EnvironmentVariables).toEqual({});
   });
 });

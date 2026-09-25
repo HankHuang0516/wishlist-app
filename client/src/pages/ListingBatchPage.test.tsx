@@ -18,6 +18,7 @@ describe('web private batch listing flow', () => {
   let unusedReads = 0;
   let currentUploadId = '';
   let holdOldAccountList = false;
+  let manyPrivateDrafts = false;
   let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
@@ -27,6 +28,7 @@ describe('web private batch listing flow', () => {
     unusedReads = 0;
     currentUploadId = '';
     holdOldAccountList = false;
+    manyPrivateDrafts = false;
     releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -40,12 +42,16 @@ describe('web private batch listing flow', () => {
           await new Promise<void>(resolve => { releaseOldAccountList = resolve; });
           return { ok: true, status: 200, json: async () => ({ items: [{ id: mediaId, aiDraftStatus: 'COMPLETED', aiDraft: { ...ai, title: '舊帳號私有商品' }, sellerDraft: null, sellerDraftVersion: 0 }] }) };
         }
+        if (manyPrivateDrafts) return { ok: true, status: 200, json: async () => ({ items: Array.from({ length: 13 }, (_, index) => ({
+          id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+          aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0,
+        })) }) };
         unusedReads++;
         const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
           aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
         return { ok: true, status: 200, json: async () => ({ items }) };
       }
-      if (path.endsWith(`/listing-media/${mediaId}/thumbnail`)) return { ok: true, blob: async () => new Blob(['private']) };
+      if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
       if (path.endsWith('/listing-media') && method === 'POST') {
         currentUploadId = String((init?.body as FormData).get('clientUploadId'));
         if (loseUploadResponse) throw new Error('upload ACK lost');
@@ -66,6 +72,16 @@ describe('web private batch listing flow', () => {
     }));
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('restores every returned private draft even when another device exceeded one capture batch', async () => {
+    manyPrivateDrafts = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByText('等待辨識或手動填寫')).toHaveLength(13));
+    expect(screen.getByText(/目前有 13 件私人草稿/)).toBeInTheDocument();
+    expect(screen.getByLabelText('拍一件商品')).toBeDisabled();
+    expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
+  });
 
   it('keeps upload private until seller supplies details and explicitly confirms publication', async () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);

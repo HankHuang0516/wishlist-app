@@ -87,7 +87,10 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         const refreshed = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
         return refreshed.items;
       });
-    const recovered = checked.items.slice(0, 12).reverse().map(fromMedia);
+    // The API can return up to 30 existing private uploads, including work
+    // saved by another device. Never hide older drafts behind the 12-item
+    // *new capture* limit: owners must still be able to finish or remove them.
+    const recovered = checked.items.slice().reverse().map(fromMedia);
     setCards(old => [...recovered.map(card => old.find(previous => previous.id === card.id && previous.dirty) ?? card),
       ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);
     setUnresolvedUploads(checked.unresolved);
@@ -279,11 +282,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       <p className="mt-3 text-sm leading-6 text-stone-600">一次上傳多張商品照，AI 為每張產生私人草稿與參考價。請逐件確認真實狀況及售價後才公開刊登；AI 不會替你直接發布。</p>
       <div className="mt-5 flex flex-wrap gap-3">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
-          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={!ready || busy || !!pending || !!unresolvedUploads.length} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={!ready || busy || !!pending || !!unresolvedUploads.length || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold"><ImagePlus size={18} />批次選照片
-          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={!ready || busy || !!pending || !!unresolvedUploads.length} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={!ready || busy || !!pending || !!unresolvedUploads.length || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
       </div>
       <p className="mt-3 text-xs text-stone-500">可重複拍照；單次最多 12 件。大張照片會先在瀏覽器縮放至 5MB 以下；支援的相片格式依瀏覽器而定。上傳後仍保持私人狀態。</p>
+      {cards.filter(card => !card.published).length >= 12 && <p role="status" className="mt-2 text-sm text-amber-800">目前有 {cards.filter(card => !card.published).length} 件私人草稿；請先確認刊登或移除部分照片，再新增商品。</p>}
     </div>
 
     {pending && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm"><p className="font-semibold">前次刊登結果尚未確認</p><p className="mt-1">請先查詢同一筆操作，避免重複刊登。</p><button className="mt-3 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcile()}>確認前次刊登</button></div>}

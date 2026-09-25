@@ -104,9 +104,12 @@ export default function Home() {
                     </Card>
                 </div>
 
-                <div className="flex justify-center mt-12">
+                <div className="flex flex-wrap justify-center gap-3 mt-12">
                     <Link to="/dashboard">
                         <Button size="lg" className="w-full md:w-auto px-12">Go to My Wishlists</Button>
+                    </Link>
+                    <Link to="/sell">
+                        <Button size="lg" variant="outline" className="w-full md:w-auto px-12">拍照刊登好物</Button>
                     </Link>
                 </div>
             </div>

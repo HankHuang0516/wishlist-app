@@ -18,7 +18,7 @@ describe('web private batch listing flow', () => {
   let unusedReads = 0;
   let currentUploadId = '';
   let holdOldAccountList = false;
-  let manyPrivateDrafts = false;
+  let manyPrivateDrafts = 0;
   let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
@@ -28,7 +28,7 @@ describe('web private batch listing flow', () => {
     unusedReads = 0;
     currentUploadId = '';
     holdOldAccountList = false;
-    manyPrivateDrafts = false;
+    manyPrivateDrafts = 0;
     releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -37,15 +37,22 @@ describe('web private batch listing flow', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input), method = init?.method ?? 'GET';
       calls.push({ path, method, body: typeof init?.body === 'string' ? init.body : undefined });
-      if (path.endsWith('/listing-media/unused?purpose=BATCH_ITEM')) {
+      if (path.includes('/listing-media/unused?purpose=BATCH_ITEM')) {
         if (holdOldAccountList && (init?.headers as Record<string, string>)?.Authorization === 'Bearer test-session') {
           await new Promise<void>(resolve => { releaseOldAccountList = resolve; });
           return { ok: true, status: 200, json: async () => ({ items: [{ id: mediaId, aiDraftStatus: 'COMPLETED', aiDraft: { ...ai, title: '舊帳號私有商品' }, sellerDraft: null, sellerDraftVersion: 0 }] }) };
         }
-        if (manyPrivateDrafts) return { ok: true, status: 200, json: async () => ({ items: Array.from({ length: 13 }, (_, index) => ({
-          id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
-          aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0,
-        })) }) };
+        if (manyPrivateDrafts) {
+          const rows = Array.from({ length: manyPrivateDrafts }, (_, index) => ({
+            id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+            aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0,
+          }));
+          const cursor = new URL(path).searchParams.get('cursor');
+          const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
+          const items = rows.slice(start, start + 30);
+          return { ok: true, status: 200, json: async () => ({ items,
+            nextCursor: start + 30 < rows.length ? items[items.length - 1].id : null }) };
+        }
         unusedReads++;
         const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
           aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
@@ -74,12 +81,21 @@ describe('web private batch listing flow', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('restores every returned private draft even when another device exceeded one capture batch', async () => {
-    manyPrivateDrafts = true;
+    manyPrivateDrafts = 13;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
     await waitFor(() => expect(screen.getAllByText('等待辨識或手動填寫')).toHaveLength(13));
     expect(screen.getByText(/目前有 13 件私人草稿/)).toBeInTheDocument();
     expect(screen.getByLabelText('拍一件商品')).toBeDisabled();
     expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
+  });
+
+  it('loads older private drafts beyond the server first page without silently hiding them', async () => {
+    manyPrivateDrafts = 32;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByText('等待辨識或手動填寫')).toHaveLength(32));
+    expect(calls.filter(call => call.path.includes('/listing-media/unused?purpose=BATCH_ITEM'))).toHaveLength(2);
+    expect(screen.getByText(/目前有 32 件私人草稿/)).toBeInTheDocument();
     expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
   });
 

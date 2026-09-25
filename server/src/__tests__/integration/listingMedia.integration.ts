@@ -63,6 +63,42 @@ afterAll(async () => {
 });
 
 describe('real listing photo upload / private read / PostgreSQL', () => {
+    it('pages every owner-only private batch draft without repeating or leaking another purpose', async () => {
+        const createdAt = new Date();
+        const batchIds = Array.from({ length: 32 }, () => randomUUID());
+        const olderBatchId = randomUUID();
+        await prisma.listingMedia.createMany({ data: [
+            ...batchIds.map(id => ({ id, ownerUserId: seller, capturePurpose: 'BATCH_ITEM' as const,
+                imageUrl: `https://example.invalid/${id}/image`, thumbnailUrl: `https://example.invalid/${id}/thumbnail`,
+                contentHash: 'a'.repeat(64), clientUploadId: randomUUID(), createdAt })),
+            { id: olderBatchId, ownerUserId: seller, capturePurpose: 'BATCH_ITEM' as const,
+                imageUrl: 'https://example.invalid/old-batch/image', thumbnailUrl: 'https://example.invalid/old-batch/thumbnail',
+                contentHash: 'a'.repeat(64), clientUploadId: randomUUID(), createdAt: new Date(Date.now() - 45 * 86_400_000) },
+            { id: randomUUID(), ownerUserId: seller, capturePurpose: 'MANUAL_PHOTO' as const,
+                imageUrl: 'https://example.invalid/manual/image', thumbnailUrl: 'https://example.invalid/manual/thumbnail',
+                contentHash: 'b'.repeat(64), clientUploadId: randomUUID(), createdAt },
+            { id: randomUUID(), ownerUserId: third, capturePurpose: 'BATCH_ITEM' as const,
+                imageUrl: 'https://example.invalid/third/image', thumbnailUrl: 'https://example.invalid/third/thumbnail',
+                contentHash: 'c'.repeat(64), clientUploadId: randomUUID(), createdAt },
+        ] });
+        const list = (user: number, cursor?: string) => request(app).get('/api/listing-media/unused')
+            .set('Authorization', 'Bearer ' + token(user)).query({ purpose: 'BATCH_ITEM', ...(cursor ? { cursor } : {}) });
+        const first = await list(seller);
+        expect(first.status).toBe(200);
+        expect(first.headers['cache-control']).toBe('private, no-store');
+        expect(first.body.items).toHaveLength(30);
+        expect(first.body.nextCursor).toBe(first.body.items[29].id);
+        const second = await list(seller, first.body.nextCursor);
+        expect(second.status).toBe(200);
+        expect(second.body.items).toHaveLength(3);
+        expect(second.body.nextCursor).toBeNull();
+        expect(new Set([...first.body.items, ...second.body.items].map((row: { id: string }) => row.id)))
+            .toEqual(new Set([...batchIds, olderBatchId]));
+        expect((await list(third, first.body.nextCursor)).status).toBe(400);
+        expect((await list(seller, randomUUID())).status).toBe(400);
+        expect((await request(app).get('/api/listing-media/unused').set('Authorization', 'Bearer ' + token(seller))
+            .query({ purpose: 'BATCH_ITEM', cursor: 'bad-id' })).status).toBe(400);
+    });
     it('keeps manual multi-angle photos out of batch recovery and adopts legacy photos only on explicit owner action', async () => {
         const batchUploadId = randomUUID();
         const batch = (await upload(seller, batchUploadId, undefined, 'image/jpeg', 'BATCH_ITEM')).body;

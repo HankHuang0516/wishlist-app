@@ -14,7 +14,7 @@ import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
 import { captureCameraSequence } from './listingCaptureFlow';
 import { listPrivateCaptures, preservePrivateCapture, releasePrivateCapture } from './privateCaptureStore';
-import { reconcilePrivateBatchCaptures } from './listingCaptureRecovery';
+import { loadPrivateMediaPages, reconcilePrivateBatchCaptures } from './listingCaptureRecovery';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { parseSellerDraft, restoreSellerForm, sellerDraftFromCard, SellerDraftSync } from './listingSellerDraft';
 import { PrivateListingPhoto } from './PrivateListingPhoto';
@@ -73,11 +73,12 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     void (async () => {
       try {
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
-        const [journal, response, legacy, localCaptures] = await Promise.all([privatePendingStore.get(key),
-          api<{ items: unknown[] }>('/listing-media/unused?purpose=BATCH_ITEM'),
+        const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>('/listing-media/unused?purpose=BATCH_ITEM' +
+          (cursor ? `&cursor=${cursor}` : '')));
+        const [journal, batchItems, legacy, localCaptures] = await Promise.all([privatePendingStore.get(key),
+          loadBatch(),
           api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null),
           listPrivateCaptures(apiUrl, userId)]);
-        if (!Array.isArray(response.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
         let olderPhotos: PhotoRecord[] = [], olderFailed = !legacy;
         try {
           if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
@@ -85,7 +86,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         } catch { olderFailed = true; }
         // An upload can commit after the unused-list snapshot but before its
         // durable UUID lookup. Refresh that snapshot before discarding pixels.
-        const captureRecovery = await reconcilePrivateBatchCaptures(response.items, localCaptures,
+        const captureRecovery = await reconcilePrivateBatchCaptures(batchItems, localCaptures,
           async clientUploadId => {
             const raw = await api<unknown>(`/listing-media/by-upload-id/${clientUploadId}`, { timeoutMs: 5000 });
             const record = parsePhotoRecord(raw, apiUrl, __DEV__);
@@ -95,11 +96,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
                 Number.isSafeInteger(row.wishItemId) && row.wishItemId > 0)) throw new Error('PHOTO_LINK_STATE_INVALID');
             return { ...record, linked: row.listingId !== null || row.wishItemId !== null };
           },
-          async () => {
-            const refreshed = await api<{ items: unknown[] }>('/listing-media/unused?purpose=BATCH_ITEM');
-            if (!Array.isArray(refreshed.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
-            return refreshed.items;
-          });
+          loadBatch);
         const recovered = restoreBatchCaptureOrder(captureRecovery.items, captureRecovery.items.length).map(raw => {
           const record = parsePhotoRecord(raw, apiUrl, __DEV__);
           const row = raw as Record<string, unknown>;

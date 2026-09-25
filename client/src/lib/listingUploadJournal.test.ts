@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { forgetPendingUploads, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from './listingUploadJournal';
+import { forgetPendingUploads, loadPrivateMediaPages, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from './listingUploadJournal';
 
 const uploadId = '11111111-1111-4111-8111-111111111111';
 const mediaId = '22222222-2222-4222-8222-222222222222';
@@ -7,6 +7,16 @@ const item = { id: mediaId, clientUploadId: uploadId, listingId: null, wishItemI
 
 describe('private web upload recovery journal', () => {
   beforeEach(() => localStorage.clear());
+
+  it('collects every private page and rejects repeated media IDs', async () => {
+    const rows = Array.from({ length: 32 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}` }));
+    const page = vi.fn(async (cursor: string | null) => cursor
+      ? { items: rows.slice(30), nextCursor: null }
+      : { items: rows.slice(0, 30), nextCursor: rows[29].id });
+    expect(await loadPrivateMediaPages(page)).toEqual(rows);
+    expect(page).toHaveBeenNthCalledWith(2, rows[29].id);
+    await expect(loadPrivateMediaPages(async () => ({ items: [rows[0], rows[0]], nextCursor: null }))).rejects.toThrow();
+  });
 
   it('persists only an account-scoped upload identifier and clears the exact entry', () => {
     rememberPendingUpload(19, uploadId);

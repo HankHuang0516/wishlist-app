@@ -194,15 +194,29 @@ export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
     res.setHeader('Cache-Control', 'private, no-store');
     try {
         const purpose = req.query.purpose;
+        const cursor = req.query.cursor;
+        if (Object.keys(req.query).some(key => key !== 'purpose' && key !== 'cursor') ||
+            (cursor !== undefined && (typeof cursor !== 'string' || !isListingId(cursor))))
+            return res.status(400).json({ error: '私人照片分頁識別碼不正確', errorCode: 'INVALID_MEDIA_CURSOR' });
         if (purpose !== undefined && (typeof purpose !== 'string' ||
             !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(purpose)))
             return res.status(400).json({ error: '照片用途不正確', errorCode: 'INVALID_MEDIA_PURPOSE' });
-        const records = await prisma.listingMedia.findMany({ where: { ownerUserId: req.user.id, listingId: null, wishItemId: null,
-            createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) },
-            ...(purpose ? { capturePurpose: purpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM' } : {}) },
-            orderBy: { createdAt: 'desc' }, take: 30,
+        const base: Prisma.ListingMediaWhereInput = { ownerUserId: req.user.id, listingId: null, wishItemId: null,
+            // Explicit batch drafts remain recoverable until the owner links
+            // or removes them. A 30-day listing expiry is not draft deletion.
+            ...(purpose === 'BATCH_ITEM' ? {} : { createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }),
+            ...(purpose ? { capturePurpose: purpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM' } : {}) };
+        const anchor = cursor ? await prisma.listingMedia.findFirst({ where: { ...base, id: cursor },
+            select: { id: true, createdAt: true } }) : null;
+        if (cursor && !anchor) return res.status(400).json({ error: '私人照片分頁已失效', errorCode: 'INVALID_MEDIA_CURSOR' });
+        const records = await prisma.listingMedia.findMany({ where: { ...base,
+            ...(anchor ? { OR: [{ createdAt: { lt: anchor.createdAt } },
+                { createdAt: anchor.createdAt, id: { lt: anchor.id } }] } : {}) },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 31,
             select: { ...select, clientUploadId: true, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
-        return res.json({ items: records.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })) });
+        const page = records.slice(0, 30);
+        return res.json({ items: page.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })),
+            nextCursor: records.length > 30 ? page[29].id : null });
     } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
 }
 

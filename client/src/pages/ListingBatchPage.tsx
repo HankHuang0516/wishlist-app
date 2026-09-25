@@ -6,7 +6,7 @@ import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { buildPublishedListing, emptyListingDraft, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile, sameSellerContent } from '../lib/listingBatch';
 import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingTouched, PublishDetails } from '../lib/listingBatch';
-import { forgetPendingUploads, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
+import { forgetPendingUploads, loadPrivateMediaPages, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
 
 type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
@@ -79,17 +79,14 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
 
   const reload = useCallback(async () => {
-    const result = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
-    if (!Array.isArray(result.items)) throw new Error('私人照片資料不正確');
-    const checked = await reconcilePendingUploads(userId, result.items,
+    const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>(token,
+      '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
+    const items = await loadBatch();
+    const checked = await reconcilePendingUploads(userId, items,
       id => api<unknown>(token, `/listing-media/by-upload-id/${id}`),
-      async () => {
-        const refreshed = await api<{ items: unknown[] }>(token, '/listing-media/unused?purpose=BATCH_ITEM');
-        return refreshed.items;
-      });
-    // The API can return up to 30 existing private uploads, including work
-    // saved by another device. Never hide older drafts behind the 12-item
-    // *new capture* limit: owners must still be able to finish or remove them.
+      loadBatch);
+    // Private uploads can span multiple 30-item pages. The 12-item limit
+    // applies only to new captures, never to owner recovery.
     const recovered = checked.items.slice().reverse().map(fromMedia);
     setCards(old => [...recovered.map(card => old.find(previous => previous.id === card.id && previous.dirty) ?? card),
       ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);

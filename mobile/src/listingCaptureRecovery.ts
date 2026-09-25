@@ -1,5 +1,31 @@
 import type { PhotoRecord } from './listingForm';
 import type { PrivateCapture } from './privateCaptureStore';
+import { uuid } from './listingForm';
+
+// Fetch the complete owner-only recovery window before matching device-local
+// capture UUIDs. A first-page-only snapshot can mistake an older committed
+// upload for an unsaved photo and offer a duplicate card.
+export async function loadPrivateMediaPages(fetchPage: (cursor: string | null) => Promise<unknown>): Promise<unknown[]> {
+  const items: unknown[] = [], seen = new Set<string>();
+  let cursor: string | null = null;
+  for (let page = 0; page < 100; page++) {
+    const raw = await fetchPage(cursor);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('UNUSED_MEDIA_RESPONSE');
+    const response = raw as { items?: unknown; nextCursor?: unknown };
+    if (!Array.isArray(response.items) || response.items.length > 30) throw new Error('UNUSED_MEDIA_RESPONSE');
+    for (const item of response.items) {
+      const id = item && typeof item === 'object' && !Array.isArray(item) ? (item as { id?: unknown }).id : null;
+      if (!uuid(id) || seen.has(id)) throw new Error('UNUSED_MEDIA_RESPONSE');
+      seen.add(id); items.push(item);
+    }
+    const next = response.nextCursor ?? null;
+    if (next === null) return items;
+    if (!uuid(next) || response.items.length !== 30 || next !== (response.items[29] as { id: string }).id || next === cursor)
+      throw new Error('UNUSED_MEDIA_RESPONSE');
+    cursor = next;
+  }
+  throw new Error('UNUSED_MEDIA_TOO_MANY_PAGES');
+}
 
 export type CaptureRecovery = {
   items: unknown[];

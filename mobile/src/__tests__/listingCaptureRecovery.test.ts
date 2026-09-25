@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { reconcilePrivateBatchCaptures } from '../listingCaptureRecovery';
+import { loadPrivateMediaPages, reconcilePrivateBatchCaptures } from '../listingCaptureRecovery';
 import type { LookupPhotoRecord } from '../listingCaptureRecovery';
 
 const capture = { clientUploadId: '0a35d55f-074d-4f15-84e6-68f9fd64b87a', uri: 'file:///private/lamp.jpg' };
@@ -7,6 +7,27 @@ const record: LookupPhotoRecord = { id: '97b5a765-1761-4285-bb3e-d694f688dc0f', 
   thumbnailUrl: 'private-thumbnail', width: 640, height: 480, byteSize: 12345, linked: false };
 
 describe('batch capture recovery after a lost upload reply', () => {
+  it('loads later private pages before comparing a retained capture', async () => {
+    const rows = Array.from({ length: 32 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}` }));
+    const fetchPage = vi.fn(async (cursor: string | null) => cursor
+      ? { items: rows.slice(30), nextCursor: null }
+      : { items: rows.slice(0, 30), nextCursor: rows[29].id });
+    const items = await loadPrivateMediaPages(fetchPage);
+    expect(items).toHaveLength(32);
+    expect(fetchPage).toHaveBeenNthCalledWith(2, rows[29].id);
+    const result = await reconcilePrivateBatchCaptures(items, [capture], async () => ({ ...record, id: rows[31].id }), async () => []);
+    expect(result.retryCaptures).toEqual([]);
+    expect(result.releaseUploadIds).toEqual([capture.clientUploadId]);
+  });
+
+  it('rejects repeating or cross-page duplicate recovery cursors', async () => {
+    const row = { id: '00000000-0000-4000-8000-000000000001' };
+    await expect(loadPrivateMediaPages(async () => ({ items: [row, row], nextCursor: null }))).rejects.toThrow();
+    await expect(loadPrivateMediaPages(async cursor => cursor
+      ? { items: [row], nextCursor: null }
+      : { items: Array.from({ length: 30 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}` })),
+        nextCursor: '00000000-0000-4000-8000-000000000030' })).rejects.toThrow();
+  });
   it('refreshes a stale unused-list snapshot before releasing the local photo', async () => {
     const refresh = vi.fn(async () => [{ ...record, clientUploadId: capture.clientUploadId }]);
     const result = await reconcilePrivateBatchCaptures([], [capture], async () => record, refresh);

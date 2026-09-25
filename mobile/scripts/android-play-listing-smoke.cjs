@@ -74,11 +74,24 @@ async function api(route, options = {}) {
   return response;
 }
 async function unused() {
-  const response = await api('/listing-media/unused?purpose=BATCH_ITEM');
-  if (!response.ok) throw new Error('private_drafts_unavailable');
-  const data = await response.json();
-  if (!Array.isArray(data.items) || data.nextCursor) throw new Error('private_drafts_ambiguous');
-  return data.items;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response;
+    try { response = await api('/listing-media/unused?purpose=BATCH_ITEM'); }
+    catch {
+      if (attempt === 2) throw new Error('private_drafts_network_unavailable');
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    if ([429, 502, 503, 504].includes(response.status) && attempt < 2) {
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    if (!response.ok) throw new Error(`private_drafts_unavailable_${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data.items) || data.nextCursor) throw new Error('private_drafts_ambiguous');
+    return data.items;
+  }
+  throw new Error('private_drafts_unavailable');
 }
 async function cleanupCandidate(candidateId) {
   if (!bearer || !candidateId) return 'NOT_IDENTIFIED';

@@ -29,6 +29,7 @@ const sourceFiles = ['App.tsx', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.
   'scripts/ios-qa-input.cjs', 'scripts/ios-qa-result-privacy.cjs', 'scripts/ios-xctestrun-config.cjs', 'scripts/ios-native-qa.cjs',
   'scripts/native-qa.cjs', 'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
   'scripts/native-qa-marketplace-fixture.cjs', 'scripts/test-native-qa-marketplace-fixture.cjs', 'scripts/test-ios-public-input.cjs',
+  'scripts/native-qa-photo-fingerprint.cjs', 'scripts/check-native-qa-photo-fingerprint.cjs',
   'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json',
   ...fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name)];
 const fingerprint = () => Object.fromEntries(sourceFiles.map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(mobile, file))).digest('hex')]));

@@ -115,7 +115,7 @@ final class NativeQaTests: XCTestCase {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }
-    private func syntheticBatchPhotoOffsets() throws -> (CGVector, CGVector) {
+    private func syntheticBatchPhotoOffsets(requireOrange: Bool = true) throws -> (CGVector?, CGVector) {
         guard abs(app.frame.width - 402) < 1, abs(app.frame.height - 874) < 1,
               let image = app.screenshot().image.cgImage, image.width == 1206, image.height == 2622 else { throw Failure.invalidIdentity }
         let width = image.width, height = image.height
@@ -145,7 +145,7 @@ final class NativeQaTests: XCTestCase {
                         if blue == nil && bluePixels >= 80 && orangePixels < 30 { blue = tile }
                     }
                 }
-                if let orange, let blue { return (orange, blue) }
+                if let blue, !requireOrange || orange != nil { return (orange, blue) }
             }
             throw Failure.missingControl
         }
@@ -518,10 +518,10 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-photo-picker-selection")
             // PHPicker runs in a different process: its image elements appear
             // in the diagnostic hierarchy but not in app.images queries.
-            // Fail closed outside the inspected 402x874 assigned device, then
-            // tap the known newest first tile containing our seeded image.
-            guard abs(app.frame.width - 402) < 1, abs(app.frame.height - 874) < 1 else { throw Failure.invalidIdentity }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.165, dy: 0.448)).tap()
+            // Prior isolated tests can leave other synthetic photos in this
+            // private library. Select the blue mug by observed tile pixels.
+            let (_, blue) = try syntheticBatchPhotoOffsets(requireOrange: false)
+            app.coordinate(withNormalizedOffset: blue).tap()
             checkpoint("listing-photo-picker-selected")
             try safeScreenshot("qa-photo-selected")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
@@ -556,7 +556,8 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-two-picker-open")
             try tap("批次選照片")
             try safeScreenshot("qa-photo-picker")
-            let (orange, blue) = try syntheticBatchPhotoOffsets()
+            let (maybeOrange, blue) = try syntheticBatchPhotoOffsets()
+            guard let orange = maybeOrange else { throw Failure.missingControl }
             checkpoint("listing-two-picker-selection")
             app.coordinate(withNormalizedOffset: orange).tap()
             app.coordinate(withNormalizedOffset: blue).tap()

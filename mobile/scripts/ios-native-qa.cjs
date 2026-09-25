@@ -15,6 +15,7 @@ const { credentialFreeResultLogs } = require('./ios-qa-result-privacy.cjs');
 const { buyerErasureProof } = require('./android-qa-config.cjs');
 const { startNativeQa } = require('./native-qa.cjs');
 const { seedNativeMarketplace } = require('./native-qa-marketplace-fixture.cjs');
+const { fixtureDistance } = require('./native-qa-photo-fingerprint.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]), udid = assignedUdid(process.env);
@@ -57,6 +58,7 @@ let stopping = false, child, metro, metroExit, qa, requestedStop = false, instal
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
 let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
+let listingPhotoFixtureVerified = false;
 const ownedChildren = new Set();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); metro?.kill('SIGTERM');
@@ -133,15 +135,26 @@ async function auditListingPhoto() {
     };
     const ownerToken = await login(qa.actors.buyer), outsiderToken = await login(qa.actors.seller);
     listingPhotoVerified = true; listingPhotoPrivacyVerified = true;
+    const sharp = require('../../server/node_modules/sharp');
+    const blue = fs.readFileSync(path.join(mobile, 'qa-fixtures/synthetic-used-blue-mug.png'));
+    const orange = fs.readFileSync(path.join(mobile, 'qa-fixtures/synthetic-used-orange-desk-lamp.png'));
+    const identities = [];
     for (const record of records) {
       const url = qa.apiUrl + '/api/listing-media/' + record.id + '/image';
       const owner = await fetch(url, { headers: { Authorization: 'Bearer ' + ownerToken }, signal: AbortSignal.timeout(5000) });
       const bytes = Buffer.from(await owner.arrayBuffer());
       listingPhotoVerified &&= owner.status === 200 && !!owner.headers.get('content-type')?.startsWith('image/') && bytes.length > 1000;
+      if (owner.status === 200 && bytes.length > 1000) {
+        const blueDistance = await fixtureDistance(sharp, bytes, blue);
+        const orangeDistance = await fixtureDistance(sharp, bytes, orange);
+        identities.push(blueDistance < 12 && orangeDistance > 40 ? 'BLUE_MUG' : orangeDistance < 12 && blueDistance > 40 ? 'ORANGE_LAMP' : 'OTHER');
+      }
       const outsider = await fetch(url, { headers: { Authorization: 'Bearer ' + outsiderToken }, signal: AbortSignal.timeout(5000) });
       const anonymous = await fetch(url, { signal: AbortSignal.timeout(5000) });
       listingPhotoPrivacyVerified &&= outsider.status === 404 && anonymous.status === 404;
     }
+    listingPhotoFixtureVerified = flow === 'listing-batch-photo' ? identities.length === 1 && identities[0] === 'BLUE_MUG' :
+      identities.length === 2 && identities.sort().join(',') === 'BLUE_MUG,ORANGE_LAMP';
   } finally { await audit.$disconnect(); }
 }
 async function main() {
@@ -230,7 +243,7 @@ async function main() {
   const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
-      (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified)) ||
+      (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       (flow === 'listing-batch-photo' && !sellerDraftVerified) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
@@ -303,7 +316,7 @@ async function main() {
     failedStage: cleanupFailed ? 'exact-cleanup-failed' : failed ? failedStage : null,
     tests: summary ? { total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests } : null,
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
-    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoCount, sellerDraftVerified,
+    nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoFixtureVerified, listingPhotoCount, sellerDraftVerified,
     privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

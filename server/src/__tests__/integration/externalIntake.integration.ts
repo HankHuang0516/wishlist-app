@@ -42,12 +42,21 @@ describe('admin-only attributed external supply staging', () => {
         const created = await request(app).post(url + '/sources').set('x-admin-key', adminKey).send(sourceBody);
         expect(created.status).toBe(201); sourceId = created.body.id;
         expect(created.body).toMatchObject({ enabled: false, authorizationRef: sourceBody.authorizationRef });
+        expect((await request(app).get(`${url}/sources/${sourceId}`)).status).toBe(401);
+        expect((await request(app).get(`${url}/sources/not-a-source`).set('x-admin-key', adminKey)).status).toBe(404);
+        const sourceRead = await request(app).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey);
+        expect(sourceRead.status).toBe(200);
+        expect(sourceRead.headers['cache-control']).toBe('private, no-store');
+        expect(sourceRead.body).toMatchObject({ id: sourceId, enabled: false, authorizationRef: sourceBody.authorizationRef,
+            canonicalHost: sourceBody.canonicalHost });
         expect((await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
         expect((await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
             .send({ authorizationRef: 'contract:wrong', confirmRights: true })).status).toBe(400);
         const enabled = await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
             .send({ authorizationRef: sourceBody.authorizationRef, confirmRights: true });
         expect(enabled.status).toBe(200); expect(enabled.body.enabled).toBe(true);
+        expect((await request(app).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey)).body)
+            .toMatchObject({ id: sourceId, enabled: true, enabledAt: expect.any(String) });
     });
     it('atomically stages sourced records and never inserts public seller listings', async () => {
         const originalCount = await prisma.listing.count();

@@ -28,6 +28,13 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         try { return res.json({ items: await prisma.externalListingSource.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }) }); }
         catch (error) { return fail(res, error); }
     });
+    router.get('/sources/:id', async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
+            const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
+            return source ? res.json(source) : res.status(404).json({ error: '來源不存在' });
+        } catch (error) { return fail(res, error); }
+    });
     router.get('/sources/:id/intake-batches', async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });

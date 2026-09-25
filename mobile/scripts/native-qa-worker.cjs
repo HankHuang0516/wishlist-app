@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
 const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
@@ -97,11 +97,14 @@ async function main() {
   if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
   if (process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== undefined && process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== '1') throw new Error('Unsafe QA upload interruption mode');
   if (process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== undefined && process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== '1') throw new Error('Unsafe QA upload rejection mode');
+  if (process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT !== undefined && process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT !== '1') throw new Error('Unsafe QA stale batch snapshot mode');
   const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
   const externalListingsPilot = process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT === '1';
   const holdListingUploadAck = process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK === '1';
   const rejectFirstListingUpload = process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD === '1';
+  const staleBatchRecoverySnapshot = process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT === '1';
   if (holdListingUploadAck && rejectFirstListingUpload) throw new Error('Conflicting QA upload interruption modes');
+  if (staleBatchRecoverySnapshot && !holdListingUploadAck) throw new Error('Stale recovery snapshot requires held upload ACK');
   if (externalListingsPilot) process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-native-qa-'));
   startupStage = 'private-storage';
@@ -217,6 +220,18 @@ async function main() {
       send({ kind: 'listing-upload-ack-held', mediaId: body.id });
       return res;
     };
+    next();
+  });
+  let staleBatchSnapshotServed = false;
+  if (staleBatchRecoverySnapshot) app.use((req, res, next) => {
+    if (!uploadAckAlreadyHeld || req.method !== 'GET' || req.path !== '/api/listing-media/unused' ||
+      req.query.purpose !== 'BATCH_ITEM' || typeof req.headers.authorization !== 'string') return next();
+    if (!staleBatchSnapshotServed) {
+      staleBatchSnapshotServed = true;
+      send({ kind: 'batch-recovery-snapshot', phase: 'stale' });
+      return res.json({ items: [] });
+    }
+    send({ kind: 'batch-recovery-snapshot', phase: 'fresh' });
     next();
   });
   app.use(async (req, res, next) => {

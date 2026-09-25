@@ -5,7 +5,8 @@ const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
-  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false } = {}) {
+  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false,
+    staleBatchRecoverySnapshot = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
@@ -20,6 +21,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
     ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
     ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
+    ...(staleBatchRecoverySnapshot ? { NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1' } : {}),
   };
 }
 
@@ -30,6 +32,7 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
   });
   let summary, uploadAckHeldResolve, listingUploadRejectedResolve;
   const imageReads = [];
+  const batchRecoverySnapshots = [];
   const uploadAckHeld = new Promise(resolve => { uploadAckHeldResolve = resolve; });
   const listingUploadRejected = new Promise(resolve => { listingUploadRejectedResolve = resolve; });
   const requestStop = () => {
@@ -53,6 +56,8 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
       if (message?.kind === 'listing-upload-rejected') listingUploadRejectedResolve(true);
       if (message?.kind === 'private-image-read') imageReads.push({ variant: message.variant, statusCode: message.statusCode,
         hasAuthorization: message.hasAuthorization });
+      if (message?.kind === 'batch-recovery-snapshot' && ['stale', 'fresh'].includes(message.phase))
+        batchRecoverySnapshots.push(message.phase);
       if (message?.kind === 'stopped') summary = message.summary;
       if (message?.kind === 'failed') {
         clearTimeout(timer);
@@ -89,6 +94,7 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     ...(options.holdListingUploadAck ? { uploadAckHeld } : {}),
     ...(options.rejectFirstListingUpload ? { listingUploadRejected } : {}),
     ...(options.holdListingUploadAck || options.rejectFirstListingUpload ? { imageReads } : {}),
+    ...(options.staleBatchRecoverySnapshot ? { batchRecoverySnapshots } : {}),
     async stop() {
       if (child.exitCode === null) requestStop();
       return exited;

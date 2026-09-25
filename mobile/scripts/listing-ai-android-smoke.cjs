@@ -17,7 +17,7 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload', '--retry-uncommitted'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload', '--stale-recovery', '--retry-uncommitted'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
 const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
@@ -212,8 +212,9 @@ async function main() {
   await preflight();
   await fs.mkdir(evidence, { mode: 0o700 });
   await freeMetroPort();
-  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: !['--interrupt-upload', '--retry-uncommitted'].includes(mode),
-    holdListingUploadAck: mode === '--interrupt-upload', rejectFirstListingUpload: mode === '--retry-uncommitted' });
+  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: !['--interrupt-upload', '--stale-recovery', '--retry-uncommitted'].includes(mode),
+    holdListingUploadAck: ['--interrupt-upload', '--stale-recovery'].includes(mode),
+    staleBatchRecoverySnapshot: mode === '--stale-recovery', rejectFirstListingUpload: mode === '--retry-uncommitted' });
   const environment = hostEnvironment(process.execPath, '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
     '/Users/hank/Library/Android/sdk', os.homedir());
   stage = 'metro';
@@ -381,7 +382,7 @@ async function main() {
     await sleep(1200);
   }
   if (!photos?.every(photo => photo?.id && photo.imageUrl)) throw new Error('QA_UPLOAD_MISSING');
-  if (mode === '--interrupt-upload') {
+  if (mode === '--interrupt-upload' || mode === '--stale-recovery') {
     stage = 'committed-ack-held';
     const heldMediaId = await Promise.race([qa.uploadAckHeld,
       sleep(20_000).then(() => { throw new Error('QA_ACK_HOLD_MISSING'); })]);
@@ -403,6 +404,8 @@ async function main() {
     await waitWithScroll('第1件商品照片');
     await waitNode('第1件商品照片預覽已載入', { timeout: 25_000 });
     await waitNode('照片已私密保存，可開始 AI 辨識', { timeout: 10_000 });
+    if (mode === '--stale-recovery' && qa.batchRecoverySnapshots.slice(0, 2).join(',') !== 'stale,fresh')
+      throw new Error('QA_STALE_SNAPSHOT_NOT_REFRESHED');
     if (!qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode === 200 && read.hasAuthorization) ||
       qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode !== 200))
       throw new Error('QA_PRIVATE_THUMBNAIL_NOT_AUTHENTICATED');
@@ -427,7 +430,8 @@ async function main() {
     if (after.length !== 0) throw new Error('QA_REDUNDANT_LOCAL_CAPTURE_RETAINED');
     report.interruption = { committedBeforeAck: true, appForceStopped: true, sameMediaAfterRestart: true,
       localCaptureCountBefore: before.length, localCaptureCountAfter: after.length,
-      privateImageVerified: true, authenticatedThumbnailVerified: true, publicCount: 0 };
+      privateImageVerified: true, authenticatedThumbnailVerified: true, publicCount: 0,
+      ...(mode === '--stale-recovery' ? { staleSnapshotRefreshed: true } : {}) };
     report.passed = true;
     return;
   }

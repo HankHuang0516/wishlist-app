@@ -38,4 +38,12 @@ describe('native QA child environment, before process or DB creation', () => {
         expect(env).toMatchObject({ NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1', PATH: '/safe/runtime' });
         expect(env.FLICKR_API_KEY).toBeUndefined();
     });
+    it('injects a stale recovery snapshot only into an explicitly selected isolated QA child', () => {
+        expect(qaEnvironment(database, 60).NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT).toBeUndefined();
+        const env = qaEnvironment(database, 60, { PATH: '/safe/runtime', ADMIN_API_KEY: 'never-forward' },
+            { holdListingUploadAck: true, staleBatchRecoverySnapshot: true });
+        expect(env).toMatchObject({ NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1',
+            NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1', PATH: '/safe/runtime' });
+        expect(env.ADMIN_API_KEY).toBeUndefined();
+    });
 });

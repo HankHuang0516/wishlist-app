@@ -22,11 +22,18 @@ for (const label of labels) {
   }
   const metadataPath = path.join(output, 'build.json'), metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   if (metadata.kind !== 'isolated-debug-ios-native-qa' || metadata.label !== label || metadata.storeDeliverable !== false) throw new Error('Only isolated QA products allowed');
-  const evidence = fs.readdirSync(output).filter(name => /^qa-[0-9a-f-]{36}$/.test(name) && fs.existsSync(path.join(output, name, 'result.json')));
-  if (evidence.length !== 1) throw new Error('Exactly one terminal QA report required');
-  const reportPath = path.join(output, evidence[0], 'result.json'), report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-  if (typeof report.passed !== 'boolean' || report.appBundle !== metadata.appBundle || report.hashes?.app !== metadata.hashes?.app || report.hashes?.test !== metadata.hashes?.test) throw new Error('Only terminal matching QA reports allowed');
-  if (mode === '--discard-failed-products' && report.passed !== false) throw new Error('Only failed QA reports allowed in failed mode');
+  const evidence = fs.readdirSync(output).filter(name => /^qa-[0-9a-f-]{36}$/.test(name));
+  if (!evidence.length) throw new Error('At least one terminal QA report required');
+  const reports = evidence.map(name => {
+    const reportPath = path.join(output, name, 'result.json');
+    if (!fs.existsSync(reportPath)) throw new Error('Every QA evidence directory needs a terminal report');
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    if (typeof report.passed !== 'boolean' || report.appBundle !== metadata.appBundle ||
+      report.hashes?.app !== metadata.hashes?.app || report.hashes?.test !== metadata.hashes?.test)
+      throw new Error('Only terminal matching QA reports allowed');
+    if (mode === '--discard-failed-products' && report.passed !== false) throw new Error('Only failed QA reports allowed in failed mode');
+    return { name, reportPath };
+  });
   if (mode === '--discard-superseded-products') {
     const changed = metadata.sourceFiles.some(source => !fs.existsSync(path.join(mobile, source)) || hash(path.join(mobile, source)) !== metadata.sourceHashes?.[source]);
     if (!changed) throw new Error('Current QA products are not superseded');
@@ -34,18 +41,20 @@ for (const label of labels) {
   const appBinary = path.join(metadata.app, 'Wishlistai');
   const testBinary = path.join(metadata.runner, 'PlugIns/WishlistNativeQa.xctest/WishlistNativeQa');
   if (hash(appBinary) !== metadata.hashes.app || hash(testBinary) !== metadata.hashes.test) throw new Error('Compiled QA product changed');
-  const evidenceEntries = [];
-  const visit = directory => {
-    for (const name of fs.readdirSync(directory).sort()) {
-      const item = path.join(directory, name), relative = path.relative(output, item), stat = fs.lstatSync(item);
-      if (stat.isDirectory()) visit(item);
-      else if (stat.isFile()) evidenceEntries.push([relative, stat.size, hash(item)]);
-      else if (stat.isSymbolicLink()) evidenceEntries.push([relative, 'link', fs.readlinkSync(item)]);
-      else throw new Error('Unexpected evidence entry');
-    }
-  };
-  visit(path.join(output, evidence[0]));
-  preserved.push({ output, evidenceDirectory: evidence[0], metadataHash: hash(metadataPath), reportHash: hash(reportPath), evidenceEntries });
+  for (const { name: evidenceDirectory, reportPath } of reports) {
+    const evidenceEntries = [];
+    const visit = directory => {
+      for (const name of fs.readdirSync(directory).sort()) {
+        const item = path.join(directory, name), relative = path.relative(output, item), stat = fs.lstatSync(item);
+        if (stat.isDirectory()) visit(item);
+        else if (stat.isFile()) evidenceEntries.push([relative, stat.size, hash(item)]);
+        else if (stat.isSymbolicLink()) evidenceEntries.push([relative, 'link', fs.readlinkSync(item)]);
+        else throw new Error('Unexpected evidence entry');
+      }
+    };
+    visit(path.join(output, evidenceDirectory));
+    preserved.push({ output, evidenceDirectory, metadataHash: hash(metadataPath), reportHash: hash(reportPath), evidenceEntries });
+  }
   for (const target of [path.join(output, 'app-derived/Build/Products'), path.join(output, 'runner-derived/Build/Products')]) {
     if (!fs.existsSync(target) || !fs.lstatSync(target).isDirectory() || fs.realpathSync(target) !== target) throw new Error('Exact compiled products required');
     targets.push(target);

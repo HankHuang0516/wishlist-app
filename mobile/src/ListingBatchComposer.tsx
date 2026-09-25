@@ -337,7 +337,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} />;
   return <Modal visible animationType="slide" onRequestClose={() => void leave(onClose)}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text accessibilityRole="header" testID="listing-batch-title" style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onClose)} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'} contentContainerStyle={s.content}>
       <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。AI 逐件產生私人草稿，你確認後才會公開。</Text>
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
       {!!pending && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}

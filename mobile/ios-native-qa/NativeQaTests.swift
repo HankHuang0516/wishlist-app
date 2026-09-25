@@ -21,6 +21,18 @@ final class NativeQaTests: XCTestCase {
     private func element(_ label: String, kind: XCUIElement.ElementType = .any) -> XCUIElement {
         app.descendants(matching: kind).matching(identifier: label).firstMatch
     }
+    private func scrollToward(_ control: XCUIElement, in scroller: XCUIElement) {
+        let target = control.frame
+        let viewport = scroller.frame
+        // Dismissing the keyboard can expand the viewport while keeping the
+        // old content offset. An offscreen field may then be above us; blindly
+        // swiping up makes it impossible to reach.
+        if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
+            scroller.swipeDown()
+        } else {
+            scroller.swipeUp()
+        }
+    }
     @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any) throws -> XCUIElement {
         let deadline = Date().addingTimeInterval(12)
         repeat {
@@ -30,7 +42,7 @@ final class NativeQaTests: XCTestCase {
                 // Do not swipe a background/covered scroll view belonging to
                 // a screen underneath a native Modal or keyboard.
                 let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
-                scroller?.swipeUp()
+                if let scroller { scrollToward(control, in: scroller) }
                 let observed = element(label, kind: kind)
                 if observed.exists && observed.isHittable { return observed }
             }
@@ -49,7 +61,10 @@ final class NativeQaTests: XCTestCase {
                 if control.exists && control.isHittable && (control.isEnabled || label == "商品聊天訊息") { return control }
             }
             let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
-            scroller?.swipeUp()
+            if let scroller {
+                let field = element(label, kind: .textField)
+                scrollToward(field.exists ? field : element(label, kind: .textView), in: scroller)
+            }
             Thread.sleep(forTimeInterval: 0.12)
         } while Date() < deadline
         throw Failure.missingControl
@@ -129,7 +144,7 @@ final class NativeQaTests: XCTestCase {
             let bytes = raw.bindMemory(to: UInt8.self)
             for upsideDown in [false, true] {
                 var orange: CGVector?, blue: CGVector?
-                for row in 0..<3 {
+                for row in 0..<4 {
                     for column in 0..<3 {
                         var orangePixels = 0, bluePixels = 0
                         for y in stride(from: Int((326 + row * 134 + 10) * 3), to: Int((326 + row * 134 + 120) * 3), by: 15) {
@@ -140,7 +155,9 @@ final class NativeQaTests: XCTestCase {
                                 if cobalt > 80 && cobalt * 10 > red * 12 && cobalt * 10 > green * 12 { bluePixels += 1 }
                             }
                         }
-                        let tile = CGVector(dx: Double(column * 134 + 67) / 402, dy: Double(326 + row * 134 + 67) / 874)
+                        // The picker's bottom selection tray covers the
+                        // fourth row's center. Tap its visible upper third.
+                        let tile = CGVector(dx: Double(column * 134 + 67) / 402, dy: Double(326 + row * 134 + (row >= 3 ? 35 : 67)) / 874)
                         if orange == nil && orangePixels >= 30 && bluePixels < 30 { orange = tile }
                         if blue == nil && bluePixels >= 80 && orangePixels < 30 { blue = tile }
                     }
@@ -249,6 +266,16 @@ final class NativeQaTests: XCTestCase {
             checkpoint(valueCheckpoint + "retry-" + valueState)
         }
         guard valueState == "matched" else { throw Failure.invalidIdentity }
+        if label == "縣市" || label == "行政區" {
+            // The next location field can be below the iOS keyboard after
+            // KeyboardAvoidingView resizes the modal. Submit only this
+            // already-verified, public single-line field, then re-verify it.
+            checkpoint(prefix + "-return")
+            control.typeText("\n")
+            valueState = awaitedPublicValueState()
+            checkpoint(valueCheckpoint + "return-" + valueState)
+            guard valueState == "matched" else { throw Failure.invalidIdentity }
+        }
         if deletionConfirmation || searchSubmission {
             // Submit this single-line public text field through the real
             // keyboard Return key. Search runs its read-only submit callback;
@@ -716,7 +743,9 @@ final class NativeQaTests: XCTestCase {
                 try publicText("行政區", value: "中正區")
                 try publicText("位置緯度", value: "25.033")
                 try publicText("位置經度", value: "121.565")
-                try tap("☐ 可面交", kind: .any)
+                // The seller form defaults to in-person handoff. Verify that
+                // state instead of toggling it off during publication QA.
+                guard element("☑ 可面交", kind: .any).exists else { throw Failure.invalidIdentity }
                 try tap("☐ 我確認資料屬實並同意公開照片與約略位置", kind: .any)
                 try publicText("第1件售價 TWD", value: "450", replace: true)
                 checkpoint("listing-two-ai-publish-confirm-one")
@@ -724,10 +753,16 @@ final class NativeQaTests: XCTestCase {
                 guard try required("刊登已逐件確認的商品（1）", scroll: true, kind: .button).isEnabled else { throw Failure.invalidIdentity }
                 checkpoint("listing-two-ai-publish-one")
                 try tap("刊登已逐件確認的商品（1）")
-                try required("商品草稿 1/12", scroll: true)
-                try required("第 1 件 · 已刊登", scroll: true)
-                try required("第 2 件", scroll: true)
+                let publishedAlert = app.alerts["商品已刊登"]
+                guard publishedAlert.waitForExistence(timeout: 25),
+                      publishedAlert.staticTexts["已確認 1 件商品，可在探索地圖查看。"].exists else { throw Failure.missingControl }
                 try safeScreenshot("qa-two-ai-published")
+                publishedAlert.buttons["OK"].tap()
+                let publicCount = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "站內 1 件")).firstMatch
+                guard publicCount.waitForExistence(timeout: 25), publicCount.isHittable else { throw Failure.missingControl }
+                try tap("切換清單")
+                let publishedCard = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "NativeQA")).firstMatch
+                guard publishedCard.waitForExistence(timeout: 20), publishedCard.isHittable else { throw Failure.missingControl }
             }
             app.terminate()
         } catch { reportFailure() }

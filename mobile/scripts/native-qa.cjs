@@ -5,7 +5,7 @@ const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
-  { listingAiPilot = false, externalListingsPilot = false } = {}) {
+  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 600) throw new Error('QA lifetime must be 1–600 seconds');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
@@ -18,6 +18,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
     ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
     ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
+    ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
   };
 }
 
@@ -26,7 +27,9 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     env: qaEnvironment(databaseUrl, lifetimeSeconds, process.env, options),
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
-  let summary;
+  let summary, uploadAckHeldResolve;
+  const imageReads = [];
+  const uploadAckHeld = new Promise(resolve => { uploadAckHeldResolve = resolve; });
   const requestStop = () => {
     if (child.connected) { try { child.send({ kind: 'stop' }, () => undefined); } catch { /* Await authoritative exit below. */ } }
   };
@@ -44,6 +47,9 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
     }, 30_000);
     child.on('message', message => {
       if (message?.kind === 'ready') { clearTimeout(timer); resolve(message); }
+      if (message?.kind === 'listing-upload-ack-held') uploadAckHeldResolve(message.mediaId);
+      if (message?.kind === 'private-image-read') imageReads.push({ variant: message.variant, statusCode: message.statusCode,
+        hasAuthorization: message.hasAuthorization });
       if (message?.kind === 'stopped') summary = message.summary;
       if (message?.kind === 'failed') {
         clearTimeout(timer);
@@ -77,6 +83,8 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
   return {
     apiUrl: fixture.apiUrl, runId: fixture.runId, actors: fixture.actors,
     ...(options.listingAiPilot ? { callbackToken: fixture.callbackToken } : {}),
+    ...(options.holdListingUploadAck ? { uploadAckHeld } : {}),
+    ...(options.holdListingUploadAck ? { imageReads } : {}),
     async stop() {
       if (child.exitCode === null) requestStop();
       return exited;

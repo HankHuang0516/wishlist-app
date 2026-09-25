@@ -25,4 +25,10 @@ describe('native QA child environment, before process or DB creation', () => {
     it.each([1, 300, 600])('accepts explicit bounded lifetime %p', duration => {
         expect(qaEnvironment(database, duration).NATIVE_QA_LIFETIME_SECONDS).toBe(String(duration));
     });
+    it('enables commit-before-ACK interruption only by explicit isolated QA option', () => {
+        expect(qaEnvironment(database, 60).NATIVE_QA_HOLD_LISTING_UPLOAD_ACK).toBeUndefined();
+        expect(qaEnvironment(database, 60, { PATH: '/safe/runtime', ADMIN_API_KEY: 'never-forward' },
+            { holdListingUploadAck: true })).toMatchObject({ NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1',
+                PATH: '/safe/runtime' });
+    });
 });

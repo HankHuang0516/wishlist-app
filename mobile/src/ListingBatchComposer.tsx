@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +16,7 @@ import { captureCameraSequence } from './listingCaptureFlow';
 import { listPrivateCaptures, preservePrivateCapture, releasePrivateCapture } from './privateCaptureStore';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { parseSellerDraft, restoreSellerForm, sellerDraftFromCard, SellerDraftSync } from './listingSellerDraft';
+import { PrivateListingPhoto } from './PrivateListingPhoto';
 
 type Card = { key: string; clientListingId: string; uri: string; local: boolean; record?: PhotoRecord;
   ai: ListingAiState['status']; draft: ListingAiDraft | null; form: ListingForm; touched: ListingAiTouched; error: string; confirmed: boolean; published: boolean };
@@ -354,13 +355,15 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       {legacyRecoveryError && <Text style={s.error}>舊版未分類照片暫時無法讀取；批次照片仍可使用。請稍後重開再檢查舊照片。</Text>}
       {legacyPhotos.length > 0 && <View style={s.card}><Text style={s.cardTitle}>舊版未分類照片</Text>
         <Text style={s.small}>舊版照片可能是同件商品的多角度照；只有你明確選擇後，才會當成一件批次商品。</Text>
-        {legacyPhotos.map(photo => <View key={photo.id} style={s.row}><Image source={{ uri: photo.thumbnailUrl,
-          headers: { Authorization: `Bearer ${token}` } }} style={s.image} accessibilityLabel="舊版未分類商品照片" />
+        {legacyPhotos.map(photo => <View key={photo.id} style={s.row}><PrivateListingPhoto thumbnailUrl={photo.thumbnailUrl}
+          token={token} style={s.image} label="舊版未分類商品照片" />
           <Pressable accessibilityRole="button" disabled={busy || !!pending || cards.filter(card => !card.published).length >= MAX_ITEMS}
             onPress={() => void adoptLegacy(photo)} style={s.chip}><Text style={s.text}>將此照片作為一件商品</Text></Pressable></View>)}
       </View>}
       {cards.map((card, index) => <View key={card.key} style={s.card}>
-        <View style={s.row}><Image source={card.local ? { uri: card.uri } : { uri: card.uri, headers: { Authorization: `Bearer ${token}` } }} style={s.image} accessibilityLabel={`第${index + 1}件商品照片`} /><View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : '等待上傳'}</Text></View></View>
+        <View style={s.row}><PrivateListingPhoto localUri={card.local ? card.uri : undefined}
+          thumbnailUrl={card.record?.thumbnailUrl} token={token} style={s.image} label={`第${index + 1}件商品照片`} />
+          <View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : card.record ? '照片已私密保存，可開始 AI 辨識' : '等待上傳'}</Text></View></View>
         {!!card.draft && <><Text style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
         {input(card.form.title, `第${index + 1}件商品名稱`, value => changeCard(card.key, 'title', value))}
         {input(card.form.description, `第${index + 1}件商品描述`, value => changeCard(card.key, 'description', value), false, true)}

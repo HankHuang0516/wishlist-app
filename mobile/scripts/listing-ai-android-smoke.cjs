@@ -17,7 +17,7 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
 const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
@@ -126,9 +126,21 @@ async function tapVisibleWithScroll(label, exact = true) {
   }
   throw new Error('QA_VISIBLE_CONTROL_MISSING');
 }
+async function tapInputAboveKeyboard(label) {
+  for (let attempt = 0; attempt < 26 && !stopping; attempt++) {
+    const node = visibleControl(await dump(), label);
+    const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (node && bounds && Number(bounds[4]) <= 480) {
+      await tap(node); await sleep(600); return;
+    }
+    await adb(['shell', 'input', 'swipe', '160', '490', '160', '330', '350']);
+    await sleep(500);
+  }
+  throw new Error('QA_EDIT_INPUT_NOT_VISIBLE');
+}
 async function fillVisibleInput(label, value, field) {
   stage = 'native-publish-form-' + field;
-  await tapVisibleWithScroll(label);
+  await tapInputAboveKeyboard(label);
   await adb(['shell', 'input', 'text', value]);
   if (!(await dump()).includes(`text="${value}"`)) throw new Error('QA_PUBLISH_INPUT_MISSING');
   report.formInputs ??= [];
@@ -137,7 +149,7 @@ async function fillVisibleInput(label, value, field) {
   if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_PUBLISH_EDITOR_CLOSED');
 }
 async function shot(name) {
-  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
+  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'recovered', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   report.screenshots.push(target);
@@ -171,6 +183,13 @@ async function json(url, options = {}, expected = 200) {
   if (response.status !== expected) throw new Error('QA_HTTP_' + response.status);
   return response.status === 204 ? null : response.json();
 }
+async function privateCaptureFiles(apiUrl, userId) {
+  const scope = createHash('sha256').update(apiUrl.replace(/\/$/, '').replace(/\/api$/, '')).digest('hex');
+  const scopedDirectory = `/wishlist-private-captures-v1/${scope}/${userId}/`;
+  const listing = await adb(['shell', 'run-as', packageName, 'sh', '-c',
+    'find . -type f -path "*/wishlist-private-captures-v1/*" -name "*.jpg"'], 15000);
+  return listing.split(/\r?\n/).map(line => line.trim()).filter(line => line.includes(scopedDirectory));
+}
 async function preflight() {
   const prior = JSON.parse(await fs.readFile(priorPath, 'utf8'));
   const bytes = await fs.readFile(apk);
@@ -193,7 +212,8 @@ async function main() {
   await preflight();
   await fs.mkdir(evidence, { mode: 0o700 });
   await freeMetroPort();
-  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: true });
+  stage = 'fixture'; qa = await startNativeQa(database, 600, { listingAiPilot: mode !== '--interrupt-upload',
+    holdListingUploadAck: mode === '--interrupt-upload' });
   const environment = hostEnvironment(process.execPath, '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
     '/Users/hank/Library/Android/sdk', os.homedir());
   stage = 'metro';
@@ -292,6 +312,56 @@ async function main() {
     await sleep(1200);
   }
   if (!photos?.every(photo => photo?.id && photo.imageUrl)) throw new Error('QA_UPLOAD_MISSING');
+  if (mode === '--interrupt-upload') {
+    stage = 'committed-ack-held';
+    const heldMediaId = await Promise.race([qa.uploadAckHeld,
+      sleep(20_000).then(() => { throw new Error('QA_ACK_HOLD_MISSING'); })]);
+    report.interruption = { heldMediaMatches: heldMediaId === photos[0].id,
+      aiDraftStatus: photos[0].aiDraftStatus, captureCountBefore: null, imageReads: qa.imageReads };
+    if (heldMediaId !== photos[0].id || photos[0].aiDraftStatus !== 'SKIPPED') throw new Error('QA_HELD_MEDIA_MISMATCH');
+    const before = await privateCaptureFiles(qa.apiUrl, qa.actors.buyer.id);
+    report.interruption.captureCountBefore = before.length;
+    if (before.length !== 1) throw new Error('QA_DURABLE_CAPTURE_MISSING');
+    stage = 'forced-app-interruption';
+    await adb(['shell', 'am', 'force-stop', packageName]);
+    await adb(['shell', 'am', 'start', '-n', `${packageName}/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity`]);
+    stage = 'native-recovery';
+    await waitNode('我的', { timeout: 50_000 });
+    await tapLabel('我的'); await tapLabel('刊登好物');
+    // Shared location controls precede the draft section; it is below the
+    // 320x640 viewport even when recovery has already succeeded.
+    await waitWithScroll('商品草稿 1/12');
+    await waitWithScroll('第1件商品照片');
+    await waitNode('照片預覽已載入', { timeout: 25_000 });
+    await waitNode('照片已私密保存，可開始 AI 辨識', { timeout: 10_000 });
+    if (!qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode === 200 && read.hasAuthorization) ||
+      qa.imageReads.some(read => read.variant === 'thumbnail' && read.statusCode !== 200))
+      throw new Error('QA_PRIVATE_THUMBNAIL_NOT_AUTHENTICATED');
+    await shot('recovered');
+    const recovered = await json(base + '/listing-media/unused?purpose=BATCH_ITEM', { headers: owner });
+    if (recovered.items?.length !== 1 || recovered.items[0].id !== heldMediaId ||
+      (await json(base + '/listings')).items?.length !== 0) throw new Error('QA_INTERRUPTED_UPLOAD_DUPLICATE');
+    const ownerImage = await fetch(photos[0].imageUrl, { headers: owner, signal: AbortSignal.timeout(15000) });
+    const outsiderImage = await fetch(photos[0].imageUrl, { headers: outsider, signal: AbortSignal.timeout(15000) });
+    const anonymousImage = await fetch(photos[0].imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (ownerImage.status !== 200 || outsiderImage.status !== 404 || anonymousImage.status !== 404)
+      throw new Error('QA_INTERRUPTED_IMAGE_PRIVACY');
+    const image = Buffer.from(await ownerImage.arrayBuffer());
+    const { data: pixels, info: dimensions } = await sharp(image).resize(64, 64).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    let orange = 0;
+    for (let offset = 0; offset < pixels.length; offset += dimensions.channels) {
+      const red = pixels[offset], green = pixels[offset + 1], blue = pixels[offset + 2];
+      if (red > 100 && green > 40 && green < 170 && red > green * 1.25 && green > blue * 1.2) orange++;
+    }
+    if (orange <= 400) throw new Error('QA_INTERRUPTED_WRONG_PHOTO');
+    const after = await privateCaptureFiles(qa.apiUrl, qa.actors.buyer.id);
+    if (after.length !== 0) throw new Error('QA_REDUNDANT_LOCAL_CAPTURE_RETAINED');
+    report.interruption = { committedBeforeAck: true, appForceStopped: true, sameMediaAfterRestart: true,
+      localCaptureCountBefore: before.length, localCaptureCountAfter: after.length,
+      privateImageVerified: true, authenticatedThumbnailVerified: true, publicCount: 0 };
+    report.passed = true;
+    return;
+  }
   const classified = new Map();
   for (const photo of photos) {
     const ownerImage = await fetch(photo.imageUrl, { headers: owner, signal: AbortSignal.timeout(15_000) });
@@ -380,9 +450,9 @@ async function main() {
     if (!(await dump()).includes(draft.name)) throw new Error('QA_NATIVE_FIRST_NOT_RESTORED');
   }
   stage = 'native-edit';
-  const titleInput = await waitWithScroll('第1件商品名稱');
+  await waitWithScroll('第1件商品名稱');
   await shot('pre-edit');
-  await tap(titleInput);
+  await tapInputAboveKeyboard('第1件商品名稱');
   await adb(['shell', 'input', 'keyevent', '123']); // Move to end of this synthetic title.
   await adb(['shell', 'input', 'text', 'NativeQA']);
   if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_EDITOR_CLOSED_UNEXPECTEDLY');
@@ -523,6 +593,6 @@ async function main() {
     evidenceDirectory: evidence, pickerMarkers: report.pickerMarkers, selectionMarkers: report.selectionMarkers, ai: report.ai,
     screenshots: report.screenshots.length,
     cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers, editObserved: report.editObserved,
-    publication: report.publication, formInputs: report.formInputs }));
+    publication: report.publication, interruption: report.interruption, formInputs: report.formInputs }));
   if (!report.passed) process.exitCode = 1;
 })().catch(() => { console.error('Isolated Android listing AI QA could not complete; private input withheld'); process.exitCode = 1; });

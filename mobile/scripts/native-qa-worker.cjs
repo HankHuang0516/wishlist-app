@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
 const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
@@ -95,8 +95,10 @@ async function main() {
   if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 600) throw new Error('Unsafe QA lifetime');
   if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
   if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
+  if (process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== undefined && process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== '1') throw new Error('Unsafe QA upload interruption mode');
   const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
   const externalListingsPilot = process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT === '1';
+  const holdListingUploadAck = process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK === '1';
   if (externalListingsPilot) process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-native-qa-'));
   startupStage = 'private-storage';
@@ -183,6 +185,30 @@ async function main() {
   app.disable('x-powered-by');
   // Do not trust X-Forwarded-For: the real route rate limits remain effective.
   app.use(express.json({ limit: '64kb' }));
+  if (holdListingUploadAck) app.use((req, res, next) => {
+    if (req.method === 'GET' && /^\/api\/listing-media\/[0-9a-f-]{36}\/(?:image|thumbnail)$/.test(req.path))
+      res.once('finish', () => send({ kind: 'private-image-read', variant: req.path.endsWith('/thumbnail') ? 'thumbnail' : 'image',
+        statusCode: res.statusCode, hasAuthorization: typeof req.headers.authorization === 'string' }));
+    next();
+  });
+  let uploadAckAlreadyHeld = false;
+  if (holdListingUploadAck) app.use((req, res, next) => {
+    if (req.method !== 'POST' || req.path !== '/api/listing-media') return next();
+    const originalJson = res.json;
+    res.json = function (body) {
+      if (uploadAckAlreadyHeld || res.statusCode !== 201 || !uuid.test(body?.id || '')) return originalJson.call(this, body);
+      // The real route has already committed the private photo. Delay only
+      // its successful acknowledgement so QA can terminate the App in the
+      // otherwise rare commit-before-ACK window. Never affect a store build.
+      uploadAckAlreadyHeld = true;
+      const timeout = setTimeout(() => { if (!res.destroyed) originalJson.call(res, body); }, 45_000);
+      timeout.unref();
+      res.once('close', () => clearTimeout(timeout));
+      send({ kind: 'listing-upload-ack-held', mediaId: body.id });
+      return res;
+    };
+    next();
+  });
   app.use(async (req, res, next) => {
     res.set('Cache-Control', 'private, no-store');
     try {

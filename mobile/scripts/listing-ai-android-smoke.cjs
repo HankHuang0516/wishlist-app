@@ -17,8 +17,8 @@ const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]);
 const mode = process.argv[3];
-if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--interrupt-upload', '--stale-recovery', '--retry-uncommitted'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
-const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one';
+if (!['--inspect-picker', '--inspect-picker-two', '--inspect-selection', '--recognize-one', '--recognize-two', '--publish-one', '--reconfirm-one', '--interrupt-upload', '--stale-recovery', '--retry-uncommitted'].includes(mode) || process.argv.length !== 4) throw new Error('Explicit QA mode required');
+const twoPhotos = mode === '--inspect-picker-two' || mode === '--recognize-two' || mode === '--publish-one' || mode === '--reconfirm-one';
 const serial = assignedSerial(process.env);
 const database = process.env.TEST_DATABASE_URL;
 assertTestDatabase(database);
@@ -149,7 +149,7 @@ async function fillVisibleInput(label, value, field) {
   if (!findNode(await dump(), '連續拍照刊登')) throw new Error('QA_PUBLISH_EDITOR_CLOSED');
 }
 async function shot(name) {
-  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'published', 'recovered', 'failed-upload', 'retried-upload', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
+  if (!['picker', 'selected', 'ai-draft', 'ai-second-draft', 'second-pending', 'pre-edit', 'edited', 'pre-publish', 'confirmation-cleared', 'reconfirmed', 'published', 'recovered', 'failed-upload', 'retried-upload', 'failure'].includes(name)) throw new Error('QA_SHOT_NAME');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   report.screenshots.push(target);
@@ -496,17 +496,15 @@ async function main() {
   await shot('ai-draft');
   if (twoPhotos) {
     stage = 'native-second-ai-result';
-    await waitWithScroll('第2件商品名稱');
     const mug = recognized.get('mug');
     const mugPrice = `NT$ ${mug.estimatedPriceLowTwd}–${mug.estimatedPriceHighTwd}`;
-    const secondDeadline = Date.now() + 35_000;
-    let secondVisible = false;
-    while (Date.now() < secondDeadline && !stopping) {
-      const mugScreen = await dump();
-      if (mugScreen.includes(escapeXml(mug.name)) && mugScreen.includes(mugPrice)) { secondVisible = true; break; }
-      await sleep(1200);
-    }
-    if (!secondVisible) {
+    // On a small screen, the second card's price and editable name cannot
+    // always fit in the same accessibility snapshot. Verify each in order.
+    try {
+      await waitWithScroll(`AI 二手參考價：${mugPrice}`);
+      await waitWithScroll('第2件商品名稱');
+      if (!(await dump()).includes(escapeXml(mug.name))) throw new Error('QA_NATIVE_SECOND_AI_MISSING');
+    } catch {
       await shot('second-pending');
       throw new Error('QA_NATIVE_SECOND_AI_MISSING');
     }
@@ -577,7 +575,7 @@ async function main() {
   report.ai = { status: 'COMPLETED', items: [...recognized].map(([fixture, result]) => ({ fixture, name: result.name,
     referencePriceTwd: [result.estimatedPriceLowTwd, result.estimatedPriceHighTwd] })),
     nativePriceVisible: true, sellerEditRestored: true, unpublishedUntilConfirmation: true, ownerOnly: true };
-  if (mode === '--publish-one') {
+  if (mode === '--publish-one' || mode === '--reconfirm-one') {
     stage = 'native-publish-form';
     // Reopening intentionally clears precise location and consent. Enter only
     // synthetic QA values through the native form, never via a test-only API.
@@ -600,6 +598,28 @@ async function main() {
     await waitNode('☑ 我已逐欄確認第 1 件商品的照片、內容及售價');
     if ((await json(base + '/listings')).items?.length !== 0) throw new Error('QA_PRECONFIRM_PUBLICATION');
     await shot('pre-publish');
+    if (mode === '--reconfirm-one') {
+      stage = 'native-retry-after-confirmation';
+      await tapVisibleWithScroll('重試 AI');
+      const retryDeadline = Date.now() + 15_000;
+      let cleared = false;
+      while (Date.now() < retryDeadline && !stopping) {
+        const retryScreen = await dump();
+        if (findNode(retryScreen, '☐ 我已逐欄確認第 1 件商品的照片、內容及售價')) { cleared = true; break; }
+        await sleep(600);
+      }
+      if (!cleared) throw new Error('QA_OLD_CONFIRMATION_REUSED');
+      await waitWithScroll('刊登已逐件確認的商品（0）');
+      if ((await json(base + '/listings')).items?.length !== 0)
+        throw new Error('QA_OLD_CONFIRMATION_REUSED');
+      await shot('confirmation-cleared');
+      report.reconfirmation = { oldConfirmationCleared: true, publicCountBeforeReconfirm: 0 };
+      stage = 'native-reconfirm-one';
+      await tapVisibleWithScroll('我已逐欄確認第 1 件商品的照片、內容及售價', false);
+      await waitNode('☑ 我已逐欄確認第 1 件商品的照片、內容及售價');
+      await waitWithScroll('刊登已逐件確認的商品（1）');
+      await shot('reconfirmed');
+    }
     stage = 'native-publish-one';
     await tapVisibleWithScroll('刊登已逐件確認的商品（1）');
     let listing;
@@ -666,6 +686,6 @@ async function main() {
     evidenceDirectory: evidence, pickerMarkers: report.pickerMarkers, selectionMarkers: report.selectionMarkers, ai: report.ai,
     screenshots: report.screenshots.length,
     cleanup: report.cleanup, failure: report.failure, uiMarkers: report.uiMarkers, editObserved: report.editObserved,
-    publication: report.publication, interruption: report.interruption, formInputs: report.formInputs }));
+    publication: report.publication, reconfirmation: report.reconfirmation, interruption: report.interruption, formInputs: report.formInputs }));
   if (!report.passed) process.exitCode = 1;
 })().catch(() => { console.error('Isolated Android listing AI QA could not complete; private input withheld'); process.exitCode = 1; });

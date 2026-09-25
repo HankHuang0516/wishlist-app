@@ -104,6 +104,12 @@ enum ListingAiStatus {
   FAILED
 }
 
+enum ListingMediaPurpose {
+  LEGACY_UNKNOWN
+  MANUAL_PHOTO
+  BATCH_ITEM
+}
+
 model Listing {
   id              String                  @id @default(uuid())
   ownerUserId     Int
@@ -235,6 +241,7 @@ model ListingMedia {
   thumbnailUrl String
   contentHash  String
   clientUploadId String?
+  capturePurpose ListingMediaPurpose @default(LEGACY_UNKNOWN)
   width        Int?
   height       Int?
   byteSize     Int?
@@ -260,6 +267,7 @@ model ListingMedia {
 
   @@index([listingId, position])
   @@index([ownerUserId, createdAt])
+  @@index([ownerUserId, capturePurpose, createdAt])
   @@index([aiDraftStatus, aiDraftUpdatedAt])
   @@unique([ownerUserId, clientUploadId])
 }

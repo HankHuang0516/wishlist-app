@@ -54,7 +54,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
   }
 
   async function upload(photo: Photo) {
-    const body = jpegPhotoUploadForm(photo.key, photo.uri, 'listing-photo.jpg');
+    const body = jpegPhotoUploadForm(photo.key, photo.uri, 'listing-photo.jpg', 'MANUAL_PHOTO');
     const record = await uploadPhotoRecord(api, apiUrl, photo.key, body, __DEV__);
     setPhotos(old => old.map(p => p.key === photo.key ? { ...p, record, failed: false } : p));
   }

@@ -25,9 +25,13 @@ const savedMode = process.env.NODE_ENV;
 const savedProvider = process.env.LISTING_MEDIA_STORAGE_PROVIDER;
 const savedPilotUserId = process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID;
 const token = (id: number) => jwt.sign({ id }, secret, { expiresIn: '1h' });
-const upload = (id = seller, clientUploadId: string = randomUUID(), input?: Buffer, mime = 'image/jpeg') => request(app).post('/api/listing-media')
-    .set('Authorization', 'Bearer ' + token(id)).set('X-Forwarded-For', '198.51.100.' + (sequence++ % 250 + 1))
-    .field('clientUploadId', clientUploadId).attach('image', input ?? jpeg, { filename: '../../private-address.jpg', contentType: mime });
+const upload = (id = seller, clientUploadId: string = randomUUID(), input?: Buffer, mime = 'image/jpeg',
+    purpose?: 'MANUAL_PHOTO' | 'BATCH_ITEM') => {
+    const req = request(app).post('/api/listing-media').set('Authorization', 'Bearer ' + token(id))
+        .set('X-Forwarded-For', '198.51.100.' + (sequence++ % 250 + 1)).field('clientUploadId', clientUploadId);
+    if (purpose) req.field('capturePurpose', purpose);
+    return req.attach('image', input ?? jpeg, { filename: '../../private-address.jpg', contentType: mime });
+};
 const image = (id: string, variant = 'image', user?: number) => {
     const r = request(app).get(`/api/listing-media/${id}/${variant}`); return user ? r.set('Authorization', 'Bearer ' + token(user)) : r;
 };
@@ -59,6 +63,43 @@ afterAll(async () => {
 });
 
 describe('real listing photo upload / private read / PostgreSQL', () => {
+    it('keeps manual multi-angle photos out of batch recovery and adopts legacy photos only on explicit owner action', async () => {
+        const batch = (await upload(seller, randomUUID(), undefined, 'image/jpeg', 'BATCH_ITEM')).body;
+        const manual = (await upload(seller, randomUUID(), undefined, 'image/jpeg', 'MANUAL_PHOTO')).body;
+        const legacy = (await upload()).body;
+        const list = (purpose: string, user = seller) => request(app).get('/api/listing-media/unused')
+            .set('Authorization', 'Bearer ' + token(user)).query({ purpose });
+        expect((await list('BATCH_ITEM')).body.items.map((item: { id: string }) => item.id)).toEqual([batch.id]);
+        expect((await list('MANUAL_PHOTO')).body.items.map((item: { id: string }) => item.id)).toEqual([manual.id]);
+        expect((await list('LEGACY_UNKNOWN')).body.items.map((item: { id: string }) => item.id)).toEqual([legacy.id]);
+        expect((await list('BATCH_ITEM', third)).body.items).toEqual([]);
+        expect((await list('BATCH_ITEM,MANUAL_PHOTO')).status).toBe(400);
+        const endpoint = `/api/listing-media/${legacy.id}/capture-purpose`;
+        expect((await request(app).put(endpoint).send({ capturePurpose: 'BATCH_ITEM' })).status).toBe(401);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(third))
+            .send({ capturePurpose: 'BATCH_ITEM' })).status).toBe(404);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ capturePurpose: 'MANUAL_PHOTO' })).status).toBe(400);
+        expect((await request(app).put(`/api/listing-media/${manual.id}/capture-purpose`)
+            .set('Authorization', 'Bearer ' + token(seller)).send({ capturePurpose: 'BATCH_ITEM' })).status).toBe(404);
+        const adopted = await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ capturePurpose: 'BATCH_ITEM' });
+        expect(adopted.status).toBe(200);
+        expect(adopted.body).toEqual({ mediaId: legacy.id, capturePurpose: 'BATCH_ITEM' });
+        expect((await list('BATCH_ITEM')).body.items.map((item: { id: string }) => item.id)).toEqual(expect.arrayContaining([batch.id, legacy.id]));
+        expect((await list('MANUAL_PHOTO')).body.items.map((item: { id: string }) => item.id)).toEqual([manual.id]);
+        expect((await request(app).put(endpoint).set('Authorization', 'Bearer ' + token(seller))
+            .send({ capturePurpose: 'BATCH_ITEM' })).status).toBe(404);
+        const attached = (await upload()).body;
+        expect((await request(app).post('/api/listings').set('Authorization', 'Bearer ' + token(seller))
+            .send(listingBody(attached.id, false))).status).toBe(201);
+        expect((await request(app).put(`/api/listing-media/${attached.id}/capture-purpose`)
+            .set('Authorization', 'Bearer ' + token(seller)).send({ capturePurpose: 'BATCH_ITEM' })).status).toBe(404);
+        const reused = randomUUID();
+        expect((await upload(seller, reused, undefined, 'image/jpeg', 'BATCH_ITEM')).status).toBe(201);
+        expect((await upload(seller, reused)).status).toBe(200); // older clients omit the tag on retries
+        expect((await upload(seller, reused, undefined, 'image/jpeg', 'MANUAL_PHOTO')).status).toBe(409);
+    });
     it('requires real authentication before receiving any upload', async () => {
         const r = await request(app).post('/api/listing-media').attach('image', jpeg, 'photo.jpg'); expect(r.status).toBe(401);
         expect(await prisma.listingMedia.count({ where: { ownerUserId: seller } })).toBe(0);

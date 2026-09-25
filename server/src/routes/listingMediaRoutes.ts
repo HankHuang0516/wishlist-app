@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
+import { adoptLegacyBatchPhoto, deleteUnusedListingMedia, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
 
 const router = Router();
@@ -11,7 +11,7 @@ const uploads = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, 
     message: { error: '照片操作過於頻繁，請稍後重試', errorCode: 'PHOTO_RATE_LIMIT' } });
 const aiRequests = rateLimit({ windowMs: 60_000, limit: 15, standardHeaders: true, legacyHeaders: false,
     message: { error: 'AI 辨識請求過於頻繁，請稍後再試', errorCode: 'LISTING_AI_RATE_LIMIT' } });
-const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1, fields: 1, parts: 2, fieldSize: 100, fieldNameSize: 30, headerPairs: 100 },
+const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1, fields: 2, parts: 3, fieldSize: 100, fieldNameSize: 30, headerPairs: 100 },
     fileFilter: (_req, file, callback) => PHOTO_MIME_TYPES.includes(file.mimetype) ? callback(null, true) : callback(new PhotoInputError()) }).single('image');
 
 router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
@@ -39,6 +39,7 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
 });
 router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadId);
 router.get('/unused', authenticateToken, myUnusedListingMedia);
+router.put('/:id/capture-purpose', authenticateToken, adoptLegacyBatchPhoto);
 router.post('/:id/ai-draft', authenticateToken, aiRequests, requestListingAiDraft);
 router.get('/:id/ai-draft', authenticateToken, getListingAiDraft);
 router.put('/:id/seller-draft', authenticateToken, saveListingSellerDraft);

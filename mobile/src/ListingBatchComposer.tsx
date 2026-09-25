@@ -43,6 +43,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   onClose: () => void; onAdvanced: () => void; onPublished: (count: number) => void;
 }) {
   const [cards, setCards] = useState<Card[]>([]);
+  const [legacyPhotos, setLegacyPhotos] = useState<PhotoRecord[]>([]);
+  const [legacyRecoveryError, setLegacyRecoveryError] = useState(false);
   const [shared, setShared] = useState<ListingForm>({ ...emptyListingForm });
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
@@ -72,8 +74,15 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     void (async () => {
       try {
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
-        const [journal, response] = await Promise.all([privatePendingStore.get(key), api<{ items: unknown[] }>('/listing-media/unused')]);
+        const [journal, response, legacy] = await Promise.all([privatePendingStore.get(key),
+          api<{ items: unknown[] }>('/listing-media/unused?purpose=BATCH_ITEM'),
+          api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null)]);
         if (!Array.isArray(response.items)) throw new Error('UNUSED_MEDIA_RESPONSE');
+        let olderPhotos: PhotoRecord[] = [], olderFailed = !legacy;
+        try {
+          if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
+          olderPhotos = (legacy?.items ?? []).map(raw => parsePhotoRecord(raw, apiUrl, __DEV__));
+        } catch { olderFailed = true; }
         const recovered = restoreBatchCaptureOrder(response.items, MAX_ITEMS).map(raw => {
           const record = parsePhotoRecord(raw, apiUrl, __DEV__);
           const row = raw as Record<string, unknown>;
@@ -85,7 +94,9 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           return restored ? { ...aiCard, clientListingId: restored.clientListingId,
             form: restoreSellerForm(aiCard.form, restored, state.draft), touched: restored.touched } : aiCard;
         });
-        if (active.current) { keyRef.current = key; setPending(journal); setCards(recovered); setReady(true); }
+        if (active.current) { keyRef.current = key; setPending(journal); setCards(recovered);
+          setLegacyPhotos(olderPhotos); setLegacyRecoveryError(olderFailed);
+          setReady(true); }
       } catch { if (active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }
     })();
     return () => { active.current = false; sync.dispose(); if (sellerSync.current === sync) sellerSync.current = null; };
@@ -125,7 +136,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   }
   async function upload(card: Card) {
     try {
-      const form = jpegPhotoUploadForm(card.key, card.uri, 'listing-photo.jpg');
+      const form = jpegPhotoUploadForm(card.key, card.uri, 'listing-photo.jpg', 'BATCH_ITEM');
       const record = await uploadPhotoRecord(api, apiUrl, card.key, form, __DEV__);
       if (!sellerSync.current?.has(record.id)) sellerSync.current?.hydrate(record.id, 0, null);
       setCards(old => old.map(current => current.key === card.key ? { ...current, record } : current));
@@ -168,6 +179,23 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         setCards(old => old.map(current => current.key === card.key ? applyAi(current, state) : current));
       }
     } catch { setError('辨識重試未成功，照片仍保留在私人草稿。'); } finally { end(); }
+  }
+  async function adoptLegacy(record: PhotoRecord) {
+    if (!ready || pending || cards.filter(card => !card.published).length >= MAX_ITEMS || !begin()) return;
+    try {
+      const adopted = await api<{ mediaId: string; capturePurpose: string }>(`/listing-media/${record.id}/capture-purpose`,
+        { method: 'PUT', body: JSON.stringify({ capturePurpose: 'BATCH_ITEM' }) });
+      if (adopted.mediaId !== record.id || adopted.capturePurpose !== 'BATCH_ITEM') throw new Error('BAD_ADOPTION_ACK');
+      sellerSync.current?.hydrate(record.id, 0, null);
+      setCards(old => [...old, initialCard(record.id, record.imageUrl, false, record)]);
+      setLegacyPhotos(old => old.filter(photo => photo.id !== record.id));
+      const state = parseListingAiState(await api<unknown>(`/listing-media/${record.id}/ai-draft`, { method: 'POST' }), record.id);
+      setCards(old => old.map(card => card.key === record.id ? applyAi(card, state) : card));
+    } catch (failure) {
+      setError(failure instanceof ApiError && failure.code === 'LISTING_AI_UNAVAILABLE'
+        ? '舊照片已加入私人批次；AI 尚未開放，可手動編輯或稍後重試。'
+        : '舊照片加入狀態未確認；請重新開啟後檢查，避免重複操作。');
+    } finally { end(); }
   }
   async function remove(card: Card) {
     if (!begin()) return;
@@ -285,6 +313,14 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         minimumDate={new Date()} mode="date" timeZoneName="Asia/Taipei" locale="zh-TW" onChange={(_event, date) => { setExpiryPicker(Platform.OS === 'ios'); if (date) changeShared('expiryDate', taiwanDate(date)); }} />}
       <Text style={s.small}>重新開啟草稿時，位置、交付方式與失效日期需再次確認；精確定位不保存在私人商品草稿。</Text>
       <Text style={s.section}>商品草稿 {cards.filter(card => !card.published).length}/{MAX_ITEMS}</Text>
+      {legacyRecoveryError && <Text style={s.error}>舊版未分類照片暫時無法讀取；批次照片仍可使用。請稍後重開再檢查舊照片。</Text>}
+      {legacyPhotos.length > 0 && <View style={s.card}><Text style={s.cardTitle}>舊版未分類照片</Text>
+        <Text style={s.small}>舊版照片可能是同件商品的多角度照；只有你明確選擇後，才會當成一件批次商品。</Text>
+        {legacyPhotos.map(photo => <View key={photo.id} style={s.row}><Image source={{ uri: photo.thumbnailUrl,
+          headers: { Authorization: `Bearer ${token}` } }} style={s.image} accessibilityLabel="舊版未分類商品照片" />
+          <Pressable accessibilityRole="button" disabled={busy || !!pending || cards.filter(card => !card.published).length >= MAX_ITEMS}
+            onPress={() => void adoptLegacy(photo)} style={s.chip}><Text style={s.text}>將此照片作為一件商品</Text></Pressable></View>)}
+      </View>}
       {cards.map((card, index) => <View key={card.key} style={s.card}>
         <View style={s.row}><Image source={card.local ? { uri: card.uri } : { uri: card.uri, headers: { Authorization: `Bearer ${token}` } }} style={s.image} accessibilityLabel={`第${index + 1}件商品照片`} /><View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : '等待上傳'}</Text></View></View>
         {!!card.draft && <><Text style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}

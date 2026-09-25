@@ -45,7 +45,12 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
     let flickrPhotoId: string | undefined;
     try {
         const clientUploadId = req.body?.clientUploadId;
-        if (!isListingId(clientUploadId) || Object.keys(req.body ?? {}).some(k => k !== 'clientUploadId') || !req.file) throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼');
+        const purposeSpecified = req.body?.capturePurpose !== undefined;
+        const capturePurpose = req.body?.capturePurpose ?? 'LEGACY_UNKNOWN';
+        if (!isListingId(clientUploadId) || typeof capturePurpose !== 'string' ||
+            !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(capturePurpose) ||
+            Object.keys(req.body ?? {}).some(k => k !== 'clientUploadId' && k !== 'capturePurpose') || !req.file)
+            throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼與用途');
         const ownerUserId = req.user.id;
         if (!await prisma.user.findUnique({ where: { id: ownerUserId }, select: { id: true } })) return res.status(401).json({ error: '帳號已失效' });
         const provider = uploadProvider(ownerUserId);
@@ -55,7 +60,8 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         const photo = await encodeListingPhoto(req.file.buffer, req.file.mimetype);
         const existing = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId, clientUploadId } } });
         if (existing) {
-            if (existing.contentHash !== photo.contentHash) return res.status(409).json({ error: '上傳識別碼已被不同照片使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
+            if (existing.contentHash !== photo.contentHash || (purposeSpecified && existing.capturePurpose !== capturePurpose))
+                return res.status(409).json({ error: '上傳識別碼已被不同照片或用途使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
             return res.json(await prisma.listingMedia.findUnique({ where: { id: existing.id }, select }));
         }
         id = randomUUID();
@@ -66,6 +72,7 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         const base = `${getApiUrl().trim().replace(/\/$/, '')}/listing-media/${id}`;
         try {
             const record = await prisma.listingMedia.create({ data: { id, ownerUserId, clientUploadId, contentHash: photo.contentHash,
+                capturePurpose: capturePurpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM',
                 width: photo.width, height: photo.height, byteSize: photo.byteSize, imageUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`,
                 flickrPhotoId, flickrImageUrl: remote?.imageSource, flickrThumbnailUrl: remote?.thumbnailSource }, select });
             return res.status(201).json(record);
@@ -74,7 +81,8 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
             persisted = false;
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
                 const winner = await prisma.listingMedia.findUnique({ where: { ownerUserId_clientUploadId: { ownerUserId, clientUploadId } } });
-                if (winner?.contentHash === photo.contentHash) return res.json(await prisma.listingMedia.findUnique({ where: { id: winner.id }, select }));
+                if (winner?.contentHash === photo.contentHash && (!purposeSpecified || winner.capturePurpose === capturePurpose))
+                    return res.json(await prisma.listingMedia.findUnique({ where: { id: winner.id }, select }));
                 return res.status(409).json({ error: '上傳識別碼已被使用', errorCode: 'PHOTO_UPLOAD_CONFLICT' });
             }
             throw error;
@@ -185,11 +193,34 @@ export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     res.setHeader('Cache-Control', 'private, no-store');
     try {
+        const purpose = req.query.purpose;
+        if (purpose !== undefined && (typeof purpose !== 'string' ||
+            !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(purpose)))
+            return res.status(400).json({ error: '照片用途不正確', errorCode: 'INVALID_MEDIA_PURPOSE' });
         const records = await prisma.listingMedia.findMany({ where: { ownerUserId: req.user.id, listingId: null, wishItemId: null,
-            createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }, orderBy: { createdAt: 'desc' }, take: 30,
+            createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) },
+            ...(purpose ? { capturePurpose: purpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM' } : {}) },
+            orderBy: { createdAt: 'desc' }, take: 30,
             select: { ...select, ...aiDraftSelect, sellerDraft: true, sellerDraftVersion: true } });
         return res.json({ items: records.map(record => ({ ...record, aiDraft: record.aiDraftStatus === 'COMPLETED' ? record.aiDraft : null })) });
     } catch { return res.status(503).json({ error: '暫時無法恢復未刊登照片', errorCode: 'PHOTO_RECOVERY_UNAVAILABLE' }); }
+}
+
+// An older upload has no trustworthy workflow tag. Only its owner may
+// explicitly adopt it as one batch item; never infer this from a photo alone.
+export async function adoptLegacyBatchPhoto(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!isListingId(req.params.id)) return res.status(404).json({ error: '未分類照片不存在' });
+    if (!req.body || Object.keys(req.body).join(',') !== 'capturePurpose' || req.body.capturePurpose !== 'BATCH_ITEM')
+        return res.status(400).json({ error: '只能明確選擇加入批次商品', errorCode: 'INVALID_MEDIA_PURPOSE' });
+    try {
+        const changed = await prisma.listingMedia.updateMany({ where: { id: req.params.id, ownerUserId: req.user.id,
+            capturePurpose: 'LEGACY_UNKNOWN', listingId: null, wishItemId: null, aiDraftStatus: 'SKIPPED', sellerDraft: { equals: Prisma.DbNull } },
+            data: { capturePurpose: 'BATCH_ITEM' } });
+        return changed.count ? res.json({ mediaId: req.params.id, capturePurpose: 'BATCH_ITEM' }) :
+            res.status(404).json({ error: '未分類照片不存在或已被使用' });
+    } catch { return res.status(503).json({ error: '照片暫時無法加入批次', errorCode: 'MEDIA_ADOPTION_UNAVAILABLE' }); }
 }
 
 export async function getMediaByUploadId(req: AuthRequest, res: Response) {

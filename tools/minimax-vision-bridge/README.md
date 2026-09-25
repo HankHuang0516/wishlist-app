@@ -20,6 +20,8 @@ Railway 設定 `MINIMAX_PILOT_USER_ID`（僅測試帳號的數字 ID）及隨機
 
 外部來源另有獨立的 `MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED=1` 開關，預設關閉。須先在後台建立並核實來源、圖片重用與 AI 處理授權，再升級本機 poller，最後才可開啟；此功能仍使用相同的本機拉取通道與 worker token。工作器只從來源登記的 HTTPS 圖片主機下載，驗證公開 IPv4 並固定連線位址，不把 bearer token 送給來源；圖片只在本機暫存，完成後清除。模型補充結果僅回到後台待審候選資料，不能自行新增公開商品、售價或賣家資訊。具體限制與驗收閘門見 [外部商品來源契約](../../docs/external-supply-intake.md)。目前沒有因程式部署而自動加入任何真實雙北商品。
 
+macOS 常駐工作器使用 `~/Library/Application Support/WishlistMiniMax/` 下的獨立程式副本；合併 Git 變更不會自動更新該副本。每次變更圖片橋接器後，應在安全時段核對並更新該副本、重啟單一 Wishlist.ai LaunchAgent，再執行明確 opt-in 的 `node tools/minimax-vision-bridge/runtime-external-image-smoke.mjs`。此 smoke 先確認安裝副本與專案程式雜湊相同，再從固定提交下載本專案自製檯燈圖並核對影像雜湊，最後用**安裝副本**呼叫 MiniMax；只接受有圖片證據且不自行推測外部來源售價／新舊的結果。測試不建立來源、候選或公開商品，也不向 Railway 寫入；它會消耗一次 MiniMax 模型呼叫，需人工明確執行。通過此項仍不能取代真實授權來源及其售出更新的驗收。
+
 ## 舊本機概念驗證
 
 原先的 `server.mjs` 仍可做單機概念驗證；請不要將其回環端口公開。新增的 poller 仍需 Railway 部署與兩端一致的私密設定，才算完成端到端串接。

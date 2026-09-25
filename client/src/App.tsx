@@ -22,6 +22,7 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiShowcasePage from "./pages/ApiShowcasePage";
 import ChangelogPage from "./pages/ChangelogPage";
 import ListingBatchPage from "./pages/ListingBatchPage";
+import AccountDeletionPage from "./pages/AccountDeletionPage";
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -56,6 +57,7 @@ function App() {
             <Route path="register" element={<Register />} />
             <Route path="terms" element={<TermsOfUse />} />
             <Route path="privacy" element={<PrivacyPolicy />} />
+            <Route path="account-deletion" element={<AccountDeletionPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />

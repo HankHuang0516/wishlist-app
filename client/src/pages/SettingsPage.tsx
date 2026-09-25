@@ -6,7 +6,6 @@ import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2, LogOut } from "lucide-react";
-import ActionConfirmModal from "../components/ActionConfirmModal";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 
@@ -38,44 +37,6 @@ export default function SettingsPage() {
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Modal State
-    const [modalConfig, setModalConfig] = useState<{
-        isOpen: boolean;
-        title: string;
-        message: string;
-        confirmText?: string;
-        variant?: "primary" | "destructive";
-        onConfirm: () => void;
-        isProcessing?: boolean;
-    }>({
-        isOpen: false,
-        title: "",
-        message: "",
-        onConfirm: () => { },
-        variant: "primary"
-    });
-
-    const openModal = (
-        title: string,
-        message: string,
-        onConfirm: () => Promise<void> | void,
-        variant: "primary" | "destructive" = "primary",
-        confirmTextWithPrice?: string
-    ) => {
-        setModalConfig({
-            isOpen: true,
-            title,
-            message,
-            onConfirm: async () => {
-                setModalConfig(prev => ({ ...prev, isProcessing: true })); // Show loading
-                await onConfirm();
-                setModalConfig(prev => ({ ...prev, isOpen: false, isProcessing: false })); // Close on finish
-            },
-            variant,
-            confirmText: confirmTextWithPrice || t('common.confirm')
-        });
-    };
 
     useEffect(() => {
         if (token) {
@@ -825,33 +786,7 @@ export default function SettingsPage() {
                                 </div>
                                 <Button
                                     variant="destructive"
-                                    onClick={() => {
-                                        openModal(
-                                            t('settings.deleteAccount'),
-                                            t('settings.deleteConfirm'),
-                                            async () => {
-                                                try {
-                                                    const res = await fetch(`${API_URL}/users/me`, {
-                                                        method: 'DELETE',
-                                                        headers: { 'Authorization': `Bearer ${token}` }
-                                                    });
-                                                    if (res.ok) {
-                                                        logout();
-                                                        navigate('/');
-                                                    } else {
-                                                        setFeedback({ message: t('common.error'), type: 'error' });
-                                                        setTimeout(() => setFeedback(null), 3000);
-                                                    }
-
-                                                } catch (e) {
-                                                    console.error(e);
-                                                    alert("Connection error");
-                                                }
-                                            },
-                                            "destructive",
-                                            t('common.delete')
-                                        );
-                                    }}
+                                    onClick={() => navigate('/account-deletion')}
                                 >
                                     {t('settings.deleteAccount')}
                                 </Button>
@@ -923,16 +858,6 @@ export default function SettingsPage() {
                     </Button>
                 </div>
 
-                <ActionConfirmModal
-                    isOpen={modalConfig.isOpen}
-                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    onConfirm={modalConfig.onConfirm}
-                    title={modalConfig.title}
-                    message={modalConfig.message}
-                    confirmText={modalConfig.confirmText}
-                    variant={modalConfig.variant}
-                    isProcessing={modalConfig.isProcessing}
-                />
             </div>
         </div>
 

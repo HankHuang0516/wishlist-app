@@ -59,7 +59,8 @@ function destinationTestRun(template, label, testRoot, inputPort, flow) {
   delete qa.UITargetAppPath;
   qa.OnlyTestIdentifiers = [...(inputPort === undefined ? TESTS : AUTHENTICATED_FLOWS[flow])];
   qa.ParallelizationEnabled = false;
-  qa.TestTimeoutsEnabled = true; qa.DefaultTestExecutionTimeAllowance = 180; qa.MaximumTestExecutionTimeAllowance = 240;
+  qa.TestTimeoutsEnabled = true; qa.DefaultTestExecutionTimeAllowance = 180;
+  qa.MaximumTestExecutionTimeAllowance = flow === 'listing-batch-two-ai-photos' ? 500 : 240;
   qa.SystemAttachmentLifetime = 'keepNever';
   qa.UserAttachmentLifetime = 'keepAlways';
   return copy;

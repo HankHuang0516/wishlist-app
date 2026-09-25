@@ -240,8 +240,9 @@ async function main() {
     server.once('error', () => reject(new Error('Private Metro port occupied; no existing server changed')));
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
-  qaDeadline = Date.now() + 360000;
-  qa = await startNativeQa(database, 360, { externalListingsPilot: flow === 'external-map',
+  const serviceLifetimeSeconds = flow === 'listing-batch-two-ai-photos' ? 600 : 360;
+  qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
+  qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow });
   if (listingAiFlow) listingAiTask = completeListingAiDrafts().catch(() => { listingAiTaskFailed = true; });
   if (flow?.startsWith('marketplace-')) {
@@ -299,7 +300,9 @@ async function main() {
       '-destination-timeout', '15', '-resultBundlePath', result, '-parallel-testing-enabled', 'NO',
       '-collect-test-diagnostics', 'never',
       '-maximum-concurrent-test-simulator-destinations', '1', '-test-timeouts-enabled', 'YES',
-      '-default-test-execution-time-allowance', '180', '-maximum-test-execution-time-allowance', '240', 'test-without-building'], 300000);
+      '-default-test-execution-time-allowance', '180', '-maximum-test-execution-time-allowance',
+      flow === 'listing-batch-two-ai-photos' ? '500' : '240', 'test-without-building'],
+    flow === 'listing-batch-two-ai-photos' ? 520000 : 300000);
     testCommandSucceeded = true;
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));

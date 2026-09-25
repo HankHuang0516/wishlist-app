@@ -638,7 +638,9 @@ final class NativeQaTests: XCTestCase {
         } catch { reportFailure() }
     }
     func test12RealLoginListingBatchTwoAiPhotos() {
-        executionTimeAllowance = 235
+        // Two real connector calls are serialized by the private worker and
+        // can each take up to 150 seconds without indicating an app failure.
+        executionTimeAllowance = 480
         do {
             try prepare()
             try loginBuyerAndRequireTabs()
@@ -662,7 +664,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("listing-two-ai-results-await")
             let firstPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第1件 AI 二手參考價：NT$ ")).firstMatch
             let secondPrice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "第2件 AI 二手參考價：NT$ ")).firstMatch
-            let deadline = Date().addingTimeInterval(145)
+            let deadline = Date().addingTimeInterval(390)
             while !(firstPrice.exists && secondPrice.exists) && Date() < deadline {
                 app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
                 Thread.sleep(forTimeInterval: 0.5)

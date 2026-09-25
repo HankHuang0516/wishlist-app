@@ -120,4 +120,5 @@ jobs:
     - run: npm ci
     - run: npm run typecheck
     - run: npm test
+    - run: node --test scripts/check-ios-xctestrun-config.cjs
     - run: npx expo install --check

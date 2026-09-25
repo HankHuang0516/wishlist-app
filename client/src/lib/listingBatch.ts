@@ -103,10 +103,18 @@ export function buildPublishedListing(draft: SellerDraft, mediaId: string, detai
   if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(form.price) || Number(form.price) > 9_999_999_999.99) throw new Error('請填寫有效售價');
   const latitude = Number(details.latitude), longitude = Number(details.longitude);
   if (!details.county.trim() || !details.district.trim() || details.county.length > 30 || details.district.length > 30 ||
-      !details.latitude.trim() || !details.longitude.trim() || latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8) throw new Error('請完成台灣縣市、行政區與有效位置');
+      !details.latitude.trim() || !details.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8) throw new Error('請完成台灣縣市、行政區與有效位置');
   if (!details.meetup && !details.shipping) throw new Error('請選擇至少一種交付方式');
   if (!details.consent) throw new Error('請確認同意公開商品至地圖');
-  if (details.expiryDate && (!/^\d{4}-\d{2}-\d{2}$/.test(details.expiryDate) || new Date(`${details.expiryDate}T23:59:59+08:00`) <= new Date())) throw new Error('請選擇未來的失效日期');
+  if (details.expiryDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(details.expiryDate)) throw new Error('請選擇未來的失效日期');
+    const end = new Date(`${details.expiryDate}T23:59:59.999+08:00`);
+    if (!Number.isFinite(end.getTime())) throw new Error('請選擇未來的失效日期');
+    const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(end);
+    const localDate = `${parts.find(part => part.type === 'year')?.value}-${parts.find(part => part.type === 'month')?.value}-${parts.find(part => part.type === 'day')?.value}`;
+    if (localDate !== details.expiryDate || end <= new Date()) throw new Error('請選擇未來的失效日期');
+  }
   // The server also snaps to the same ~2 km grid. Snap before transport so
   // neither the publication request nor its idempotency journal has exact GPS.
   const publicLatitude = Number(Math.min(26.59, Math.floor(latitude / 0.02) * 0.02 + 0.01).toFixed(2));

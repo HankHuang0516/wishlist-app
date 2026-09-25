@@ -26,6 +26,7 @@ describe('web listing batch publication boundary', () => {
   it('requires explicit consent, location, real photo, and seller price before publication', () => {
     expect(() => buildPublishedListing(draft, mediaId, { ...details, consent: false })).toThrow('同意');
     expect(() => buildPublishedListing(draft, mediaId, { ...details, latitude: '' })).toThrow('位置');
+    expect(() => buildPublishedListing(draft, mediaId, { ...details, latitude: 'not-a-number' })).toThrow('位置');
     expect(() => buildPublishedListing({ ...draft, form: { ...draft.form, price: '' } }, mediaId, details)).toThrow('售價');
     expect(() => buildPublishedListing(draft, 'not-a-photo', details)).toThrow('識別碼');
     expect(buildPublishedListing(draft, mediaId, details)).toMatchObject({ publish: true, consentToMap: true, price: 350, mediaIds: [mediaId],
@@ -34,6 +35,7 @@ describe('web listing batch publication boundary', () => {
 
   it('defaults expiry to server-side 30 days unless seller specifies a date', () => {
     expect(buildPublishedListing(draft, mediaId, details)).not.toHaveProperty('expiryDate');
+    expect(() => buildPublishedListing(draft, mediaId, { ...details, expiryDate: '2027-02-30' })).toThrow('失效日期');
   });
 
   it('never sends precise GPS coordinates in the publication request', () => {

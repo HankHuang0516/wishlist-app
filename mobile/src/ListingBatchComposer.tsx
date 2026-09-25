@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { ApiError, createApi } from './api';
-import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
+import { confirmedBatchCandidates, parseListingAiState, restoreBatchCaptureOrder, reviewStateAfterAi, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, ListingFormError, parsePhotoRecord, taiwanDate, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -26,9 +26,7 @@ const initialCard = (key: string, uri: string, local: boolean, record?: PhotoRec
   clientListingId: Crypto.randomUUID(), uri, local, record, ai: 'SKIPPED', draft: null,
   form: { ...emptyListingForm }, touched: {}, error: '', confirmed: false, published: false });
 const applyAi = (card: Card, state: ListingAiState): Card => {
-  if (!state.draft) return { ...card, ai: state.status, draft: null, error: '' };
-  return { ...card, ai: state.status, draft: state.draft, error: '', confirmed: false,
-    form: mergeListingAiSuggestions(card.form, state.draft, card.touched) };
+  return { ...card, ...reviewStateAfterAi(card, state), error: '' };
 };
 const itemForm = (card: Card, shared: ListingForm): ListingForm => ({ ...card.form,
   county: shared.county, district: shared.district, latitude: shared.latitude, longitude: shared.longitude,
@@ -224,6 +222,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   async function retry(card: Card) {
     if (card.record && aiAvailableRef.current === false) return;
     if (!begin()) return;
+    setCards(old => old.map(current => current.key === card.key ? { ...current, confirmed: false } : current));
     try {
       if (!card.record) await upload(card);
       else {

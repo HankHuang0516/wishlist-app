@@ -36,6 +36,69 @@ afterAll(async () => {
 });
 
 describe('admin-only attributed external supply staging', () => {
+    it('publishes an AI supplement only after explicit review and revokes it on source revision', async () => {
+        const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        const previousAiFlag = process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.121');
+        const source = await admin('/sources').send({ ...sourceBody,
+            name: 'Synthetic AI-reviewed source', aiProcessingAllowed: true });
+        expect(source.status).toBe(201);
+        const aiSourceId: string = source.body.id;
+        try {
+            expect((await admin(`/sources/${aiSourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
+                confirmRights: true, confirmAiProcessing: true })).status).toBe(200);
+            const staged = await admin(`/sources/${aiSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            const id: string = staged.body.items[0].id;
+            const first = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
+            const approval = { expectedContentHash: first.contentHash, authorizationRef: sourceBody.authorizationRef,
+                reviewRef: 'review:synthetic-ai-supplement', confirmRights: true, confirmItem: true,
+                useAiSupplement: true };
+            expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(409);
+            const supplement = '照片可見橘色燈罩與金屬底座；是否能正常點亮、尺寸與瑕疵請向原來源確認。';
+            await prisma.externalListingCandidate.update({ where: { id }, data: { aiStatus: 'COMPLETED',
+                aiInputHash: first.contentHash, aiDraft: { title: 'AI 建議標題', description: supplement,
+                    confidence: 0.85, evidence: ['橘色燈罩', '金屬底座'] } } });
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            const invalid = await admin(`/candidates/${id}/approve`).send({ ...approval, useAiSupplement: 'yes' });
+            expect(invalid.status).toBe(400);
+            const approved = await admin(`/candidates/${id}/approve`).send(approval);
+            expect(approved.status).toBe(200);
+            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({
+                aiSupplement: null, aiDerivedPublicFields: false });
+            process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED = '1';
+            const publicItem = (await request(app).get(`/api/external-listings/${id}`)).body;
+            expect(publicItem).toMatchObject({ title: candidate().title, description: candidate().description,
+                priceTwd: '590', condition: 'USED', aiSupplement: supplement, aiDerivedPublicFields: true });
+            expect(publicItem).not.toHaveProperty('aiDraft');
+            expect((await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items)
+                .toEqual([expect.objectContaining({ decision: 'APPROVED', reason: 'AI_SUPPLEMENT_ACCEPTED' })]);
+            expect((await admin(`/sources/${aiSourceId}/candidates`).send({ items: [candidate()] })).body.items[0])
+                .toMatchObject({ status: 'APPROVED', changed: false });
+            expect((await request(app).get(`/api/external-listings/${id}`)).body.aiSupplement).toBe(supplement);
+            await prisma.externalListingSource.update({ where: { id: aiSourceId }, data: { aiProcessingAllowed: false } });
+            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({
+                aiSupplement: null, aiDerivedPublicFields: false, priceTwd: '590' });
+            await prisma.externalListingSource.update({ where: { id: aiSourceId }, data: { aiProcessingAllowed: true } });
+            const revised = await admin(`/sources/${aiSourceId}/candidates`).send({ items: [{ ...candidate(),
+                title: '二手新版檯燈合成測試' }] });
+            expect(revised.body.items[0]).toMatchObject({ status: 'PENDING_REVIEW', changed: true });
+            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
+                approvedAiSupplement: null, approvedAiInputHash: null });
+        } finally {
+            if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
+            if (previousAiFlag === undefined) delete process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED = previousAiFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: aiSourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: aiSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: aiSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
+        }
+    });
     it('is closed without the header and requires separate authorization activation', async () => {
         expect((await request(app).get(url + '/sources')).status).toBe(401);
         expect((await request(app).get(url + '/sources?key=' + encodeURIComponent(adminKey)).set('x-admin-key', adminKey)).status).toBe(400);

@@ -282,8 +282,11 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
           <Text style={s.heading}>{externalDetail.title}</Text><Text style={s.price}>{externalPrice(externalDetail)}</Text>
           <Image source={{ uri: externalDetail.imageUrl }} style={s.detailPhoto} accessibilityLabel="來源商品圖片" />
           <Text style={s.text}>{externalDetail.description}</Text>
+          {externalDetail.aiSupplement && <><Text style={s.externalBadge}>AI 補充說明 · 已人工審核</Text>
+            <Text style={s.text}>{externalDetail.aiSupplement}</Text>
+            <Text style={s.small}>AI 依授權圖片產生的補充資訊，可能有誤；商品現況與售價仍以來源網站為準。</Text></>}
           <Text style={s.text}>{externalDetail.county} {externalDetail.district} · 二手</Text>
-          <Text style={s.small}>地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。</Text>
+          <Text style={s.small}>地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與原始描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。</Text>
           <Text style={s.small}>來源最後確認：{new Date(externalDetail.observedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}</Text>
           <Pressable accessibilityRole="button" disabled={externalOpening} style={s.button} onPress={() => void openExternalSource(externalDetail)}><Text style={s.white}>{externalOpening ? '重新確認來源中…' : '前往來源網站查看'}</Text></Pressable>
           <Text style={s.small}>這是外部導流商品，不提供站內賣家聊天或面交預約。</Text></>}

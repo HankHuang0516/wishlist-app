@@ -8,7 +8,8 @@ export type ExternalListing = {
   observedAt: string; expiresAt: string;
   location: { latitude: number; longitude: number; precision: 'DISTRICT_CENTER'; source: 'https://data.gov.tw/dataset/25489' };
   source: { host: string; imageHost: string; kind: 'PARTNER_FEED' | 'LINE_OPT_IN' | 'SELLER_IMPORT' };
-  locationPrecision: 'DISTRICT_ONLY'; priceSource: 'SOURCE_STATED'; inAppSeller: false; aiDerivedPublicFields: false;
+  locationPrecision: 'DISTRICT_ONLY'; priceSource: 'SOURCE_STATED'; inAppSeller: false; aiDerivedPublicFields: boolean;
+  aiSupplement: string | null;
 };
 
 const object = (value: unknown): Record<string, unknown> => {
@@ -35,7 +36,9 @@ export function parseExternalListing(value: unknown, now = Date.now()): External
       !host(source.host) || !host(source.imageHost) ||
       !['PARTNER_FEED', 'LINE_OPT_IN', 'SELLER_IMPORT'].includes(String(source.kind)) ||
       row.locationPrecision !== 'DISTRICT_ONLY' || row.priceSource !== 'SOURCE_STATED' ||
-      row.inAppSeller !== false || row.aiDerivedPublicFields !== false ||
+      row.inAppSeller !== false || typeof row.aiDerivedPublicFields !== 'boolean' ||
+      !(row.aiSupplement === undefined || row.aiSupplement === null || text(row.aiSupplement, 1500)) ||
+      row.aiDerivedPublicFields !== (row.aiSupplement !== undefined && row.aiSupplement !== null) ||
       location.precision !== 'DISTRICT_CENTER' || location.source !== 'https://data.gov.tw/dataset/25489' ||
       typeof location.latitude !== 'number' || !Number.isFinite(location.latitude) ||
       typeof location.longitude !== 'number' || !Number.isFinite(location.longitude) ||
@@ -59,7 +62,8 @@ export function parseExternalListing(value: unknown, now = Date.now()): External
       precision: 'DISTRICT_CENTER', source: 'https://data.gov.tw/dataset/25489' },
     source: { host: source.host, imageHost: source.imageHost, kind: source.kind as ExternalListing['source']['kind'] },
     locationPrecision: 'DISTRICT_ONLY', priceSource: 'SOURCE_STATED', inAppSeller: false,
-    aiDerivedPublicFields: false };
+    aiDerivedPublicFields: row.aiDerivedPublicFields as boolean,
+    aiSupplement: (row.aiSupplement ?? null) as string | null };
 }
 
 export function parseExternalListingPage(value: unknown, now = Date.now()) {

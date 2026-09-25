@@ -367,6 +367,8 @@ model ExternalListingCandidate {
   approvedAuthorizationRef String?
   approvedContentHash String?
   approvedAt     DateTime?
+  approvedAiSupplement String?
+  approvedAiInputHash String?
   rejectionRef   String?
   rejectionReason String?
   rejectedContentHash String?

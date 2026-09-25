@@ -12,7 +12,7 @@ export async function expireExternalCandidates(now = new Date()) {
         status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } },
             { observedAt: { lt: observationCutoff } }, { source: { enabled: false } }],
     }, data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
-        approvedContentHash: null, approvedAt: null,
+        approvedContentHash: null, approvedAt: null, approvedAiSupplement: null, approvedAiInputHash: null,
         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,
         aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
     return result.count;

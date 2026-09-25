@@ -16,8 +16,9 @@ const select = { id: true, sourceItemId: true, status: true, canonicalUrl: true,
     title: true, description: true,
     priceTwd: true, condition: true, county: true, district: true, observedAt: true, expiresAt: true, contentHash: true,
     approvedContentHash: true, approvedAuthorizationRef: true, approvedAt: true,
+    approvedAiSupplement: true, approvedAiInputHash: true,
     source: { select: { kind: true, enabled: true, enabledAt: true, textReuseAllowed: true,
-        imageReuseAllowed: true, authorizationRef: true, canonicalHost: true, imageHost: true } },
+        imageReuseAllowed: true, aiProcessingAllowed: true, authorizationRef: true, canonicalHost: true, imageHost: true } },
 } satisfies Prisma.ExternalListingCandidateSelect;
 type SelectedCandidate = Prisma.ExternalListingCandidateGetPayload<{ select: typeof select }>;
 const publicCandidate = (row: SelectedCandidate, now: Date) => {
@@ -25,13 +26,16 @@ const publicCandidate = (row: SelectedCandidate, now: Date) => {
     if (row.status !== 'APPROVED' || row.approvedContentHash !== row.contentHash ||
         row.approvedAuthorizationRef !== row.source.authorizationRef || !location ||
         !eligibleExternalCandidate(row, row.source, now)) return null;
-    return { id: row.id, title: row.title, description: row.description, condition: row.condition,
+    const aiSupplement = process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED === '1' &&
+        row.source.aiProcessingAllowed && row.approvedAiInputHash === row.contentHash &&
+        row.approvedAiSupplement ? row.approvedAiSupplement : null;
+    return { id: row.id, title: row.title, description: row.description, aiSupplement, condition: row.condition,
         priceTwd: row.priceTwd?.toString(), county: row.county, district: row.district, location,
         imageUrl: row.imageUrl, thumbnailUrl: row.thumbnailUrl, canonicalUrl: row.canonicalUrl, observedAt: row.observedAt,
         expiresAt: row.expiresAt, source: { host: row.source.canonicalHost,
             imageHost: row.source.imageHost, kind: row.source.kind },
         locationPrecision: 'DISTRICT_ONLY', priceSource: 'SOURCE_STATED', inAppSeller: false,
-        aiDerivedPublicFields: false };
+        aiDerivedPublicFields: !!aiSupplement };
 };
 const bboxValue = (value: string) => {
     const pieces = value.split(',');

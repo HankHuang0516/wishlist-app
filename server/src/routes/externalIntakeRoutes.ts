@@ -8,6 +8,7 @@ import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, parseExternalCand
 import { eligibleExternalCandidate } from '../lib/externalListingPublication';
 import { districtCenter } from '../lib/doubleNorthDistrictCenters';
 import { isListingId } from '../lib/listingRules';
+import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 
 const writes = () => rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false,
     message: { error: '外部來源操作過於頻繁', errorCode: 'EXTERNAL_INTAKE_RATE_LIMIT' } });
@@ -82,7 +83,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 const updated = await tx.externalListingSource.updateMany({ where: { id: sourceId }, data: { enabled: false } });
                 if (updated.count) await tx.externalListingCandidate.updateMany({ where: { sourceId, status: { in: ['PENDING_REVIEW', 'APPROVED'] } },
                     data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
-                        approvedContentHash: null, approvedAt: null,
+                        approvedContentHash: null, approvedAt: null, approvedAiSupplement: null, approvedAiInputHash: null,
                         aiStatus: 'NOT_ELIGIBLE', aiJobId: null, aiInputHash: null,
                         aiDraft: Prisma.DbNull, aiUpdatedAt: new Date() } });
                 return updated;
@@ -131,7 +132,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,
                         status: old.status === 'REJECTED' ? 'REJECTED' : retainsApproval ? 'APPROVED' : 'PENDING_REVIEW',
                         ...(!retainsApproval ? { approvalRef: null, approvedAuthorizationRef: null,
-                            approvedContentHash: null, approvedAt: null } : {}),
+                            approvedContentHash: null, approvedAt: null, approvedAiSupplement: null, approvedAiInputHash: null } : {}),
                         ...(aiChanged || !['PENDING_REVIEW', 'APPROVED'].includes(old.status) ||
                             (old.status === 'APPROVED' && !retainsApproval) ? aiReset : {}) } }) :
                         await tx.externalListingCandidate.create({ data: { ...item, sourceId: source.id, lastSeenAt: now,
@@ -193,7 +194,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const changed = await tx.externalListingCandidate.updateMany({ where: { id: row.id,
                         status: { in: ['PENDING_REVIEW', 'APPROVED'] } }, data: {
                         status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
-                        approvedContentHash: null, approvedAt: null,
+                        approvedContentHash: null, approvedAt: null, approvedAiSupplement: null, approvedAiInputHash: null,
                         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,
                         aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
                     observations.push({ sourceItemIdSha256: createHash('sha256').update(sourceItemId).digest('hex'),
@@ -231,6 +232,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     data: { status: 'REJECTED', rejectionRef: body.reviewRef, rejectionReason: body.reason,
                         rejectedContentHash: body.expectedContentHash, rejectedAt: now,
                         approvalRef: null, approvedAuthorizationRef: null, approvedContentHash: null, approvedAt: null,
+                        approvedAiSupplement: null, approvedAiInputHash: null,
                         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
                 if (result.count) await tx.externalCandidateReviewEvent.create({ data: { candidateId,
                     decision: 'REJECTED', contentHash: body.expectedContentHash, reviewRef: body.reviewRef,
@@ -248,10 +250,13 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });
             const body = req.body;
             if (!body || typeof body !== 'object' || Array.isArray(body) ||
-                Object.keys(body).sort().join(',') !== 'authorizationRef,confirmItem,confirmRights,expectedContentHash,reviewRef' ||
+                !['authorizationRef,confirmItem,confirmRights,expectedContentHash,reviewRef',
+                    'authorizationRef,confirmItem,confirmRights,expectedContentHash,reviewRef,useAiSupplement']
+                    .includes(Object.keys(body).sort().join(',')) ||
                 typeof body.expectedContentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.expectedContentHash) ||
                 typeof body.reviewRef !== 'string' || !/^review:[A-Za-z0-9._/-]{4,160}$/.test(body.reviewRef) ||
-                typeof body.authorizationRef !== 'string' || body.confirmRights !== true || body.confirmItem !== true)
+                typeof body.authorizationRef !== 'string' || body.confirmRights !== true || body.confirmItem !== true ||
+                (body.useAiSupplement !== undefined && typeof body.useAiSupplement !== 'boolean'))
                 throw new ExternalIntakeError('review', '須明確核對來源授權、商品真實性與目前內容指紋');
             const row = await prisma.externalListingCandidate.findUnique({ where: { id: req.params.id }, include: { source: true } });
             if (!row) return res.status(404).json({ error: '候選商品不存在' });
@@ -260,21 +265,36 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 row.source.authorizationRef !== body.authorizationRef || !districtCenter(row.county, row.district) ||
                 !eligibleExternalCandidate(row, row.source, now))
                 return res.status(409).json({ error: '來源權利、商品內容或時效不符合公開條件', errorCode: 'EXTERNAL_REVIEW_CONFLICT' });
+            const aiDraft = row.aiDraft && typeof row.aiDraft === 'object' && !Array.isArray(row.aiDraft)
+                ? row.aiDraft as Record<string, unknown> : null;
+            const aiSupplement = body.useAiSupplement === true && typeof aiDraft?.description === 'string'
+                ? aiDraft.description.trim() : null;
+            if (body.useAiSupplement === true && (row.aiStatus !== 'COMPLETED' ||
+                row.aiInputHash !== row.contentHash || !row.source.aiProcessingAllowed ||
+                !aiSupplement || aiSupplement.length < 16 || aiSupplement.length > 1500 ||
+                forbiddenListingField({ title: row.title, description: aiSupplement }) ||
+                privateContactField({ title: row.title, description: aiSupplement })))
+                return res.status(409).json({ error: 'AI 補充說明未完成、已過期或不適合公開；請重新審核', errorCode: 'EXTERNAL_AI_REVIEW_CONFLICT' });
             const changed = await prisma.$transaction(async tx => {
                 const result = await tx.externalListingCandidate.updateMany({ where: { id: row.id, status: 'PENDING_REVIEW',
-                    contentHash: row.contentHash, aiStatus: row.aiStatus, observedAt: { gte: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) },
+                    contentHash: row.contentHash, aiStatus: row.aiStatus,
+                    ...(body.useAiSupplement === true ? { aiInputHash: row.contentHash } : {}),
+                    observedAt: { gte: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) },
                     expiresAt: { gt: now }, imageUrl: row.imageUrl, thumbnailUrl: row.thumbnailUrl,
                     description: row.description, condition: 'USED',
                     source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,
+                        ...(body.useAiSupplement === true ? { aiProcessingAllowed: true } : {}),
                         authorizationRef: row.source.authorizationRef } },
                     data: { status: 'APPROVED', approvalRef: body.reviewRef,
                         approvedAuthorizationRef: row.source.authorizationRef,
                         approvedContentHash: row.contentHash, approvedAt: now,
+                        approvedAiSupplement: aiSupplement, approvedAiInputHash: aiSupplement ? row.contentHash : null,
                         ...(row.aiStatus === 'COMPLETED' ? {} : { aiStatus: 'NOT_ELIGIBLE' as const, aiInputHash: null,
                             aiJobId: null, aiDraft: Prisma.DbNull, aiUpdatedAt: now }) } });
                 if (result.count) await tx.externalCandidateReviewEvent.create({ data: { candidateId: row.id,
                     decision: 'APPROVED', contentHash: row.contentHash, reviewRef: body.reviewRef,
-                    authorizationRef: row.source.authorizationRef } });
+                    authorizationRef: row.source.authorizationRef,
+                    reason: aiSupplement ? 'AI_SUPPLEMENT_ACCEPTED' : null } });
                 return result;
             });
             return changed.count ? res.json({ id: row.id, status: 'APPROVED', approvedContentHash: row.contentHash, approvedAt: now }) :

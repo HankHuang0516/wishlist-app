@@ -14,7 +14,7 @@ const row = () => ({ id: randomUUID(), title: '二手檯燈', description: '來�
   location: { latitude: 25.01186, longitude: 121.45797, precision: 'DISTRICT_CENTER',
     source: 'https://data.gov.tw/dataset/25489' },
   locationPrecision: 'DISTRICT_ONLY', priceSource: 'SOURCE_STATED', inAppSeller: false,
-  aiDerivedPublicFields: false });
+  aiDerivedPublicFields: false, aiSupplement: null });
 
 describe('source-attributed external map data', () => {
   it('keeps only source facts and district-center provenance', () => {
@@ -23,8 +23,16 @@ describe('source-attributed external map data', () => {
     expect(item).toMatchObject({ priceTwd: 590, locationPrecision: 'DISTRICT_ONLY',
       source: { host: 'partner.example.com' }, inAppSeller: false });
     expect(externalPrice(item)).toBe('來源售價 NT$ 590');
+    expect(parseExternalListing({ ...row(), aiSupplement: undefined }, now).aiSupplement).toBeNull();
     expect(externalGeoJSON([item]).features[0]).toMatchObject({
       geometry: { coordinates: [121.45797, 25.01186] }, properties: { externalId: item.id } });
+  });
+  it('shows only explicitly marked, bounded AI supplements while keeping source price and description', () => {
+    const item = parseExternalListing({ ...row(), aiSupplement: '根據授權照片可見的橘色燈罩與金屬底座，外觀細節仍請在來源確認。',
+      aiDerivedPublicFields: true }, now);
+    expect(item).toMatchObject({ priceTwd: 590, description: row().description,
+      aiDerivedPublicFields: true, aiSupplement: expect.stringContaining('橘色燈罩') });
+    expect(() => parseExternalListing({ ...row(), aiSupplement: '未標示', aiDerivedPublicFields: false }, now)).toThrow();
   });
   it.each([
     { inAppSeller: true }, { aiDerivedPublicFields: true }, { priceSource: 'AI_ESTIMATE' },

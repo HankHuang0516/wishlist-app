@@ -14,7 +14,13 @@ describe('native identity and minimal permissions', () => {
 
   it('keeps iPad support required by the previously published iOS app', () => {
     expect(expo.ios.supportsTablet).toBe(true);
-    expect(Number(expo.ios.buildNumber)).toBeGreaterThan(1);
+    expect(Number(expo.ios.buildNumber)).toBeGreaterThan(2);
+    expect(expo.ios.infoPlist['UISupportedInterfaceOrientations~ipad']).toEqual([
+      'UIInterfaceOrientationPortrait',
+      'UIInterfaceOrientationPortraitUpsideDown',
+      'UIInterfaceOrientationLandscapeLeft',
+      'UIInterfaceOrientationLandscapeRight',
+    ]);
   });
 
   it('does not request background location, motion or unnecessary biometrics', () => {

@@ -54,13 +54,16 @@ build.on('close', code => {
     };
     const signature = spawnSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { encoding: 'utf8' });
     let families = [];
+    let ipadOrientations = [];
     try { families = JSON.parse(readPlist('UIDeviceFamily', 'json')); } catch { /* reject malformed archive */ }
+    try { ipadOrientations = JSON.parse(readPlist('UISupportedInterfaceOrientations~ipad', 'json')); } catch { /* reject malformed archive */ }
     verified = readPlist('CFBundleIdentifier') === appConfig.ios.bundleIdentifier
       && readPlist('CFBundleShortVersionString') === appConfig.version
       && readPlist('CFBundleVersion') === appConfig.ios.buildNumber
       && Array.isArray(families) && families.includes(1) && (!appConfig.ios.supportsTablet || families.includes(2))
+      && (!appConfig.ios.supportsTablet || appConfig.ios.infoPlist['UISupportedInterfaceOrientations~ipad'].every(orientation => ipadOrientations.includes(orientation)))
       && signature.status === 0;
-    if (!verified) console.error('Archive identity, iPad family or deep code signature verification failed');
+    if (!verified) console.error('Archive identity, iPad family/orientations or deep code signature verification failed');
   }
   console.log(JSON.stringify({ scope: 'local-distribution-archive-only-not-full-acceptance-or-upload', exitCode: code, archiveVerified: verified, warnings, errors, archivePath, fullResultBundle: resultPath }));
   process.exitCode = code === 0 && verified ? 0 : 1;

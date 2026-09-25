@@ -113,6 +113,55 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: source.id } });
         }
     });
+    it('withdraws sold source items immediately and requires a new review after re-import', async () => {
+        const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.93');
+        const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic sold-item source' });
+        expect(created.status).toBe(201);
+        const soldSourceId: string = created.body.id;
+        try {
+            expect((await admin(`/sources/${soldSourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
+                confirmRights: true })).status).toBe(200);
+            const first = { ...candidate(), sourceItemId: 'sold-item', canonicalUrl: 'https://partner.example.com/items/sold' };
+            const staged = await admin(`/sources/${soldSourceId}/candidates`).send({ items: [first] });
+            expect(staged.status).toBe(202);
+            const id: string = staged.body.items[0].id;
+            const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
+            const review = { expectedContentHash: row.contentHash, authorizationRef: sourceBody.authorizationRef,
+                reviewRef: 'review:synthetic-sold-item', confirmRights: true, confirmItem: true };
+            expect((await admin(`/candidates/${id}/approve`).send(review)).status).toBe(200);
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
+            const endpoint = `/sources/${soldSourceId}/withdraw`;
+            expect((await request(app).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
+            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' })).status).toBe(400);
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
+            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'sold-item'], reason: 'SOLD' })).status).toBe(400);
+            const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' });
+            expect(withdrawn.status).toBe(200);
+            expect(withdrawn.body).toMatchObject({ withdrawn: 1, intakeBatchId: expect.any(String), publicCount: 0 });
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
+            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
+                status: 'STALE', approvalRef: null, approvedContentHash: null, aiStatus: 'NOT_ELIGIBLE' });
+            const receipt = await prisma.externalIntakeBatch.findUniqueOrThrow({ where: { id: withdrawn.body.intakeBatchId } });
+            expect(receipt.observations).toEqual([expect.objectContaining({ withdrawalReason: 'SOLD', status: 'STALE', changed: true,
+                sourceItemIdSha256: createHash('sha256').update('sold-item').digest('hex') })]);
+            expect(JSON.stringify(receipt.observations)).not.toContain('sold-item');
+            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).body.withdrawn).toBe(0);
+            const refreshed = await admin(`/sources/${soldSourceId}/candidates`).send({ items: [first] });
+            expect(refreshed.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', changed: false });
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
+        } finally {
+            if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: soldSourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: soldSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: soldSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: soldSourceId } });
+        }
+    });
     it('does not resurrect rejected candidates from a repeated feed and can pause a source', async () => {
         await prisma.externalListingCandidate.update({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } },
             data: { expiresAt: new Date(Date.now() - 1_000) } });

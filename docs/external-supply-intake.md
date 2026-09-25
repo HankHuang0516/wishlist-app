@@ -1,6 +1,6 @@
 # External second-hand supply: private intake contract
 
-This is an **admin-only staging path**, not a public product feed. No source or candidate is created by deployment, and imported rows do not enter `/api/listings`, the map, wish matching, or chat. Never represent an indexed source as an in-app seller.
+This is an **admin-only intake path**. No source or candidate is created by deployment. Imported rows never enter seller `/api/listings` or seller chat. A separate external map/search/wish-match index exists, but only a fresh, explicitly reviewed candidate can enter it when `EXTERNAL_LISTINGS_PUBLIC_ENABLED=1`; the default is off. Never represent an indexed source as an in-app seller.
 
 ## Source admission
 
@@ -14,12 +14,14 @@ County and district must match the [Taipei City Government's 12 districts](https
 
 Every 15 minutes, a bounded background check marks expired candidates or candidates from paused sources `STALE`. A fresh re-import may return a stale candidate to review; rejected candidates remain rejected. This check does not fetch external sites or run AI.
 
+When a source confirms an item was sold or removed, call `POST /api/external-intake/sources/:id/withdraw` immediately with `{ "sourceItemIds": ["source-stable-id"], "reason": "SOLD" }` (or `REMOVED`). This admin-only, atomic batch accepts 1–50 already-known source IDs, including while a source is paused. It revokes public approval and pending AI jobs immediately, records hashed IDs plus the reason in the private intake-batch history, and never deletes the review history. A duplicate withdrawal is harmless. A later feed refresh moves a withdrawn item only to `PENDING_REVIEW`, never directly back to the map. Do not treat missing items from a partial feed page as withdrawn; send explicit source-confirmed sold/removal signals.
+
 ## Optional private AI enrichment
 
 The external AI queue is **off by default** (`MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED=1` enables it). It also requires the existing local MiniMax Code pull worker and worker token. Start the updated local poller before enabling the backend flag. The poller periodically claims only fresh `PENDING_REVIEW` candidates from enabled sources with both image reuse and AI-processing rights. It downloads only from the registered exact HTTPS image host, pins a public IPv4 address after DNS validation, rejects redirects, limits the image to 8 MiB, and does **not** forward the worker bearer token to the external host. A failed job may retry after 30 minutes, at most three claims; expired leases may be reclaimed. Re-import of changed content invalidates an outstanding job. Pausing a source, expiring a candidate, or changing its content causes late callbacks to be refused.
 
 The AI result is a **private suggestion** visible through the admin candidates API. It cannot update the source-stated price or condition, manufacture seller/location/stock details, create a public `Listing`, or reach the map by itself. Human source/rights and availability review remains mandatory. Do not enable this flag until an actual authorized source and operating terms exist. Local synthetic fixtures exercise the queue but do not constitute real double-north supply.
 
-## Remaining publication gates
+## Remaining operational gates
 
-Before any external candidate appears on the map, implement and verify: source-rights review, original availability recheck, district/coordinate validation without inventing an address, content and image-use review, price attribution, explicit source and ad/affiliate disclosure, deep link to the source (never fake chat), stale/offline removal within 24 hours, report/removal controls, and native + web UI. The private AI queue is implemented but off; it is not an authorization to scrape Facebook/LINE groups or publish AI-created stock.
+The external index and its native/web readers require a real source license, independently checked item availability, content/image-use review, source and ad/affiliate disclosure, report/removal operations, and end-to-end release QA before the production flag can be enabled. Exact district-center placement is deliberately approximate; it is not a seller address. The 48-hour freshness guard is a backstop, **not** a substitute for source-confirmed sold/removal signals; partners must send those promptly. The private AI queue is implemented but off; it is not authorization to scrape Facebook/LINE groups or publish AI-created stock.

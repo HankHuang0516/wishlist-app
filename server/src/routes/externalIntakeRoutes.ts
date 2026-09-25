@@ -143,6 +143,58 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             return res.status(202).json({ items: saved.records, intakeBatchId: saved.batchId, publicCount: 0 });
         } catch (error) { return fail(res, error); }
     });
+    // A partner's sold/removed signal must hide a previously approved item
+    // immediately; waiting for the 48-hour freshness window is unsafe.
+    router.post('/sources/:id/withdraw', writes(), async (req, res) => {
+        try {
+            if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).sort().join(',') !== 'reason,sourceItemIds' ||
+                !['SOLD', 'REMOVED'].includes(body.reason) || !Array.isArray(body.sourceItemIds) ||
+                body.sourceItemIds.length < 1 || body.sourceItemIds.length > 50 ||
+                body.sourceItemIds.some((id: unknown) => typeof id !== 'string' || id.length < 1 || id.length > 160 ||
+                    id.trim() !== id || /[\u0000-\u001f\u007f]/.test(id)) ||
+                new Set(body.sourceItemIds).size !== body.sourceItemIds.length)
+                throw new ExternalIntakeError('sourceItemIds', '請提供 1–50 個不重複的來源商品 ID 與 SOLD/REMOVED 原因');
+            const sourceId = String(req.params.id);
+            const now = new Date();
+            const saved = await prisma.$transaction(async tx => {
+                // Intake takes this same lock, so a simultaneous refresh cannot
+                // silently restore an approval after a withdrawal.
+                const locked = await tx.$queryRaw<Array<{ id: string; authorizationRef: string; enabledAt: Date | null }>>`
+                    SELECT "id", "authorizationRef", "enabledAt" FROM "ExternalListingSource"
+                    WHERE "id" = ${sourceId} FOR UPDATE`;
+                if (!locked[0]) return null;
+                if (!locked[0].enabledAt) throw new ExternalIntakeError('source', '來源從未啟用');
+                const rows = await tx.externalListingCandidate.findMany({ where: { sourceId,
+                    sourceItemId: { in: body.sourceItemIds } } });
+                if (rows.length !== body.sourceItemIds.length)
+                    throw new ExternalIntakeError('sourceItemIds', '部分來源商品 ID 不存在；整批未撤下');
+                const observations = [];
+                for (const sourceItemId of body.sourceItemIds as string[]) {
+                    const row = rows.find(item => item.sourceItemId === sourceItemId)!;
+                    const changed = await tx.externalListingCandidate.updateMany({ where: { id: row.id,
+                        status: { in: ['PENDING_REVIEW', 'APPROVED'] } }, data: {
+                        status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
+                        approvedContentHash: null, approvedAt: null,
+                        aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,
+                        aiDraft: Prisma.DbNull, aiUpdatedAt: now } });
+                    observations.push({ sourceItemIdSha256: createHash('sha256').update(sourceItemId).digest('hex'),
+                        canonicalUrlSha256: createHash('sha256').update(row.canonicalUrl).digest('hex'),
+                        contentHash: row.contentHash, observedAt: row.observedAt.toISOString(),
+                        status: changed.count ? 'STALE' : row.status, changed: !!changed.count,
+                        withdrawalReason: body.reason });
+                }
+                const batch = await tx.externalIntakeBatch.create({ data: { sourceId,
+                    authorizationRef: locked[0].authorizationRef, sourceEnabledAt: locked[0].enabledAt,
+                    receivedAt: now, itemCount: observations.length, observations } });
+                return { withdrawn: observations.filter(item => item.changed).length, intakeBatchId: batch.id };
+            }, { timeout: 15000 });
+            return saved ? res.status(200).json({ ...saved, publicCount: 0 }) :
+                res.status(404).json({ error: '來源不存在' });
+        } catch (error) { return fail(res, error); }
+    });
     router.post('/candidates/:id/reject', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '候選商品不存在' });

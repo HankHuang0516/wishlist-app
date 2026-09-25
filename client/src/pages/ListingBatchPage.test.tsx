@@ -105,6 +105,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     await screen.findByDisplayValue('二手檯燈');
     expect(screen.getByText(/AI 參考價格/)).toHaveTextContent('NT$100–600');
+    expect(screen.getByText(/此售價由 AI 參考區間中間值預填/)).toBeInTheDocument();
     expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
 
     fireEvent.click(screen.getByText('確認並刊登'));
@@ -121,6 +122,19 @@ describe('web private batch listing flow', () => {
     const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
     expect(JSON.parse(posted!.body!)).toMatchObject({ publish: true, mediaIds: [mediaId], price: 350, consentToMap: true });
     expect(await screen.findByText('商品已刊登。其他照片仍是私人草稿。')).toBeInTheDocument();
+  });
+
+  it('labels an AI-prefilled price as unverified and removes that label after seller edits it', async () => {
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
+    const price = await screen.findByLabelText('賣家售價（TWD）');
+    await waitFor(() => expect(price).toHaveValue('350'));
+    expect(screen.getByText(/此售價由 AI 參考區間中間值預填/)).toBeInTheDocument();
+    fireEvent.change(price, { target: { value: '420' } });
+    expect(screen.queryByText(/此售價由 AI 參考區間中間值預填/)).toBeNull();
+    expect(price).toHaveValue('420');
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
   });
 
   it('replays the identical idempotency key when publication response is lost', async () => {

@@ -389,6 +389,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {input(card.form.title, `第${index + 1}件商品名稱`, value => changeCard(card.key, 'title', value))}
         {input(card.form.description, `第${index + 1}件商品描述`, value => changeCard(card.key, 'description', value), false, true)}
         <View style={s.row}>{input(card.form.brand, `第${index + 1}件品牌（可留空）`, value => changeCard(card.key, 'brand', value))}{input(card.form.price, `第${index + 1}件售價 TWD`, value => changeCard(card.key, 'price', value), true)}</View>
+        {!!card.draft && !card.touched.price && card.draft.estimatedPriceLowTwd !== null &&
+          <Text style={s.small}>目前售價由 AI 參考區間中間值預填，不是已驗證行情；刊登前請確認或修改。</Text>}
         <View style={s.row}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.condition === value }} disabled={busy || !!pending} style={[s.chip, card.form.condition === value && s.selected]} onPress={() => changeCard(card.key, 'condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
         <View style={s.wrap}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.category === value }} disabled={busy || !!pending} style={[s.chip, card.form.category === value && s.selected]} onPress={() => changeCard(card.key, 'category', value)}><Text style={s.small}>{label}</Text></Pressable>)}</View>
         {!!card.error && <Text style={s.error}>{card.error}</Text>}

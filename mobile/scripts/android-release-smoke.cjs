@@ -8,7 +8,9 @@ const { randomUUID, createHash } = require('node:crypto');
 const serial = process.env.SIM_MANAGER_SERIAL;
 if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) throw new Error('A real simulator-manager Android lease is required');
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
-const apk = path.resolve(__dirname, '../android/app/build/outputs/apk/release/app-release.apk');
+const apk = path.resolve(__dirname, process.env.WISHLIST_QA_USE_PLAY_APK === '1'
+  ? '../build/google-play-2.0.6-v21/wishlist-play-v21-universal.apk'
+  : '../android/app/build/outputs/apk/release/app-release.apk');
 const reuseInstalled = process.argv.includes('--reuse-installed');
 const screenshot = process.argv.slice(2).find(argument => argument !== '--reuse-installed');
 if (!fs.existsSync(apk)) throw new Error('Build the release APK before acquiring a simulator');

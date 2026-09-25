@@ -14,6 +14,7 @@ const environment = {
   WISHLIST_FEED_URL: 'https://partner.example.com/listings/feed.json',
   WISHLIST_FEED_API_ORIGIN: 'https://wishlist-app-production.up.railway.app',
   WISHLIST_FEED_ADMIN_KEY: 'synthetic-test-only-key',
+  WISHLIST_FEED_SYNC_ENABLED: '1',
 };
 const config = feedConfig(environment);
 const item = (sourceItemId, observedAt = now.toISOString()) => ({ sourceItemId,
@@ -34,8 +35,32 @@ test('requires explicit source, rights reference, key and production API origin'
     ['WISHLIST_FEED_URL', 'https://partner.example.com/feed.json?token=secret'],
     ['WISHLIST_FEED_URL', 'https://127.0.0.1/feed.json'],
     ['WISHLIST_FEED_INTERVAL_MINUTES', '1'],
+    ['WISHLIST_FEED_SYNC_ENABLED', 'yes'],
   ]) assert.throws(() => feedConfig({ ...environment, [key]: value }), /FEED_/);
   assert.throws(() => feedUrl('https://partner.example.com.evil.test/feed.json', 'partner.example.com'), /FEED_URL_UNSAFE/);
+});
+
+test('preflight can inspect an authorized source while sync remains explicitly disabled', async () => {
+  const disabled = feedConfig({ ...environment, WISHLIST_FEED_SYNC_ENABLED: '0' });
+  let calls = 0;
+  const fetchApi = async (_url, options) => {
+    calls++;
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: new Date().toISOString(), authorizationRef, canonicalHost: config.host }), { status: 200 });
+  };
+  const fetchFeed = async () => { calls++; return { ...envelope(), generatedAt: new Date().toISOString() }; };
+  assert.deepEqual(await preflightAuthorizedFeed(disabled, { fetchApi, fetchFeed }), {
+    kind: 'authorized-feed-preflight', validItems: 0, withdrawalSignals: 0,
+    persistedByBridge: 0, publishedByBridge: 0,
+  });
+  assert.equal(calls, 2);
+  await assert.rejects(syncAuthorizedFeed(disabled, { fetchApi, fetchFeed }), /FEED_SYNC_DISABLED/);
+  assert.equal(calls, 2);
+  await assert.rejects(syncAuthorizedFeed(feedConfig({
+    ...environment, WISHLIST_FEED_SYNC_ENABLED: undefined,
+  }), { fetchApi, fetchFeed }), /FEED_SYNC_DISABLED/);
+  assert.equal(calls, 2);
 });
 
 test('accepts only attributed fresh snapshots and explicit disjoint withdrawal signals', () => {

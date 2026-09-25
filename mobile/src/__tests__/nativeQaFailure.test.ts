@@ -20,7 +20,15 @@ describe('sanitized native QA failure receipts', () => {
       .toBe('QA_ASSERTION_FAILED');
     expect(nativeQaFailureCode(new Error('database key=example-secret')))
       .toBe('QA_ASSERTION_FAILED');
+    expect(nativeQaFailureCode(new Error('QA_SECRET_EXAMPLE')))
+      .toBe('QA_ASSERTION_FAILED');
     expect(nativeQaFailureCode({ message: 'QA failed at schema-preflight; values withheld' }))
       .toBe('QA_ASSERTION_FAILED');
+  });
+  it('keeps only known smoke assertions and bounded HTTP statuses', () => {
+    expect(nativeQaFailureCode(new Error('QA_NATIVE_PRICE_MISSING'))).toBe('QA_NATIVE_PRICE_MISSING');
+    expect(nativeQaFailureCode(new Error('QA_HTTP_503'))).toBe('QA_HTTP_503');
+    expect(nativeQaFailureCode(new Error('QA_AI_CLAIM_409'))).toBe('QA_AI_CLAIM_409');
+    expect(nativeQaFailureCode(new Error('QA_HTTP_SECRET'))).toBe('QA_ASSERTION_FAILED');
   });
 });

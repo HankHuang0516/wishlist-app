@@ -58,7 +58,7 @@ let stopping = false, child, metro, metroExit, qa, requestedStop = false, instal
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
 let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
-let listingPhotoFixtureVerified = false;
+let listingPhotoFixtureVerified = false, listingAiDraftVerified = false, listingAiDraft = null, listingAiTask = null, listingAiTaskFailed = false;
 const ownedChildren = new Set();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); metro?.kill('SIGTERM');
@@ -117,13 +117,16 @@ async function auditListingPhoto() {
       select: { id: true, ownerUserId: true, listingId: true, wishItemId: true, width: true, height: true, byteSize: true,
         contentHash: true, aiDraftStatus: true, sellerDraft: true, sellerDraftVersion: true } });
     listingPhotoCount = records.length;
+    const aiFlow = flow === 'listing-batch-ai-photo';
     const expectedCount = flow === 'listing-batch-two-photos' ? 2 : 1;
     if (records.length !== expectedCount || new Set(records.map(record => record.contentHash)).size !== expectedCount ||
       records.some(record => record.listingId !== null || record.wishItemId !== null || record.width < 100 || record.height < 100 ||
-        record.byteSize < 1000 || record.aiDraftStatus !== 'SKIPPED')) return;
-    if (flow === 'listing-batch-photo') {
+        record.byteSize < 1000 || record.aiDraftStatus !== (aiFlow ? 'COMPLETED' : 'SKIPPED'))) return;
+    if (flow === 'listing-batch-photo' || aiFlow) {
       const saved = records[0].sellerDraft;
-      sellerDraftVerified = records[0].sellerDraftVersion >= 1 && saved?.form?.title === 'Native QA Blue Mug' &&
+      sellerDraftVerified = records[0].sellerDraftVersion >= 1 &&
+        (aiFlow ? typeof saved?.form?.title === 'string' && saved.form.title.includes('NativeQA') && saved.form.title.includes('杯')
+          : saved?.form?.title === 'Native QA Blue Mug') &&
         saved?.touched?.title === true && typeof saved?.clientListingId === 'string';
     }
     const login = async actor => {
@@ -153,9 +156,48 @@ async function auditListingPhoto() {
       const anonymous = await fetch(url, { signal: AbortSignal.timeout(5000) });
       listingPhotoPrivacyVerified &&= outsider.status === 404 && anonymous.status === 404;
     }
-    listingPhotoFixtureVerified = flow === 'listing-batch-photo' ? identities.length === 1 && identities[0] === 'BLUE_MUG' :
+    listingPhotoFixtureVerified = flow !== 'listing-batch-two-photos' ? identities.length === 1 && identities[0] === 'BLUE_MUG' :
       identities.length === 2 && identities.sort().join(',') === 'BLUE_MUG,ORANGE_LAMP';
+    if (aiFlow && listingAiDraft && sellerDraftVerified) {
+      const state = await fetch(qa.apiUrl + '/api/listing-media/' + records[0].id + '/ai-draft',
+        { headers: { Authorization: 'Bearer ' + ownerToken }, signal: AbortSignal.timeout(5000) });
+      const body = state.status === 200 ? await state.json() : null;
+      const publicListings = await fetch(qa.apiUrl + '/api/listings', { signal: AbortSignal.timeout(5000) });
+      const publicBody = publicListings.status === 200 ? await publicListings.json() : null;
+      listingAiDraftVerified = body?.status === 'COMPLETED' && body.draft?.title === listingAiDraft.name &&
+        body.draft?.estimatedPriceLowTwd === listingAiDraft.estimatedPriceLowTwd &&
+        body.draft?.estimatedPriceHighTwd === listingAiDraft.estimatedPriceHighTwd &&
+        Array.isArray(publicBody?.items) && publicBody.items.length === 0;
+    }
   } finally { await audit.$disconnect(); }
+}
+async function completeListingAiDraft() {
+  const headers = { Authorization: 'Bearer ' + qa.callbackToken };
+  const endpoint = qa.apiUrl + '/api/internal/minimax-vision';
+  const deadline = Date.now() + 190000;
+  let job = null;
+  while (!stopping && Date.now() < deadline) {
+    const claim = await fetch(endpoint + '/next', { headers, signal: AbortSignal.timeout(10000) });
+    if (claim.status === 200) { job = await claim.json(); break; }
+    if (claim.status !== 204) throw new Error('QA_AI_CLAIM_FAILED');
+    await new Promise(resolve => setTimeout(resolve, 700));
+  }
+  if (stopping || job?.kind !== 'LISTING_DRAFT' || typeof job.jobId !== 'string' || typeof job.imageUrl !== 'string')
+    throw new Error('QA_AI_JOB_MISSING');
+  const anonymousImage = await fetch(job.imageUrl, { signal: AbortSignal.timeout(10000) });
+  if (anonymousImage.status !== 404) throw new Error('QA_AI_PRECONFIRM_IMAGE_PUBLIC');
+  const publicListings = await fetch(qa.apiUrl + '/api/listings', { signal: AbortSignal.timeout(10000) });
+  if (publicListings.status !== 200 || (await publicListings.json()).items?.length !== 0) throw new Error('QA_AI_PRECONFIRM_LISTING_PUBLIC');
+  const { recognizeListingImage } = await import('../../tools/minimax-vision-bridge/server.mjs');
+  const draft = await recognizeListingImage(job.imageUrl, { authToken: qa.callbackToken });
+  if (!/杯/.test(draft.name) || !Number.isInteger(draft.estimatedPriceLowTwd) ||
+    !Number.isInteger(draft.estimatedPriceHighTwd) || draft.estimatedPriceHighTwd < draft.estimatedPriceLowTwd)
+    throw new Error('QA_AI_DRAFT_UNGROUNDED');
+  const callback = await fetch(endpoint + '/' + job.jobId + '/result', { method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'COMPLETED', result: draft }), signal: AbortSignal.timeout(10000) });
+  if (callback.status !== 204) throw new Error('QA_AI_CALLBACK_FAILED');
+  listingAiDraft = draft;
 }
 async function main() {
   const inventory = await simctl(['listapps']);
@@ -173,7 +215,9 @@ async function main() {
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
   qaDeadline = Date.now() + 360000;
-  qa = await startNativeQa(database, 360, { externalListingsPilot: flow === 'external-map' });
+  qa = await startNativeQa(database, 360, { externalListingsPilot: flow === 'external-map',
+    listingAiPilot: flow === 'listing-batch-ai-photo' });
+  if (flow === 'listing-batch-ai-photo') listingAiTask = completeListingAiDraft().catch(() => { listingAiTaskFailed = true; });
   if (flow?.startsWith('marketplace-')) {
     stage = 'isolated-marketplace-fixture';
     await seedNativeMarketplace(qa); marketplaceFixtureSeeded = true;
@@ -200,7 +244,7 @@ async function main() {
   }
   if (!ready) throw new Error('Private Metro unavailable');
   stage = 'qa-only-install';
-  if (flow === 'listing-batch-photo' || flow === 'listing-batch-two-photos') {
+  if (flow === 'listing-batch-photo' || flow === 'listing-batch-two-photos' || flow === 'listing-batch-ai-photo') {
     stage = 'synthetic-photo-library-seed';
     const fixtures = [['synthetic-used-blue-mug.png', '4bf0d16e92bff216bdf0521ba878886b0a31c734d43ee9363dbc69dda6aa06f9'],
       ...(flow === 'listing-batch-two-photos' ? [['synthetic-used-orange-desk-lamp.png', 'abdaabda6b85bd4037f976638b4b93faf6702c9e1ab0997809e7fa18b4468ab0']] : [])];
@@ -234,7 +278,11 @@ async function main() {
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));
   if (flow === 'deletion') buyerErasureVerified = await auditBuyerErasure();
-  if (flow === 'listing-batch-photo' || flow === 'listing-batch-two-photos') await auditListingPhoto();
+  if (flow === 'listing-batch-ai-photo' && listingAiTask) {
+    if (!testCommandSucceeded) stopping = true;
+    await listingAiTask;
+  }
+  if (['listing-batch-photo', 'listing-batch-two-photos', 'listing-batch-ai-photo'].includes(flow)) await auditListingPhoto();
   const failures = Array.isArray(summary?.testFailures) ? summary.testFailures : [];
   for (const failure of failures) {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
@@ -243,8 +291,9 @@ async function main() {
   const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
-      (['listing-batch-photo', 'listing-batch-two-photos'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
-      (flow === 'listing-batch-photo' && !sellerDraftVerified) ||
+      (['listing-batch-photo', 'listing-batch-two-photos', 'listing-batch-ai-photo'].includes(flow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
+      (['listing-batch-photo', 'listing-batch-ai-photo'].includes(flow) && !sellerDraftVerified) ||
+      (flow === 'listing-batch-ai-photo' && (!listingAiDraftVerified || listingAiTaskFailed)) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -273,6 +322,7 @@ async function main() {
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
+    'listing-batch-ai-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'ai-photo', 'ai-resumed'],
     'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail', 'external-wish-map', 'external-wish-list'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
@@ -317,6 +367,7 @@ async function main() {
     tests: summary ? { total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests } : null,
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
     nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoFixtureVerified, listingPhotoCount, sellerDraftVerified,
+    listingAiDraftVerified, listingAiTaskFailed,
     privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

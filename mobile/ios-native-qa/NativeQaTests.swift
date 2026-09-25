@@ -91,7 +91,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -578,6 +578,58 @@ final class NativeQaTests: XCTestCase {
             // XCTest. The exact AX count is not the exact card count; the
             // backend separately requires two distinct private records.
             guard app.staticTexts.matching(NSPredicate(format: "label == %@", unavailable)).count >= 2 else { throw Failure.missingControl }
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test11RealLoginListingBatchAiPhoto() {
+        executionTimeAllowance = 230
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("listing-ai-account-entry")
+            try tapTab("我的")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            checkpoint("listing-ai-picker-open")
+            try tap("批次選照片")
+            try safeScreenshot("qa-photo-picker")
+            let (_, blue) = try syntheticBatchPhotoOffsets(requireOrange: false)
+            checkpoint("listing-ai-picker-selection")
+            app.coordinate(withNormalizedOffset: blue).tap()
+            try safeScreenshot("qa-photo-selected")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.905, dy: 0.165)).tap()
+            checkpoint("listing-ai-private-upload")
+            try required("商品草稿 1/12", scroll: true)
+            try required("第1件商品照片", scroll: true)
+            checkpoint("listing-ai-result-await")
+            let deadline = Date().addingTimeInterval(145)
+            var completed = false
+            repeat {
+                let status = element("AI 草稿已完成，請確認")
+                if status.exists { completed = true; break }
+                app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })?.swipeUp()
+                Thread.sleep(forTimeInterval: 0.5)
+            } while Date() < deadline
+            guard completed else { throw Failure.missingControl }
+            let price = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "AI 二手參考價：NT$ ")).firstMatch
+            guard price.exists else { throw Failure.missingControl }
+            checkpoint("listing-ai-result-visible")
+            try safeScreenshot("qa-ai-photo")
+            checkpoint("listing-ai-seller-edit")
+            let field = try publicInputControl("第1件商品名稱")
+            guard let original = field.value as? String, original.contains("杯"), original.count < 70 else { throw Failure.invalidIdentity }
+            field.tap()
+            field.typeText("NativeQA")
+            guard let edited = try publicInputControl("第1件商品名稱").value as? String,
+                  edited != original, edited.contains("NativeQA") else { throw Failure.invalidIdentity }
+            checkpoint("listing-ai-save-on-leave")
+            try tap("稍後繼續")
+            try required("刊登好物")
+            checkpoint("listing-ai-reopen")
+            try tap("刊登好物")
+            try required("listing-batch-title")
+            guard try publicInputControl("第1件商品名稱").value as? String == edited else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-ai-resumed")
             app.terminate()
         } catch { reportFailure() }
     }

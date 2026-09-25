@@ -118,13 +118,17 @@ export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, f
     !source.enabledAt || source.authorizationRef !== config.authorizationRef ||
     source.canonicalHost !== config.host) throw new Error('FEED_SOURCE_NOT_AUTHORIZED');
   const envelope = parseFeedEnvelope(await fetchFeed(config.url, config.host), config);
-  let withdrawn = 0, staged = 0;
+  let withdrawn = 0, unmatchedWithdrawals = 0, staged = 0;
   for (const reason of ['SOLD', 'REMOVED']) {
     const sourceItemIds = envelope.withdrawals.filter(item => item.reason === reason).map(item => item.sourceItemId);
     if (!sourceItemIds.length) continue;
     const result = await api('/sources/' + config.sourceId + '/withdraw', 'POST', { reason, sourceItemIds });
-    if (result?.publicCount !== 0 || !Number.isInteger(result.withdrawn)) throw new Error('FEED_WITHDRAW_ACK_INVALID');
+    if (result?.publicCount !== 0 || !Number.isInteger(result.withdrawn) || result.withdrawn < 0 ||
+      result.withdrawn > sourceItemIds.length || !Number.isInteger(result.unknown ?? 0) ||
+      (result.unknown ?? 0) < 0 || result.withdrawn + (result.unknown ?? 0) > sourceItemIds.length)
+      throw new Error('FEED_WITHDRAW_ACK_INVALID');
     withdrawn += result.withdrawn;
+    unmatchedWithdrawals += result.unknown ?? 0;
   }
   for (let index = 0; index < envelope.items.length; index += 50) {
     const items = envelope.items.slice(index, index + 50);
@@ -134,7 +138,7 @@ export async function syncAuthorizedFeed(config, { fetchFeed = pinnedFeedJson, f
       throw new Error('FEED_INTAKE_ACK_INVALID');
     staged += result.items.length;
   }
-  return { kind: 'authorized-private-feed-sync', staged, withdrawn, publishedByBridge: 0 };
+  return { kind: 'authorized-private-feed-sync', staged, withdrawn, unmatchedWithdrawals, publishedByBridge: 0 };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

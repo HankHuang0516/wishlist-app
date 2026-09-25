@@ -89,15 +89,16 @@ test('checks current source before fetching and sends sold signals before privat
       id: sourceId, kind: 'PARTNER_FEED', enabled: true, enabledAt: now.toISOString(),
       authorizationRef, canonicalHost: config.host,
     }), { status: 200 });
-    if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0, withdrawn: 1 }), { status: 200 });
+    if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0, withdrawn: 1, unknown: 1 }), { status: 200 });
     if (url.endsWith('/candidates')) return new Response(JSON.stringify({ publicCount: 0,
       items: [{ sourceItemId: 'one', status: 'PENDING_REVIEW' }] }), { status: 202 });
     throw new Error('unexpected API call');
   };
   const current = new Date().toISOString();
   const result = await syncAuthorizedFeed(config, { fetchApi,
-    fetchFeed: async () => ({ ...envelope([item('one', current)], [{ sourceItemId: 'sold-1', reason: 'SOLD' }]), generatedAt: current }) });
-  assert.deepEqual(result, { kind: 'authorized-private-feed-sync', staged: 1, withdrawn: 1, publishedByBridge: 0 });
+    fetchFeed: async () => ({ ...envelope([item('one', current)], [{ sourceItemId: 'sold-1', reason: 'SOLD' },
+      { sourceItemId: 'never-imported', reason: 'SOLD' }]), generatedAt: current }) });
+  assert.deepEqual(result, { kind: 'authorized-private-feed-sync', staged: 1, withdrawn: 1, unmatchedWithdrawals: 1, publishedByBridge: 0 });
   assert.deepEqual(calls.map(call => call.method), ['GET', 'POST', 'POST']);
   assert.ok(calls[1].url.endsWith('/withdraw'));
   assert.ok(calls[2].url.endsWith('/candidates'));

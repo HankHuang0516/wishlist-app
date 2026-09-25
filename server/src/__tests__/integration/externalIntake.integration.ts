@@ -144,21 +144,25 @@ describe('admin-only attributed external supply staging', () => {
             expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             const endpoint = `/sources/${soldSourceId}/withdraw`;
             expect((await request(app).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
-            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' })).status).toBe(400);
-            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'sold-item'], reason: 'SOLD' })).status).toBe(400);
-            const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' });
+            const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' });
             expect(withdrawn.status).toBe(200);
-            expect(withdrawn.body).toMatchObject({ withdrawn: 1, intakeBatchId: expect.any(String), publicCount: 0 });
+            expect(withdrawn.body).toMatchObject({ withdrawn: 1, unknown: 1, intakeBatchId: expect.any(String), publicCount: 0 });
             expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
             expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 status: 'STALE', approvalRef: null, approvedContentHash: null, aiStatus: 'NOT_ELIGIBLE' });
             const receipt = await prisma.externalIntakeBatch.findUniqueOrThrow({ where: { id: withdrawn.body.intakeBatchId } });
-            expect(receipt.observations).toEqual([expect.objectContaining({ withdrawalReason: 'SOLD', status: 'STALE', changed: true,
-                sourceItemIdSha256: createHash('sha256').update('sold-item').digest('hex') })]);
+            expect(receipt.itemCount).toBe(2);
+            expect(receipt.observations).toEqual([
+                expect.objectContaining({ withdrawalReason: 'SOLD', status: 'STALE', changed: true,
+                    sourceItemIdSha256: createHash('sha256').update('sold-item').digest('hex') }),
+                expect.objectContaining({ withdrawalReason: 'SOLD', status: 'NOT_FOUND', changed: false,
+                    sourceItemIdSha256: createHash('sha256').update('missing').digest('hex') }),
+            ]);
             expect(JSON.stringify(receipt.observations)).not.toContain('sold-item');
-            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).body.withdrawn).toBe(0);
+            expect(JSON.stringify(receipt.observations)).not.toContain('missing');
+            expect((await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).body).toMatchObject({ withdrawn: 0, unknown: 0 });
             const refreshed = await admin(`/sources/${soldSourceId}/candidates`).send({ items: [first] });
             expect(refreshed.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', changed: false });
             expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);

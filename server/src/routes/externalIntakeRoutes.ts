@@ -178,11 +178,18 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 if (!locked[0].enabledAt) throw new ExternalIntakeError('source', '來源從未啟用');
                 const rows = await tx.externalListingCandidate.findMany({ where: { sourceId,
                     sourceItemId: { in: body.sourceItemIds } } });
-                if (rows.length !== body.sourceItemIds.length)
-                    throw new ExternalIntakeError('sourceItemIds', '部分來源商品 ID 不存在；整批未撤下');
+                const bySourceItemId = new Map(rows.map(row => [row.sourceItemId, row]));
                 const observations = [];
                 for (const sourceItemId of body.sourceItemIds as string[]) {
-                    const row = rows.find(item => item.sourceItemId === sourceItemId)!;
+                    const row = bySourceItemId.get(sourceItemId);
+                    if (!row) {
+                        // A partner can report a sold item that never entered
+                        // our index. Do not let that unknown ID keep a known
+                        // sold item visible; still audit the signal by hash.
+                        observations.push({ sourceItemIdSha256: createHash('sha256').update(sourceItemId).digest('hex'),
+                            status: 'NOT_FOUND', changed: false, withdrawalReason: body.reason });
+                        continue;
+                    }
                     const changed = await tx.externalListingCandidate.updateMany({ where: { id: row.id,
                         status: { in: ['PENDING_REVIEW', 'APPROVED'] } }, data: {
                         status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
@@ -198,7 +205,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 const batch = await tx.externalIntakeBatch.create({ data: { sourceId,
                     authorizationRef: locked[0].authorizationRef, sourceEnabledAt: locked[0].enabledAt,
                     receivedAt: now, itemCount: observations.length, observations } });
-                return { withdrawn: observations.filter(item => item.changed).length, intakeBatchId: batch.id };
+                return { withdrawn: observations.filter(item => item.changed).length,
+                    unknown: observations.filter(item => item.status === 'NOT_FOUND').length, intakeBatchId: batch.id };
             }, { timeout: 15000 });
             return saved ? res.status(200).json({ ...saved, publicCount: 0 }) :
                 res.status(404).json({ error: '來源不存在' });

@@ -13,7 +13,10 @@ const LEASE_MS = 10 * 60 * 1000;
 
 function config() {
     const id = minimaxPilotUserId(), token = minimaxWorkerToken();
-    if (!id || !token) return null;
+    // Listing drafts and authorized external candidates have their own gates;
+    // retiring the legacy wish pilot must not silently disable either queue.
+    if (!token || (!id && process.env.MINIMAX_LISTING_AI_ENABLED !== '1' &&
+        process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1')) return null;
     return { userId: id, prefix: `${getApiUrl().replace(/\/$/, '')}/listing-media/` };
 }
 
@@ -49,23 +52,25 @@ router.use((req, res, next) => {
 router.get('/next', async (_req, res) => {
     const { userId, prefix } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
     try {
-        await prisma.item.updateMany({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: { startsWith: 'MINIMAX_JOB_' },
-            updatedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { aiStatus: 'PENDING', aiError: 'MINIMAX_RETRY' } });
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
-                imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true,
-                    wishMedia: { select: { imageUrl: true } } } });
-            if (!item?.imageUrl) break;
-            const suffix = item.imageUrl.slice(prefix.length);
-            if (!/^[0-9a-f-]{36}\/image$/.test(suffix) || item.wishMedia?.imageUrl !== item.imageUrl) {
-                await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
-                    data: { aiStatus: 'FAILED', aiError: 'MINIMAX_INVALID_IMAGE_LINK' } });
-                continue;
+        if (userId) {
+            await prisma.item.updateMany({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: { startsWith: 'MINIMAX_JOB_' },
+                updatedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { aiStatus: 'PENDING', aiError: 'MINIMAX_RETRY' } });
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
+                    imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true,
+                        wishMedia: { select: { imageUrl: true } } } });
+                if (!item?.imageUrl) break;
+                const suffix = item.imageUrl.slice(prefix.length);
+                if (!/^[0-9a-f-]{36}\/image$/.test(suffix) || item.wishMedia?.imageUrl !== item.imageUrl) {
+                    await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
+                        data: { aiStatus: 'FAILED', aiError: 'MINIMAX_INVALID_IMAGE_LINK' } });
+                    continue;
+                }
+                const jobId = randomUUID();
+                const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
+                    data: { aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` } });
+                if (claimed.count) return res.json({ kind: 'WISH', jobId, imageUrl: item.imageUrl });
             }
-            const jobId = randomUUID();
-            const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
-                data: { aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` } });
-            if (claimed.count) return res.json({ kind: 'WISH', jobId, imageUrl: item.imageUrl });
         }
         const listingPilot = listingAiPilotUserId();
         if (process.env.MINIMAX_LISTING_AI_ENABLED === '1' && listingPilot !== -1) {
@@ -138,7 +143,8 @@ router.post('/:jobId/result', async (req, res) => {
     if (!/^[0-9a-f-]{36}$/.test(jobId)) return res.status(400).json({ error: 'INVALID_JOB' });
     const failed = req.body?.status === 'FAILED';
     try {
-        const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` }, select: { id: true } });
+        const item = userId ? await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PROCESSING',
+            aiError: `MINIMAX_JOB_${jobId}` }, select: { id: true } }) : null;
         if (item) {
             const result = failed ? null : validMinimaxResult(req.body?.result);
             if (!failed && !result) return res.status(400).json({ error: 'INVALID_RESULT' });

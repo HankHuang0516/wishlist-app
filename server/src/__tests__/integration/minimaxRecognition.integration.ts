@@ -117,6 +117,41 @@ describe('isolated MiniMax Code pull queue', () => {
         expect(media).toMatchObject({ listingId: null, wishItemId: null, aiDraftStatus: 'COMPLETED', aiDraftJobId: null,
             aiDraft: expect.objectContaining({ title: '黑色小型相機', estimatedPriceLowTwd: 800, source: 'MINIMAX_CODE_VISION' }) });
     });
+    it('runs listing and authorized external AI without the legacy wish pilot, but never without the worker token', async () => {
+        const savedWishPilot = process.env.MINIMAX_PILOT_USER_ID;
+        const savedToken = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+        const id = randomUUID();
+        const imageUrl = `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/image`;
+        await prisma.listingMedia.create({ data: { id, ownerUserId: userId, imageUrl,
+            thumbnailUrl: `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/thumbnail`, contentHash: 'synthetic-independent-queue',
+            capturePurpose: 'BATCH_ITEM', aiDraftStatus: 'PENDING', aiDraftAttempts: 1, aiDraftUpdatedAt: new Date() } });
+        const { candidate } = await externalCandidate();
+        try {
+            delete process.env.MINIMAX_PILOT_USER_ID;
+            delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+            expect((await auth('/api/internal/minimax-vision/next')).status).toBe(404);
+            process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = token;
+            const listingJob = await auth('/api/internal/minimax-vision/next');
+            expect(listingJob.body).toMatchObject({ kind: 'LISTING_DRAFT', imageUrl, jobId: expect.any(String) });
+            const listingResult = { recognizable: true, name: '黑色小型相機',
+                description: '可見黑色機身與鏡頭，功能仍須賣家確認。', category: 'electronics', brand: null,
+                condition: null, estimatedPriceLowTwd: 800, estimatedPriceHighTwd: 2000,
+                priceBasis: '照片粗估，非即時行情', evidence: ['黑色機身', '可見鏡頭'], uncertainties: ['功能未驗證'], confidence: 0.86 };
+            expect((await callback(listingJob.body.jobId, { status: 'COMPLETED', result: listingResult })).status).toBe(204);
+            expect(await prisma.listingMedia.findUniqueOrThrow({ where: { id } })).toMatchObject({ listingId: null,
+                aiDraftStatus: 'COMPLETED', aiDraft: expect.objectContaining({ title: '黑色小型相機' }) });
+            const externalJob = await auth('/api/internal/minimax-vision/next');
+            expect(externalJob.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', imageUrl: candidate.imageUrl });
+            expect((await callback(externalJob.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(204);
+            expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } }))
+                .toMatchObject({ status: 'PENDING_REVIEW', aiStatus: 'COMPLETED' });
+        } finally {
+            if (savedWishPilot === undefined) delete process.env.MINIMAX_PILOT_USER_ID;
+            else process.env.MINIMAX_PILOT_USER_ID = savedWishPilot;
+            if (savedToken === undefined) delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+            else process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = savedToken;
+        }
+    });
     it('claims an authorized external photo and saves only a private suggestion, never an invented price', async () => {
         const { candidate } = await externalCandidate();
         const publicCount = await prisma.listing.count();

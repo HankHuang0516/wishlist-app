@@ -138,6 +138,10 @@ async function authorizedSnapshot(config, { fetchFeed = pinnedFeedJson, fetchApi
   const source = await api('/sources/' + config.sourceId);
   if (source?.id !== config.sourceId || source.kind !== 'PARTNER_FEED' || source.enabled !== true ||
     !source.enabledAt || source.authorizationRef !== config.authorizationRef ||
+    (source.authorizationExpiresAt !== null &&
+      (typeof source.authorizationExpiresAt !== 'string' ||
+        !Number.isFinite(Date.parse(source.authorizationExpiresAt)) ||
+        Date.parse(source.authorizationExpiresAt) <= Date.now())) ||
     source.canonicalHost !== config.host) throw new Error('FEED_SOURCE_NOT_AUTHORIZED');
   const envelope = parseFeedEnvelope(await fetchFeed(config.url, config.host), config);
   return { api, envelope };

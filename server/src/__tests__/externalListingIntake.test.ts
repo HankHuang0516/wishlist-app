@@ -1,4 +1,4 @@
-import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { ExternalIntakeError, externalSourceAuthorizationActive, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
 
 const now = new Date('2026-09-24T12:00:00Z');
 const source = { canonicalHost: 'partner.example.com', imageHost: 'images.example.com', imageReuseAllowed: true, textReuseAllowed: true };
@@ -22,6 +22,22 @@ describe('authorized external supply intake', () => {
             aiProcessingAllowed: true })).toThrow(ExternalIntakeError);
         expect(() => parseExternalSource({ name: '未明示 AI 權利', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
             authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true, imageReuseAllowed: true })).toThrow(ExternalIntakeError);
+    });
+    it('rejects expired source rights and expires an active source at the exact boundary', () => {
+        const sourceInput = { name: '北部合作商家', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            imageHost: 'images.example.com', authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true,
+            imageReuseAllowed: true, aiProcessingAllowed: true };
+        const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+        expect(parseExternalSource({ ...sourceInput, authorizationExpiresAt: expiresAt }).authorizationExpiresAt)
+            .toEqual(new Date(expiresAt));
+        expect(() => parseExternalSource({ ...sourceInput, authorizationExpiresAt: new Date(Date.now() - 1000).toISOString() }))
+            .toThrow(ExternalIntakeError);
+        expect(() => parseExternalSource({ ...sourceInput, authorizationExpiresAt: 'tomorrow' }))
+            .toThrow(ExternalIntakeError);
+        const active = { enabled: true, enabledAt: now, authorizationExpiresAt: new Date(expiresAt) };
+        expect(externalSourceAuthorizationActive(active, new Date(new Date(expiresAt).getTime() - 1))).toBe(true);
+        expect(externalSourceAuthorizationActive(active, new Date(expiresAt))).toBe(false);
+        expect(externalSourceAuthorizationActive({ ...active, authorizationExpiresAt: null }, new Date(expiresAt))).toBe(true);
     });
     it('accepts only fresh sourced records and normalizes Taipei spelling', () => {
         expect(parseExternalCandidate(item, source, now)).toMatchObject({ county: '臺北市', priceTwd: 560, condition: 'USED',

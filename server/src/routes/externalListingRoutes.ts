@@ -17,7 +17,7 @@ const select = { id: true, sourceItemId: true, status: true, canonicalUrl: true,
     priceTwd: true, condition: true, county: true, district: true, observedAt: true, expiresAt: true, contentHash: true,
     approvedContentHash: true, approvedAuthorizationRef: true, approvedAt: true,
     approvedAiSupplement: true, approvedAiInputHash: true,
-    source: { select: { kind: true, enabled: true, enabledAt: true, textReuseAllowed: true,
+    source: { select: { kind: true, enabled: true, enabledAt: true, authorizationExpiresAt: true, textReuseAllowed: true,
         imageReuseAllowed: true, aiProcessingAllowed: true, authorizationRef: true, canonicalHost: true, imageHost: true } },
 } satisfies Prisma.ExternalListingCandidateSelect;
 type SelectedCandidate = Prisma.ExternalListingCandidateGetPayload<{ select: typeof select }>;
@@ -78,7 +78,8 @@ router.get('/', async (req, res) => {
             condition: 'USED', imageUrl: { not: null }, thumbnailUrl: { not: null },
             description: { not: null }, priceTwd: { not: null },
             observedAt: { gte: new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS) }, expiresAt: { gt: now },
-            source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true },
+            source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] },
             ...(constraints.length ? { AND: constraints } : {}),
             ...(county ? { county: county as string } : {}), ...(district ? { district: district as string } : {}),
             ...(minPrice !== undefined || maxPrice !== undefined ? { priceTwd: {
@@ -147,7 +148,7 @@ router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
         const chinese = tokens.filter(token => /[\p{Script=Han}]/u.test(token));
         const clauses: Prisma.Sql[] = [
             Prisma.sql`c.status = 'APPROVED'::"ExternalCandidateStatus" AND c."approvedContentHash" = c."contentHash" AND c."approvedAuthorizationRef" = s."authorizationRef" AND c."approvedAt" IS NOT NULL`,
-            Prisma.sql`s.enabled = true AND s."enabledAt" IS NOT NULL AND s."textReuseAllowed" = true AND s."imageReuseAllowed" = true`,
+            Prisma.sql`s.enabled = true AND s."enabledAt" IS NOT NULL AND (s."authorizationExpiresAt" IS NULL OR s."authorizationExpiresAt" > ${now}) AND s."textReuseAllowed" = true AND s."imageReuseAllowed" = true`,
             Prisma.sql`c.condition = 'USED'::"ListingCondition" AND c."imageUrl" IS NOT NULL AND c."thumbnailUrl" IS NOT NULL AND c.description IS NOT NULL AND c."priceTwd" IS NOT NULL`,
             Prisma.sql`c."observedAt" >= ${new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS)} AND c."expiresAt" > ${now}`,
             titleOr,

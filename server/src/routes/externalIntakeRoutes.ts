@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { Prisma, type ExternalCandidateStatus, type ExternalCandidateAiStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
-import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS, ExternalIntakeError, externalSourceAuthorizationActive, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
 import { eligibleExternalCandidate } from '../lib/externalListingPublication';
 import { districtCenter } from '../lib/doubleNorthDistrictCenters';
 import { isListingId } from '../lib/listingRules';
@@ -69,6 +69,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
             const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
             if (!source) return res.status(404).json({ error: '來源不存在' });
             if (source.authorizationRef !== req.body.authorizationRef) throw new ExternalIntakeError('authorizationRef');
+            if (source.authorizationExpiresAt && source.authorizationExpiresAt <= new Date())
+                throw new ExternalIntakeError('authorizationExpiresAt', '來源授權已到期');
             if (source.aiProcessingAllowed ? req.body.confirmAiProcessing !== true : req.body.confirmAiProcessing !== undefined)
                 throw new ExternalIntakeError('confirmAiProcessing', 'AI 分析須另行確認授權範圍');
             return res.json(await prisma.externalListingSource.update({ where: { id: source.id }, data: { enabled: true, enabledAt: source.enabledAt ?? new Date() } }));
@@ -97,7 +99,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
-            if (!source || !source.enabled || !source.enabledAt) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
+            if (!source || !externalSourceAuthorizationActive(source)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
                 Object.keys(req.body).sort().join(',') !== 'authorizationRef,items' ||
                 req.body.authorizationRef !== source.authorizationRef || !Array.isArray(req.body.items) ||
@@ -119,7 +121,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             const source = await prisma.externalListingSource.findUnique({ where: { id: req.params.id } });
-            if (!source || !source.enabled || !source.enabledAt) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
+            if (!source || !externalSourceAuthorizationActive(source)) return res.status(404).json({ error: '已授權來源不存在或尚未啟用' });
             if (!req.body || Object.keys(req.body).join(',') !== 'items' || !Array.isArray(req.body.items) ||
                 req.body.items.length < 1 || req.body.items.length > 50) throw new ExternalIntakeError('items');
             const now = new Date();
@@ -127,11 +129,11 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                 (raw: unknown) => parseExternalCandidate(raw, source, now));
             if (new Set(items.map((item: { sourceItemId: string }) => item.sourceItemId)).size !== items.length) throw new ExternalIntakeError('sourceItemId', '同一批次不得重複商品 ID');
             const saved = await prisma.$transaction(async tx => {
-                const locked = await tx.$queryRaw<Array<{ enabled: boolean; enabledAt: Date | null; authorizationRef: string;
+                const locked = await tx.$queryRaw<Array<{ enabled: boolean; enabledAt: Date | null; authorizationRef: string; authorizationExpiresAt: Date | null;
                     textReuseAllowed: boolean; imageReuseAllowed: boolean; aiProcessingAllowed: boolean }>>`
-                    SELECT "enabled", "enabledAt", "authorizationRef", "textReuseAllowed", "imageReuseAllowed", "aiProcessingAllowed"
+                    SELECT "enabled", "enabledAt", "authorizationRef", "authorizationExpiresAt", "textReuseAllowed", "imageReuseAllowed", "aiProcessingAllowed"
                     FROM "ExternalListingSource" WHERE "id" = ${source.id} FOR UPDATE`;
-                if (locked[0]?.enabled !== true || !locked[0].enabledAt ||
+                if (!locked[0] || !locked[0].enabledAt || !externalSourceAuthorizationActive(locked[0], new Date()) ||
                     locked[0].authorizationRef !== source.authorizationRef ||
                     locked[0].textReuseAllowed !== source.textReuseAllowed ||
                     locked[0].imageReuseAllowed !== source.imageReuseAllowed ||
@@ -152,7 +154,8 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     const retainsApproval = old?.status === 'APPROVED' && !aiChanged &&
                         oldObservationRecent && old.expiresAt > now &&
                         old.approvedAuthorizationRef === source.authorizationRef &&
-                        source.textReuseAllowed && source.imageReuseAllowed;
+                        source.textReuseAllowed && source.imageReuseAllowed &&
+                        externalSourceAuthorizationActive(source, now);
                     const record = old ? await tx.externalListingCandidate.update({ where: { id: old.id }, data: { ...item, lastSeenAt: now,
                         status: old.status === 'REJECTED' ? 'REJECTED' : retainsApproval ? 'APPROVED' : 'PENDING_REVIEW',
                         ...(!retainsApproval ? { approvalRef: null, approvedAuthorizationRef: null,
@@ -307,6 +310,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
                     expiresAt: { gt: now }, imageUrl: row.imageUrl, thumbnailUrl: row.thumbnailUrl,
                     description: row.description, condition: 'USED',
                     source: { enabled: true, enabledAt: { not: null }, textReuseAllowed: true, imageReuseAllowed: true,
+                        OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }],
                         ...(body.useAiSupplement === true ? { aiProcessingAllowed: true } : {}),
                         authorizationRef: row.source.authorizationRef } },
                     data: { status: 'APPROVED', approvalRef: body.reviewRef,

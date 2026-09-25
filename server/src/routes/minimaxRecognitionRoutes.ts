@@ -98,19 +98,22 @@ router.get('/next', async (_req, res) => {
         const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
             aiAttempts: { lt: 3 }, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-            source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
+            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
             data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'PROCESSING', aiUpdatedAt: { lt: new Date(now.getTime() - LEASE_MS) },
             aiAttempts: { gte: 3 } }, data: { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } });
         await prisma.externalListingCandidate.updateMany({ where: { aiStatus: 'FAILED', aiAttempts: { lt: 3 },
             aiUpdatedAt: { lt: new Date(now.getTime() - 30 * 60_000) }, status: 'PENDING_REVIEW',
             expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-            source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
+            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
             data: { aiStatus: 'PENDING', aiJobId: null, aiUpdatedAt: now } });
         for (let attempt = 0; attempt < 3; attempt++) {
             const candidate = await prisma.externalListingCandidate.findFirst({ where: { aiStatus: 'PENDING', aiAttempts: { lt: 3 },
                 status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff }, imageUrl: { not: null },
-                source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
+                source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                    OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
                 orderBy: { createdAt: 'asc' }, include: { source: { select: { imageHost: true } } } });
             if (!candidate?.imageUrl) break;
             let validImage = false;
@@ -128,7 +131,8 @@ router.get('/next', async (_req, res) => {
             const claimed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PENDING',
                 contentHash: candidate.contentHash, aiInputHash: candidate.contentHash, imageUrl: candidate.imageUrl,
                 status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-                source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
+                source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                    OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
                 data: { aiStatus: 'PROCESSING', aiJobId: jobId, aiAttempts: { increment: 1 }, aiUpdatedAt: now } });
             if (claimed.count) return res.json({ kind: 'EXTERNAL_CANDIDATE', jobId, imageUrl: candidate.imageUrl,
                 imageHost: candidate.source.imageHost });
@@ -182,7 +186,8 @@ router.post('/:jobId/result', async (req, res) => {
         const changed = await prisma.externalListingCandidate.updateMany({ where: { id: candidate.id, aiStatus: 'PROCESSING',
             aiJobId: jobId, aiInputHash: candidate.contentHash, contentHash: candidate.contentHash,
             imageUrl: candidate.imageUrl, status: 'PENDING_REVIEW', expiresAt: { gt: now }, observedAt: { gte: observationCutoff },
-            source: { enabled: true, aiProcessingAllowed: true, imageReuseAllowed: true } },
+            source: { enabled: true, enabledAt: { not: null }, aiProcessingAllowed: true, imageReuseAllowed: true,
+                OR: [{ authorizationExpiresAt: null }, { authorizationExpiresAt: { gt: now } }] } },
             data: failed ? { aiStatus: 'FAILED', aiJobId: null, aiUpdatedAt: now } :
                 { aiStatus: 'COMPLETED', aiDraft: privateDraft as Prisma.InputJsonObject, aiJobId: null, aiUpdatedAt: now } });
         return changed.count ? res.status(204).send() : res.status(409).json({ error: 'LEASE_EXPIRED' });

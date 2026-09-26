@@ -10,11 +10,12 @@ import { Bounds, clipBounds, emptySearchFilters, listingGeoJSON, listingPrice, L
 import { parseWishMatchPage, wishMatchPath } from './wishData';
 import { ListingReportSheet } from './ListingReportSheet';
 import { iosColors, iosFloatingShadow, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
-import { externalGeoJSON, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
+import { externalGeoJSON, externalListingVisible, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
   parseExternalListingPage, type ExternalListing } from './externalListingSearch';
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const MAX_LOADED = 500;
+const EXTERNAL_REFRESH_MS = 5 * 60_000;
 type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onOpenChat: (id: string) => void; wishItemId?: number; onClearWish?: () => void; initialListing?: PublicListing | null; onInitialListingHandled?: () => void };
 
 export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onClearWish, initialListing, onInitialListingHandled }: Props) {
@@ -59,8 +60,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
       clearInterval(timer); clearTimeout(viewportTimer.current); subscription.remove(); };
   }, []);
   const visible = useMemo(() => items.filter(item => Date.parse(item.expiresAt) > clock), [items, clock]);
-  const externalVisible = useMemo(() => externalItems.filter(item =>
-    Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= 48 * 3_600_000), [externalItems, clock]);
+  const externalVisible = useMemo(() => externalItems.filter(item => externalListingVisible(item, clock)), [externalItems, clock]);
   const chosen = visible.find(item => item.id === selected);
   const chosenExternal = externalVisible.find(item => item.id === selectedExternal);
   useEffect(() => { if (detail && Date.parse(detail.expiresAt) <= clock) { detailSequence.current++; setDetail(null); } }, [clock, detail]);
@@ -131,6 +131,14 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
       externalLoading.current = false; setExternalBusy(false); } }
   }, [api, externalPath]);
   useEffect(() => { void loadExternal(); }, [loadExternal]);
+  // A source can withdraw an item or its authorization while the map stays
+  // open. Refresh the whole current query rather than keeping a stale card;
+  // detail and outbound navigation still revalidate each item immediately.
+  useEffect(() => {
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void loadExternal(); }, EXTERNAL_REFRESH_MS);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void loadExternal(); });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, [loadExternal]);
 
   function apply() {
     try { if (wishItemId) wishMatchPath(wishItemId, filters, bounds ?? TAIWAN_BOUNDS, radiusInput); else listingSearchPath(filters, bounds ?? TAIWAN_BOUNDS); setApplied({ ...filters }); setRadiusApplied(radiusInput); setFiltering(false); setError(''); }

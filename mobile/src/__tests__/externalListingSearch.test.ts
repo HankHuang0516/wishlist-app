@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'crypto';
-import { externalGeoJSON, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS, externalGeoJSON, externalListingVisible, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
   parseExternalListingPage } from '../externalListingSearch';
 import { emptySearchFilters, type SearchFilters } from '../listingSearch';
 
@@ -34,6 +34,17 @@ describe('source-attributed external map data', () => {
       aiDerivedPublicFields: true, aiSupplement: expect.stringContaining('橘色燈罩') });
     expect(() => parseExternalListing({ ...row(), aiSupplement: '未標示', aiDerivedPublicFields: false }, now)).toThrow();
   });
+  it('uses the same 24-hour observation cutoff as the public source index', () => {
+    expect(EXTERNAL_OBSERVATION_MAX_AGE_MS).toBe(24 * 3_600_000);
+    const atCutoff = parseExternalListing({ ...row(), observedAt: new Date(now - EXTERNAL_OBSERVATION_MAX_AGE_MS).toISOString() }, now);
+    expect(externalListingVisible(atCutoff, now)).toBe(true);
+    // A page arriving just after the backend cutoff may be parsed, but the
+    // local map must not display its stale item or fail the entire page.
+    const justOld = parseExternalListing({ ...row(), observedAt: new Date(now - EXTERNAL_OBSERVATION_MAX_AGE_MS - 1).toISOString() }, now);
+    expect(externalListingVisible(justOld, now)).toBe(false);
+    expect(() => parseExternalListing({ ...row(), observedAt: new Date(now - EXTERNAL_OBSERVATION_MAX_AGE_MS - 5 * 60_000 - 1).toISOString() }, now))
+      .toThrow('外部商品已失效');
+  });
   it.each([
     { inAppSeller: true }, { aiDerivedPublicFields: true }, { priceSource: 'AI_ESTIMATE' },
     { locationPrecision: 'EXACT' }, { condition: 'NEW' }, { priceTwd: null },
@@ -43,7 +54,7 @@ describe('source-attributed external map data', () => {
     { imageUrl: 'https://images.example.com:444/items/1.jpg' },
     { thumbnailUrl: null }, { thumbnailUrl: 'https://evil.example/items/1.jpg' },
     { thumbnailUrl: 'https://images.example.com/items/1.jpg' },
-    { observedAt: new Date(now - 49 * 3_600_000).toISOString() },
+    { observedAt: new Date(now - EXTERNAL_OBSERVATION_MAX_AGE_MS - 5 * 60_000 - 1).toISOString() },
     { expiresAt: new Date(now - 1_000).toISOString() },
     { location: { latitude: 25.01186, longitude: 121.45797, precision: 'EXACT',
       source: 'https://data.gov.tw/dataset/25489' } },

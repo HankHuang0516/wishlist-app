@@ -20,6 +20,9 @@ describe('web private batch listing flow', () => {
   let holdOldAccountList = false;
   let manyPrivateDrafts = 0;
   let showUploadedPrivatePhoto = false;
+  let showPendingPrivatePhoto = false;
+  let holdSellerSave = false;
+  let releaseSellerSave: (() => void) | undefined;
   let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
@@ -31,6 +34,9 @@ describe('web private batch listing flow', () => {
     holdOldAccountList = false;
     manyPrivateDrafts = 0;
     showUploadedPrivatePhoto = false;
+    showPendingPrivatePhoto = false;
+    holdSellerSave = false;
+    releaseSellerSave = undefined;
     releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -56,9 +62,13 @@ describe('web private batch listing flow', () => {
             nextCursor: start + 30 < rows.length ? items[items.length - 1].id : null }) };
         }
         unusedReads++;
-        const items = (loseUploadResponse && unusedReads >= 3 || showUploadedPrivatePhoto) ? [{ id: mediaId, clientUploadId: currentUploadId,
-          aiDraftStatus: showUploadedPrivatePhoto ? 'COMPLETED' : 'SKIPPED', aiDraft: showUploadedPrivatePhoto ? ai : null,
-          sellerDraft: null, sellerDraftVersion: 0 }] : [];
+        const items = showPendingPrivatePhoto ? [{ id: mediaId, clientUploadId: currentUploadId,
+          aiDraftStatus: 'PENDING', aiDraft: null, sellerDraftVersion: 0,
+          sellerDraft: { clientListingId: '33333333-3333-4333-8333-333333333333', touched: {},
+            form: { title: '賣家確認的檯燈', description: '賣家已檢查外觀。', brand: '', category: 'home', condition: 'USED', price: '350' } } }] :
+          (loseUploadResponse && unusedReads >= 3 || showUploadedPrivatePhoto) ? [{ id: mediaId, clientUploadId: currentUploadId,
+            aiDraftStatus: showUploadedPrivatePhoto ? 'COMPLETED' : 'SKIPPED', aiDraft: showUploadedPrivatePhoto ? ai : null,
+            sellerDraft: null, sellerDraftVersion: 0 }] : [];
         return { ok: true, status: 200, json: async () => ({ items }) };
       }
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
@@ -73,7 +83,11 @@ describe('web private batch listing flow', () => {
         return { ok: true, status: 200, json: async () => ({ id: mediaId, listingId: null, wishItemId: null }) };
       }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
-      if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
+      if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
+      if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') {
+        if (holdSellerSave) await new Promise<void>(resolve => { releaseSellerSave = resolve; });
+        return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
+      }
       if (path.endsWith('/listings') && method === 'POST') {
         if (loseFirstPublicationResponse) { loseFirstPublicationResponse = false; throw new Error('response lost'); }
         return { ok: true, status: 201, json: async () => ({ id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }) };
@@ -138,6 +152,34 @@ describe('web private batch listing flow', () => {
     expect(screen.queryByText(/此售價由 AI 參考區間中間值預填/)).toBeNull();
     expect(price).toHaveValue('420');
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+  });
+
+  it('keeps the exact seller-reviewed details visible while a late AI poll arrives during publication', async () => {
+    showPendingPrivatePhoto = true;
+    holdSellerSave = true;
+    let aiTick: (() => void) | undefined;
+    const realSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout, ...args) => {
+      if (timeout === 3000) { aiTick = handler as () => void; return 1; }
+      return realSetInterval(handler, timeout, ...args);
+    });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('賣家確認的檯燈');
+    expect(aiTick).toBeDefined();
+    fireEvent.change(screen.getByLabelText('品牌（選填）'), { target: { value: '自有品牌' } });
+    fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
+    fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
+    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByText('確認並刊登'));
+    await waitFor(() => expect(releaseSellerSave).toBeDefined());
+    await act(async () => { aiTick!(); });
+    expect(screen.getByDisplayValue('賣家確認的檯燈')).toBeInTheDocument();
+    await act(async () => { releaseSellerSave!(); });
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
+    const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(JSON.parse(posted!.body!)).toMatchObject({ title: '賣家確認的檯燈', brand: '自有品牌' });
   });
 
   it('replays the identical idempotency key when publication response is lost', async () => {

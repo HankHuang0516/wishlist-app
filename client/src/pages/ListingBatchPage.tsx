@@ -115,7 +115,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         void api<unknown>(token, `/listing-media/${card.id}/ai-draft`).then(raw => {
           const ai = parseAiState(raw, card.id);
           if (!active) return;
-          setCards(current => current.map(item => item.id === card.id ? { ...item, ai: ai.status, draft: ai.draft,
+          setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? { ...item, ai: ai.status, draft: ai.draft,
             form: ai.draft ? mergeAiDraft(item.form, item.touched, ai.draft) : item.form,
             dirty: item.dirty || !!ai.draft, error: '' } : item));
         }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ });
@@ -228,17 +228,24 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     catch (error) { replace(card.id, current => ({ ...current, error: (error as Error).message })); return; }
     if (!window.confirm(`確定公開刊登「${card.form.title}」？照片、售價與約略位置將出現在商品地圖。`)) return;
     setBusy(true);
-    if (card.dirty && !await save(card)) { setBusy(false); return; }
+    // Freeze the reviewed card before any await: a late AI poll must not
+    // replace the fields on screen while this exact confirmed body is sent.
+    replace(card.id, current => ({ ...current, form: card.form, touched: card.touched,
+      ai: card.ai, draft: card.draft, publishing: true, error: '' }));
+    if (card.dirty && !await save(card)) {
+      replace(card.id, current => ({ ...current, publishing: false }));
+      setBusy(false); return;
+    }
     // Keep the exact request for an uncertain network outcome. Replaying it
     // uses the server's clientListingId idempotency key, never a new listing.
     try { localStorage.setItem(pendingKey(userId!), body); }
     catch {
-      replace(card.id, current => ({ ...current, error: '此瀏覽器無法安全記錄刊登操作；商品尚未送出。請允許網站儲存空間後重試。' }));
+      replace(card.id, current => ({ ...current, publishing: false,
+        error: '此瀏覽器無法安全記錄刊登操作；商品尚未送出。請允許網站儲存空間後重試。' }));
       setBusy(false);
       return;
     }
     setPending(body);
-    replace(card.id, current => ({ ...current, publishing: true, error: '' }));
     try {
       const result = await api<{ id: unknown; status: string }>(token!, '/listings', { method: 'POST', body });
       if (!isUuid(result.id) || result.status !== 'ACTIVE') throw new Error('刊登結果尚未確認');

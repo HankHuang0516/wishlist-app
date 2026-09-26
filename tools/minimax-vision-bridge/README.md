@@ -20,7 +20,7 @@ Railway 設定 `MINIMAX_PILOT_USER_ID`（僅測試帳號的數字 ID）及隨機
 
 獨立的 `marketing-poller.mjs` 以同一把既有 callback capability，主動向 Railway 的 `/api/internal/marketing/next` 領取已確認商品。只對 `MARKETING_ASSISTANT_ENABLED=1` 且 `MARKETING_ASSISTANT_PILOT_USER_ID` 指定的測試帳號開放。每張原始照片仍由 Flickr 私密保存；Mac 暫存原圖、Apple Vision 切出的商品像素與背景生成檔，完成或失敗後刪除本機暫存。MiniMax 生成四個**沒有商品的背景**，本機把賣家的原始商品像素合成上去並印上「AI 行銷示意」，避免 image-to-image 改動商品本體；若平面商品或複雜照片無法可靠去背，改把**完整原始照片**置入 AI 背景相框，不捏造商品輪廓。再產出可編輯的繁體中文文案。四張圖全部保存到私密 Flickr 並且賣家確認後，後端才把選用圖附到公開刊登。一次免費調整只重做指定槽位，其他圖保留。
 
-本機常駐工作器可使用 `com.hankhuang.wishlist.marketing-poller.plist` 與 `run-marketing-poller.sh`；後者每次啟動都從既有 macOS Keychain 讀取 token，plist 與 Git 不存值。此 plist 使用專案的絕對路徑，安裝前應核對專案位置與 `sharp`／Swift 環境。單次隔離驗收：`railway run ... -- env DATABASE_URL=<隔離測試庫> TEST_DATABASE_URL=<同一隔離測試庫> NODE_ENV=test node mobile/scripts/marketing-four-local-e2e.cjs`。不應以生產資料庫執行這個合成照片測試。
+本機常駐工作器使用 `com.hankhuang.wishlist.marketing-poller.plist` 與 `run-marketing-poller.sh`；後者每次啟動都從既有 macOS Keychain 讀取 token，plist 與 Git 不存值。macOS 背景服務可能無權讀取 Desktop 專案，因此 plist 指向權限 0700 的 `~/Library/Application Support/WishlistMarketing/` 獨立副本；安裝時將 `marketing-poller.mjs`、`marketing-compose.mjs`、`lift-subject.swift`、`run-marketing-poller.sh` 複製到該處，並將固定版 `marketing-runtime-package.json` 命名為 `package.json`，在該資料夾安裝 `sharp`。逐一比對副本與 Git 原檔雜湊，確認 `launchctl` 顯示 `running`，後續程式更新須同步該副本。安裝和日誌不得保存 callback token。單次隔離驗收：`railway run ... -- env DATABASE_URL=<隔離測試庫> TEST_DATABASE_URL=<同一隔離測試庫> NODE_ENV=test node mobile/scripts/marketing-four-local-e2e.cjs`。不應以生產資料庫執行這個合成照片測試。
 
 若 Mac 離線或睡眠，Railway 工作會等待；最多重試三次，不應在 App 顯示假完成。公開商轉與付費額度尚未開放，內測限指定帳號。
 

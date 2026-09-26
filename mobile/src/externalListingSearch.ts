@@ -12,6 +12,17 @@ export type ExternalListing = {
   aiSupplement: string | null;
 };
 
+// Match the server's 24-hour source-observation gate. A longer client window
+// can leave a withdrawn or unrefreshed source item on an already-open map.
+export const EXTERNAL_OBSERVATION_MAX_AGE_MS = 24 * 3_600_000;
+const EXTERNAL_TRANSPORT_GRACE_MS = 5 * 60_000;
+
+export function externalListingVisible(item: Pick<ExternalListing, 'observedAt' | 'expiresAt'>, now = Date.now()) {
+  const observedAt = Date.parse(item.observedAt), expiresAt = Date.parse(item.expiresAt);
+  return Number.isFinite(observedAt) && Number.isFinite(expiresAt) && expiresAt > now &&
+    observedAt <= now + EXTERNAL_TRANSPORT_GRACE_MS && now - observedAt <= EXTERNAL_OBSERVATION_MAX_AGE_MS;
+}
+
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ListingSearchError('外部商品資料不正確');
   return value as Record<string, unknown>;
@@ -48,7 +59,8 @@ export function parseExternalListing(value: unknown, now = Date.now()): External
   const price = typeof row.priceTwd === 'string' && /^\d{1,8}(?:\.\d{1,2})?$/.test(row.priceTwd) ? Number(row.priceTwd) : NaN;
   const observedAt = Date.parse(row.observedAt), expiresAt = Date.parse(row.expiresAt);
   if (!Number.isFinite(price) || price < 1 || price > 10_000_000 || !Number.isFinite(observedAt) ||
-      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 || now - observedAt > 48 * 3_600_000 ||
+      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 ||
+      now - observedAt > EXTERNAL_OBSERVATION_MAX_AGE_MS + EXTERNAL_TRANSPORT_GRACE_MS ||
       expiresAt <= now || expiresAt > observedAt + 30 * 86_400_000)
     throw new ListingSearchError('外部商品已失效或資料不正確');
   const canonicalUrl = externalUrl(row.canonicalUrl, source.host);

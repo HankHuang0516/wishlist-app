@@ -14,6 +14,7 @@ const { startNativeQa } = require('./native-qa.cjs');
 const { assignedSerial, hostEnvironment, metroArguments, METRO_PORT, qaLabel, qaPackage } = require('./android-qa-config.cjs');
 const { androidQaSources } = require('./android-qa-sources.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
+const { PrismaClient } = require('../../server/node_modules/@prisma/client');
 
 const runFile = promisify(execFile);
 const mobile = path.resolve(__dirname, '..');
@@ -104,7 +105,7 @@ async function waitWithScroll(label, exact = true) {
   throw new Error('Scrollable UI control missing at ' + stage);
 }
 async function screenshot(name) {
-  if (!/^(?:external-map|external-list|external-detail|wish-map|wish-list)$/.test(name)) throw new Error('Unsafe screenshot name');
+  if (!/^(?:external-map|external-list|external-detail|wish-map|wish-list|external-withdrawn)$/.test(name)) throw new Error('Unsafe screenshot name');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   result.screenshots.push(target);
@@ -256,6 +257,31 @@ async function main() {
   await waitNode('Native QA 外部檯燈', { exact: false });
   await waitNode('來源售價 NT$ 590', { exact: false });
   await screenshot('wish-list');
+  stage = 'source-withdrawal';
+  const prisma = new PrismaClient({ datasources: { db: { url: database } } });
+  try {
+    // Only the fixture created by this isolated QA worker is eligible.
+    const changed = await prisma.externalListingCandidate.updateMany({ where: {
+      sourceItemId: 'synthetic-' + qa.runId, status: 'APPROVED',
+      source: { authorizationRef: 'self:synthetic-native-qa' },
+    }, data: { status: 'STALE', approvalRef: null, approvedContentHash: null,
+      approvedAuthorizationRef: null, approvedAt: null } });
+    if (changed.count !== 1) throw new Error('Owned synthetic withdrawal target missing');
+  } finally { await prisma.$disconnect(); }
+  const withdrawn = await fetch(qa.apiUrl + '/api/external-listings?limit=1');
+  if (!withdrawn.ok || (await withdrawn.json()).items?.length !== 0)
+    throw new Error('Withdrawn synthetic item still public');
+  stage = 'foreground-refresh';
+  await adb(['shell', 'input', 'keyevent', '3']);
+  await sleep(900);
+  await adb(['shell', 'am', 'start', '-n', `${packageName}/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity`]);
+  await waitNode('外部 0 件', { exact: false });
+  await sleep(1500);
+  const refreshed = await dump();
+  if (!nodeWith(refreshed, '外部 0 件', false) || nodeWith(refreshed, 'Native QA 外部檯燈', false) ||
+    nodeWith(refreshed, '外部商品暫時無法載入。', false)) throw new Error('Withdrawn item survived foreground refresh');
+  await screenshot('external-withdrawn');
+  result.withdrawalRefresh = { sourceCandidateWithdrawn: true, publicEndpointItems: 0, appExternalItems: 0 };
   passed = true;
 }
 

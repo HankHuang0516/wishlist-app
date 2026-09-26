@@ -244,6 +244,62 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: source.id } });
         }
     });
+    it('pages every private review candidate across a 200-item feed without re-import reshuffling', async () => {
+        const source = await prisma.externalListingSource.create({ data: {
+            name: 'Synthetic candidate pagination partner', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            authorizationRef: 'contract:synthetic-candidate-pages', enabled: true, enabledAt: new Date(),
+            textReuseAllowed: true, imageReuseAllowed: true,
+        } });
+        try {
+            const oldest = Date.now() - 220_000;
+            const records = Array.from({ length: 200 }, (_, index) => {
+                const sourceItemId = `synthetic-page-${String(index).padStart(3, '0')}`;
+                return { id: randomUUID(), sourceId: source.id, sourceItemId,
+                    canonicalUrl: `https://partner.example.com/items/${sourceItemId}`,
+                    imageUrl: `https://images.example.com/${sourceItemId}.jpg`,
+                    thumbnailUrl: `https://images.example.com/${sourceItemId}-small.jpg`,
+                    title: `合成二手商品 ${index}`, description: '僅供隔離審核分頁測試。', priceTwd: 590,
+                    condition: 'USED' as const, county: '新北市', district: '板橋區',
+                    observedAt: new Date(), expiresAt: new Date(Date.now() + 7 * 86_400_000),
+                    lastSeenAt: new Date(oldest), createdAt: new Date(oldest + index * 1000),
+                    contentHash: createHash('sha256').update(sourceItemId).digest('hex') };
+            });
+            await prisma.externalListingCandidate.createMany({ data: records });
+            const list = (query: Record<string, string> = {}) => request(app).get(`${url}/candidates`)
+                .set('x-admin-key', adminKey).query({ status: 'PENDING_REVIEW', sourceId: source.id, limit: '40', ...query });
+            expect((await request(app).get(`${url}/candidates`).query({ sourceId: source.id })).status).toBe(401);
+            const first = await list();
+            expect(first.status).toBe(200);
+            expect(first.headers['cache-control']).toBe('private, no-store');
+            expect(first.body.items).toHaveLength(40);
+            expect(first.body.nextCursor).toBe(first.body.items[39].id);
+            // A feed refresh changes lastSeenAt, never the review queue order.
+            await prisma.externalListingCandidate.update({ where: { id: records[199].id },
+                data: { lastSeenAt: new Date() } });
+            const pages = [first];
+            for (let index = 1; index < 5; index++) {
+                const page = await list({ cursor: pages[index - 1].body.nextCursor });
+                expect(page.status).toBe(200);
+                pages.push(page);
+            }
+            expect(pages.map(page => page.body.items.length)).toEqual([40, 40, 40, 40, 40]);
+            expect(pages[4].body.nextCursor).toBeNull();
+            const ids = pages.flatMap(page => page.body.items).map((row: { id: string }) => row.id);
+            expect(ids).toEqual(records.map(row => row.id));
+            expect(new Set(ids).size).toBe(200);
+            expect((await list({ cursor: 'not-a-uuid' })).status).toBe(400);
+            expect((await list({ cursor: first.body.nextCursor, sourceId: randomUUID() })).status).toBe(400);
+            expect((await list({ limit: '101' })).status).toBe(400);
+            expect((await list({ unexpected: '1' })).status).toBe(400);
+            await prisma.externalListingCandidate.update({ where: { id: first.body.nextCursor },
+                data: { status: 'APPROVED' } });
+            expect((await list({ cursor: first.body.nextCursor })).status).toBe(400);
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+        } finally {
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: source.id } });
+            await prisma.externalListingSource.delete({ where: { id: source.id } });
+        }
+    });
     it('withdraws sold source items immediately and requires a new review after re-import', async () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';

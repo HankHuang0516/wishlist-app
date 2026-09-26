@@ -331,12 +331,32 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
     });
     router.get('/candidates', async (req, res) => {
         try {
+            if (Object.keys(req.query).some(key => !['status', 'sourceId', 'cursor', 'limit'].includes(key)))
+                throw new ExternalIntakeError('query');
             const status = req.query.status === undefined ? 'PENDING_REVIEW' : req.query.status;
-            if (!['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'STALE'].includes(String(status))) throw new ExternalIntakeError('status');
-            const rows = await prisma.externalListingCandidate.findMany({ where: { status: status as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'STALE' },
-                orderBy: [{ lastSeenAt: 'desc' }, { id: 'desc' }], take: 100,
+            const sourceId = req.query.sourceId, cursor = req.query.cursor, limit = req.query.limit;
+            if (typeof status !== 'string' || !['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'STALE'].includes(status))
+                throw new ExternalIntakeError('status');
+            if (sourceId !== undefined && !isListingId(sourceId)) throw new ExternalIntakeError('sourceId');
+            if (cursor !== undefined && !isListingId(cursor)) throw new ExternalIntakeError('cursor');
+            if (limit !== undefined && (typeof limit !== 'string' || !/^[1-9]\d{0,2}$/.test(limit) || Number(limit) > 100))
+                throw new ExternalIntakeError('limit');
+            const pageSize = limit === undefined ? 100 : Number(limit);
+            const where: Prisma.ExternalListingCandidateWhereInput = { status: status as ExternalCandidateStatus,
+                ...(sourceId ? { sourceId } : {}) };
+            // A cursor must still belong to the selected private queue. If a
+            // reviewer changes its status mid-review, refresh instead of
+            // silently skipping candidates or crossing into another source.
+            if (cursor && !await prisma.externalListingCandidate.findFirst({ where: { ...where, id: cursor }, select: { id: true } }))
+                throw new ExternalIntakeError('cursor');
+            // createdAt is immutable. Re-imports update lastSeenAt, which
+            // would otherwise reshuffle a long queue between pages.
+            const rows = await prisma.externalListingCandidate.findMany({ where,
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: pageSize + 1,
+                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
                 include: { source: { select: { name: true, kind: true, authorizationRef: true, textReuseAllowed: true, imageReuseAllowed: true } } } });
-            return res.json({ items: rows });
+            const items = rows.slice(0, pageSize);
+            return res.json({ items, nextCursor: rows.length > pageSize ? items[items.length - 1].id : null });
         } catch (error) { return fail(res, error); }
     });
     router.get('/candidates/:id/reviews', async (req, res) => {

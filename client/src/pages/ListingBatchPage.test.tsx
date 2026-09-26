@@ -165,7 +165,7 @@ describe('web private batch listing flow', () => {
     });
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
     await screen.findByDisplayValue('賣家確認的檯燈');
-    expect(aiTick).toBeDefined();
+    await waitFor(() => expect(aiTick).toBeDefined());
     fireEvent.change(screen.getByLabelText('品牌（選填）'), { target: { value: '自有品牌' } });
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });

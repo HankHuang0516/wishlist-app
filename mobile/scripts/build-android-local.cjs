@@ -4,6 +4,7 @@
 const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+const { alignAndroidGradle } = require('./sync-android-version.cjs');
 const mobile = path.resolve(__dirname, '..');
 const { getApiUrl } = require('../../server/dist/config/constants.js');
 const java = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
@@ -15,6 +16,15 @@ const disk = fs.statfsSync(mobile);
 if (disk.bavail * disk.bsize < 15 * 1024 ** 3) throw new Error('At least 15 GiB free space is required by the local native-build safety guard; no credentials were read and no build was started');
 for (const required of [path.join(java, 'bin', 'java'), sdk, keystore, path.join(mobile, 'android', 'gradlew')]) if (!fs.existsSync(required)) throw new Error('Existing local Android build prerequisite is missing');
 if ((fs.statSync(keystore).mode & 0o077) !== 0) throw new Error('Upload key is not privately stored');
+const { expo } = require('../app.config.js');
+const gradleFile = path.join(mobile, 'android', 'app', 'build.gradle');
+const gradle = fs.readFileSync(gradleFile, 'utf8');
+const alignedGradle = alignAndroidGradle(gradle, {
+  packageName: expo.android.package,
+  versionCode: expo.android.versionCode,
+  versionName: expo.version,
+});
+if (alignedGradle !== gradle) fs.writeFileSync(gradleFile, alignedGradle);
 const env = { ...process.env, JAVA_HOME: java, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk, EXPO_PUBLIC_API_URL: getApiUrl(), NODE_ENV: target === 'assembleDebug' ? 'development' : 'production',
   PATH: `${path.dirname(process.execPath)}:${path.join(java, 'bin')}:${process.env.PATH}` };
 if (target !== 'assembleDebug') {

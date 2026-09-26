@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const { expo } = require('../../app.config.js');
+const { alignAndroidGradle } = require('../../scripts/sync-android-version.cjs');
 const options = (name: string) => expo.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === name)[1];
 
 describe('native identity and minimal permissions', () => {
@@ -10,6 +11,24 @@ describe('native identity and minimal permissions', () => {
     expect(expo.ios.bundleIdentifier).toBe('com.hankhuang.weesh');
     expect(expo.android.package).toBe('com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1');
     expect(expo.extra.eas.projectId).toBe('1f7233de-f650-4938-a46d-97b419832519');
+  });
+
+  it('aligns an older generated Android version without changing the package identity', () => {
+    const gradle = `defaultConfig {\n applicationId '${expo.android.package}'\n versionCode 25\n versionName "2.0.7"\n}`;
+    const aligned = alignAndroidGradle(gradle, {
+      packageName: expo.android.package,
+      versionCode: expo.android.versionCode,
+      versionName: expo.version,
+    });
+    expect(aligned).toContain(`applicationId '${expo.android.package}'`);
+    expect(aligned).toContain(`versionCode ${expo.android.versionCode}`);
+    expect(aligned).toContain(`versionName "${expo.version}"`);
+    expect(alignAndroidGradle(aligned, {
+      packageName: expo.android.package, versionCode: expo.android.versionCode, versionName: expo.version,
+    })).toBe(aligned);
+    expect(() => alignAndroidGradle(gradle.replace(expo.android.package, 'com.wrong.app'), {
+      packageName: expo.android.package, versionCode: expo.android.versionCode, versionName: expo.version,
+    })).toThrow(/identity\/version/);
   });
 
   it('keeps iPad support required by the previously published iOS app', () => {

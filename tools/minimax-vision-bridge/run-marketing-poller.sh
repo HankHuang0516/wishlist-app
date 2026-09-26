@@ -14,5 +14,6 @@ unset callback_token
 export PATH="${HOME}/.minimax/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 script_dir=${0:A:h}
-cd "$script_dir/../.."
+export WISHLIST_MARKETING_DEPENDENCY_ROOT="$script_dir"
+cd "$script_dir"
 exec /opt/homebrew/bin/node "$script_dir/marketing-poller.mjs"

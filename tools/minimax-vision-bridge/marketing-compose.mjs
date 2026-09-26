@@ -2,9 +2,16 @@
 // empty scene only behind it. Publication remains seller-controlled in the API.
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { writeFile } from 'node:fs/promises';
 
-const require = createRequire(new URL('../../server/package.json', import.meta.url));
+// Installed LaunchAgents cannot rely on macOS background access to ~/Desktop.
+// Use the private runtime's pinned dependency when installed, and the server's
+// existing dependency during repository tests.
+const dependencyRoot = process.env.WISHLIST_MARKETING_DEPENDENCY_ROOT;
+const require = createRequire(dependencyRoot
+  ? pathToFileURL(resolve(dependencyRoot, 'package.json'))
+  : new URL('../../server/package.json', import.meta.url));
 const sharp = require('sharp');
 
 export async function composeMarketingImage(backgroundBytes, cutoutBytes, { badge = 'AI 行銷示意', outputSize = 1024,

@@ -5,9 +5,9 @@
   <key>Label</key><string>com.hankhuang.wishlist.marketing-poller</string>
   <key>ProgramArguments</key><array>
     <string>/bin/zsh</string>
-    <string>/Users/hank/Desktop/Project/wishlist-app/tools/minimax-vision-bridge/run-marketing-poller.sh</string>
+    <string>/Users/hank/Library/Application Support/WishlistMarketing/run-marketing-poller.sh</string>
   </array>
-  <key>WorkingDirectory</key><string>/Users/hank/Desktop/Project/wishlist-app</string>
+  <key>WorkingDirectory</key><string>/Users/hank/Library/Application Support/WishlistMarketing</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>

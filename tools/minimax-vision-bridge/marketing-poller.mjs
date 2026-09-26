@@ -6,7 +6,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { composeMarketingImage } from './marketing-compose.mjs';
+import { composeFramedMarketingImage, composeMarketingImage } from './marketing-compose.mjs';
 
 const exec = promisify(execFile);
 const apiBase = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
@@ -101,9 +101,12 @@ async function cycle() {
     const sourcePath = join(dir, `source.${original.extension}`);
     await writeFile(sourcePath, original.bytes, { mode: 0o600 });
     const cutoutPath = join(dir, 'subject.png');
-    await exec('swift', [new URL('./lift-subject.swift', import.meta.url).pathname, sourcePath, cutoutPath],
-      { timeout: 120_000, maxBuffer: 30_000 });
-    const cutout = await readFile(cutoutPath);
+    let cutout = null;
+    try {
+      await exec('swift', [new URL('./lift-subject.swift', import.meta.url).pathname, sourcePath, cutoutPath],
+        { timeout: 120_000, maxBuffer: 30_000 });
+      cutout = await readFile(cutoutPath);
+    } catch { /* Safe whole-photo inset below; no synthetic product geometry. */ }
     const uploaded = parsed((await exec('mcode-tools', ['upload-temp-url', sourcePath],
       { timeout: 45_000, maxBuffer: 1_000_000 })).stdout, 'UPLOAD');
     const tempUrl = safeUrl(uploaded.temp_url);
@@ -128,7 +131,9 @@ async function cycle() {
       const asset = parsed((await exec('mcode-tools', ['get-asset-url', item.node_id],
         { timeout: 30_000, maxBuffer: 1_000_000 })).stdout, 'ASSET');
       const background = await bounded(safeUrl(asset.url ?? asset.asset_url ?? asset.download_url), {}, 12 * 1024 * 1024);
-      const art = await composeMarketingImage(background.bytes, cutout, { groundY: [895, 970, 930, 970][slot - 1] });
+      const art = cutout ? await composeMarketingImage(background.bytes, cutout,
+        { groundY: [895, 970, 930, 970][slot - 1] }).catch(() => composeFramedMarketingImage(background.bytes, original.bytes))
+        : await composeFramedMarketingImage(background.bytes, original.bytes);
       const hash = createHash('sha256').update(art).digest('hex');
       if (hashes.has(hash)) throw new Error('ART_DUPLICATE');
       hashes.add(hash);

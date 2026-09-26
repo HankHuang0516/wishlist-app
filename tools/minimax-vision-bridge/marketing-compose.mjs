@@ -23,6 +23,24 @@ export async function composeMarketingImage(backgroundBytes, cutoutBytes, { badg
     .jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 }
 
+// Flat objects and busy photos may not yield a safe foreground mask. Preserve
+// the complete seller photo in an inset rather than inventing a cutout.
+export async function composeFramedMarketingImage(backgroundBytes, originalBytes, { outputSize = 1024 } = {}) {
+  const scene = await sharp(backgroundBytes).resize(outputSize, outputSize, { fit: 'cover' }).jpeg({ quality: 92 }).toBuffer();
+  const photo = await sharp(originalBytes).rotate().resize(760, 760, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 94 }).toBuffer();
+  const info = await sharp(photo).metadata();
+  if (!info.width || !info.height || info.width > 760 || info.height > 760) throw new Error('SOURCE_PHOTO_INVALID');
+  const border = 18, width = info.width + border * 2, height = info.height + border * 2;
+  const frame = await sharp({ create: { width, height, channels: 4, background: '#fffdf7' } })
+    .composite([{ input: photo, top: border, left: border }]).png().toBuffer();
+  const left = Math.round((outputSize - width) / 2), top = Math.round((outputSize - height) / 2) + 30;
+  if (left < 0 || top < 0 || top + height > outputSize) throw new Error('PHOTO_FRAME_INVALID');
+  const label = Buffer.from(`<svg width="${outputSize}" height="${outputSize}"><rect x="24" y="24" width="180" height="43" rx="21" fill="#111827" opacity="0.82"/><text x="43" y="53" fill="white" font-family="PingFang TC, sans-serif" font-size="20" font-weight="600">AI 行銷示意</text></svg>`);
+  return sharp(scene).composite([{ input: frame, top, left }, { input: label, top: 0, left: 0 }])
+    .jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+}
+
 if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
   if (process.argv.length !== 5) throw new Error('usage: node marketing-compose.mjs background-image cutout-png output-jpg');
   const [background, cutout, output] = process.argv.slice(2);

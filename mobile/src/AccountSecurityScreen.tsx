@@ -3,7 +3,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { performSecurityOperation, securityPayload, SecurityApi, SecurityOperation } from './accountSecurity';
 import type { AuthOperationGate } from './authOperation';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType } from './iosTheme';
-export function AccountSecurityScreen({ api, onPublish, onLogout, onRevoked, onDelete, operationGate }: { api: SecurityApi; onPublish: () => void; onLogout: () => void; onRevoked: (message: string) => Promise<void>; onDelete: () => void; operationGate: AuthOperationGate }) {
+export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRevoked, onDelete, operationGate }: { api: SecurityApi; onPublish: () => void; onManage: () => void; onLogout: () => void; onRevoked: (message: string) => Promise<void>; onDelete: () => void; operationGate: AuthOperationGate }) {
   const [current, setCurrent] = useState(''), [replacement, setReplacement] = useState(''), [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false), [issue, setIssue] = useState('');
   const active = useRef(true), running = useRef(false);
@@ -29,10 +29,11 @@ export function AccountSecurityScreen({ api, onPublish, onLogout, onRevoked, onD
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <Text style={styles.title}>我的</Text>
     <Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={onPublish}><Text style={styles.buttonText}>刊登好物</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={onManage}><Text style={styles.secondaryButtonText}>我的商品 · 閱覽與管理</Text></Pressable>
     <Text style={styles.heading}>帳號安全</Text><Text style={styles.note}>請輸入目前密碼以確認操作。密碼不會儲存在裝置，也不會自動重送。</Text>
-    <TextInput accessibilityLabel="目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={current} onChangeText={setCurrent} maxLength={1024} style={styles.input} />
-    <TextInput accessibilityLabel="新密碼" placeholder="新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={replacement} onChangeText={setReplacement} maxLength={73} style={styles.input} />
-    <TextInput accessibilityLabel="再次輸入新密碼" placeholder="再次輸入新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={confirmation} onChangeText={setConfirmation} maxLength={73} style={styles.input} />
+    <Text style={styles.fieldLabel}>目前密碼</Text><TextInput accessibilityLabel="目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={current} onChangeText={setCurrent} maxLength={1024} style={styles.input} />
+    <Text style={styles.fieldLabel}>新密碼</Text><TextInput accessibilityLabel="新密碼" placeholder="新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={replacement} onChangeText={setReplacement} maxLength={73} style={styles.input} />
+    <Text style={styles.fieldLabel}>再次輸入新密碼</Text><TextInput accessibilityLabel="再次輸入新密碼" placeholder="再次輸入新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={confirmation} onChangeText={setConfirmation} maxLength={73} style={styles.input} />
     <Text style={styles.note}>新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。</Text>
     {!!issue && <Text accessibilityRole="alert" style={styles.error}>{issue}</Text>}
     <Pressable accessibilityRole="button" disabled={busy || !current || !replacement || !confirmation} style={[styles.button, (busy || !current || !replacement || !confirmation) && styles.disabled]} onPress={() => confirm('password')}><Text style={styles.buttonText}>{busy ? '確認中…' : '更新密碼並重新登入'}</Text></Pressable>
@@ -47,6 +48,7 @@ const styles = StyleSheet.create({
   title: { ...iosType.largeTitle, color: iosColors.label },
   heading: { ...iosType.title2, color: iosColors.label, marginTop: iosSpacing.sm },
   note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' },
   input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, fontSize: 17, color: iosColors.label, ...iosShadow },
   button: { minHeight: 52, padding: iosSpacing.md, alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.tint, borderRadius: iosRadius.control },
   buttonText: { ...iosType.headline, color: iosColors.white },

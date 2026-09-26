@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
 const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_EXTERNAL_MAP_STRESS', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
@@ -95,11 +95,14 @@ async function main() {
   if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 900) throw new Error('Unsafe QA lifetime');
   if (process.env.NATIVE_QA_LISTING_AI_PILOT !== undefined && process.env.NATIVE_QA_LISTING_AI_PILOT !== '1') throw new Error('Unsafe QA AI mode');
   if (process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== undefined && process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT !== '1') throw new Error('Unsafe QA external mode');
+  if (process.env.NATIVE_QA_EXTERNAL_MAP_STRESS !== undefined && process.env.NATIVE_QA_EXTERNAL_MAP_STRESS !== '1') throw new Error('Unsafe QA map stress mode');
   if (process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== undefined && process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK !== '1') throw new Error('Unsafe QA upload interruption mode');
   if (process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== undefined && process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD !== '1') throw new Error('Unsafe QA upload rejection mode');
   if (process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT !== undefined && process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT !== '1') throw new Error('Unsafe QA stale batch snapshot mode');
   const listingAiPilot = process.env.NATIVE_QA_LISTING_AI_PILOT === '1';
   const externalListingsPilot = process.env.NATIVE_QA_EXTERNAL_LISTINGS_PILOT === '1';
+  const externalMapStress = process.env.NATIVE_QA_EXTERNAL_MAP_STRESS === '1';
+  if (externalMapStress && !externalListingsPilot) throw new Error('Map stress requires synthetic external fixtures');
   const holdListingUploadAck = process.env.NATIVE_QA_HOLD_LISTING_UPLOAD_ACK === '1';
   const rejectFirstListingUpload = process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD === '1';
   const staleBatchRecoverySnapshot = process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT === '1';
@@ -172,6 +175,32 @@ async function main() {
         approvedAuthorizationRef: owner.authorizationRef, approvedContentHash: input.contentHash, approvedAt: new Date() } });
       await tx.externalCandidateReviewEvent.create({ data: { candidateId: candidate.id, decision: 'APPROVED',
         contentHash: input.contentHash, reviewRef: 'review:synthetic-native-qa', authorizationRef: owner.authorizationRef } });
+      if (externalMapStress) {
+        // 101 additional same-source objects produce four nearby district-center
+        // clusters and a real second page after the first 100 loaded results.
+        const areas = [['新北市', '板橋區'], ['新北市', '三重區'], ['臺北市', '中正區'], ['臺北市', '信義區']];
+        const extras = Array.from({ length: 101 }, (_, index) => {
+          const [county, district] = areas[index % areas.length];
+          const item = parseExternalCandidate({ sourceItemId: `map-${runId}-${index}`,
+            canonicalUrl: `https://github.com/HankHuang0516/wishlist-app/blob/65f6630901a9b6eb8395b88d52d4c3d7eb20708c/mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png?map=${index}`,
+            imageUrl: fixtureBase,
+            thumbnailUrl: 'https://raw.githubusercontent.com/HankHuang0516/wishlist-app/7632e69d5f03f8826aac4711d496ce54b815a4fe/mobile/qa-fixtures/synthetic-used-orange-desk-lamp-320.png',
+            title: `QA map sample ${String(index + 1).padStart(3, '0')}`,
+            description: '合成來源商品，僅用於隔離地圖分頁與群聚測試。', priceTwd: 700 + index,
+            condition: 'USED', county, district,
+            observedAt: new Date(Date.now() - (index + 1) * 1000).toISOString(),
+            expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, source);
+          return { ...item, sourceId: owner.id, status: 'APPROVED', approvalRef: 'review:synthetic-native-qa',
+            approvedAuthorizationRef: owner.authorizationRef, approvedContentHash: item.contentHash, approvedAt: new Date() };
+        });
+        await tx.externalListingCandidate.createMany({ data: extras });
+        const createdExtras = await tx.externalListingCandidate.findMany({ where: { sourceId: owner.id,
+          sourceItemId: { startsWith: `map-${runId}-` } }, select: { id: true, contentHash: true } });
+        if (createdExtras.length !== extras.length) throw new Error('Synthetic map fixture count mismatch');
+        await tx.externalCandidateReviewEvent.createMany({ data: createdExtras.map(row => ({ candidateId: row.id,
+          decision: 'APPROVED', contentHash: row.contentHash, reviewRef: 'review:synthetic-native-qa',
+          authorizationRef: owner.authorizationRef })) });
+      }
       await tx.wishlist.create({ data: { userId: actors.buyer.id, title: 'Native QA 外部比對清單', isPublic: false,
         items: { create: { name: '檯燈', maxPrice: 600, priceCurrency: 'TWD', aiStatus: 'SKIPPED' } } } });
       return { sourceId: owner.id, candidateId: candidate.id };

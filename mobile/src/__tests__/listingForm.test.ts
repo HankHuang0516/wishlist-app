@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildListingBody, emptyListingForm, ListingFormError, parsePhotoRecord, taiwanDate, uuid } from '../listingForm';
+import { buildListingBody, emptyListingForm, firstListingPublishIssue, ListingFormError, parsePhotoRecord, taiwanDate, uuid } from '../listingForm';
 
 const id = '745d5d99-547b-4df7-a417-a43723c34b67';
 const now = new Date('2026-09-15T04:00:00Z');
@@ -32,6 +32,17 @@ describe('native listing form contracts', () => {
   it('shows dates in Taiwan regardless of the device timezone', () => {
     expect(taiwanDate(new Date('2026-09-15T16:00:00Z'))).toBe('2026-09-16');
     expect(buildListingBody({ ...full, expiryDate: '2026-09-15' }, id, [id], true, now).expiryDate).toBe('2026-09-15');
+  });
+  it('points at the first missing field instead of a generic publication warning', () => {
+    expect(firstListingPublishIssue(full, [id], now)).toBeNull();
+    expect(firstListingPublishIssue({ ...full, description: '' }, [id], now)?.field).toBe('description');
+    expect(firstListingPublishIssue({ ...full, price: '' }, [id], now)?.field).toBe('price');
+    expect(firstListingPublishIssue(full, [], now)?.field).toBe('photo');
+    expect(firstListingPublishIssue({ ...full, latitude: '' }, [id], now)).toMatchObject({ field: 'location' });
+    expect(firstListingPublishIssue({ ...full, county: '台北市', district: '中山區', longitude: '' }, [id], now)?.message).toContain('地圖座標');
+    expect(firstListingPublishIssue({ ...full, meetup: false, shipping: false }, [id], now)?.field).toBe('delivery');
+    expect(firstListingPublishIssue({ ...full, consent: false }, [id], now)?.field).toBe('consent');
+    expect(firstListingPublishIssue({ ...full, expiryDate: '2020-01-01' }, [id], now)?.field).toBe('expiryDate');
   });
 });
 describe('safe photo response / bearer-token origin', () => {

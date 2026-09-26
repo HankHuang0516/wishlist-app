@@ -32,6 +32,35 @@ export type ListingForm = {
 export const emptyListingForm: ListingForm = { title: '', description: '', brand: '', category: 'other', condition: 'USED', price: '', county: '', district: '', latitude: '', longitude: '',
   meetup: true, shipping: false, negotiable: false, consent: false, expiryDate: '' };
 
+export type ListingPublishField = 'title' | 'description' | 'brand' | 'price' | 'photo' | 'location' | 'delivery' | 'consent' | 'expiryDate' | 'condition' | 'category';
+export type ListingPublishIssue = { field: ListingPublishField; message: string };
+
+/** First actionable field for the seller, in the same constraints as publishing. */
+export function firstListingPublishIssue(form: ListingForm, mediaIds: string[], now = new Date()): ListingPublishIssue | null {
+  if (!form.title.trim() || form.title.trim().length > 100) return { field: 'title', message: '請填寫 100 字內的商品名稱。' };
+  if (!form.description.trim() || form.description.trim().length > 3000) return { field: 'description', message: '請填寫 3000 字內的商品狀況與說明。' };
+  if (form.brand.trim().length > 60) return { field: 'brand', message: '品牌最多 60 字。' };
+  if (!form.price || !/^\d{1,10}(?:\.\d{1,2})?$/.test(form.price) || Number(form.price) > 9_999_999_999.99)
+    return { field: 'price', message: '請確認售價；贈送請填 0，最多兩位小數。' };
+  if (!mediaIds.length || mediaIds.length > 8 || mediaIds.some(id => !uuid(id)) || new Set(mediaIds).size !== mediaIds.length)
+    return { field: 'photo', message: '請先確認商品照片已私密上傳成功。' };
+  if (!['NEW', 'USED'].includes(form.condition)) return { field: 'condition', message: '請選擇新品或二手。' };
+  if (!CATEGORIES.some(category => category[0] === form.category)) return { field: 'category', message: '請選擇商品分類。' };
+  const latitude = Number(form.latitude), longitude = Number(form.longitude);
+  if (!form.county.trim() || !form.district.trim() || form.county.trim().length > 30 || form.district.trim().length > 30 ||
+      !form.latitude.trim() || !form.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8)
+    return { field: 'location', message: '請完成商品地點：使用目前位置，或填入縣市、行政區與有效地圖座標。' };
+  if (!form.meetup && !form.shipping) return { field: 'delivery', message: '請至少選擇面交或寄送一種交付方式。' };
+  if (!form.consent) return { field: 'consent', message: '請勾選同意公開照片與約略位置。' };
+  if (form.expiryDate) {
+    const day = new Date(`${form.expiryDate}T23:59:59.999+08:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.expiryDate) || !Number.isFinite(day.getTime()) || taiwanDate(day) !== form.expiryDate || day <= now)
+      return { field: 'expiryDate', message: '請重新選擇尚未失效的日期，或使用預設 30 天。' };
+  }
+  return null;
+}
+
 export function buildListingBody(form: ListingForm, clientListingId: string, mediaIds: string[], publish: boolean, now = new Date()) {
   const title = form.title.trim();
   if (!title || title.length > 100) throw new ListingFormError('請填寫100字內商品名稱');

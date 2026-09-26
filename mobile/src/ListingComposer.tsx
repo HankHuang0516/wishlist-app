@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -10,7 +9,8 @@ import { File, Paths } from 'expo-file-system';
 import { ApiError, createApi } from './api';
 import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
-import { buildListingBody, CATEGORIES, emptyListingForm, ListingForm, ListingFormError, parsePhotoRecord, PhotoRecord, taiwanDate, uuid } from './listingForm';
+import { buildListingBody, CATEGORIES, emptyListingForm, ListingForm, ListingFormError, parsePhotoRecord, PhotoRecord, uuid } from './listingForm';
+import { ListingExpiryPicker } from './ListingExpiryPicker';
 import { PendingStoreError } from './pendingStore';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
@@ -152,7 +152,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
     photos.forEach(releasePreparedPhoto);
     onClose();
   }
-  const input = (key: 'title' | 'description' | 'brand' | 'price' | 'county' | 'district' | 'latitude' | 'longitude', label: string, numeric = false, multiline = false) => <TextInput key={key} accessibilityLabel={label} placeholder={label} value={form[key]} onChangeText={value => change(key, value)} editable={!locked} keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} />;
+  const input = (key: 'title' | 'description' | 'brand' | 'price' | 'county' | 'district' | 'latitude' | 'longitude', label: string, numeric = false, multiline = false) => <View key={key} style={s.fieldGroup}><Text style={s.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={form[key]} onChangeText={value => change(key, value)} editable={!locked} keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} /></View>;
   const toggle = (key: 'meetup' | 'shipping' | 'negotiable' | 'consent', label: string) => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: form[key], disabled: locked }} disabled={locked} onPress={() => change(key, !form[key])} style={s.option}><Text style={s.text}>{form[key] ? '☑' : '☐'} {label}</Text></Pressable>;
   return <Modal visible animationType="slide" onRequestClose={() => void close()}><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text style={s.title}>刊登好物</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void close()} style={s.option}><Text style={s.text}>{pending || !ready ? '稍後確認' : '取消'}</Text></Pressable></View>
@@ -171,10 +171,10 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
       {input('latitude', '位置緯度', true)}{input('longitude', '位置經度', true)}
       <Text style={s.small}>後端只保存約2公里模糊位置，不公開或保存原始GPS。行政區與地圖選位介面仍待整合驗收。</Text>
       {toggle('meetup', '可面交')}{toggle('shipping', '可寄送')}{toggle('negotiable', '可議價')}
-      <Text style={s.section}>失效日期（選填）</Text><Text style={s.text}>{form.expiryDate || '未設定：發布後30天'}</Text>
-      <Pressable accessibilityRole="button" disabled={locked} style={s.chip} onPress={() => setPicker(true)}><Text style={s.text}>選擇失效日期</Text></Pressable>
+      <Text style={s.section}>失效日期（選填）</Text><Text style={s.text}>{form.expiryDate || '預設：發布後 30 天'}</Text>
+      <Pressable accessibilityRole="button" disabled={locked} style={s.chip} onPress={() => setPicker(true)}><Text style={s.text}>自訂失效日期 · 選用</Text></Pressable>
       {!!form.expiryDate && <Pressable accessibilityRole="button" disabled={locked} style={s.option} onPress={() => change('expiryDate', '')}><Text style={s.text}>清除，使用預設30天</Text></Pressable>}
-      {picker && !locked && <DateTimePicker accessibilityLabel="失效日期" value={form.expiryDate ? new Date(form.expiryDate + 'T12:00:00+08:00') : new Date()} minimumDate={new Date()} mode="date" timeZoneName="Asia/Taipei" locale="zh-TW" onChange={(_event, date) => { setPicker(Platform.OS === 'ios'); if (date) change('expiryDate', taiwanDate(date)); }} />}
+      {picker && !locked && <ListingExpiryPicker value={form.expiryDate} onApply={date => { change('expiryDate', date); setPicker(false); }} onCancel={() => setPicker(false)} />}
       {toggle('consent', '同意公開商品資訊、照片與約略位置至商品地圖')}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
       {pending ? <Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>重試相同刊登</Text></Pressable> : <><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>發布商品</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.option} onPress={() => void save(false)}><Text style={s.text}>儲存草稿</Text></Pressable></>}
@@ -182,6 +182,6 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
   </KeyboardAvoidingView></SafeAreaView></Modal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, content: { padding: iosSpacing.lg, gap: iosSpacing.md, paddingBottom: 48 },
-  title: { ...iosType.title, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, section: { ...iosType.headline, color: iosColors.label, marginTop: iosSpacing.sm }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, padding: iosSpacing.md, borderRadius: iosRadius.control, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, multiline: { minHeight: 116, textAlignVertical: 'top' },
+  title: { ...iosType.title, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, section: { ...iosType.headline, color: iosColors.label, marginTop: iosSpacing.sm }, fieldGroup: { gap: iosSpacing.xs }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, padding: iosSpacing.md, borderRadius: iosRadius.control, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, multiline: { minHeight: 116, textAlignVertical: 'top' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, justifyContent: 'center' }, selected: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint }, option: { minHeight: minimumTapSize, padding: iosSpacing.sm, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: 52, padding: iosSpacing.md, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm }, photo: { width: 124, gap: iosSpacing.xs }, preview: { width: 124, height: 104, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary },
 });

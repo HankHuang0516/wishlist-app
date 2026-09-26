@@ -133,16 +133,15 @@ router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
             isHidden: false, isPurchased: false }, select: { id: true, name: true, maxPrice: true, priceCurrency: true } });
         if (!wish) return res.status(404).json({ error: '願望不存在、已隱藏或已完成', errorCode: 'WISH_MATCH_NOT_FOUND' });
         const tokens = wishKeywords(wish.name), now = new Date();
-        if (!tokens.length) return res.json({ enabled: true, items: [], nextCursor: null,
-            notice: '願望名稱資訊不足，請補充名稱或型號後再比對' });
+        if (!tokens.length) return search.cursor
+            ? res.status(400).json({ error: '商品分頁已失效', errorCode: 'EXTERNAL_CURSOR_INVALID' })
+            : res.json({ enabled: true, items: [], nextCursor: null,
+                notice: '願望名稱資訊不足，請補充名稱或型號後再比對' });
         const areas = search.bbox ? districtsInBounds([search.bbox.west, search.bbox.south,
             search.bbox.east, search.bbox.north]) : null;
-        if (areas && !areas.length) return res.json({ enabled: true, items: [], nextCursor: null });
-        if (search.cursor) {
-            const anchor = await prisma.externalListingCandidate.findUnique({ where: { id: search.cursor }, select });
-            if (!anchor || !publicCandidate(anchor, now))
-                return res.status(400).json({ error: '商品分頁已失效', errorCode: 'EXTERNAL_CURSOR_INVALID' });
-        }
+        if (areas && !areas.length) return search.cursor
+            ? res.status(400).json({ error: '商品分頁已失效', errorCode: 'EXTERNAL_CURSOR_INVALID' })
+            : res.json({ enabled: true, items: [], nextCursor: null });
         const title = (token: string) => Prisma.sql`position(${token} in lower(normalize(c.title, NFKC))) > 0`;
         const titleOr = Prisma.sql`(${Prisma.join(tokens.map(title), ' OR ')})`;
         const chinese = tokens.filter(token => /[\p{Script=Han}]/u.test(token));
@@ -163,6 +162,23 @@ router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
         if (wish.maxPrice !== null && wish.priceCurrency === 'TWD') clauses.push(Prisma.sql`c."priceTwd" <= ${wish.maxPrice}`);
         if (areas) clauses.push(Prisma.sql`(${Prisma.join(areas.map(place =>
             Prisma.sql`(c.county = ${place.county} AND c.district = ${place.district})`), ' OR ')})`);
+        const matchingPublicItem = (row: SelectedCandidate, at: Date) => {
+            const item = publicCandidate(row, at);
+            if (!item || row.priceTwd === null) return null;
+            return evaluateWishMatch(wish, { title: row.title, brand: null, category: null,
+                condition: row.condition, price: Number(row.priceTwd), currency: 'TWD', deliveryMethods: [],
+                status: 'ACTIVE', expiresAt: row.expiresAt, publishedAt: null, lastVerifiedAt: null,
+                location: { publicLatitude: item.location.latitude,
+                    publicLongitude: item.location.longitude } }, {}, at) ? item : null;
+        };
+        if (search.cursor) {
+            // A public item from a different wish/filter is not a valid page
+            // anchor. Reusing it could silently skip matches in this query.
+            const anchorIds = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT c.id FROM "ExternalListingCandidate" c JOIN "ExternalListingSource" s ON s.id = c."sourceId" WHERE ${Prisma.join([...clauses, Prisma.sql`c.id = ${search.cursor}`], ' AND ')} LIMIT 1`);
+            const anchor = anchorIds.length === 1 ? await prisma.externalListingCandidate.findUnique({ where: { id: search.cursor }, select }) : null;
+            if (!anchor || !matchingPublicItem(anchor, new Date()))
+                return res.status(400).json({ error: '商品分頁已失效', errorCode: 'EXTERNAL_CURSOR_INVALID' });
+        }
         const items: Array<NonNullable<ReturnType<typeof publicCandidate>>> = [];
         let scanCursor = search.cursor, exhausted = false;
         // Content hashes and source rights are revalidated in JS. Scan bounded
@@ -175,14 +191,9 @@ router.get('/matches', authenticateToken, async (req: AuthRequest, res) => {
             const byId = new Map(rows.map(row => [row.id, row]));
             for (const { id: candidateId } of ids) {
                 scanCursor = candidateId;
-                const row = byId.get(candidateId), publicItem = row && publicCandidate(row, new Date());
-                if (!row || !publicItem || row.priceTwd === null) continue;
-                const match = evaluateWishMatch(wish, { title: row.title, brand: null, category: null,
-                    condition: row.condition, price: Number(row.priceTwd), currency: 'TWD', deliveryMethods: [],
-                    status: 'ACTIVE', expiresAt: row.expiresAt, publishedAt: null, lastVerifiedAt: null,
-                    location: { publicLatitude: publicItem.location.latitude,
-                        publicLongitude: publicItem.location.longitude } }, {}, new Date());
-                if (match) items.push(publicItem);
+                const row = byId.get(candidateId);
+                const publicItem = row && matchingPublicItem(row, new Date());
+                if (publicItem) items.push(publicItem);
                 if (items.length > search.limit) break;
             }
             if (ids.length < 100) { exhausted = true; break; }

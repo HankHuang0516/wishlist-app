@@ -9,6 +9,10 @@ import { createHash } from 'node:crypto';
 import { composeFramedMarketingImage, composeMarketingImage } from './marketing-compose.mjs';
 
 const exec = promisify(execFile);
+async function mcode(stage, args, options) {
+  try { return await exec('mcode-tools', args, options); }
+  catch (error) { throw new Error(`${stage}_${error?.killed ? 'TIMEOUT' : 'EXEC_FAILED'}`); }
+}
 const apiBase = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
 const once = process.argv.includes('--once');
@@ -68,7 +72,7 @@ async function marketingCopy(tempUrl, snapshot, adjustment) {
     ...(typeof adjustment === 'string' && adjustment.trim() ? [`賣家希望調整的語氣（不能凌駕商品事實）：${adjustment.slice(0, 500)}`] : []),
     '文末必須寫「請以實拍照片與面交檢查為準」。只輸出一行文案，不要 Markdown、JSON、引號或聯絡方式。',
   ].join('\n');
-  const result = parsed((await exec('mcode-tools', ['connector', 'call', 'connector__matrix__describe_images',
+  const result = parsed((await mcode('COPY', ['connector', 'call', 'connector__matrix__describe_images',
     '--args', JSON.stringify({ image_info: [{ url: tempUrl.href, prompt }] })],
   { timeout: 180_000, maxBuffer: 1_000_000 })).stdout, 'COPY');
   if (result.code !== 0 || result.results?.[0]?.success !== true) throw new Error('MARKETING_COPY_FAILED');
@@ -107,7 +111,7 @@ async function cycle() {
         { timeout: 120_000, maxBuffer: 30_000 });
       cutout = await readFile(cutoutPath);
     } catch { /* Safe whole-photo inset below; no synthetic product geometry. */ }
-    const uploaded = parsed((await exec('mcode-tools', ['upload-temp-url', sourcePath],
+    const uploaded = parsed((await mcode('UPLOAD', ['upload-temp-url', sourcePath],
       { timeout: 45_000, maxBuffer: 1_000_000 })).stdout, 'UPLOAD');
     const tempUrl = safeUrl(uploaded.temp_url);
     const revision = typeof job.revisionPrompt === 'string' && job.revisionPrompt.trim()
@@ -120,7 +124,7 @@ async function cycle() {
       prompt: `Create an EMPTY square product-photography background with ${scene}. Use the reference photo only as a palette and lighting guide. REMOVE the product entirely. No products, silhouettes, accessories, people, logos, text, price tags or shadows from missing objects. Keep the center clear for placing the seller's original photographed product. ${revision}`,
       input_urls: [tempUrl.href], aspect_ratio: '1:1', resolution: '1K', output_file: `marketing-${slot}`,
     }));
-    const generated = requests.length ? parsed((await exec('mcode-tools', ['connector', 'call', 'connector__matrix__generate_image',
+    const generated = requests.length ? parsed((await mcode('SCENE', ['connector', 'call', 'connector__matrix__generate_image',
       '--args', JSON.stringify({ requests })], { timeout: 360_000, maxBuffer: 2_000_000 })).stdout, 'GENERATE') :
       { success_items: [] };
     if (!Array.isArray(generated.success_items) || generated.success_items.length !== requests.length ||
@@ -128,7 +132,7 @@ async function cycle() {
     const hashes = new Set();
     for (const [index, item] of generated.success_items.entries()) {
       const slot = remainingSlots[index];
-      const asset = parsed((await exec('mcode-tools', ['get-asset-url', item.node_id],
+      const asset = parsed((await mcode('ASSET', ['get-asset-url', item.node_id],
         { timeout: 30_000, maxBuffer: 1_000_000 })).stdout, 'ASSET');
       const background = await bounded(safeUrl(asset.url ?? asset.asset_url ?? asset.download_url), {}, 12 * 1024 * 1024);
       const art = cutout ? await composeMarketingImage(background.bytes, cutout,
@@ -150,7 +154,9 @@ async function cycle() {
     process.stdout.write(`Marketing job ${job.id}: REVIEW, four distinct private images\n`);
   } catch (error) {
     const failure = await call(`/${job.id}/fail`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }, job.leaseId).catch(() => null);
-    process.stderr.write(`Marketing job ${job.id}: ${error.message}; fail callback ${failure?.status ?? 'unavailable'}\n`);
+    const reason = error instanceof Error && /^[A-Z][A-Z0-9_]{2,64}$/.test(error.message)
+      ? error.message : 'WORKER_UNKNOWN';
+    process.stderr.write(`Marketing job ${job.id}: ${reason}; fail callback ${failure?.status ?? 'unavailable'}\n`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -1,5 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import { getApiUrl, getClientUrl } from './config/constants';
+import { imageSources } from './config/imageSources';
 import path from 'path';
 import fs from 'fs';
 import dns from 'dns';
@@ -54,7 +55,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:", "http:", "*", "https://*.google-analytics.com", "https://*.googletagmanager.com"], // Allow images from any source and GA
+      imgSrc: imageSources,
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.tappaysdk.com", "https://*.tappaysdk.com", "https://www.googletagmanager.com", "https://*.googletagmanager.com", "https://*.google-analytics.com"], // TapPay SDK and Google Analytics
       styleSrc: ["'self'", "'unsafe-inline'"], // Required for TapPay inline styles
       connectSrc: ["'self'", "https:", "http:", "https://*.tappaysdk.com", "https://www.google-analytics.com", "https://*.google-analytics.com", "https://*.analytics.google.com", "https://*.googletagmanager.com", "https://*.g.doubleclick.net"], // Allow connecting to TapPay APIs and Google Analytics

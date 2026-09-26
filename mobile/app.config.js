@@ -24,7 +24,7 @@ module.exports = {
     },
     android: {
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 25,
+      versionCode: 26,
       allowBackup: false,
       blockedPermissions: [
         'android.permission.SYSTEM_ALERT_WINDOW',

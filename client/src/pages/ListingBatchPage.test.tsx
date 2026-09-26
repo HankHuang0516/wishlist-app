@@ -19,6 +19,10 @@ describe('web private batch listing flow', () => {
   let currentUploadId = '';
   let holdOldAccountList = false;
   let manyPrivateDrafts = 0;
+  let showUploadedPrivatePhoto = false;
+  let showPendingPrivatePhoto = false;
+  let holdSellerSave = false;
+  let releaseSellerSave: (() => void) | undefined;
   let releaseOldAccountList: (() => void) | undefined;
   beforeEach(() => {
     calls.length = 0;
@@ -29,6 +33,10 @@ describe('web private batch listing flow', () => {
     currentUploadId = '';
     holdOldAccountList = false;
     manyPrivateDrafts = 0;
+    showUploadedPrivatePhoto = false;
+    showPendingPrivatePhoto = false;
+    holdSellerSave = false;
+    releaseSellerSave = undefined;
     releaseOldAccountList = undefined;
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -54,8 +62,13 @@ describe('web private batch listing flow', () => {
             nextCursor: start + 30 < rows.length ? items[items.length - 1].id : null }) };
         }
         unusedReads++;
-        const items = loseUploadResponse && unusedReads >= 3 ? [{ id: mediaId, clientUploadId: currentUploadId,
-          aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0 }] : [];
+        const items = showPendingPrivatePhoto ? [{ id: mediaId, clientUploadId: currentUploadId,
+          aiDraftStatus: 'PENDING', aiDraft: null, sellerDraftVersion: 0,
+          sellerDraft: { clientListingId: '33333333-3333-4333-8333-333333333333', touched: {},
+            form: { title: '賣家確認的檯燈', description: '賣家已檢查外觀。', brand: '', category: 'home', condition: 'USED', price: '350' } } }] :
+          (loseUploadResponse && unusedReads >= 3 || showUploadedPrivatePhoto) ? [{ id: mediaId, clientUploadId: currentUploadId,
+            aiDraftStatus: showUploadedPrivatePhoto ? 'COMPLETED' : 'SKIPPED', aiDraft: showUploadedPrivatePhoto ? ai : null,
+            sellerDraft: null, sellerDraftVersion: 0 }] : [];
         return { ok: true, status: 200, json: async () => ({ items }) };
       }
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
@@ -70,7 +83,11 @@ describe('web private batch listing flow', () => {
         return { ok: true, status: 200, json: async () => ({ id: mediaId, listingId: null, wishItemId: null }) };
       }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
-      if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
+      if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
+      if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') {
+        if (holdSellerSave) await new Promise<void>(resolve => { releaseSellerSave = resolve; });
+        return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
+      }
       if (path.endsWith('/listings') && method === 'POST') {
         if (loseFirstPublicationResponse) { loseFirstPublicationResponse = false; throw new Error('response lost'); }
         return { ok: true, status: 201, json: async () => ({ id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }) };
@@ -137,6 +154,34 @@ describe('web private batch listing flow', () => {
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
   });
 
+  it('keeps the exact seller-reviewed details visible while a late AI poll arrives during publication', async () => {
+    showPendingPrivatePhoto = true;
+    holdSellerSave = true;
+    let aiTick: (() => void) | undefined;
+    const realSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout, ...args) => {
+      if (timeout === 3000) { aiTick = handler as () => void; return 1; }
+      return realSetInterval(handler, timeout, ...args);
+    });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('賣家確認的檯燈');
+    expect(aiTick).toBeDefined();
+    fireEvent.change(screen.getByLabelText('品牌（選填）'), { target: { value: '自有品牌' } });
+    fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
+    fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
+    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByText('確認並刊登'));
+    await waitFor(() => expect(releaseSellerSave).toBeDefined());
+    await act(async () => { aiTick!(); });
+    expect(screen.getByDisplayValue('賣家確認的檯燈')).toBeInTheDocument();
+    await act(async () => { releaseSellerSave!(); });
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
+    const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(JSON.parse(posted!.body!)).toMatchObject({ title: '賣家確認的檯燈', brand: '自有品牌' });
+  });
+
   it('replays the identical idempotency key when publication response is lost', async () => {
     loseFirstPublicationResponse = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
@@ -159,6 +204,40 @@ describe('web private batch listing flow', () => {
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
   });
 
+  it('never posts a listing when the browser cannot persist its publication journal', async () => {
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByDisplayValue('二手檯燈');
+    fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
+    fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
+    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+      if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      return realSetItem(key, value);
+    });
+    fireEvent.click(screen.getByText('確認並刊登'));
+    await screen.findByText(/商品尚未送出/);
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+    expect(screen.getByText('確認並刊登')).not.toBeDisabled();
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
+  });
+
+  it('does not enable upload or publication when an existing journal cannot be read', async () => {
+    const realGetItem = localStorage.getItem.bind(localStorage);
+    vi.spyOn(localStorage, 'getItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'SecurityError');
+      return realGetItem(key);
+    });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/無法讀取安全刊登紀錄/);
+    expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+  });
+
   it('recovers a committed photo after upload ACK loss and one stale private list', async () => {
     loseUploadResponse = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
@@ -171,6 +250,45 @@ describe('web private batch listing flow', () => {
     await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
     expect(await screen.findByText('等待辨識或手動填寫')).toBeInTheDocument();
     expect(input).not.toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
+  });
+
+  it('keeps a confirmed private photo visible and stops the batch when clearing its browser journal fails', async () => {
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    await waitFor(() => expect(input).not.toBeDisabled());
+    showUploadedPrivatePhoto = true;
+    const realRemoveItem = localStorage.removeItem.bind(localStorage);
+    const realGetItem = localStorage.getItem.bind(localStorage);
+    let denyJournalRead = false;
+    vi.spyOn(localStorage, 'getItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-upload-pending:19' && denyJournalRead)
+        throw new DOMException('Storage unavailable', 'SecurityError');
+      return realGetItem(key);
+    });
+    vi.spyOn(localStorage, 'removeItem').mockImplementation(key => {
+      if (key === 'wishlist:listing-upload-pending:19') {
+        denyJournalRead = true;
+        throw new DOMException('Storage unavailable', 'SecurityError');
+      }
+      return realRemoveItem(key);
+    });
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' }),
+      new File(['second'], 'cup.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByDisplayValue('二手檯燈');
+    expect(await screen.findByText(/已由後台確認私密保存/)).toBeInTheDocument();
+    expect(screen.getByText(/有 1 張照片的上傳結果待確認/)).toBeInTheDocument();
+    expect(input).toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
+    vi.mocked(localStorage.removeItem).mockRestore();
+    vi.mocked(localStorage.getItem).mockRestore();
+    fireEvent.click(screen.getByText('重新確認上傳'));
+    await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
+    expect(input).not.toBeDisabled();
+    expect(screen.getByDisplayValue('二手檯燈')).toBeInTheDocument();
+    expect(calls.filter(call => call.path.endsWith(`/listing-media/${mediaId}/ai-draft`) && call.method === 'POST')).toHaveLength(1);
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
   });

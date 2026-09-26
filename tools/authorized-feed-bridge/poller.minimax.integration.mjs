@@ -79,7 +79,7 @@ test('real MiniMax supplements a synthetic authorized feed only in private revie
       WISHLIST_FEED_AUTHORIZATION_REF: authorizationRef, WISHLIST_FEED_HOST: host,
       WISHLIST_FEED_URL: `https://${host}/synthetic-feed.json`,
       WISHLIST_FEED_API_ORIGIN: 'https://wishlist-app-production.up.railway.app',
-      WISHLIST_FEED_ADMIN_KEY: adminKey });
+      WISHLIST_FEED_ADMIN_KEY: adminKey, WISHLIST_FEED_SYNC_ENABLED: '1' });
     const observedAt = new Date().toISOString();
     const item = { sourceItemId: 'owned-synthetic-orange-lamp',
       canonicalUrl: `https://${host}/items/owned-synthetic-orange-lamp`, imageUrl,

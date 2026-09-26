@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { getUserLocale } from "../utils/localization";
@@ -81,6 +81,7 @@ export default function PrivacyPolicy() {
                             您有權隨時訪問、更正或刪除您的個人資訊。
                             您可以通過帳戶設定進行操作，或聯繫我們要求協助刪除您的帳戶及相關數據。
                         </p>
+                        <p><Link to="/account-deletion" className="underline">在網頁提出刪除 Wishlist.ai 帳號與相關資料的要求</Link>（不需重新安裝 App）。</p>
                     </section>
 
                     <section>
@@ -162,6 +163,7 @@ export default function PrivacyPolicy() {
                             You have the right to access, correct, or delete your personal information at any time.
                             You can do this through your account settings or contact us to request assistance with deleting your account and related data.
                         </p>
+                        <p><Link to="/account-deletion" className="underline">Request deletion of your Wishlist.ai account and associated data on the web</Link> without reinstalling the app.</p>
                     </section>
 
                     <section>

@@ -14,6 +14,7 @@ const environment = {
   WISHLIST_FEED_URL: 'https://partner.example.com/listings/feed.json',
   WISHLIST_FEED_API_ORIGIN: 'https://wishlist-app-production.up.railway.app',
   WISHLIST_FEED_ADMIN_KEY: 'synthetic-test-only-key',
+  WISHLIST_FEED_SYNC_ENABLED: '1',
 };
 const config = feedConfig(environment);
 const item = (sourceItemId, observedAt = now.toISOString()) => ({ sourceItemId,
@@ -34,18 +35,63 @@ test('requires explicit source, rights reference, key and production API origin'
     ['WISHLIST_FEED_URL', 'https://partner.example.com/feed.json?token=secret'],
     ['WISHLIST_FEED_URL', 'https://127.0.0.1/feed.json'],
     ['WISHLIST_FEED_INTERVAL_MINUTES', '1'],
+    ['WISHLIST_FEED_SYNC_ENABLED', 'yes'],
   ]) assert.throws(() => feedConfig({ ...environment, [key]: value }), /FEED_/);
   assert.throws(() => feedUrl('https://partner.example.com.evil.test/feed.json', 'partner.example.com'), /FEED_URL_UNSAFE/);
+});
+
+test('preflight can inspect an authorized source while sync remains explicitly disabled', async () => {
+  const disabled = feedConfig({ ...environment, WISHLIST_FEED_SYNC_ENABLED: '0' });
+  let calls = 0;
+  const fetchApi = async (_url, options) => {
+    calls++;
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: new Date().toISOString(), authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+  };
+  const fetchFeed = async () => { calls++; return { ...envelope(), generatedAt: new Date().toISOString() }; };
+  assert.deepEqual(await preflightAuthorizedFeed(disabled, { fetchApi, fetchFeed }), {
+    kind: 'authorized-feed-preflight', validItems: 0, withdrawalSignals: 0,
+    persistedByBridge: 0, publishedByBridge: 0,
+  });
+  assert.equal(calls, 2);
+  await assert.rejects(syncAuthorizedFeed(disabled, { fetchApi, fetchFeed }), /FEED_SYNC_DISABLED/);
+  assert.equal(calls, 2);
+  await assert.rejects(syncAuthorizedFeed(feedConfig({
+    ...environment, WISHLIST_FEED_SYNC_ENABLED: undefined,
+  }), { fetchApi, fetchFeed }), /FEED_SYNC_DISABLED/);
+  assert.equal(calls, 2);
 });
 
 test('accepts only attributed fresh snapshots and explicit disjoint withdrawal signals', () => {
   assert.deepEqual(parseFeedEnvelope(envelope([item('one')]), config, now).withdrawals, []);
   assert.throws(() => parseFeedEnvelope(envelope([item('one'), item('one')]), config, now), /FEED_ITEM_INVALID/);
+  for (const unstableId of [' item', 'item ', 'item  two', 'item\t two', 'item\u0000two', 'x'.repeat(161)]) {
+    assert.throws(() => parseFeedEnvelope(envelope([item(unstableId)]), config, now), /FEED_ITEM_INVALID/);
+    assert.throws(() => parseFeedEnvelope(envelope([], [{ sourceItemId: unstableId, reason: 'SOLD' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
+  }
   assert.throws(() => parseFeedEnvelope(envelope([item('one')], [{ sourceItemId: 'one', reason: 'SOLD' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([], [{ sourceItemId: 'two', reason: 'UNKNOWN' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope({ ...envelope(), authorizationRef: 'contract:other-ref' }, config, now), /FEED_ENVELOPE_INVALID/);
   assert.throws(() => parseFeedEnvelope({ ...envelope(), generatedAt: '2026-09-23T03:00:00Z' }, config, now), /FEED_ENVELOPE_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([item('one', '2026-09-26T03:00:00Z')]), config, now), /FEED_ITEM_INVALID/);
+});
+
+test('preflight refuses unstable source keys before validating or staging any batch', async () => {
+  const current = new Date().toISOString();
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    calls.push({ url, method: options.method });
+    if (options.method !== 'GET') throw new Error('invalid snapshot must not reach intake API');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+  };
+  const items = Array.from({ length: 51 }, (_, index) => item('item-' + index, current));
+  items[50].sourceItemId = ' item-0 ';
+  await assert.rejects(preflightAuthorizedFeed(config, { fetchApi, fetchFeed: async () => ({
+    ...envelope(items), generatedAt: current,
+  }) }), /FEED_ITEM_INVALID/);
+  assert.deepEqual(calls.map(call => call.method), ['GET']);
 });
 
 test('refuses private DNS answers before making an HTTPS request', async () => {
@@ -130,7 +176,7 @@ test('checks current source before fetching and sends sold signals before privat
       key: options.headers['x-admin-key'] });
     if (url.endsWith('/sources/' + sourceId) && options.method === 'GET') return new Response(JSON.stringify({
       id: sourceId, kind: 'PARTNER_FEED', enabled: true, enabledAt: now.toISOString(),
-      authorizationRef, canonicalHost: config.host,
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host,
     }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0, withdrawn: 1, unknown: 1 }), { status: 200 });
     if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({ validCount: 1,
@@ -154,7 +200,7 @@ test('checks current source before fetching and sends sold signals before privat
   let feedCalled = false;
   await assert.rejects(syncAuthorizedFeed(config, {
     fetchApi: async () => new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: false,
-      authorizationRef, canonicalHost: config.host }), { status: 200 }),
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 }),
     fetchFeed: async () => { feedCalled = true; return envelope(); },
   }), /FEED_SOURCE_NOT_AUTHORIZED/);
   assert.equal(feedCalled, false);
@@ -167,7 +213,7 @@ test('preflight checks all candidate batches without staging or withdrawing', as
     calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
     if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
       kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
-      authorizationRef, canonicalHost: config.host }), { status: 200 });
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
     assert.ok(url.endsWith('/validate-candidates'));
     return new Response(JSON.stringify({ validCount: JSON.parse(options.body).items.length,
       publicCount: 0, persistedCount: 0 }), { status: 200 });
@@ -190,7 +236,7 @@ test('a later invalid batch cannot partly stage candidates, but sold signals sti
     calls.push(url);
     if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
       kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
-      authorizationRef, canonicalHost: config.host }), { status: 200 });
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
     if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
       withdrawn: 1, unknown: 0 }), { status: 200 });
     if (url.endsWith('/validate-candidates')) return calls.filter(call => call.endsWith('/validate-candidates')).length === 2
@@ -205,4 +251,91 @@ test('a later invalid batch cannot partly stage candidates, but sold signals sti
   assert.ok(calls[1].endsWith('/withdraw'));
   assert.equal(calls.filter(call => call.endsWith('/validate-candidates')).length, 2);
   assert.equal(calls.some(call => call.endsWith('/candidates')), false);
+});
+
+test('maximum scheduled snapshot keeps 200 items private and processes 50 explicit withdrawals first', async () => {
+  const current = new Date().toISOString();
+  const items = Array.from({ length: 200 }, (_, index) => item('current-' + index, current));
+  const withdrawals = Array.from({ length: 50 }, (_, index) => ({
+    sourceItemId: 'retired-' + index, reason: index < 25 ? 'SOLD' : 'REMOVED',
+  }));
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ url, method: options.method, body });
+    if (options.method === 'GET') return new Response(JSON.stringify({ id: sourceId,
+      kind: 'PARTNER_FEED', enabled: true, enabledAt: current,
+      authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+    if (url.endsWith('/withdraw')) return new Response(JSON.stringify({ publicCount: 0,
+      withdrawn: body.sourceItemIds.length, unknown: 0 }), { status: 200 });
+    if (url.endsWith('/validate-candidates')) return new Response(JSON.stringify({
+      validCount: body.items.length, publicCount: 0, persistedCount: 0,
+    }), { status: 200 });
+    if (url.endsWith('/candidates')) return new Response(JSON.stringify({ publicCount: 0,
+      items: body.items.map(entry => ({ sourceItemId: entry.sourceItemId, status: 'PENDING_REVIEW' })),
+    }), { status: 202 });
+    throw new Error('unexpected API call');
+  };
+  const result = await syncAuthorizedFeed(config, { fetchApi,
+    fetchFeed: async () => ({ ...envelope(items, withdrawals), generatedAt: current }) });
+  assert.deepEqual(result, { kind: 'authorized-private-feed-sync', staged: 200,
+    withdrawn: 50, unmatchedWithdrawals: 0, publishedByBridge: 0 });
+  assert.deepEqual(calls.map(call => call.url.split('/').at(-1)), [sourceId, 'withdraw', 'withdraw',
+    'validate-candidates', 'validate-candidates', 'validate-candidates', 'validate-candidates',
+    'candidates', 'candidates', 'candidates', 'candidates']);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/withdraw')).map(call =>
+    [call.body.reason, call.body.sourceItemIds.length]), [['SOLD', 25], ['REMOVED', 25]]);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/candidates')).map(call => call.body.items.length),
+    [50, 50, 50, 50]);
+  assert.ok(calls.every(call => !call.url.endsWith('/approve')));
+});
+
+test('recurring sync rechecks source authorization and does not fetch after it is paused', async () => {
+  const current = new Date().toISOString();
+  let enabled = true;
+  let fetched = 0;
+  const fetchApi = async (_url, options) => {
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled,
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+  };
+  const fetchFeed = async () => { fetched++; return { ...envelope(), generatedAt: current }; };
+  assert.deepEqual(await syncAuthorizedFeed(config, { fetchApi, fetchFeed }), {
+    kind: 'authorized-private-feed-sync', staged: 0, withdrawn: 0,
+    unmatchedWithdrawals: 0, publishedByBridge: 0,
+  });
+  enabled = false;
+  await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed }), /FEED_SOURCE_NOT_AUTHORIZED/);
+  assert.equal(fetched, 1);
+});
+
+test('expired or missing source authorization expiry is rejected before the partner feed is fetched', async () => {
+  let fetched = 0;
+  for (const authorizationExpiresAt of [new Date(Date.now() - 1).toISOString(), undefined, 'not-a-date']) {
+    await assert.rejects(preflightAuthorizedFeed(config, {
+      fetchApi: async () => new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+        enabledAt: new Date().toISOString(), authorizationRef, authorizationExpiresAt,
+        canonicalHost: config.host }), { status: 200 }),
+      fetchFeed: async () => { fetched++; return envelope(); },
+    }), /FEED_SOURCE_NOT_AUTHORIZED/);
+  }
+  assert.equal(fetched, 0);
+});
+
+test('over-limit snapshots are rejected before any private or public write', async () => {
+  const current = new Date().toISOString();
+  const calls = [];
+  const fetchApi = async (url, options) => {
+    calls.push(options.method);
+    assert.equal(options.method, 'GET');
+    return new Response(JSON.stringify({ id: sourceId, kind: 'PARTNER_FEED', enabled: true,
+      enabledAt: current, authorizationRef, authorizationExpiresAt: null, canonicalHost: config.host }), { status: 200 });
+  };
+  for (const snapshot of [
+    { ...envelope(Array.from({ length: 201 }, (_, index) => item('too-many-' + index, current))), generatedAt: current },
+    { ...envelope([], Array.from({ length: 51 }, (_, index) => ({ sourceItemId: 'sold-' + index,
+      reason: 'SOLD' }))), generatedAt: current },
+  ]) await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed: async () => snapshot }),
+    /FEED_ENVELOPE_INVALID/);
+  assert.deepEqual(calls, ['GET', 'GET']);
 });

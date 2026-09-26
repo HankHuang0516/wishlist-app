@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { ImageManipulator, ImageRef, SaveFormat } from 'expo-image-manipulator';
 import { ApiError, createApi } from './api';
-import { confirmedBatchCandidates, parseListingAiState, restoreBatchCaptureOrder, reviewStateAfterAi, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
+import { confirmedBatchCandidates, parseListingAiState, polledReviewStateAfterAi, restoreBatchCaptureOrder, reviewStateAfterAi, type ListingAiDraft, type ListingAiField, type ListingAiState, type ListingAiTouched } from './listingAiDraft';
 import { buildListingBody, CATEGORIES, emptyListingForm, firstListingPublishIssue, ListingFormError, parsePhotoRecord, type ListingForm, type PhotoRecord, uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { jpegPhotoUploadForm } from './photoUploadForm';
@@ -163,7 +163,11 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           try {
             const raw = await api<unknown>(`/listing-media/${card.record!.id}/ai-draft`);
             const state = parseListingAiState(raw, card.record!.id);
-            if (active.current) setCards(old => old.map(current => current.key === card.key ? applyAi(current, state) : current));
+            if (active.current) setCards(old => old.map(current => {
+              if (current.key !== card.key) return current;
+              const update = polledReviewStateAfterAi(current, state, busyRef.current);
+              return update ? { ...current, ...update, error: '' } : current;
+            }));
           } catch { /* retain queue state; explicit retry remains available */ }
         }
       })().finally(() => { polling.current = false; });

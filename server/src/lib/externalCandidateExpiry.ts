@@ -10,7 +10,8 @@ export async function expireExternalCandidates(now = new Date()) {
     const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);
     const result = await prisma.externalListingCandidate.updateMany({ where: {
         status: { in: ['PENDING_REVIEW', 'APPROVED'] }, OR: [{ expiresAt: { lte: now } },
-            { observedAt: { lt: observationCutoff } }, { source: { enabled: false } }],
+            { observedAt: { lt: observationCutoff } }, { source: { enabled: false } },
+            { source: { authorizationExpiresAt: { lte: now } } }],
     }, data: { status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,
         approvedContentHash: null, approvedAt: null, approvedAiSupplement: null, approvedAiInputHash: null,
         aiStatus: 'NOT_ELIGIBLE', aiInputHash: null, aiJobId: null,

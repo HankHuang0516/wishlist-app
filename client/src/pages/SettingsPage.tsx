@@ -6,7 +6,6 @@ import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2, LogOut } from "lucide-react";
-import ActionConfirmModal from "../components/ActionConfirmModal";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 
@@ -38,44 +37,6 @@ export default function SettingsPage() {
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Modal State
-    const [modalConfig, setModalConfig] = useState<{
-        isOpen: boolean;
-        title: string;
-        message: string;
-        confirmText?: string;
-        variant?: "primary" | "destructive";
-        onConfirm: () => void;
-        isProcessing?: boolean;
-    }>({
-        isOpen: false,
-        title: "",
-        message: "",
-        onConfirm: () => { },
-        variant: "primary"
-    });
-
-    const openModal = (
-        title: string,
-        message: string,
-        onConfirm: () => Promise<void> | void,
-        variant: "primary" | "destructive" = "primary",
-        confirmTextWithPrice?: string
-    ) => {
-        setModalConfig({
-            isOpen: true,
-            title,
-            message,
-            onConfirm: async () => {
-                setModalConfig(prev => ({ ...prev, isProcessing: true })); // Show loading
-                await onConfirm();
-                setModalConfig(prev => ({ ...prev, isOpen: false, isProcessing: false })); // Close on finish
-            },
-            variant,
-            confirmText: confirmTextWithPrice || t('common.confirm')
-        });
-    };
 
     useEffect(() => {
         if (token) {
@@ -788,22 +749,7 @@ export default function SettingsPage() {
                             <CardDescription>{t('settings.expandListDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-bold mb-4">NT$ 30 <span className="text-sm font-normal text-gray-500">(1 USD)</span></p>
-
-                            <div className="mb-4">
-                                <label className="text-sm text-gray-500 mb-1 block">{t('settings.type')}</label>
-                                <select
-                                    className="w-full border rounded p-2 text-sm"
-                                    id="expansion-type-select"
-                                >
-                                    <option value="wishlists">{t('dashboard.myWishlists')}</option>
-                                    <option value="following">{t('social.following')}</option>
-                                </select>
-                            </div>
-
-                            <Button className="w-full" variant="outline" disabled>
-                                {t('settings.purchaseUnavailable')}
-                            </Button>
+                            <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                         </CardContent>
                     </Card>
 
@@ -814,43 +760,14 @@ export default function SettingsPage() {
                             <CardDescription>{t('settings.premiumDesc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-bold mb-4">NT$ 90 <span className="text-sm font-normal text-gray-500">/mo (3 USD)</span></p>
-
                             {profile.isPremium ? (
                                 <div className="space-y-3">
                                     <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded text-center font-medium border border-amber-200">
                                         {t('settings.isPremium')}
                                     </div>
-                                    <Button className="w-full bg-white text-red-600 border border-red-200 hover:bg-red-50" onClick={() => {
-                                        openModal(
-                                            t('settings.cancelSubscription'),
-                                            "Are you sure you want to cancel? \n\nYour limit will revert to default (100).",
-                                            async () => {
-                                                try {
-                                                    const res = await fetch(`${API_URL}/users/me/subscription/cancel`, {
-                                                        method: 'POST',
-                                                        headers: { 'Authorization': `Bearer ${token}` }
-                                                    });
-                                                    if (res.ok) {
-                                                        // Smooth update
-                                                        handleUpdate({ isPremium: false });
-                                                        // Optional: Show toast or small feedback
-                                                    } else {
-                                                        setFeedback({ message: "Failed to cancel", type: 'error' });
-                                                        setTimeout(() => setFeedback(null), 3000);
-                                                    }
-                                                } catch (e) { console.error(e); }
-                                            },
-                                            "destructive",
-                                            t('common.confirm')
-                                        );
-                                    }}>
-                                        {t('settings.cancelSubscription')}
-                                    </Button>
+                                    <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                                 </div>
-                            ) : <Button className="w-full" disabled>
-                                {t('settings.purchaseUnavailable')}
-                            </Button>
+                            ) : <p className="text-sm text-gray-600">{t('settings.purchaseUnavailable')}</p>
                             }
 
                         </CardContent>
@@ -869,33 +786,7 @@ export default function SettingsPage() {
                                 </div>
                                 <Button
                                     variant="destructive"
-                                    onClick={() => {
-                                        openModal(
-                                            t('settings.deleteAccount'),
-                                            t('settings.deleteConfirm'),
-                                            async () => {
-                                                try {
-                                                    const res = await fetch(`${API_URL}/users/me`, {
-                                                        method: 'DELETE',
-                                                        headers: { 'Authorization': `Bearer ${token}` }
-                                                    });
-                                                    if (res.ok) {
-                                                        logout();
-                                                        navigate('/');
-                                                    } else {
-                                                        setFeedback({ message: t('common.error'), type: 'error' });
-                                                        setTimeout(() => setFeedback(null), 3000);
-                                                    }
-
-                                                } catch (e) {
-                                                    console.error(e);
-                                                    alert("Connection error");
-                                                }
-                                            },
-                                            "destructive",
-                                            t('common.delete')
-                                        );
-                                    }}
+                                    onClick={() => navigate('/account-deletion')}
                                 >
                                     {t('settings.deleteAccount')}
                                 </Button>
@@ -967,16 +858,6 @@ export default function SettingsPage() {
                     </Button>
                 </div>
 
-                <ActionConfirmModal
-                    isOpen={modalConfig.isOpen}
-                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    onConfirm={modalConfig.onConfirm}
-                    title={modalConfig.title}
-                    message={modalConfig.message}
-                    confirmText={modalConfig.confirmText}
-                    variant={modalConfig.variant}
-                    isProcessing={modalConfig.isProcessing}
-                />
             </div>
         </div>
 

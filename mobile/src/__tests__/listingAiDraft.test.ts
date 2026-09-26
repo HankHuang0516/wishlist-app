@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, reviewStateAfterAi, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, polledReviewStateAfterAi, restoreBatchCaptureOrder, reviewStateAfterAi, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
 import { emptyListingForm } from '../listingForm';
 
 const id = '41fe5714-b31f-475d-b040-01e2a5c2e1cb';
@@ -47,6 +47,15 @@ describe('private listing AI draft protocol', () => {
       expect(confirmedBatchCandidates([updated])).toHaveLength(0);
       expect(updated.form).toMatchObject({ title: '賣家確認的名稱', price: '999' });
     }
+  });
+  it('does not replace reviewed fields from a late AI poll during publication', () => {
+    const confirmed = { form: { ...emptyListingForm, title: '賣家確認的檯燈', price: '350' },
+      touched: {}, published: false, confirmed: true };
+    const result = { mediaId: id, status: 'COMPLETED' as const, draft };
+    expect(polledReviewStateAfterAi(confirmed, result, true)).toBeNull();
+    expect(polledReviewStateAfterAi({ ...confirmed, published: true }, result, false)).toBeNull();
+    expect(polledReviewStateAfterAi(confirmed, result, false)).toMatchObject({ confirmed: false,
+      form: { title: draft.title, price: '1400' } });
   });
   it('keeps the latest private photos but restores their capture order', () => {
     const newestFirst = ['third photo', 'second photo', 'first photo', 'older photo'];

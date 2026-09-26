@@ -224,7 +224,8 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
   useEffect(() => {
     setReady(false); setCards([]); setMessage(''); setUnresolvedUploads([]); setAiAvailable(null);
-    setPending(localStorage.getItem(pendingKey(userId)) ?? '');
+    try { setPending(localStorage.getItem(pendingKey(userId)) ?? ''); }
+    catch { setMessage('此瀏覽器無法讀取安全刊登紀錄；為避免重複刊登，已暫停新增照片與發布。請允許網站儲存空間後重新整理。'); return; }
     void reload().catch(() => setMessage('暫時無法安全恢復私人照片。請稍後重新整理。'));
   }, [token, userId, reload]);
 
@@ -236,7 +237,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         void api<unknown>(token, `/listing-media/${card.id}/ai-draft`).then(raw => {
           const ai = parseAiState(raw, card.id);
           if (!active) return;
-          setCards(current => current.map(item => item.id === card.id ? { ...item, ai: ai.status, draft: ai.draft,
+          setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? { ...item, ai: ai.status, draft: ai.draft,
             form: ai.draft ? mergeAiDraft(item.form, item.touched, ai.draft) : item.form,
             dirty: item.dirty || !!ai.draft, error: '' } : item));
         }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ });
@@ -286,6 +287,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         const body = new FormData(); body.append('clientUploadId', uploadId); body.append('capturePurpose', 'BATCH_ITEM'); body.append('image', prepared);
         try { rememberPendingUpload(userId!, uploadId); }
         catch { setMessage('無法在此瀏覽器安全記錄上傳進度；照片尚未送出，請確認瀏覽器儲存空間後重試。'); break; }
+        let confirmedPrivate = false;
         try {
           let raw: unknown;
           try { raw = await api<unknown>(token!, '/listing-media', { method: 'POST', body }); }
@@ -298,14 +300,20 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           }
           const record = raw as { id?: unknown };
           if (!isUuid(record?.id)) throw new Error('照片上傳結果未確認');
-          forgetPendingUploads(userId!, [uploadId]);
+          confirmedPrivate = true;
           const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
             version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '' };
           setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
           if (aiCanQueue) aiCanQueue = await requestAi(record.id);
+          forgetPendingUploads(userId!, [uploadId]);
         } catch (error) {
-          setUnresolvedUploads(readPendingUploads(userId!).map(entry => entry.clientUploadId));
-          setMessage(`第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
+          let pendingIds: string[] = [];
+          try { pendingIds = readPendingUploads(userId!).map(entry => entry.clientUploadId); }
+          catch { /* The known upload ID still blocks a duplicate in this session. */ }
+          setUnresolvedUploads(pendingIds.length ? pendingIds : [uploadId]);
+          setMessage(confirmedPrivate
+            ? `第 ${index + 1} 張照片已由後台確認私密保存，但瀏覽器無法更新恢復紀錄。請先按「重新確認上傳」，不要重傳同張照片。`
+            : `第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
           break;
         }
       }
@@ -342,11 +350,24 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     catch (error) { replace(card.id, current => ({ ...current, error: (error as Error).message })); return; }
     if (!window.confirm(`確定公開刊登「${card.form.title}」？照片、售價與約略位置將出現在商品地圖。`)) return;
     setBusy(true);
-    if (card.dirty && !await save(card)) { setBusy(false); return; }
+    // Freeze the reviewed card before any await: a late AI poll must not
+    // replace the fields on screen while this exact confirmed body is sent.
+    replace(card.id, current => ({ ...current, form: card.form, touched: card.touched,
+      ai: card.ai, draft: card.draft, publishing: true, error: '' }));
+    if (card.dirty && !await save(card)) {
+      replace(card.id, current => ({ ...current, publishing: false }));
+      setBusy(false); return;
+    }
     // Keep the exact request for an uncertain network outcome. Replaying it
     // uses the server's clientListingId idempotency key, never a new listing.
-    localStorage.setItem(pendingKey(userId!), body); setPending(body);
-    replace(card.id, current => ({ ...current, publishing: true, error: '' }));
+    try { localStorage.setItem(pendingKey(userId!), body); }
+    catch {
+      replace(card.id, current => ({ ...current, publishing: false,
+        error: '此瀏覽器無法安全記錄刊登操作；商品尚未送出。請允許網站儲存空間後重試。' }));
+      setBusy(false);
+      return;
+    }
+    setPending(body);
     try {
       const result = await api<{ id: unknown; status: string }>(token!, '/listings', { method: 'POST', body });
       if (!isUuid(result.id) || result.status !== 'ACTIVE') throw new Error('刊登結果尚未確認');

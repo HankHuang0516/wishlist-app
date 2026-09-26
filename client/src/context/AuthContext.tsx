@@ -12,7 +12,7 @@ interface User {
 interface AuthContextType {
     user: User | null;
     token: string | null;
-    login: (token: string, user: User) => void;
+    login: (token: string, user: User, returnTo?: '/dashboard' | '/account-deletion') => void;
     logout: () => void;
     refreshUser: () => Promise<void>;
     isAuthenticated: boolean;
@@ -31,12 +31,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const navigate = useNavigate();
 
-    const login = (newToken: string, newUser: User) => {
+    const login = (newToken: string, newUser: User, returnTo: '/dashboard' | '/account-deletion' = '/dashboard') => {
         setToken(newToken);
         setUser(newUser);
         localStorage.setItem('token', newToken);
         localStorage.setItem('user', JSON.stringify(newUser));
-        navigate('/dashboard');
+        navigate(returnTo);
     };
 
     const logout = () => {

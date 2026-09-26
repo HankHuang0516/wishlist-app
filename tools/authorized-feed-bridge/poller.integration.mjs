@@ -57,7 +57,7 @@ test('authorized feed bridge keeps AI suggestions private, rejects sold callback
       WISHLIST_FEED_AUTHORIZATION_REF: authorizationRef, WISHLIST_FEED_HOST: host,
       WISHLIST_FEED_URL: `https://${host}/authorized-feed.json`,
       WISHLIST_FEED_API_ORIGIN: 'https://wishlist-app-production.up.railway.app',
-      WISHLIST_FEED_ADMIN_KEY: adminKey });
+      WISHLIST_FEED_ADMIN_KEY: adminKey, WISHLIST_FEED_SYNC_ENABLED: '1' });
     const observedAt = new Date().toISOString();
     const candidate = { sourceItemId: 'synthetic-lamp-1', canonicalUrl: `https://${host}/items/synthetic-lamp-1`,
       imageUrl: 'https://images.example.com/synthetic-lamp-1.jpg',

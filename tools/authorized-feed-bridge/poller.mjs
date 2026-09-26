@@ -12,6 +12,11 @@ const ITEM_FIELDS = ['sourceItemId', 'canonicalUrl', 'imageUrl', 'thumbnailUrl',
   'priceTwd', 'condition', 'county', 'district', 'observedAt', 'expiresAt'];
 const exact = (value, fields) => value && typeof value === 'object' && !Array.isArray(value) &&
   Object.keys(value).every(key => fields.includes(key));
+// The intake API normalizes candidate IDs before using them as source keys.
+// Reject non-canonical IDs here so two feed pages cannot refer to one item
+// with different raw strings, and withdrawal signals use the exact same key.
+const stableItemId = value => typeof value === 'string' && value.length >= 1 && value.length <= 160 &&
+  !/[\u0000-\u001f\u007f]/.test(value) && value.replace(/\s+/g, ' ').trim() === value;
 
 export function feedUrl(raw, expectedHost) {
   try {
@@ -30,13 +35,15 @@ export function feedConfig(environment) {
   const apiOrigin = environment.WISHLIST_FEED_API_ORIGIN;
   const adminKey = environment.WISHLIST_FEED_ADMIN_KEY;
   const intervalMinutes = Number(environment.WISHLIST_FEED_INTERVAL_MINUTES || '15');
+  const syncFlag = environment.WISHLIST_FEED_SYNC_ENABLED;
   if (!SOURCE_ID.test(sourceId || '') || !AUTH_REF.test(authorizationRef || '') ||
     apiOrigin !== 'https://wishlist-app-production.up.railway.app' ||
     typeof adminKey !== 'string' || !adminKey || adminKey.length > 4096 || /[\u0000-\u001f\u007f]/.test(adminKey) ||
+    (syncFlag !== undefined && syncFlag !== '0' && syncFlag !== '1') ||
     !Number.isInteger(intervalMinutes) || intervalMinutes < 15 || intervalMinutes > 1440)
     throw new Error('FEED_CONFIG_INVALID');
   return { sourceId, authorizationRef, host, url: feedUrl(environment.WISHLIST_FEED_URL, host),
-    apiOrigin, adminKey, intervalMinutes };
+    apiOrigin, adminKey, intervalMinutes, syncEnabled: syncFlag === '1' };
 }
 
 export function parseFeedEnvelope(raw, config, now = new Date()) {
@@ -49,15 +56,15 @@ export function parseFeedEnvelope(raw, config, now = new Date()) {
     !Array.isArray(raw.withdrawals) || raw.withdrawals.length > 50) throw new Error('FEED_ENVELOPE_INVALID');
   const seen = new Set();
   for (const item of raw.items) {
-    if (!exact(item, ITEM_FIELDS) || typeof item.sourceItemId !== 'string' ||
-      !item.sourceItemId || seen.has(item.sourceItemId) || typeof item.observedAt !== 'string' ||
+    if (!exact(item, ITEM_FIELDS) || !stableItemId(item.sourceItemId) ||
+      seen.has(item.sourceItemId) || typeof item.observedAt !== 'string' ||
       !Number.isFinite(Date.parse(item.observedAt)) || Date.parse(item.observedAt) > Date.parse(raw.generatedAt) + 5 * 60_000)
       throw new Error('FEED_ITEM_INVALID');
     seen.add(item.sourceItemId);
   }
   for (const withdrawal of raw.withdrawals) {
-    if (!exact(withdrawal, ['sourceItemId', 'reason']) || typeof withdrawal.sourceItemId !== 'string' ||
-      !withdrawal.sourceItemId || seen.has(withdrawal.sourceItemId) ||
+    if (!exact(withdrawal, ['sourceItemId', 'reason']) || !stableItemId(withdrawal.sourceItemId) ||
+      seen.has(withdrawal.sourceItemId) ||
       !['SOLD', 'REMOVED'].includes(withdrawal.reason)) throw new Error('FEED_WITHDRAWAL_INVALID');
     seen.add(withdrawal.sourceItemId);
   }
@@ -136,6 +143,10 @@ async function authorizedSnapshot(config, { fetchFeed = pinnedFeedJson, fetchApi
   const source = await api('/sources/' + config.sourceId);
   if (source?.id !== config.sourceId || source.kind !== 'PARTNER_FEED' || source.enabled !== true ||
     !source.enabledAt || source.authorizationRef !== config.authorizationRef ||
+    (source.authorizationExpiresAt !== null &&
+      (typeof source.authorizationExpiresAt !== 'string' ||
+        !Number.isFinite(Date.parse(source.authorizationExpiresAt)) ||
+        Date.parse(source.authorizationExpiresAt) <= Date.now())) ||
     source.canonicalHost !== config.host) throw new Error('FEED_SOURCE_NOT_AUTHORIZED');
   const envelope = parseFeedEnvelope(await fetchFeed(config.url, config.host), config);
   return { api, envelope };
@@ -159,6 +170,9 @@ export async function preflightAuthorizedFeed(config, dependencies = {}) {
 }
 
 export async function syncAuthorizedFeed(config, dependencies = {}) {
+  // A scheduled process can be deployed with credentials for preflight without
+  // accidentally starting intake. This gate is separate from source activation.
+  if (config?.syncEnabled !== true) throw new Error('FEED_SYNC_DISABLED');
   const { api, envelope } = await authorizedSnapshot(config, dependencies);
   let withdrawn = 0, unmatchedWithdrawals = 0, staged = 0;
   for (const reason of ['SOLD', 'REMOVED']) {

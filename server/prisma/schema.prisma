@@ -371,6 +371,7 @@ model ExternalListingSource {
   canonicalHost    String
   imageHost        String?
   authorizationRef String
+  authorizationExpiresAt DateTime?
   textReuseAllowed Boolean                    @default(false)
   imageReuseAllowed Boolean                   @default(false)
   aiProcessingAllowed Boolean                 @default(false)

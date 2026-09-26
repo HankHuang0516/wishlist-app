@@ -59,7 +59,7 @@ afterAll(async () => {
 async function externalCandidate() {
     const source = await prisma.externalListingSource.create({ data: { name: 'Synthetic authorized source', kind: 'PARTNER_FEED',
         canonicalHost: 'partner.example.com', imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026',
-        textReuseAllowed: true, imageReuseAllowed: true, aiProcessingAllowed: true, enabled: true } });
+        textReuseAllowed: true, imageReuseAllowed: true, aiProcessingAllowed: true, enabled: true, enabledAt: new Date() } });
     sourceIds.push(source.id);
     const candidate = await prisma.externalListingCandidate.create({ data: { sourceId: source.id, sourceItemId: randomUUID(),
         canonicalUrl: 'https://partner.example.com/item/1', imageUrl: 'https://images.example.com/item/1.jpg',
@@ -131,8 +131,16 @@ describe('isolated MiniMax Code pull queue', () => {
             delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
             expect((await auth('/api/internal/minimax-vision/next')).status).toBe(404);
             process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = token;
-            const listingJob = await auth('/api/internal/minimax-vision/next');
+            const firstJob = await auth('/api/internal/minimax-vision/next');
+            const secondJob = await auth('/api/internal/minimax-vision/next');
+            expect(firstJob.status).toBe(200);
+            expect(secondJob.status).toBe(200);
+            expect(new Set([firstJob.body.kind, secondJob.body.kind]))
+                .toEqual(new Set(['LISTING_DRAFT', 'EXTERNAL_CANDIDATE']));
+            const listingJob = firstJob.body.kind === 'LISTING_DRAFT' ? firstJob : secondJob;
+            const externalJob = firstJob.body.kind === 'EXTERNAL_CANDIDATE' ? firstJob : secondJob;
             expect(listingJob.body).toMatchObject({ kind: 'LISTING_DRAFT', imageUrl, jobId: expect.any(String) });
+            expect(externalJob.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', imageUrl: candidate.imageUrl });
             const listingResult = { recognizable: true, name: '黑色小型相機',
                 description: '可見黑色機身與鏡頭，功能仍須賣家確認。', category: 'electronics', brand: null,
                 condition: null, estimatedPriceLowTwd: 800, estimatedPriceHighTwd: 2000,
@@ -140,8 +148,6 @@ describe('isolated MiniMax Code pull queue', () => {
             expect((await callback(listingJob.body.jobId, { status: 'COMPLETED', result: listingResult })).status).toBe(204);
             expect(await prisma.listingMedia.findUniqueOrThrow({ where: { id } })).toMatchObject({ listingId: null,
                 aiDraftStatus: 'COMPLETED', aiDraft: expect.objectContaining({ title: '黑色小型相機' }) });
-            const externalJob = await auth('/api/internal/minimax-vision/next');
-            expect(externalJob.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', imageUrl: candidate.imageUrl });
             expect((await callback(externalJob.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(204);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } }))
                 .toMatchObject({ status: 'PENDING_REVIEW', aiStatus: 'COMPLETED' });
@@ -180,6 +186,28 @@ describe('isolated MiniMax Code pull queue', () => {
         await prisma.externalListingCandidate.update({ where: { id: second.candidate.id },
             data: { title: 'changed', contentHash: 'changed-hash', aiStatus: 'PENDING', aiJobId: null } });
         expect((await callback(secondJob.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+    });
+    it('never leases an unactivated or expired source image and rejects a callback after rights expire', async () => {
+        const { source, candidate } = await externalCandidate();
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: { enabledAt: null } });
+        expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).aiStatus).toBe('PENDING');
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            enabledAt: new Date(), authorizationExpiresAt: new Date(Date.now() - 1000),
+        } });
+        expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            authorizationExpiresAt: new Date(Date.now() + 86_400_000),
+        } });
+        const claimed = await auth('/api/internal/minimax-vision/next');
+        expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', imageUrl: candidate.imageUrl });
+        await prisma.externalListingSource.update({ where: { id: source.id }, data: {
+            authorizationExpiresAt: new Date(Date.now() - 1000),
+        } });
+        expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).aiDraft).toBeNull();
+        expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
+        expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).status).toBe('STALE');
     });
     it('expires an external source item and discards an in-flight private AI suggestion', async () => {
         const { candidate } = await externalCandidate();
@@ -241,5 +269,32 @@ describe('isolated MiniMax Code pull queue', () => {
         expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
             status: 'REJECTED', aiStatus: 'NOT_ELIGIBLE', aiDraft: null, aiJobId: null,
         });
+    });
+    it('serves all three lanes despite continuous wish and seller-draft backlogs', async () => {
+        const publicCount = await prisma.listing.count();
+        for (let index = 0; index < 4; index++) {
+            await wish();
+            const id = randomUUID();
+            const imageUrl = `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/image`;
+            await prisma.listingMedia.create({ data: { id, ownerUserId: userId, imageUrl,
+                thumbnailUrl: `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/thumbnail`,
+                contentHash: `synthetic-fair-lane-${index}`, aiDraftStatus: 'PENDING', aiDraftAttempts: 1,
+                aiDraftUpdatedAt: new Date() } });
+        }
+        const { candidate } = await externalCandidate();
+        const jobs = [];
+        for (let index = 0; index < 3; index++) {
+            const claimed = await auth('/api/internal/minimax-vision/next');
+            expect(claimed.status).toBe(200);
+            jobs.push(claimed.body);
+        }
+        expect(new Set(jobs.map(job => job.kind))).toEqual(new Set(['WISH', 'LISTING_DRAFT', 'EXTERNAL_CANDIDATE']));
+        const externalJob = jobs.find(job => job.kind === 'EXTERNAL_CANDIDATE');
+        expect(externalJob.imageUrl).toBe(candidate.imageUrl);
+        expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } }))
+            .toMatchObject({ status: 'PENDING_REVIEW', aiStatus: 'PROCESSING', aiDraft: null });
+        expect(await prisma.listing.count()).toBe(publicCount);
+        for (const job of jobs) expect((await callback(job.jobId, { status: 'FAILED' })).status).toBe(204);
+        expect(await prisma.listing.count()).toBe(publicCount);
     });
 });

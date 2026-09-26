@@ -10,7 +10,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '6',
+      buildNumber: '8',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,

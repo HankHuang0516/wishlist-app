@@ -1,4 +1,4 @@
-import { ExternalIntakeError, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
+import { ExternalIntakeError, externalSourceAuthorizationActive, parseExternalCandidate, parseExternalSource } from '../lib/externalListingIntake';
 
 const now = new Date('2026-09-24T12:00:00Z');
 const source = { canonicalHost: 'partner.example.com', imageHost: 'images.example.com', imageReuseAllowed: true, textReuseAllowed: true };
@@ -23,11 +23,35 @@ describe('authorized external supply intake', () => {
         expect(() => parseExternalSource({ name: '未明示 AI 權利', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
             authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true, imageReuseAllowed: true })).toThrow(ExternalIntakeError);
     });
+    it('rejects expired source rights and expires an active source at the exact boundary', () => {
+        const sourceInput = { name: '北部合作商家', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            imageHost: 'images.example.com', authorizationRef: 'contract:partner-2026-09', textReuseAllowed: true,
+            imageReuseAllowed: true, aiProcessingAllowed: true };
+        const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+        expect(parseExternalSource({ ...sourceInput, authorizationExpiresAt: expiresAt }).authorizationExpiresAt)
+            .toEqual(new Date(expiresAt));
+        expect(() => parseExternalSource({ ...sourceInput, authorizationExpiresAt: new Date(Date.now() - 1000).toISOString() }))
+            .toThrow(ExternalIntakeError);
+        expect(() => parseExternalSource({ ...sourceInput, authorizationExpiresAt: 'tomorrow' }))
+            .toThrow(ExternalIntakeError);
+        const active = { enabled: true, enabledAt: now, authorizationExpiresAt: new Date(expiresAt) };
+        expect(externalSourceAuthorizationActive(active, new Date(new Date(expiresAt).getTime() - 1))).toBe(true);
+        expect(externalSourceAuthorizationActive(active, new Date(expiresAt))).toBe(false);
+        expect(externalSourceAuthorizationActive({ ...active, authorizationExpiresAt: null }, new Date(expiresAt))).toBe(true);
+    });
     it('accepts only fresh sourced records and normalizes Taipei spelling', () => {
         expect(parseExternalCandidate(item, source, now)).toMatchObject({ county: '臺北市', priceTwd: 560, condition: 'USED',
             canonicalUrl: 'https://partner.example.com/items/123', contentHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
         expect(parseExternalCandidate({ ...item, county: '新北市', district: '板橋區' }, source, now))
             .toMatchObject({ county: '新北市', district: '板橋區' });
+    });
+    it('requires a canonical source ID so a later sold signal addresses the same item', () => {
+        expect(parseExternalCandidate({ ...item, sourceItemId: 'seller 123' }, source, now).sourceItemId).toBe('seller 123');
+        for (const unstableId of [' taipei-123', 'taipei-123 ', 'taipei  123', 'taipei\t123',
+            'taipei\u0000123', 'x'.repeat(161)]) {
+            try { parseExternalCandidate({ ...item, sourceItemId: unstableId }, source, now); throw new Error('accepted unstable ID'); }
+            catch (error) { expect(error).toBeInstanceOf(ExternalIntakeError); expect((error as ExternalIntakeError).field).toBe('sourceItemId'); }
+        }
     });
     it('accepts a daily observation at 24 hours but rejects one millisecond older', () => {
         expect(parseExternalCandidate({ ...item, observedAt: '2026-09-23T12:00:00Z' }, source, now).observedAt)

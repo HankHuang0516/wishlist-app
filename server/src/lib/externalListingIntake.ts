@@ -33,6 +33,13 @@ const word = (value: unknown, field: string, min: number, max: number) => {
     if (normalized.length < min || normalized.length > max) throw new ExternalIntakeError(field);
     return normalized;
 };
+// Candidate intake and sold/removed callbacks must address the same exact
+// partner key. Silently normalizing only one side can leave sold stock public.
+export const parseExternalSourceItemId = (value: unknown) => {
+    const id = word(value, 'sourceItemId', 1, 160);
+    if (id !== value) throw new ExternalIntakeError('sourceItemId', '來源商品 ID 不得含前後空白、重複空白或控制字元');
+    return id;
+};
 const host = (value: unknown, field: string) => {
     const hostname = word(value, field, 4, 253).toLowerCase();
     if (!/^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname) ||
@@ -57,7 +64,7 @@ const date = (value: unknown, field: string) => {
 
 export function parseExternalSource(input: unknown) {
     const value = own(input);
-    exactKeys(value, ['name', 'kind', 'canonicalHost', 'imageHost', 'authorizationRef', 'textReuseAllowed', 'imageReuseAllowed', 'aiProcessingAllowed']);
+    exactKeys(value, ['name', 'kind', 'canonicalHost', 'imageHost', 'authorizationRef', 'authorizationExpiresAt', 'textReuseAllowed', 'imageReuseAllowed', 'aiProcessingAllowed']);
     const name = word(value.name, 'name', 3, 100);
     const kind = value.kind;
     if (!['PARTNER_FEED', 'LINE_OPT_IN', 'SELLER_IMPORT'].includes(String(kind))) throw new ExternalIntakeError('kind');
@@ -70,15 +77,25 @@ export function parseExternalSource(input: unknown) {
         typeof value.aiProcessingAllowed !== 'boolean') throw new ExternalIntakeError('rights');
     if (value.imageReuseAllowed && !imageHost) throw new ExternalIntakeError('imageHost');
     if (value.aiProcessingAllowed && !value.imageReuseAllowed) throw new ExternalIntakeError('aiProcessingAllowed', 'AI 分析圖片前須取得圖片使用與 AI 處理兩項明確授權');
+    const authorizationExpiresAt = value.authorizationExpiresAt === undefined || value.authorizationExpiresAt === null ? null :
+        date(value.authorizationExpiresAt, 'authorizationExpiresAt');
+    if (authorizationExpiresAt && authorizationExpiresAt <= new Date())
+        throw new ExternalIntakeError('authorizationExpiresAt', '來源授權已到期');
     return { name, kind: kind as 'PARTNER_FEED' | 'LINE_OPT_IN' | 'SELLER_IMPORT', canonicalHost, imageHost,
         authorizationRef, textReuseAllowed: value.textReuseAllowed, imageReuseAllowed: value.imageReuseAllowed,
-        aiProcessingAllowed: value.aiProcessingAllowed };
+        aiProcessingAllowed: value.aiProcessingAllowed, authorizationExpiresAt };
+}
+
+export function externalSourceAuthorizationActive(source: { enabled: boolean; enabledAt: Date | null;
+    authorizationExpiresAt: Date | null }, now = new Date()) {
+    return source.enabled && !!source.enabledAt &&
+        (source.authorizationExpiresAt === null || source.authorizationExpiresAt > now);
 }
 
 export function parseExternalCandidate(input: unknown, source: SourcePolicy, now = new Date()) {
     const value = own(input);
     exactKeys(value, ['sourceItemId', 'canonicalUrl', 'imageUrl', 'thumbnailUrl', 'title', 'description', 'priceTwd', 'condition', 'county', 'district', 'observedAt', 'expiresAt']);
-    const sourceItemId = word(value.sourceItemId, 'sourceItemId', 1, 160);
+    const sourceItemId = parseExternalSourceItemId(value.sourceItemId);
     const canonicalUrl = httpsOnHost(value.canonicalUrl, 'canonicalUrl', source.canonicalHost);
     const imageUrl = value.imageUrl === undefined || value.imageUrl === null ? null :
         source.imageReuseAllowed && source.imageHost ? httpsOnHost(value.imageUrl, 'imageUrl', source.imageHost) : (() => { throw new ExternalIntakeError('imageUrl', '來源尚未授權顯示圖片'); })();

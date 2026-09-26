@@ -16,6 +16,12 @@ const app = express(); app.set('trust proxy', 1); app.use(express.json());
 app.use('/api/users', userRoutes); app.use('/api/payment', paymentRoutes);
 let freeId: number, legacyPremiumId: number;
 const token = (id: number) => jwt.sign({ id, authVersion: 0 }, secret);
+const paths = [
+    '/api/users/me/subscription',
+    '/api/users/me/subscription/cancel',
+    '/api/payment/pay',
+    '/api/payment/cancel-subscription',
+];
 
 beforeAll(async () => {
     const suffix = randomUUID();
@@ -31,12 +37,12 @@ afterAll(async () => {
     if (previousSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previousSecret;
 });
 
-describe('paid access is closed until verified transactions exist', () => {
-    it.each(['/api/users/me/subscription', '/api/payment/pay'])('requires a real login for %s', async path => {
+describe('legacy payment controls are closed until provider verification exists', () => {
+    it.each(paths)('requires authentication for %s', async path => {
         expect((await request(app).post(path).send({ type: 'premium', purchaseType: 'PREMIUM', details: { amount: 90 } })).status).toBe(401);
     });
 
-    it.each(['/api/users/me/subscription', '/api/payment/pay'])('rejects unverified paid grants through %s without changing entitlements', async path => {
+    it.each(paths)('refuses %s without changing free account or purchase history', async path => {
         const before = await prisma.purchase.count({ where: { userId: freeId } });
         const result = await request(app).post(path).set('Authorization', 'Bearer ' + token(freeId))
             .send({ type: 'premium', purchaseType: 'PREMIUM', prime: 'synthetic-prime', details: { amount: 90 } });
@@ -47,9 +53,9 @@ describe('paid access is closed until verified transactions exist', () => {
         expect(await prisma.purchase.count({ where: { userId: freeId } })).toBe(before);
     });
 
-    it('preserves an existing Premium flag and all prior records while refusing new purchases', async () => {
+    it.each(paths)('preserves existing Premium rights through %s', async path => {
         const before = await prisma.purchase.count({ where: { userId: legacyPremiumId } });
-        const response = await request(app).post('/api/payment/pay').set('Authorization', 'Bearer ' + token(legacyPremiumId))
+        const response = await request(app).post(path).set('Authorization', 'Bearer ' + token(legacyPremiumId))
             .send({ purchaseType: 'limit', details: { amount: 30 }, prime: 'synthetic-prime' });
         expect(response.status).toBe(503);
         expect(await prisma.user.findUniqueOrThrow({ where: { id: legacyPremiumId }, select: { isPremium: true } })).toEqual({ isPremium: true });

@@ -99,6 +99,48 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
+    it('hides approved items and blocks new intake immediately when source authorization expires', async () => {
+        const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+        process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
+        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            .set('x-forwarded-for', '203.0.113.212');
+        const rightsEnd = new Date(Date.now() + 86_400_000).toISOString();
+        const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic expiring rights source',
+            authorizationExpiresAt: rightsEnd });
+        expect(created.status).toBe(201);
+        const expiringSourceId: string = created.body.id;
+        try {
+            expect((await admin(`/sources/${expiringSourceId}/activate`).send({
+                authorizationRef: sourceBody.authorizationRef, confirmRights: true,
+            })).status).toBe(200);
+            const staged = await admin(`/sources/${expiringSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.status).toBe(202);
+            const row = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: staged.body.items[0].id } });
+            expect((await admin(`/candidates/${row.id}/approve`).send({ expectedContentHash: row.contentHash,
+                authorizationRef: sourceBody.authorizationRef, reviewRef: 'review:expiring-rights-test',
+                confirmRights: true, confirmItem: true })).status).toBe(200);
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(200);
+            await prisma.externalListingSource.update({ where: { id: expiringSourceId }, data: {
+                authorizationExpiresAt: new Date(Date.now() - 1000),
+            } });
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+            expect((await admin(`/sources/${expiringSourceId}/validate-candidates`).send({
+                authorizationRef: sourceBody.authorizationRef, items: [candidate()],
+            })).status).toBe(404);
+            expect((await admin(`/sources/${expiringSourceId}/candidates`).send({ items: [candidate()] })).status).toBe(404);
+            expect((await expireExternalCandidates()).valueOf()).toBeGreaterThanOrEqual(1);
+            expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('STALE');
+            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+        } finally {
+            if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
+            else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
+            await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId: expiringSourceId } } });
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: expiringSourceId } });
+            await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: expiringSourceId } });
+            await prisma.externalListingSource.delete({ where: { id: expiringSourceId } });
+        }
+    });
     it('is closed without the header and requires separate authorization activation', async () => {
         expect((await request(app).get(url + '/sources')).status).toBe(401);
         expect((await request(app).get(url + '/sources?key=' + encodeURIComponent(adminKey)).set('x-admin-key', adminKey)).status).toBe(400);
@@ -202,6 +244,62 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: source.id } });
         }
     });
+    it('pages every private review candidate across a 200-item feed without re-import reshuffling', async () => {
+        const source = await prisma.externalListingSource.create({ data: {
+            name: 'Synthetic candidate pagination partner', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
+            authorizationRef: 'contract:synthetic-candidate-pages', enabled: true, enabledAt: new Date(),
+            textReuseAllowed: true, imageReuseAllowed: true,
+        } });
+        try {
+            const oldest = Date.now() - 220_000;
+            const records = Array.from({ length: 200 }, (_, index) => {
+                const sourceItemId = `synthetic-page-${String(index).padStart(3, '0')}`;
+                return { id: randomUUID(), sourceId: source.id, sourceItemId,
+                    canonicalUrl: `https://partner.example.com/items/${sourceItemId}`,
+                    imageUrl: `https://images.example.com/${sourceItemId}.jpg`,
+                    thumbnailUrl: `https://images.example.com/${sourceItemId}-small.jpg`,
+                    title: `合成二手商品 ${index}`, description: '僅供隔離審核分頁測試。', priceTwd: 590,
+                    condition: 'USED' as const, county: '新北市', district: '板橋區',
+                    observedAt: new Date(), expiresAt: new Date(Date.now() + 7 * 86_400_000),
+                    lastSeenAt: new Date(oldest), createdAt: new Date(oldest + index * 1000),
+                    contentHash: createHash('sha256').update(sourceItemId).digest('hex') };
+            });
+            await prisma.externalListingCandidate.createMany({ data: records });
+            const list = (query: Record<string, string> = {}) => request(app).get(`${url}/candidates`)
+                .set('x-admin-key', adminKey).query({ status: 'PENDING_REVIEW', sourceId: source.id, limit: '40', ...query });
+            expect((await request(app).get(`${url}/candidates`).query({ sourceId: source.id })).status).toBe(401);
+            const first = await list();
+            expect(first.status).toBe(200);
+            expect(first.headers['cache-control']).toBe('private, no-store');
+            expect(first.body.items).toHaveLength(40);
+            expect(first.body.nextCursor).toBe(first.body.items[39].id);
+            // A feed refresh changes lastSeenAt, never the review queue order.
+            await prisma.externalListingCandidate.update({ where: { id: records[199].id },
+                data: { lastSeenAt: new Date() } });
+            const pages = [first];
+            for (let index = 1; index < 5; index++) {
+                const page = await list({ cursor: pages[index - 1].body.nextCursor });
+                expect(page.status).toBe(200);
+                pages.push(page);
+            }
+            expect(pages.map(page => page.body.items.length)).toEqual([40, 40, 40, 40, 40]);
+            expect(pages[4].body.nextCursor).toBeNull();
+            const ids = pages.flatMap(page => page.body.items).map((row: { id: string }) => row.id);
+            expect(ids).toEqual(records.map(row => row.id));
+            expect(new Set(ids).size).toBe(200);
+            expect((await list({ cursor: 'not-a-uuid' })).status).toBe(400);
+            expect((await list({ cursor: first.body.nextCursor, sourceId: randomUUID() })).status).toBe(400);
+            expect((await list({ limit: '101' })).status).toBe(400);
+            expect((await list({ unexpected: '1' })).status).toBe(400);
+            await prisma.externalListingCandidate.update({ where: { id: first.body.nextCursor },
+                data: { status: 'APPROVED' } });
+            expect((await list({ cursor: first.body.nextCursor })).status).toBe(400);
+            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+        } finally {
+            await prisma.externalListingCandidate.deleteMany({ where: { sourceId: source.id } });
+            await prisma.externalListingSource.delete({ where: { id: source.id } });
+        }
+    });
     it('withdraws sold source items immediately and requires a new review after re-import', async () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
@@ -225,6 +323,9 @@ describe('admin-only attributed external supply staging', () => {
             const endpoint = `/sources/${soldSourceId}/withdraw`;
             expect((await request(app).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
             expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'sold-item'], reason: 'SOLD' })).status).toBe(400);
+            const unstableSoldId = await admin(endpoint).send({ sourceItemIds: ['sold-item '], reason: 'SOLD' });
+            expect(unstableSoldId.status).toBe(400);
+            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' });
             expect(withdrawn.status).toBe(200);
             expect(withdrawn.body).toMatchObject({ withdrawn: 1, unknown: 1, intakeBatchId: expect.any(String), publicCount: 0 });
@@ -520,6 +621,19 @@ describe('admin-only attributed external supply staging', () => {
             expect(nextMatchPage.status).toBe(200);
             expect(nextMatchPage.body.items).toHaveLength(1);
             expect(new Set([firstMatchPage.body.items[0].id, nextMatchPage.body.items[0].id])).toEqual(new Set([id, secondId]));
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                q: '不相關商品' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                bbox: '121.50,25.00,121.52,25.03' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                bbox: '117.00,20.00,118.00,21.00' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                maxPrice: '100' })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: '沙發' } });
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: 'a' } });
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: '檯燈' } });
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
             const firstPage = await request(app).get('/api/external-listings').query({ limit: '1' });
             expect(firstPage.body.items).toHaveLength(1);

@@ -621,6 +621,19 @@ describe('admin-only attributed external supply staging', () => {
             expect(nextMatchPage.status).toBe(200);
             expect(nextMatchPage.body.items).toHaveLength(1);
             expect(new Set([firstMatchPage.body.items[0].id, nextMatchPage.body.items[0].id])).toEqual(new Set([id, secondId]));
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                q: '不相關商品' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                bbox: '121.50,25.00,121.52,25.03' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                bbox: '117.00,20.00,118.00,21.00' })).status).toBe(400);
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor,
+                maxPrice: '100' })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: '沙發' } });
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: 'a' } });
+            expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor })).status).toBe(400);
+            await prisma.item.update({ where: { id: wishItemId }, data: { name: '檯燈' } });
             expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
             const firstPage = await request(app).get('/api/external-listings').query({ limit: '1' });
             expect(firstPage.body.items).toHaveLength(1);

@@ -17,8 +17,9 @@ const integer = (value: unknown) => {
     if (typeof value !== 'string' || !/^[1-9]\d{0,9}$/.test(value) || Number(value) > 2147483647) throw new ListingInputError('wishItemId'); return Number(value);
 };
 export function parseWishMatchQuery(query: Record<string, unknown>) {
-    const { wishItemId, center, radiusKm, ...listing } = query;
+    const { wishItemId, center, radiusKm, includeOwnPreview, ...listing } = query;
     const search = parseListingSearch(listing); const id = integer(wishItemId);
+    if (includeOwnPreview !== undefined && includeOwnPreview !== '1') throw new ListingInputError('includeOwnPreview');
     let origin: [number, number] | undefined, radius: number | undefined;
     if (center !== undefined) {
         if (typeof center !== 'string' || !/^\d{2}\.\d{2},\d{3}\.\d{2}$/.test(center)) throw new ListingInputError('center', '請使用約2公里格點中心，不傳精確GPS');
@@ -29,7 +30,7 @@ export function parseWishMatchQuery(query: Record<string, unknown>) {
     if (radiusKm !== undefined) {
         if (!origin || typeof radiusKm !== 'string' || !/^\d{1,3}(?:\.\d{1,2})?$/.test(radiusKm) || Number(radiusKm) < 0.5 || Number(radiusKm) > 200) throw new ListingInputError('radiusKm'); radius = Number(radiusKm);
     }
-    return { id, search, preferences: { brand: search.brand, category: search.category, condition: search.condition, delivery: search.delivery, center: origin, radiusKm: radius } satisfies MatchPreferences };
+    return { id, search, includeOwnPreview: includeOwnPreview === '1', preferences: { brand: search.brand, category: search.category, condition: search.condition, delivery: search.delivery, center: origin, radiusKm: radius } satisfies MatchPreferences };
 }
 export function approximateDistanceKm(a: [number, number], b: [number, number]) {
     const rad = (n: number) => n * Math.PI / 180;

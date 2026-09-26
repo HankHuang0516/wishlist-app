@@ -409,8 +409,12 @@ export default function WishlistDetail() {
                 <div className="space-y-2 flex-1">
                     {isEditing ? (
                         <div className="space-y-2 max-w-lg">
-                            <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Title" />
-                            <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description" />
+                            <label className="block text-sm font-medium text-gray-700">清單名稱
+                                <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="為清單命名" />
+                            </label>
+                            <label className="block text-sm font-medium text-gray-700">清單說明（選填）
+                                <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="公開清單會顯示" />
+                            </label>
 
                             <div className="flex items-center gap-3 p-3 border rounded-lg border-dashed hover:bg-gray-50 transition-colors">
                                 <label className="relative inline-flex items-center cursor-pointer">

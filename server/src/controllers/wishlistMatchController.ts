@@ -27,7 +27,7 @@ export async function getMatchWishes(req: AuthRequest, res: Response) {
 export async function matchWishListings(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     try {
-        const { id, search, preferences } = parseWishMatchQuery(req.query);
+        const { id, search, preferences, includeOwnPreview } = parseWishMatchQuery(req.query);
         // Public wishlist visibility is NOT permission to match/read another
         // person's private budget or preference data. Auth ownership required.
         const wish = await prisma.item.findFirst({ where: { id, wishlist: { userId: req.user.id }, isHidden: false, isPurchased: false }, select: wishSelect });
@@ -39,8 +39,9 @@ export async function matchWishListings(req: AuthRequest, res: Response) {
             const row = await prisma.listing.findUnique({ where: { id: search.cursor }, select: { id: true, createdAt: true, status: true, expiresAt: true } });
             if (!row || !isDiscoverable(row.status, row.expiresAt, now)) return res.status(404).json({ error: '商品分頁已失效，請重新配對' }); anchor = row;
         }
-        const clauses: Prisma.Sql[] = [Prisma.sql`l."status" IN ('ACTIVE', 'RESERVED')`, Prisma.sql`l."expiresAt" > ${now.toISOString()}::timestamp`, Prisma.sql`l."ownerUserId" <> ${req.user.id}`, Prisma.sql`l.price >= 0 AND l.currency = 'TWD' AND p."listingId" IS NOT NULL AND l.description IS NOT NULL AND l.category IS NOT NULL AND EXISTS (SELECT 1 FROM "ListingMedia" m WHERE m."listingId" = l.id)`,
+        const clauses: Prisma.Sql[] = [Prisma.sql`l."status" IN ('ACTIVE', 'RESERVED')`, Prisma.sql`l."expiresAt" > ${now.toISOString()}::timestamp`, Prisma.sql`l.price >= 0 AND l.currency = 'TWD' AND p."listingId" IS NOT NULL AND l.description IS NOT NULL AND l.category IS NOT NULL AND EXISTS (SELECT 1 FROM "ListingMedia" m WHERE m."listingId" = l.id)`,
             Prisma.sql`(${Prisma.join(tokens.map(t => Prisma.sql`position(${t} in lower(normalize(l.title, NFKC))) > 0 OR position(${t} in lower(normalize(coalesce(l.brand, ''), NFKC))) > 0`), ' OR ')})`];
+        if (!includeOwnPreview) clauses.push(Prisma.sql`l."ownerUserId" <> ${req.user.id}`);
         clauses.push(Prisma.sql`(${Prisma.join(tokens.map(t => Prisma.sql`position(${t} in lower(normalize(l.title, NFKC))) > 0`), ' OR ')})`);
         const chinese = tokens.filter(t => /[\p{Script=Han}]/u.test(t));
         if (chinese.length) clauses.push(Prisma.sql`(${Prisma.join(chinese.map(t => Prisma.sql`position(${t} in lower(normalize(l.title, NFKC))) > 0`), ' OR ')})`);
@@ -71,6 +72,6 @@ export async function matchWishListings(req: AuthRequest, res: Response) {
             const match = evaluateWishMatch(wish, { ...row, price: row.price === null ? null : Number(row.price) }, preferences, new Date());
             return match ? [{ listing: row, ...match, wishItemId: wish.id }] : [];
         }).sort((a, b) => b.score - a.score || a.listing.id.localeCompare(b.listing.id));
-        return res.set('Cache-Control', 'private, no-store').json({ items, nextCursor: ids.length > search.limit ? candidates[candidates.length - 1].id : null, scannedCandidates: candidates.length, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: '先依新近刊登分頁，每頁按吻合度排序；文字吻合不保證同一型號或商品真偽' });
+        return res.set('Cache-Control', 'private, no-store').json({ items, nextCursor: ids.length > search.limit ? candidates[candidates.length - 1].id : null, scannedCandidates: candidates.length, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: includeOwnPreview ? '已包含自己刊登的配對預覽；自己的商品不能向自己購買。圖片不直接比對，文字吻合不保證同一型號或真偽。' : '先依新近刊登分頁，每頁按吻合度排序；文字吻合不保證同一型號或商品真偽' });
     } catch (e) { return fail(res, e); }
 }

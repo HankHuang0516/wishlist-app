@@ -33,6 +33,16 @@ describe('private explainable matching / PostgreSQL', () => {
     it('excludes unrelated, expensive, expired, sold, removed and own listings', async () => {
         const keep = await seed(); await seed('Canon 相機', { price: 6000 }); await seed('二手電冰箱'); await seed('Sony 相機', { status: 'SOLD' }); await seed('Sony 相機', { status: 'REMOVED' }); await seed('Sony 相機', { publishedAt: new Date('2020-01-01'), expiresAt: new Date('2020-02-01') }); await seed('Sony 相機', { ownerUserId: buyer }); expect((await match()).body.items.map((v: { listing: { id: string } }) => v.listing.id)).toEqual([keep]);
     });
+    it('shows the owner a clearly opt-in private preview without making own goods a default buyer result', async () => {
+        const own = await seed('三國演義漫畫', { ownerUserId: buyer, brand: null, category: 'books' });
+        await prisma.item.update({ where: { id: wishId }, data: { name: '三國演義漫畫', maxPrice: null } });
+        expect((await match()).body.items).toEqual([]);
+        const preview = await match({ includeOwnPreview: '1' });
+        expect(preview.status).toBe(200);
+        expect(preview.body.items.map((v: { listing: { id: string } }) => v.listing.id)).toEqual([own]);
+        expect(preview.body.notice).toContain('自己刊登');
+        expect((await match({ includeOwnPreview: '1' }, third)).status).toBe(404);
+    });
     it('matches fullwidth names using actual PostgreSQL NFKC, not only JS mocks', async () => { await seed('Ｓｏｎｙ 相機 A7'); const r = await match(); expect(r.status).toBe(200); expect(r.body.items).toHaveLength(1); });
     it('matches a published item with an unknown brand without bypassing explicit brand filters', async () => {
         const id = await seed('Sony 相機 A7', { brand: null });

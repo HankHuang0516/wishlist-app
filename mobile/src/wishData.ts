@@ -16,9 +16,10 @@ export function parseMatchWishes(v: unknown) {
   if (new Set(items.map(w => w.id)).size !== items.length || (p.nextCursor !== null && p.nextCursor !== items.at(-1)?.id)) throw new WishDataError();
   return { items, nextCursor: p.nextCursor as number | null };
 }
-export function wishMatchPath(wishItemId: number, filters: SearchFilters, bounds: Bounds, radiusKm = '') {
+export function wishMatchPath(wishItemId: number, filters: SearchFilters, bounds: Bounds, radiusKm = '', includeOwnPreview = false) {
   if (!id(wishItemId)) throw new WishDataError();
   let path = '/listings/matches?wishItemId=' + wishItemId + '&' + listingSearchPath(filters, bounds).split('?')[1];
+  if (includeOwnPreview) path += '&includeOwnPreview=1';
   if (radiusKm.trim()) {
     const radius = radiusKm.trim(); if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(radius) || Number(radius) < 0.5 || Number(radius) > 200) throw new WishDataError('距離須為0.5至200公里');
     const clipped = clipBounds(bounds); if (!clipped) throw new WishDataError();

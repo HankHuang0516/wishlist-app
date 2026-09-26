@@ -16,6 +16,14 @@ Railway 設定 `MINIMAX_PILOT_USER_ID`（僅測試帳號的數字 ID）及隨機
 
 這只適用於單一測試帳號；關閉 Mac 時任務留在 Railway 排隊，超過租約才重領。正式對所有用戶開放前，必須確認 MiniMax 方案的服務用途、費用與隱私告知。不要把個人 Token Plan 當成正式服務配額。
 
+## 行銷小助手 Beta（四張圖）
+
+獨立的 `marketing-poller.mjs` 以同一把既有 callback capability，主動向 Railway 的 `/api/internal/marketing/next` 領取已確認商品。只對 `MARKETING_ASSISTANT_ENABLED=1` 且 `MARKETING_ASSISTANT_PILOT_USER_ID` 指定的測試帳號開放。每張原始照片仍由 Flickr 私密保存；Mac 暫存原圖、Apple Vision 切出的商品像素與背景生成檔，完成或失敗後刪除本機暫存。MiniMax 生成四個**沒有商品的背景**，本機把賣家的原始商品像素合成上去並印上「AI 行銷示意」，避免 image-to-image 改動商品本體；再產出可編輯的繁體中文文案。四張圖全部保存到私密 Flickr 並且賣家確認後，後端才把選用圖附到公開刊登。一次免費調整只重做指定槽位，其他圖保留。
+
+本機常駐工作器可使用 `com.hankhuang.wishlist.marketing-poller.plist` 與 `run-marketing-poller.sh`；後者每次啟動都從既有 macOS Keychain 讀取 token，plist 與 Git 不存值。此 plist 使用專案的絕對路徑，安裝前應核對專案位置與 `sharp`／Swift 環境。單次隔離驗收：`railway run ... -- env DATABASE_URL=<隔離測試庫> TEST_DATABASE_URL=<同一隔離測試庫> NODE_ENV=test node mobile/scripts/marketing-four-local-e2e.cjs`。不應以生產資料庫執行這個合成照片測試。
+
+若 Mac 離線或睡眠，Railway 工作會等待；最多重試三次，不應在 App 顯示假完成。公開商轉與付費額度尚未開放，內測限指定帳號。
+
 ## 外部二手來源的私有 AI 補充
 
 外部來源另有獨立的 `MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED=1` 開關，預設關閉。須先在後台建立並核實來源、圖片重用與 AI 處理授權，再升級本機 poller，最後才可開啟；此功能仍使用相同的本機拉取通道與 worker token。工作器只從來源登記的 HTTPS 圖片主機下載，驗證公開 IPv4 並固定連線位址，不把 bearer token 送給來源；圖片只在本機暫存，完成後清除。模型補充結果僅回到後台待審候選資料，不能自行新增公開商品、售價或賣家資訊。具體限制與驗收閘門見 [外部商品來源契約](../../docs/external-supply-intake.md)。目前沒有因程式部署而自動加入任何真實雙北商品。

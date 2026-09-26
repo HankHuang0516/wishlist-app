@@ -5,7 +5,8 @@ const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
-  { listingAiPilot = false, externalListingsPilot = false, holdListingUploadAck = false, rejectFirstListingUpload = false,
+  { listingAiPilot = false, externalListingsPilot = false, externalMapStress = false,
+    holdListingUploadAck = false, rejectFirstListingUpload = false,
     staleBatchRecoverySnapshot = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 900) throw new Error('QA lifetime must be 1–900 seconds');
@@ -19,6 +20,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
     ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
     ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
+    ...(externalMapStress ? { NATIVE_QA_EXTERNAL_MAP_STRESS: '1' } : {}),
     ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
     ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
     ...(staleBatchRecoverySnapshot ? { NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1' } : {}),

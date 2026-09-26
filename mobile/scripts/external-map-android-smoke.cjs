@@ -11,6 +11,7 @@ const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
 const { startNativeQa } = require('./native-qa.cjs');
+const { seedNativeMarketplace } = require('./native-qa-marketplace-fixture.cjs');
 const { assignedSerial, hostEnvironment, metroArguments, METRO_PORT, qaLabel, qaPackage } = require('./android-qa-config.cjs');
 const { androidQaSources } = require('./android-qa-sources.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
@@ -20,8 +21,14 @@ const mobile = path.resolve(__dirname, '..');
 const sourceLabel = qaLabel(process.argv[2]);
 const packageName = qaPackage(sourceLabel);
 const priorId = process.argv[3] === '--reuse-owned-qa' ? process.argv[4] : null;
+const managementOnly = process.env.NATIVE_QA_MANAGE_ONLY === '1' || process.argv[5] === '--manage-only';
+const removalOnly = process.env.NATIVE_QA_REMOVE_ONLY === '1';
 if (process.argv[3] && (!priorId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(priorId)))
   throw new Error('Exact prior owned QA report required');
+if (process.argv[5] && process.argv[5] !== '--manage-only') throw new Error('Unknown QA mode');
+if (process.env.NATIVE_QA_MANAGE_ONLY !== undefined && process.env.NATIVE_QA_MANAGE_ONLY !== '1') throw new Error('Unknown QA mode');
+if (process.env.NATIVE_QA_REMOVE_ONLY !== undefined && process.env.NATIVE_QA_REMOVE_ONLY !== '1') throw new Error('Unknown QA mode');
+if (removalOnly && !managementOnly) throw new Error('Removal QA requires management-only mode');
 const debugBuild = path.join(mobile, 'build', `android-debug-qa-${sourceLabel}`);
 const debugApk = path.join(debugBuild, 'app.apk');
 const legacyApk = path.join(mobile, 'build', `android-batch-qa-${sourceLabel}`, 'app.apk');
@@ -86,6 +93,18 @@ async function tapLabel(label) {
   }
   throw new Error('Tappable UI control missing at ' + stage);
 }
+async function replaceSearchText(value) {
+  const field = await waitNode('搜尋商品名稱與說明');
+  const current = field.match(/\btext="([^"]*)"/)?.[1] ?? '';
+  await tap(field);
+  await sleep(350);
+  await adb(['shell', 'input', 'keyevent', '123']);
+  for (let index = 0; index < current.length; index++) await adb(['shell', 'input', 'keyevent', '67']);
+  await sleep(250);
+  await adb(['shell', 'input', 'text', value]);
+  const updated = await waitNode('搜尋商品名稱與說明');
+  if (!updated.includes(`text="${value}"`)) throw new Error('Synthetic search text not reflected');
+}
 async function swipeUp() {
   const size = await adb(['shell', 'wm', 'size']);
   const dimensions = size.match(/(?:Physical|Override) size: (\d+)x(\d+)/);
@@ -94,8 +113,16 @@ async function swipeUp() {
   await adb(['shell', 'input', 'swipe', String(Math.floor(width / 2)), String(Math.floor(height * 0.82)),
     String(Math.floor(width / 2)), String(Math.floor(height * 0.22)), '360']);
 }
-async function waitWithScroll(label, exact = true) {
-  for (let attempt = 0; attempt < 6; attempt++) {
+async function dismissDebugToast() {
+  // Expo's Debug-only warning banner can intercept controls immediately above
+  // the navigation bar. This distinct-package QA shell never ships to Play.
+  const size = await adb(['shell', 'wm', 'size']);
+  const dimensions = size.match(/(?:Physical|Override) size: (\d+)x(\d+)/);
+  if (!dimensions) throw new Error('Device size unavailable');
+  await adb(['shell', 'input', 'tap', String(Number(dimensions[1]) - 29), String(Number(dimensions[2]) - 49)]);
+}
+async function waitWithScroll(label, exact = true, maxSwipes = 6) {
+  for (let attempt = 0; attempt < maxSwipes; attempt++) {
     if (stopping) throw new Error('QA interrupted');
     const node = nodeWith(await dump(), label, exact);
     if (node) return node;
@@ -104,7 +131,7 @@ async function waitWithScroll(label, exact = true) {
   throw new Error('Scrollable UI control missing at ' + stage);
 }
 async function screenshot(name) {
-  if (!/^(?:external-map|external-list|external-detail|wish-map|wish-list)$/.test(name)) throw new Error('Unsafe screenshot name');
+  if (!/^(?:external-map|multi-focused|external-list|paged-list|paged-map|zero-results|search-focused|list-to-map|return-results|external-detail|wish-map|wish-list|my-listings|my-listings-edit|my-listings-edit-typed|my-listings-expiry|my-listings-extended|my-listings-reserved|my-listings-sold|my-listings-removed)$/.test(name)) throw new Error('Unsafe screenshot name');
   const target = path.join(evidence, name + '.png');
   await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
   result.screenshots.push(target);
@@ -170,6 +197,105 @@ async function verifyApk() {
       throw new Error('Prior owned QA receipt does not authorize reuse');
   }
 }
+async function managementSequence(alreadySeller) {
+  if (!alreadySeller) {
+    stage = 'my-listings-fixture';
+    await seedNativeMarketplace(qa);
+    stage = 'switch-to-seller';
+    await tapLabel('我的');
+    await tap(await waitWithScroll('登出此裝置'));
+    await waitNode('手機號碼或 Email');
+    await tapLabel('手機號碼或 Email');
+    await adb(['shell', 'input', 'text', qa.actors.seller.phoneNumber]);
+    await tapLabel('密碼');
+    await adb(['shell', 'input', 'text', qa.actors.seller.password]);
+    await adb(['shell', 'input', 'keyevent', '4']);
+    await tapLabel('登入');
+  }
+  await waitNode('我的');
+  await tapLabel('我的');
+  stage = 'my-listings-entry';
+  await tapLabel('我的商品 · 閱覽與管理');
+  await waitNode('我的商品');
+  await waitNode('Native QA Switch OLED', { exact: false });
+  await waitNode('NT$ 7,500');
+  await dismissDebugToast();
+  await screenshot('my-listings');
+  stage = 'my-listings-edit';
+  await tapLabel('編輯資訊');
+  await waitWithScroll('編輯商品名稱');
+  await waitWithScroll('編輯商品說明');
+  await waitWithScroll('編輯商品售價，新臺幣');
+  await waitWithScroll('售價（NT$，0 代表免費贈送）');
+  await screenshot('my-listings-edit');
+  await tapLabel('編輯商品售價，新臺幣');
+  await sleep(350);
+  let corrected = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const before = nodeWith(await dump(), '編輯商品售價，新臺幣');
+    const current = before?.match(/\btext="(\d{0,10})"/)?.[1];
+    if (current === undefined) throw new Error('Synthetic price input unavailable');
+    await adb(['shell', 'input', 'keyevent', '123']);
+    for (let index = 0; index < current.length; index++) await adb(['shell', 'input', 'keyevent', '67']);
+    await sleep(300);
+    await adb(['shell', 'input', 'text', '7400']);
+    await sleep(350);
+    corrected = !!nodeWith(await dump(), '編輯商品售價，新臺幣')?.includes('text="7400"');
+    if (corrected) break;
+  }
+  if (!corrected) throw new Error('Synthetic price input not reflected');
+  await screenshot('my-listings-edit-typed');
+  // The numeric keyboard's Done action blurs the field without closing the
+  // management modal (Android Back would close the modal itself).
+  await adb(['shell', 'input', 'keyevent', '66']);
+  await tap(await waitWithScroll('儲存修改'));
+  await waitNode('資料已更新', { exact: false });
+  await waitNode('NT$ 7,400');
+  stage = 'my-listings-expiry';
+  await tapLabel('延長期限');
+  await waitNode('OK');
+  await screenshot('my-listings-expiry');
+  await tapLabel('OK');
+  await waitNode('確認延長刊登？');
+  await tapLabel('確認延長');
+  await waitNode('已延長至', { exact: false });
+  await screenshot('my-listings-extended');
+  if (removalOnly) {
+    stage = 'my-listings-remove';
+    await tapLabel('移除');
+    await waitNode('確認移除商品？');
+    await tapLabel('移除商品');
+    await waitNode('已移除商品', { exact: false });
+    await tapLabel('已移除');
+    await waitNode('本頁「已移除」已載入 1 件', { exact: false });
+    await waitNode('NT$ 7,400');
+    await screenshot('my-listings-removed');
+    return;
+  }
+  stage = 'my-listings-reserve';
+  await tapLabel('標記保留');
+  await waitNode('確認標記已保留？');
+  await tapLabel('標記已保留');
+  await waitNode('已標記已保留', { exact: false });
+  await tapLabel('已保留');
+  await waitNode('Native QA Switch OLED', { exact: false });
+  await screenshot('my-listings-reserved');
+  stage = 'my-listings-release';
+  await tapLabel('恢復在售');
+  await waitNode('確認恢復在售？');
+  await tapLabel('恢復在售');
+  await waitNode('已恢復在售', { exact: false });
+  await tapLabel('在售');
+  stage = 'my-listings-sold';
+  await tapLabel('標記售出');
+  await waitNode('確認標記已售出？');
+  await tapLabel('標記已售出');
+  await waitNode('已標記已售出', { exact: false });
+  await tapLabel('已售出');
+  await waitNode('本頁「已售出」已載入 1 件', { exact: false });
+  await waitNode('NT$ 7,400');
+  await screenshot('my-listings-sold');
+}
 async function main() {
   await verifyApk();
   await fs.mkdir(evidence, { mode: 0o700 });
@@ -179,7 +305,8 @@ async function main() {
     throw new Error('QA package ownership state changed; no overwrite');
   stage = 'isolated-service';
   await freeMetroPort();
-  qa = await startNativeQa(database, 600, { externalListingsPilot: true });
+  qa = await startNativeQa(database, 850, { externalListingsPilot: true, externalMapStress: true });
+  if (managementOnly) await seedNativeMarketplace(qa);
   const apiPort = Number(new URL(qa.apiUrl).port);
   stage = 'private-metro';
   const environment = hostEnvironment(process.execPath, '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
@@ -207,26 +334,72 @@ async function main() {
   }
   stage = 'login-identifier';
   await tapLabel('手機號碼或 Email');
-  await adb(['shell', 'input', 'text', qa.actors.buyer.phoneNumber]);
-  if (!(await dump()).includes(`text="${qa.actors.buyer.phoneNumber}"`))
+  const actor = managementOnly ? qa.actors.seller : qa.actors.buyer;
+  await adb(['shell', 'input', 'text', actor.phoneNumber]);
+  if (!(await dump()).includes(`text="${actor.phoneNumber}"`))
     throw new Error('Synthetic identifier not reflected in editable field');
   stage = 'login-password';
   await tapLabel('密碼');
-  await adb(['shell', 'input', 'text', qa.actors.buyer.password]);
+  await adb(['shell', 'input', 'text', actor.password]);
   await adb(['shell', 'input', 'keyevent', '4']);
   stage = 'login-submit';
   await tapLabel('登入');
+  if (managementOnly) { await managementSequence(true); passed = true; return; }
   stage = 'external-map';
   await tapLabel('探索');
-  await waitNode('外部 1 件', { exact: false });
+  await waitNode('外部 100 件', { exact: false });
+  await waitNode('還有更多', { exact: false });
   await screenshot('external-map');
-  stage = 'external-list';
+  stage = 'multiple-search-focus';
+  await tapLabel('搜尋');
+  await waitNode('回到搜尋結果');
+  await waitNode('外部 100 件', { exact: false });
+  await sleep(1400);
+  await screenshot('multi-focused');
+  stage = 'external-list-and-pagination';
   await tapLabel('切換清單');
   await waitNode('Native QA 外部檯燈', { exact: false });
   await waitNode('來源售價 NT$ 590', { exact: false });
   await screenshot('external-list');
+  await tap(await waitWithScroll('載入更多外部商品', true, 55));
+  await waitNode('外部 102 件', { exact: false });
+  await screenshot('paged-list');
+  await tapLabel('切換地圖');
+  await waitNode('外部 102 件', { exact: false });
+  await sleep(1000);
+  await screenshot('paged-map');
+  stage = 'zero-results-scope';
+  await replaceSearchText('noresultz');
+  await adb(['shell', 'input', 'keyevent', '4']);
+  await tapLabel('搜尋');
+  await waitNode('已載入 0 件', { exact: false });
+  await waitNode('不代表全站沒有商品', { exact: false });
+  await screenshot('zero-results');
+  stage = 'single-search-focus';
+  await replaceSearchText('Native');
+  await adb(['shell', 'input', 'keyevent', '4']);
+  await tapLabel('搜尋');
+  await waitNode('外部 1 件', { exact: false });
+  await waitNode('回到搜尋結果');
+  await waitNode('Native QA 外部檯燈', { exact: false });
+  await sleep(900);
+  await screenshot('search-focused');
+  stage = 'single-result-list';
+  await tapLabel('切換清單');
+  await waitNode('Native QA 外部檯燈', { exact: false });
+  stage = 'list-to-map';
+  await tapLabel('在地圖上查看Native QA 外部檯燈');
+  await waitNode('切換清單');
+  await waitNode('Native QA 外部檯燈', { exact: false });
+  await screenshot('list-to-map');
+  stage = 'return-results';
+  await tapLabel('回到搜尋結果');
+  await waitNode('切換清單');
+  await screenshot('return-results');
+  await tapLabel('切換清單');
   stage = 'external-detail';
-  await tapLabel('外部來源商品，Native QA 外部檯燈，來源售價 NT$ 590，新北市板橋區');
+  await waitNode('外部 1 件', { exact: false });
+  await tap(await waitWithScroll('外部來源商品，Native QA 外部檯燈，來源售價 NT$ 590，新北市板橋區'));
   await waitNode('外部來源 · github.com');
   await waitNode('來源商品圖片');
   await waitWithScroll('Wishlist.ai 並非此商品賣家', false);
@@ -238,6 +411,7 @@ async function main() {
   await adb(['shell', 'input', 'keyevent', '4']);
   await waitNode('切換地圖');
   stage = 'private-wish-tab';
+  await dismissDebugToast();
   await tapLabel('願望');
   stage = 'private-wish-list-title';
   await waitNode('Native QA 外部比對清單');
@@ -256,13 +430,16 @@ async function main() {
   await waitNode('Native QA 外部檯燈', { exact: false });
   await waitNode('來源售價 NT$ 590', { exact: false });
   await screenshot('wish-list');
+  await managementSequence(false);
   passed = true;
 }
 
 (async () => {
   let cleanupFailed = false;
-  try { await main(); } catch {
+  try { await main(); } catch (failure) {
     result.failedStage = stage;
+    if (failure instanceof Error && /^(?:Required UI control missing|Tappable UI control missing|Scrollable UI control missing|Synthetic price input)/.test(failure.message))
+      result.failureReason = failure.message;
     if (installed) try {
       const screen = await dump();
       result.uiMarkers = {
@@ -272,10 +449,11 @@ async function main() {
           screen.includes('Could not connect to development server'),
         networkIssue: screen.includes('請確認網路'), storageIssue: screen.includes('無法安全儲存登入'),
       };
-      if (stage === 'login-identifier' || stage.startsWith('private-wish-')) {
+      if (stage === 'my-listings-edit') result.uiMarkers.syntheticPrice = nodeWith(screen, '編輯商品售價，新臺幣')?.match(/\btext="(\d{0,10})"/)?.[1] ?? null;
+      if (stage === 'login-identifier' || stage === 'login-submit' && !result.uiMarkers.loginForm && !result.uiMarkers.passwordField || stage.startsWith('private-wish-') || stage.startsWith('external-') || stage === 'multiple-search-focus' || stage === 'single-search-focus' || stage.startsWith('my-listings-')) {
         // Before-login contains no input; the wish route contains only owned
         // synthetic content. Never capture a filled login or other account.
-        const target = path.join(evidence, stage === 'login-identifier' ? 'before-login-failure.png' : 'private-wish-failure.png');
+        const target = path.join(evidence, stage === 'login-identifier' ? 'before-login-failure.png' : stage === 'login-submit' ? 'after-login-failure.png' : stage.startsWith('my-listings-') ? 'my-listings-failure.png' : stage.startsWith('external-') || stage === 'multiple-search-focus' || stage === 'single-search-focus' ? 'external-failure.png' : 'private-wish-failure.png');
         await fs.writeFile(target, await adbBytes(['exec-out', 'screencap', '-p']), { flag: 'wx', mode: 0o600 });
         result.diagnosticScreenshot = target;
       }

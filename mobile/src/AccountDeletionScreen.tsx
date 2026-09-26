@@ -124,8 +124,8 @@ export function AccountDeletionScreen({ apiUrl, userId, token, initialJournal, o
       <Text style={styles.heading}>刪除影響盤點</Text>
       {impact ? <><Text style={styles.note}>唯讀盤點時間：{new Date(impact.capturedAt).toLocaleString('zh-TW')}。數量可能因新資料而變動，不是刪除收據。</Text>{Object.entries(DELETION_IMPACT_LABELS).map(([name, label]) => <Text key={name} style={styles.body}>{label}：{impact.counts[name as keyof typeof DELETION_IMPACT_LABELS]}</Text>)}</> : <Text style={styles.note}>尚未取得有效盤點，不可送出刪除。</Text>}
       <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton, busy && styles.disabled]} onPress={() => void loadImpact()}><Text style={styles.secondaryButtonText}>重新盤點</Text></Pressable>
-      <TextInput accessibilityLabel="刪除帳號的目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={1024} value={password} onChangeText={setPassword} style={styles.input} />
-      <TextInput accessibilityLabel="輸入刪除帳號以確認" placeholder="請輸入「刪除帳號」" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={20} value={confirmation} onChangeText={setConfirmation} style={styles.input} />
+      <Text style={styles.fieldLabel}>目前密碼</Text><TextInput accessibilityLabel="刪除帳號的目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={1024} value={password} onChangeText={setPassword} style={styles.input} />
+      <Text style={styles.fieldLabel}>確認文字（請輸入「刪除帳號」）</Text><TextInput accessibilityLabel="輸入刪除帳號以確認" placeholder="請輸入「刪除帳號」" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={20} value={confirmation} onChangeText={setConfirmation} style={styles.input} />
       <Pressable accessibilityRole="button" disabled={busy || !impact || !password || confirmation !== '刪除帳號'} style={[styles.button, styles.danger, (busy || !impact || !password || confirmation !== '刪除帳號') && styles.disabled]} onPress={confirmDelete}><Text style={styles.buttonText}>永久刪除本人帳號</Text></Pressable>
       <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={back}><Text style={styles.secondaryButtonText}>返回，不建立刪除操作</Text></Pressable>
     </> : <>
@@ -144,6 +144,7 @@ const styles = StyleSheet.create({
   heading: { ...iosType.title2, color: iosColors.label },
   body: { ...iosType.body, color: iosColors.label },
   note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' },
   error: { ...iosType.subheadline, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm },
   input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, fontSize: 17, color: iosColors.label, ...iosShadow },
   button: { minHeight: 52, borderRadius: iosRadius.control, padding: iosSpacing.md, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' },

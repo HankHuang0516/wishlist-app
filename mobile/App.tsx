@@ -15,6 +15,7 @@ import { ChatInbox } from './src/ChatScreen';
 import { WishHome } from './src/WishHome';
 import { WishScreen } from './src/WishScreen';
 import { AccountSecurityScreen } from './src/AccountSecurityScreen';
+import { MyListingsScreen } from './src/MyListingsScreen';
 import { AuthScreen } from './src/AuthScreen';
 import { admitLogin, recoveryLink, RecoveryLink } from './src/authFlow';
 import { createAuthOperationGate, isCurrentAuthEpoch } from './src/authOperation';
@@ -65,6 +66,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   const [sessionIssue, setSessionIssue] = useState<SessionIssue | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [composing, setComposing] = useState<'batch' | 'manual' | null>(null);
+  const [managingListings, setManagingListings] = useState(false);
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [exploreWishId, setExploreWishId] = useState<number | undefined>(undefined);
   const [focusListing, setFocusListing] = useState<PublicListing | null>(null);
@@ -115,7 +117,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     setBusy(true); setError('');
     try {
       const result = await admitLogin(value, apiUrl, saved => createApi(apiUrl, () => saved, __DEV__)('/users/me'), encoded => SecureStore.setItemAsync(SESSION_KEY, encoded, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }), __DEV__);
-      authEpoch.current++; setActiveRoom(null); setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      authEpoch.current++; setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setToken(result.token); setUser(result.user); setSessionIssue(null);
       setAuthLink(current => current === authLink ? null : current);
     }
@@ -127,12 +129,12 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     authRunning.current = true; setBusy(true);
     authEpoch.current++;
     if (revokedMessage) {
-      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setError(revokedMessage); setSessionIssue('expired');
     }
     try {
       await SecureStore.deleteItemAsync(SESSION_KEY);
-      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setError(revokedMessage ?? ''); setSessionIssue(revokedMessage ? 'expired' : null); setBusy(false);
     } catch {
       if (revokedMessage) { setSessionIssue('expired-storage-unavailable'); setError(revokedMessage + '\n' + sessionIssueMessage('expired-storage-unavailable')); }
@@ -185,7 +187,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   }, [api, token, user?.id, deletionOpen, deletionJournal, deletionProblem]);
 
   function erasePrivateViews() {
-    authEpoch.current++; setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setExploreWishId(undefined); setFocusListing(null); setAuthLink(null); setTab('首頁');
+    authEpoch.current++; setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setAuthLink(null); setTab('首頁');
   }
   function openDeletion() {
     if (authRunning.current || recoveryOperation.isRunning() || accountOperation.isRunning() || deletionActive.current) { Alert.alert('帳號操作尚未結束', '請先確認目前操作結果。'); return; }
@@ -209,8 +211,8 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
-      <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onLogout={() => void logout()} onRevoked={logout} />}
+    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
+      <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
     <View style={styles.tabs}>{TABS.map(item => {
       const selected = item === tab;
       return <Pressable key={item} testID={TAB_IDS[item]} accessibilityLabel={item} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setTab(item)} style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}>
@@ -218,8 +220,9 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
         <Text style={selected ? styles.activeTab : styles.inactiveTab}>{item}</Text>
       </Pressable>;
     })}</View>
-    {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('探索'); Alert.alert('商品已刊登', `已確認 ${count} 件商品，可在探索地圖查看。`); }} />}
-    {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('探索'); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可至探索地圖查找商品。' : '商品目前已停止公開刊登。'); }} />}
+    {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('探索'); Alert.alert('商品已刊登', `已確認 ${count} 件商品，可在探索地圖查看。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
+    {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('探索'); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可至探索地圖查找商品。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
+    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></Modal>}
     {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
   </SafeAreaView>;
 }

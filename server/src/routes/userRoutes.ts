@@ -1,7 +1,8 @@
 
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, updateSubscription, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo, generateAiPrompt } from '../controllers/userController';
+import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, cancelSubscription, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo, generateAiPrompt } from '../controllers/userController';
+import { paymentTemporarilyUnavailable } from '../controllers/paymentAvailabilityController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
@@ -35,7 +36,7 @@ router.post('/me/sessions/revoke', authenticateToken, securityLimiter, revokeSes
 router.get('/me/purchases', authenticateToken, getPurchasedItems);
 router.get('/me/transaction-history', authenticateToken, getPurchaseHistory);
 router.get('/me/ai-usage', authenticateToken, getAiUsage);
-router.post('/me/subscription', authenticateToken, updateSubscription);
+router.post('/me/subscription', authenticateToken, paymentTemporarilyUnavailable);
 router.post('/me/subscription/cancel', authenticateToken, cancelSubscription);
 router.post('/me/avatar', authenticateToken, upload.single('avatar'), uploadAvatar);
 

@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../co
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2, LogOut } from "lucide-react";
 import ActionConfirmModal from "../components/ActionConfirmModal";
-import PaymentModal from "../components/PaymentModal";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 
@@ -76,33 +75,6 @@ export default function SettingsPage() {
             variant,
             confirmText: confirmTextWithPrice || t('common.confirm')
         });
-    };
-
-    // Payment Modal State
-    const [paymentModalConfig, setPaymentModalConfig] = useState<{
-        isOpen: boolean;
-        amount: number;
-        itemName: string;
-        extraPayload?: any; // New: to store purchaseType etc.
-    }>({
-        isOpen: false,
-        amount: 0,
-        itemName: "",
-        extraPayload: {}
-    });
-
-    const openPaymentModal = (amount: number, itemName: string, extraPayload?: any) => {
-        setPaymentModalConfig({
-            isOpen: true,
-            amount,
-            itemName,
-            extraPayload
-        });
-    };
-
-    const handlePaymentSuccess = (data: any) => {
-        setFeedback({ message: `Payment Successful! Transaction ID: ${data.transactionId}`, type: 'success' });
-        setTimeout(() => window.location.reload(), 2000);
     };
 
     useEffect(() => {
@@ -829,13 +801,8 @@ export default function SettingsPage() {
                                 </select>
                             </div>
 
-                            <Button className="w-full" variant="outline" onClick={() => {
-                                const select = document.getElementById('expansion-type-select') as HTMLSelectElement;
-                                if (!select) return;
-                                const targetType = select.value;
-                                openPaymentModal(30, targetType === 'following' ? "Following Expansion (+10)" : "Wishlist Expansion (+10)", { purchaseType: 'limit', target: targetType });
-                            }}>
-                                {t('settings.buyNow')}
+                            <Button className="w-full" variant="outline" disabled>
+                                {t('settings.purchaseUnavailable')}
                             </Button>
                         </CardContent>
                     </Card>
@@ -881,10 +848,8 @@ export default function SettingsPage() {
                                         {t('settings.cancelSubscription')}
                                     </Button>
                                 </div>
-                            ) : <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                                openPaymentModal(90, "Premium Subscription", { purchaseType: 'PREMIUM' });
-                            }}>
-                                {t('settings.subscribe')} (NT$ 90)
+                            ) : <Button className="w-full" disabled>
+                                {t('settings.purchaseUnavailable')}
                             </Button>
                             }
 
@@ -1011,14 +976,6 @@ export default function SettingsPage() {
                     confirmText={modalConfig.confirmText}
                     variant={modalConfig.variant}
                     isProcessing={modalConfig.isProcessing}
-                />
-                <PaymentModal
-                    isOpen={paymentModalConfig.isOpen}
-                    onClose={() => setPaymentModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    amount={paymentModalConfig.amount}
-                    itemName={paymentModalConfig.itemName}
-                    onPaymentSuccess={handlePaymentSuccess}
-                    extraPayload={paymentModalConfig.extraPayload}
                 />
             </div>
         </div>

@@ -59,6 +59,128 @@ function PrivatePhoto({ id, token }: { id: string; token: string }) {
     : <div className="flex h-32 w-32 items-center justify-center rounded-2xl bg-stone-100 text-sm text-stone-500">照片載入中</div>;
 }
 
+type MarketingMedia = { id: string; marketingSlot: number; marketingSelected: boolean };
+type MarketingJob = { id: string; status: 'PENDING' | 'PROCESSING' | 'REVIEW' | 'COMPLETED' | 'FAILED';
+  parentJobId: string | null; deliveredAt: string | null; copy: string | null; generatedMedia: MarketingMedia[];
+  previousMedia?: MarketingMedia[]; selectedMediaIds?: string[] };
+
+function MarketingAssistantWeb({ token, card, beforeStart, onApproved }: { token: string; card: Card;
+  beforeStart: () => Promise<boolean>; onApproved: () => Promise<void> }) {
+  const [enabled, setEnabled] = useState(false), [job, setJob] = useState<MarketingJob | null>(null);
+  const [copy, setCopy] = useState(''), [selected, setSelected] = useState<string[]>([]);
+  const [adjustment, setAdjustment] = useState(''), [slots, setSlots] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([api<{ available: boolean }>(token, '/marketing/availability'),
+      api<{ job: { id: string } | null }>(token, `/marketing/jobs?sourceMediaId=${card.id}`)])
+      .then(([access, latest]) => { if (!alive) return; setEnabled(access.available === true);
+        if (latest.job?.id) void api<MarketingJob>(token, `/marketing/jobs/${latest.job.id}`)
+          .then(value => { if (alive) setJob(value); }).catch(() => undefined); })
+      .catch(() => { if (alive) setEnabled(false); });
+    return () => { alive = false; };
+  }, [token, card.id]);
+  useEffect(() => {
+    if (!job || !['PENDING', 'PROCESSING'].includes(job.status)) return;
+    let alive = true;
+    const timer = window.setInterval(() => { void api<MarketingJob>(token, `/marketing/jobs/${job.id}`)
+      .then(value => { if (alive) setJob(value); }).catch(() => { if (alive) setError('排隊狀態暫時無法讀取；資料仍安全保存。'); }); }, 3000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [token, job?.id, job?.status]);
+  useEffect(() => { if (!job || !['REVIEW', 'COMPLETED'].includes(job.status)) return;
+    setCopy(job.copy ?? ''); setSelected(job.selectedMediaIds?.length
+      ? job.selectedMediaIds : job.generatedMedia.map(media => media.id)); }, [job?.id, job?.status]);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 60_000); return () => window.clearInterval(timer); }, []);
+  if (!enabled) return null;
+  const deadline = job?.deliveredAt ? Date.parse(job.deliveredAt) + 7 * 86_400_000 : 0;
+  const remaining = Math.max(0, deadline - now);
+  const mayAdjust = !!job && !job.parentJobId && ['REVIEW', 'COMPLETED'].includes(job.status) && remaining > 0;
+  async function start() {
+    if (busy || !await beforeStart()) { setError('請先儲存並確認商品名稱、說明與售價。'); return; }
+    setBusy(true); setError('');
+    try { const made = await api<{ id: string; status: MarketingJob['status'] }>(token, '/marketing/jobs', {
+      method: 'POST', body: JSON.stringify({ clientRequestId: crypto.randomUUID(), sourceMediaId: card.id }) });
+      setJob({ id: made.id, status: made.status, parentJobId: null, deliveredAt: null, copy: null, generatedMedia: [] }); }
+    catch (failure) { setError(failure instanceof ApiFailure && failure.code === 'MONTHLY_LIMIT'
+      ? '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。'
+      : '未能加入排隊；請確認私人草稿已儲存。'); }
+    finally { setBusy(false); }
+  }
+  async function approve() {
+    if (!job || !selected.length) { setError('請至少選一張行銷圖。'); return; }
+    setBusy(true); setError('');
+    try { await api(token, `/marketing/jobs/${job.id}/approve`, { method: 'POST',
+      body: JSON.stringify({ selectedMediaIds: selected, copy }) });
+      setJob(await api<MarketingJob>(token, `/marketing/jobs/${job.id}`)); await onApproved(); setNotice('已加入私人草稿；實拍原圖保留。'); }
+    catch { setError('尚未套用：商品資料可能變更，請重新載入核對。'); }
+    finally { setBusy(false); }
+  }
+  async function revise() {
+    if (!job || !slots.length || adjustment.trim().length < 3) { setError('請勾選照片並描述要調整的地方。'); return; }
+    setBusy(true); setError('');
+    try { const made = await api<{ id: string; status: MarketingJob['status'] }>(token, `/marketing/jobs/${job.id}/revision`, {
+      method: 'POST', body: JSON.stringify({ clientRequestId: crypto.randomUUID(), prompt: adjustment.trim(), slots }) });
+      setJob({ id: made.id, status: made.status, parentJobId: job.id, deliveredAt: null, copy: null, generatedMedia: [] });
+      setNotice('免費調整已排隊；未勾選的照片保留。'); }
+    catch { setError('免費調整未排隊；請確認仍在七天期限內且尚未使用。'); }
+    finally { setBusy(false); }
+  }
+  const choices = [...(job?.generatedMedia ?? []), ...(job?.previousMedia ?? [])];
+  function toggle(id: string) { setSelected(old => {
+    if (old.includes(id)) return old.filter(value => value !== id);
+    const slot = choices.find(media => media.id === id)?.marketingSlot;
+    const at = old.findIndex(value => choices.find(media => media.id === value)?.marketingSlot === slot);
+    if (at < 0) return [...old, id];
+    const updated = [...old]; updated[at] = id; return updated;
+  }); }
+  function move(id: string, direction: -1 | 1) { setSelected(old => {
+    const from = old.indexOf(id), to = from + direction;
+    if (from < 0 || to < 0 || to >= old.length) return old;
+    const updated = [...old]; [updated[from], updated[to]] = [updated[to], updated[from]]; return updated;
+  }); }
+  return <section aria-label="行銷小助手 Beta" className="mt-5 rounded-2xl bg-orange-50 p-4 text-sm">
+    <h4 className="font-semibold">行銷小助手 · Beta</h4>
+    <p className="mt-1 text-stone-600">原始實拍照保留；AI 圖僅為行銷示意，確認前不公開。</p>
+    {!job || job.status === 'FAILED' ? <button type="button" disabled={busy} onClick={() => void start()}
+      className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{job ? '重新排隊生成四圖' : '生成四張行銷圖'}</button>
+      : ['PENDING', 'PROCESSING'].includes(job.status) ? <p role="status" className="mt-3 text-orange-900">
+        {job.status === 'PENDING' ? '已排隊，稍後自動更新' : '正在生成四張圖片與文案'}</p>
+        : <>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{job.generatedMedia.map(media => <button key={media.id}
+            type="button" role="checkbox" aria-checked={selected.includes(media.id)} onClick={() => toggle(media.id)} className="rounded-xl border bg-white p-2 text-left">
+            <PrivatePhoto id={media.id} token={token} /><span>{selected.includes(media.id) ? '☑ 選用' : '☐ 不選用'} · AI 示意</span>
+          </button>)}</div>
+          {!!job.previousMedia?.length && <div className="mt-4"><p>調整前的照片（可點選保留原版）</p>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">{job.previousMedia.map(media => <button key={media.id}
+              type="button" role="checkbox" aria-checked={selected.includes(media.id)} onClick={() => toggle(media.id)}
+              className="rounded-xl border bg-white p-2 text-left"><PrivatePhoto id={media.id} token={token} />
+              <span>{selected.includes(media.id) ? '☑ 保留原版' : '☐ 選原版'} · 圖 {media.marketingSlot}</span>
+            </button>)}</div></div>}
+          {!!selected.length && <div className="mt-4"><p>公開照片順序（第一張為封面）</p>
+            <ol>{selected.map((id, index) => <li key={id} className="mt-2 flex items-center gap-2">
+              <span>{index + 1}. 圖 {choices.find(media => media.id === id)?.marketingSlot}</span>
+              <button type="button" aria-label={`圖 ${choices.find(media => media.id === id)?.marketingSlot} 往前移`}
+                disabled={index === 0} onClick={() => move(id, -1)} className="min-h-11 rounded-lg border px-3">↑</button>
+              <button type="button" aria-label={`圖 ${choices.find(media => media.id === id)?.marketingSlot} 往後移`}
+                disabled={index === selected.length - 1} onClick={() => move(id, 1)} className="min-h-11 rounded-lg border px-3">↓</button>
+            </li>)}</ol></div>}
+          <label className="mt-4 block">行銷文案（可修改後確認）<textarea aria-label="編輯行銷文案"
+            className="mt-1 min-h-28 w-full rounded-xl border p-3" maxLength={1200} value={copy} onChange={event => setCopy(event.target.value)} /></label>
+          {job.status === 'REVIEW' && <button type="button" disabled={busy || job.generatedMedia.length !== 4}
+            onClick={() => void approve()} className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">確認照片與文案</button>}
+          {mayAdjust && <div className="mt-4 border-t pt-3"><p className="font-semibold text-red-700">免費調整剩餘 {Math.floor(remaining / 86_400_000)}天 {Math.floor(remaining % 86_400_000 / 3_600_000)}時 {Math.floor(remaining % 3_600_000 / 60_000)}分</p>
+            <p className="mt-2">勾選要重新生成的圖片（最多一次）</p><div className="mt-2 flex gap-3">{[1, 2, 3, 4].map(slot => <label key={slot}>
+              <input type="checkbox" checked={slots.includes(slot)} onChange={event => setSlots(old => event.target.checked ? [...old, slot] : old.filter(value => value !== slot))} /> 圖 {slot}</label>)}</div>
+            <input aria-label="描述要調整的地方" className="mt-3 w-full rounded-xl border p-3" maxLength={500} placeholder="例如：改成更明亮的背景" value={adjustment} onChange={event => setAdjustment(event.target.value)} />
+            <button type="button" disabled={busy} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">免費調整一次</button>
+          </div>}
+        </>}
+    {notice && <p role="status" className="mt-2 text-green-800">{notice}</p>}
+    {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
+  </section>;
+}
+
 export default function ListingBatchPage() {
   const { token, user } = useAuth();
   if (!token || !user) return <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 text-center shadow-sm">請先 <Link to="/login" className="text-blue-600 underline">登入</Link> 再刊登商品。</div>;
@@ -349,6 +471,17 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           <label className="text-sm sm:col-span-2">商品說明<textarea className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={busy || card.saving} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
         </div>
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
+          {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} card={card}
+            beforeStart={async () => card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
+              !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
+            onApproved={async () => {
+              const rows = await loadPrivateMediaPages(cursor => api<unknown>(token,
+                '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
+              const updated = rows.find(row => typeof row === 'object' && row !== null &&
+                (row as { id?: unknown }).id === card.id);
+              if (!updated) throw new Error('PRIVATE_DRAFT_NOT_FOUND');
+              replace(card.id, () => fromMedia(updated));
+            }} />}
           {card.error && <p role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
             {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}

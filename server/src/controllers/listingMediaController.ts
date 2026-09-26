@@ -103,13 +103,17 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
     try {
         const { id, variant } = req.params;
         if (!isListingId(id) || (variant !== 'image' && variant !== 'thumbnail')) return res.status(404).json({ error: '照片不存在' });
-        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true, aiDraftStatus: true, flickrPhotoId: true,
-            flickrImageUrl: true, flickrThumbnailUrl: true, listing: { select: { status: true, expiresAt: true } } } });
+        const record = await prisma.listingMedia.findUnique({ where: { id }, select: { ownerUserId: true, wishItemId: true,
+            capturePurpose: true, marketingSelected: true, aiDraftStatus: true, flickrPhotoId: true,
+            flickrImageUrl: true, flickrThumbnailUrl: true, listing: { select: { status: true, expiresAt: true } },
+            marketingJobsAsSource: { where: { status: 'PROCESSING' }, select: { id: true }, take: 1 } } });
         // The opaque URL is shared with EClaw for recognition after attachment.
-        const publicAccess = record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date()));
+        const publicAccess = (record?.capturePurpose !== 'AI_MARKETING' || record.marketingSelected) &&
+            (record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date())));
         const workerAccess = variant === 'image' && record?.aiDraftStatus === 'PROCESSING' &&
             listingAiEnabledFor(record.ownerUserId) && isMinimaxWorker(req.headers.authorization);
-        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id && !workerAccess)) return res.status(404).json({ error: '照片不存在' });
+        const marketingWorkerAccess = variant === 'image' && !!record?.marketingJobsAsSource.length && isMinimaxWorker(req.headers.authorization);
+        if (!record || (!publicAccess && record.ownerUserId !== req.user?.id && !workerAccess && !marketingWorkerAccess)) return res.status(404).json({ error: '照片不存在' });
         if (record.flickrPhotoId) {
             const source = variant === 'image' ? record.flickrImageUrl : record.flickrThumbnailUrl;
             if (!source) throw new FlickrMediaUnavailable();
@@ -207,6 +211,7 @@ export async function myUnusedListingMedia(req: AuthRequest, res: Response) {
             !['LEGACY_UNKNOWN', 'MANUAL_PHOTO', 'BATCH_ITEM'].includes(purpose)))
             return res.status(400).json({ error: '照片用途不正確', errorCode: 'INVALID_MEDIA_PURPOSE' });
         const base: Prisma.ListingMediaWhereInput = { ownerUserId: req.user.id, listingId: null, wishItemId: null,
+            capturePurpose: { not: 'AI_MARKETING' },
             // Explicit batch drafts remain recoverable until the owner links
             // or removes them. A 30-day listing expiry is not draft deletion.
             ...(purpose === 'BATCH_ITEM' ? {} : { createdAt: { gt: new Date(Date.now() - 30 * 86_400_000) } }),
@@ -262,9 +267,25 @@ export async function deleteUnusedListingMedia(req: AuthRequest, res: Response) 
         // Atomically prevent deleting an image that a concurrent listing has
         // attached. Only this owner's still-unbound record may be removed.
         const removed = await prisma.$transaction(async tx => {
-            const media = await tx.listingMedia.findFirst({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null }, select: { flickrPhotoId: true } });
+            const media = await tx.listingMedia.findFirst({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null,
+                capturePurpose: { not: 'AI_MARKETING' }, marketingJobsAsSource: { none: { status: { in: ['PENDING', 'PROCESSING', 'REVIEW'] } } } },
+                select: { flickrPhotoId: true } });
             if (!media) return null;
-            const deleted = await tx.listingMedia.deleteMany({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null } });
+            const jobs = await tx.marketingJob.findMany({ where: { sourceMediaId: id, ownerUserId: req.user!.id },
+                select: { id: true } });
+            const generated = jobs.length ? await tx.listingMedia.findMany({ where: { ownerUserId: req.user!.id,
+                marketingJobId: { in: jobs.map(job => job.id) }, listingId: null },
+                select: { id: true, flickrPhotoId: true } }) : [];
+            if (generated.length) {
+                await tx.listingMedia.deleteMany({ where: { id: { in: generated.map(item => item.id) }, ownerUserId: req.user!.id,
+                    listingId: null } });
+                await tx.mediaErasureTask.createMany({ data: generated.map(item => ({ mediaId: item.id,
+                    flickrPhotoId: item.flickrPhotoId })), skipDuplicates: true });
+            }
+            if (jobs.length) await tx.marketingJob.deleteMany({ where: { id: { in: jobs.map(job => job.id) },
+                ownerUserId: req.user!.id } });
+            const deleted = await tx.listingMedia.deleteMany({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null,
+                capturePurpose: { not: 'AI_MARKETING' }, marketingJobsAsSource: { none: { status: { in: ['PENDING', 'PROCESSING', 'REVIEW'] } } } } });
             if (!deleted.count) return null;
             await tx.mediaErasureTask.create({ data: { mediaId: id, flickrPhotoId: media.flickrPhotoId } });
             return media;

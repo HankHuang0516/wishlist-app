@@ -53,6 +53,14 @@ export function mergeListingAiSuggestions(form: ListingForm, draft: ListingAiDra
   };
 }
 
+// Any new AI response can change what the seller is reviewing. A previous
+// confirmation must not authorize publication after a retry or failed retry.
+export function reviewStateAfterAi(card: { form: ListingForm; touched: ListingAiTouched }, state: ListingAiState) {
+  return { ai: state.status, draft: state.draft,
+    form: state.draft ? mergeListingAiSuggestions(card.form, state.draft, card.touched) : card.form,
+    confirmed: false };
+}
+
 export function confirmedBatchCandidates<T extends { published: boolean; confirmed: boolean }>(cards: readonly T[]): T[] {
   return cards.filter(card => !card.published && card.confirmed);
 }

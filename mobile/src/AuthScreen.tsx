@@ -81,7 +81,7 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
     } finally { release(); if (active.current) setBusy(false); }
   }
   const input = (label: string, value: string, change: (value: string) => void, options: Partial<React.ComponentProps<typeof TextInput>> = {}) =>
-    <TextInput accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} />;
+    <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} /></View>;
   const button = (label: string, action: () => void, primary = false) => <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={action} style={[primary ? styles.button : styles.link, disabled && styles.disabled]}><Text style={primary ? styles.buttonText : styles.linkText}>{label}</Text></Pressable>;
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <Text style={styles.eyebrow}>YOUR WISH, A LITTLE CLOSER</Text><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.body}>留下願望，找到附近的下一個好物。</Text><Text style={styles.heading}>{titles[mode]}</Text>
@@ -114,6 +114,8 @@ const styles = StyleSheet.create({
   eyebrow: { ...iosType.caption, letterSpacing: 1.1, color: iosColors.tint },
   body: { ...iosType.body, color: iosColors.secondaryLabel },
   note: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  field: { gap: iosSpacing.xxs },
+  fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' },
   input: { minHeight: 54, backgroundColor: iosColors.surface, borderColor: iosColors.separator, borderWidth: StyleSheet.hairlineWidth, borderRadius: iosRadius.control, paddingHorizontal: iosSpacing.md, paddingVertical: 14, fontSize: 17, color: iosColors.label, ...iosShadow },
   button: { minHeight: 54, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center', padding: iosSpacing.md, marginTop: iosSpacing.xs },
   buttonText: { color: iosColors.white, ...iosType.headline },

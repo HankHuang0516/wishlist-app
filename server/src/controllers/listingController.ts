@@ -14,7 +14,9 @@ export const publicListingSelect = {
     lastVerifiedAt: true, createdAt: true, updatedAt: true, version: true,
     owner: { select: { id: true, name: true } },
     location: { select: { county: true, district: true, publicLatitude: true, publicLongitude: true, precisionMeters: true } },
-    media: { orderBy: { position: 'asc' as const }, select: { id: true, imageUrl: true, thumbnailUrl: true, position: true } },
+    media: { where: { OR: [{ capturePurpose: { not: 'AI_MARKETING' as const } }, { marketingSelected: true }] },
+        orderBy: { position: 'asc' as const }, select: { id: true, imageUrl: true, thumbnailUrl: true, position: true,
+            capturePurpose: true } },
 } satisfies Prisma.ListingSelect;
 
 class ListingConflict extends Error {}
@@ -60,12 +62,38 @@ export async function createListing(req: AuthRequest, res: Response) {
                 ...input.data, ownerUserId, clientListingId: input.clientListingId, requestHash: input.requestHash,
                 ...(input.location ? { location: { create: input.location } } : {}),
             } });
-            const media = await tx.listingMedia.findMany({ where: { id: { in: input.mediaIds }, ownerUserId, listingId: null, wishItemId: null }, select: { id: true } });
+            const media = await tx.listingMedia.findMany({ where: { id: { in: input.mediaIds }, ownerUserId, listingId: null, wishItemId: null,
+                capturePurpose: { not: 'AI_MARKETING' } }, select: { id: true } });
             if (media.length !== input.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
             for (const [position, id] of input.mediaIds.entries()) {
-                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null, wishItemId: null },
+                const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null, wishItemId: null,
+                    capturePurpose: { not: 'AI_MARKETING' } },
                     data: { listingId: created.id, position, sellerDraft: Prisma.DbNull } });
                 if (bound.count !== 1) throw new ListingConflict();
+            }
+            const approvedJobs = await tx.marketingJob.findMany({ where: { ownerUserId,
+                sourceMediaId: { in: input.mediaIds }, status: 'COMPLETED' },
+                select: { id: true, parentJobId: true } });
+            // A selected revision replaces only requested slots. The other
+            // approved images still belong to its parent generation job.
+            const approvedJobIds = [...new Set(approvedJobs.flatMap(job =>
+                job.parentJobId ? [job.id, job.parentJobId] : [job.id]))];
+            const approvedArt = await tx.listingMedia.findMany({ where: { ownerUserId, listingId: null, wishItemId: null,
+                capturePurpose: 'AI_MARKETING', marketingSelected: true,
+                marketingJobId: { in: approvedJobIds } },
+                orderBy: [{ position: 'asc' }, { createdAt: 'asc' }], select: { id: true } });
+            if (approvedArt.length + input.mediaIds.length > 8) throw new ListingInputError('mediaIds', '實拍照與選用行銷圖最多合計 8 張');
+            if (approvedArt.length) {
+                for (const [position, id] of approvedArt.map(media => media.id).entries()) {
+                    const bound = await tx.listingMedia.updateMany({ where: { id, ownerUserId, listingId: null,
+                        capturePurpose: 'AI_MARKETING', marketingSelected: true },
+                        data: { listingId: created.id, position } });
+                    if (bound.count !== 1) throw new ListingConflict();
+                }
+                await tx.listingMedia.updateMany({ where: { id: { in: input.mediaIds }, listingId: created.id },
+                    data: { position: { increment: approvedArt.length } } });
+                await tx.marketingJob.updateMany({ where: { ownerUserId, sourceMediaId: { in: input.mediaIds },
+                    status: 'COMPLETED', listingId: null }, data: { listingId: created.id } });
             }
             return tx.listing.findUniqueOrThrow({ where: { id: created.id }, select: publicListingSelect });
         });
@@ -109,7 +137,7 @@ export async function myListings(req: AuthRequest, res: Response) {
     try {
         const search = parseListingSearch(req.query);
         if (Object.keys(req.query).some(k => k !== 'limit' && k !== 'cursor')) throw new ListingInputError('query');
-        const rows = await prisma.listing.findMany({ where: { ownerUserId: req.user.id }, select: publicListingSelect,
+    const rows = await prisma.listing.findMany({ where: { ownerUserId: req.user.id }, select: publicListingSelect,
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: search.limit + 1,
             ...(search.cursor ? { cursor: { id: search.cursor }, skip: 1 } : {}) });
         const items = rows.slice(0, search.limit);
@@ -181,7 +209,7 @@ function editablePayload(listing: ListingWithAssets) {
         clientListingId: listing.clientListingId, title: listing.title, description: listing.description ?? undefined,
         condition: listing.condition, category: listing.category ?? undefined, brand: listing.brand ?? undefined,
         price: listing.price?.toNumber(), currency: listing.currency, deliveryMethods: listing.deliveryMethods, negotiable: listing.negotiable,
-        mediaIds: listing.media.map(m => m.id),
+        mediaIds: listing.media.filter(m => m.capturePurpose !== 'AI_MARKETING' || m.marketingSelected).map(m => m.id),
         location: listing.location ? { county: listing.location.county, district: listing.location.district, latitude: listing.location.publicLatitude, longitude: listing.location.publicLongitude } : undefined,
     };
 }
@@ -203,7 +231,9 @@ export async function editListing(req: AuthRequest, res: Response) {
         assertListingPolicy(parsed.data);
         const ownerUserId = req.user.id;
         const result = await prisma.$transaction(async tx => {
-            const media = await tx.listingMedia.findMany({ where: { id: { in: parsed.mediaIds }, ownerUserId, wishItemId: null, OR: [{ listingId: null }, { listingId: id }] }, select: { id: true } });
+            const media = await tx.listingMedia.findMany({ where: { id: { in: parsed.mediaIds }, ownerUserId, wishItemId: null,
+                AND: [{ OR: [{ listingId: null }, { listingId: id }] }, { OR: [{ capturePurpose: { not: 'AI_MARKETING' } }, { marketingSelected: true }] }] },
+                select: { id: true } });
             if (media.length !== parsed.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
             const { publishedAt, expiresAt, expiryMode, lastVerifiedAt, status, ...editable } = parsed.data;
             // No expiry/publication/status fields are written by normal editing.

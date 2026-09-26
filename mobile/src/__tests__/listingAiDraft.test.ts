@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
+import { confirmedBatchCandidates, mergeListingAiSuggestions, parseListingAiState, restoreBatchCaptureOrder, reviewStateAfterAi, suggestedAskingPrice, suggestedBrand, type ListingAiDraft } from '../listingAiDraft';
 import { emptyListingForm } from '../listingForm';
 
 const id = '41fe5714-b31f-475d-b040-01e2a5c2e1cb';
@@ -36,6 +36,17 @@ describe('private listing AI draft protocol', () => {
       { id: 'b', published: false, confirmed: false },
       { id: 'c', published: true, confirmed: true },
     ]).map(card => card.id)).toEqual(['a']);
+  });
+  it('requires seller reconfirmation after every AI result, including a failed retry', () => {
+    const original = { form: { ...emptyListingForm, title: '賣家確認的名稱', price: '999' }, touched: { title: true as const, price: true as const } };
+    const confirmed = { ...original, published: false, confirmed: true };
+    expect(confirmedBatchCandidates([confirmed])).toHaveLength(1);
+    for (const state of [{ mediaId: id, status: 'PENDING' as const, draft: null },
+      { mediaId: id, status: 'FAILED' as const, draft: null }, { mediaId: id, status: 'COMPLETED' as const, draft }]) {
+      const updated = { ...confirmed, ...reviewStateAfterAi(confirmed, state) };
+      expect(confirmedBatchCandidates([updated])).toHaveLength(0);
+      expect(updated.form).toMatchObject({ title: '賣家確認的名稱', price: '999' });
+    }
   });
   it('keeps the latest private photos but restores their capture order', () => {
     const newestFirst = ['third photo', 'second photo', 'first photo', 'older photo'];

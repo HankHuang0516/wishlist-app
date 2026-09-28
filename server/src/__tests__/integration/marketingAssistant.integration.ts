@@ -95,11 +95,17 @@ describe('marketing four-image workflow / isolated PostgreSQL', () => {
         expect(publicView.body.media.at(-1).id).toBe(mediaId);
     });
     it('only reveals the free limit when reached and does not treat legacy Premium as verified', async () => {
+        const allowance = () => request(app).get('/api/marketing/availability')
+            .set('Authorization', `Bearer ${token(owner)}`);
+        expect((await allowance()).body).toMatchObject({ freeUsedThisMonth: 0, freeMonthlyLimit: 3,
+            permanentCreditsRemaining: 0, paidPurchasesAvailable: false });
         for (let i = 0; i < 3; i++) {
             const { listingId, mediaId } = await listingPhoto();
             expect((await post('/jobs', { clientRequestId: randomUUID(), listingId, sourceMediaId: mediaId })).status).toBe(202);
         }
         await prisma.user.update({ where: { id: owner }, data: { isPremium: true } });
+        expect((await allowance()).body).toMatchObject({ freeUsedThisMonth: 3,
+            permanentCreditsRemaining: 0, paidPurchasesAvailable: false });
         const { listingId, mediaId } = await listingPhoto();
         const denied = await post('/jobs', { clientRequestId: randomUUID(), listingId, sourceMediaId: mediaId });
         expect(denied.status).toBe(429); expect(denied.body.errorCode).toBe('MONTHLY_LIMIT');

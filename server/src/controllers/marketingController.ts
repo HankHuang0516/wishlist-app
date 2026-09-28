@@ -46,9 +46,19 @@ function fail(res: Response, error: unknown) {
     return res.status(503).json({ error: '行銷小助手暫時無法使用', errorCode: 'MARKETING_UNAVAILABLE' });
 }
 
-export function marketingAvailability(req: AuthRequest, res: Response) {
+export async function marketingAvailability(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
-    return res.set('Cache-Control', 'private, no-store').json({ available: marketingEnabledFor(req.user.id) });
+    try {
+        const period = freeMarketingWindow(new Date());
+        const usedThisMonth = await prisma.marketingJob.count({ where: { ownerUserId: req.user.id,
+            parentJobId: null, quotaPeriodStart: period.startsAt,
+            status: { in: ['PENDING', 'PROCESSING', 'REVIEW', 'COMPLETED'] } } });
+        // No verified paid-credit ledger exists yet. Do not infer entitlement
+        // from the legacy isPremium flag or an unverified client receipt.
+        return res.set('Cache-Control', 'private, no-store').json({ available: marketingEnabledFor(req.user.id),
+            freeMonthlyLimit: MARKETING_FREE_MONTHLY_LIMIT, freeUsedThisMonth: usedThisMonth,
+            permanentCreditsRemaining: 0, paidPurchasesAvailable: false });
+    } catch (error) { return fail(res, error); }
 }
 
 async function snapshot(ownerUserId: number, sourceMediaId: string, listingId?: string) {

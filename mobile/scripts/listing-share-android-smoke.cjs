@@ -6,6 +6,7 @@ const { randomUUID } = require('node:crypto');
 const serial = process.env.SIM_MANAGER_SERIAL;
 if (!process.env.SIM_MANAGER_TOKEN || !/^emulator-\d{4,5}$/.test(serial ?? '')) throw new Error('Managed Android lease required');
 const pkg = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1';
+const { version: versionName, android: { versionCode } } = require('../app.config.js').expo;
 const xmlPath = `/sdcard/wishlist-share-${randomUUID()}.xml`;
 const adb = (args, timeout = 25000) => execFileSync('/Users/hank/Library/Android/sdk/platform-tools/adb', ['-s', serial, ...args],
   { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -26,7 +27,7 @@ async function tap(label) {
 }
 (async () => {
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
-  if (!installed.includes('versionCode=28 ') || !installed.includes('versionName=2.0.11')) throw new Error('Expected internal candidate is not installed');
+  if (!installed.includes(`versionCode=${versionCode} `) || !installed.includes(`versionName=${versionName}`)) throw new Error('Expected internal candidate is not installed');
   adb(['shell', 'am', 'force-stop', pkg]);
   adb(['shell', 'am', 'start', '-W', '-n', `${pkg}/.MainActivity`]);
   await waitFor('我的');
@@ -62,7 +63,7 @@ async function tap(label) {
     await pause(500);
   }
   if (!inboxReady) throw new Error('Chat inbox never rendered a final state');
-  console.log(JSON.stringify({ versionCode: 28, managementEntry: true, publishedListingTab: tab,
+  console.log(JSON.stringify({ versionCode, managementEntry: true, publishedListingTab: tab,
     shareActionVisible: true, systemShareSheetOpened: true, chatInboxRendered: true,
     messageSent: false, productionDataChanged: false }));
 })().catch(error => { console.error(error instanceof Error ? error.message : 'Listing share smoke failed'); process.exitCode = 1; })

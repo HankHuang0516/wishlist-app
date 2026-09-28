@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const { hardenGradle, hardenProperties } = require('../../plugins/withReleaseSigning.js');
+const { isolatedDebugQa, isolatedVisualQa } = require('../../plugins/withIsolatedDebugQa.js');
 
 const template = `signingConfigs { debug { storeFile file('debug.keystore') } }
 buildTypes {
@@ -10,6 +11,13 @@ buildTypes {
 }`;
 
 describe('release signing fail-closed config plugin', () => {
+  it('signs a fresh Expo template before the isolated QA build type is injected', () => {
+    const plugins = require('../../app.config.js').expo.plugins as string[];
+    expect(plugins.indexOf('./plugins/withIsolatedDebugQa')).toBeLessThan(plugins.indexOf('./plugins/withReleaseSigning'));
+    const result = isolatedVisualQa(isolatedDebugQa(hardenGradle(template)));
+    expect(result).toContain('signingConfig signingConfigs.release');
+    expect(result).toContain('wishlistVisualQaSuffix');
+  });
   it('uses runtime-only release credentials, never the debug key', () => {
     const result = hardenGradle(template);
     expect(result).toContain('release { signingConfig signingConfigs.release }');

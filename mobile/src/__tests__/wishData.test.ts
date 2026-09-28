@@ -1,13 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { emptySearchFilters, TAIWAN_BOUNDS } from '../listingSearch';
-import { parseMatchWishes, parseWishMatchPage, wishMatchPath } from '../wishData';
+import { parseMatchWishes, parseWishMatchPage, rankHomeMatches, wishMatchPath } from '../wishData';
 const api = 'https://example.invalid'; const future = new Date(Date.now() + 86400000).toISOString();
 const wish = () => ({ id: 1, name: 'Sony 相機', maxPrice: 5000, priceCurrency: 'TWD', wishlist: { id: 2, title: '私人願望', isPublic: false } });
 function listing() { const id = randomUUID(), mediaId = randomUUID(); return { id, title: 'Sony 相機', description: '合成測試相機', brand: 'Sony', category: 'electronics', condition: 'USED', price: '4000.00', currency: 'TWD', deliveryMethods: ['MEETUP'], negotiable: false, status: 'ACTIVE', expiresAt: future, owner: { id: 3, name: null }, location: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 }, media: [{ id: mediaId, imageUrl: `${api}/api/listing-media/${mediaId}/image`, thumbnailUrl: `${api}/api/listing-media/${mediaId}/thumbnail` }] }; }
 const match = () => ({ wishItemId: 1, listing: listing(), score: 60, budget: 'WITHIN', distanceKm: null, reasons: [{ code: 'NAME', text: '名稱符合' }, { code: 'BUDGET', text: '在上限內' }] });
 const page = (items: unknown[] = [match()]) => ({ items, nextCursor: null, scannedCandidates: items.length, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: '本頁按評分排序，不是全台最高分保證' });
 describe('native wish browsing and explainable match protocol', () => {
+  it('shows one best seller match per wish and keeps all distinct thumbnail alternatives', () => {
+    const first = parseWishMatchPage(page(), 1, api).items[0];
+    const better = { ...first, listing: { ...first.listing, id: randomUUID() }, score: 88 };
+    const own = { ...first, listing: { ...first.listing, id: randomUUID(), owner: { id: 19, name: null } }, score: 99 };
+    const ranked = rankHomeMatches([first, better, own, first], 19);
+    expect(ranked).toHaveLength(2);
+    expect(ranked.map(item => item.listing.id)).toEqual([better.listing.id, first.listing.id]);
+    expect(ranked[0].listing.media[0].thumbnailUrl).toBeTruthy();
+  });
   it('projects private eligible wishes without leaking extra API fields', () => { const r = parseMatchWishes({ items: [{ ...wish(), password: 'drop' }], nextCursor: null }); expect(r.items[0]).toEqual(wish()); expect(r.items[0]).not.toHaveProperty('password'); });
   it.each([{ id: 0 }, { name: '' }, { name: 'x'.repeat(201) }, { maxPrice: -1 }, { maxPrice: NaN }, { maxPrice: 1e12 + 1 }, { priceCurrency: 'bad' }, { wishlist: { id: 0, title: 'x', isPublic: false } }])('rejects malformed wishlist metadata %p', overrides => expect(() => parseMatchWishes({ items: [{ ...wish(), ...overrides }], nextCursor: null })).toThrow());
   it('accepts unspecified budget, currencies and empty pages without inventing prices', () => { expect(parseMatchWishes({ items: [{ ...wish(), maxPrice: null, priceCurrency: null }], nextCursor: null }).items[0].maxPrice).toBeNull(); expect(parseMatchWishes({ items: [], nextCursor: null }).items).toEqual([]); });

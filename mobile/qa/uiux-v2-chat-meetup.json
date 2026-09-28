@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "screen": "chat-meetup",
+  "allowedScreenStates": ["meetup-proposed-v1"],
+  "designReference": "wishlist-uiux-social-billing-v2-20260927.png",
+  "items": [
+    { "id": "safe-area-header", "weight": 15, "critical": false, "requiredMetrics": ["safeAreaBottomPt", "headerBottomPt"], "criterion": "同畫布頁首、安全區與返回／封鎖導覽符合核准標註；主要邊界誤差不超過 4pt。" },
+    { "id": "product-photo-price", "weight": 20, "critical": true, "requiredMetrics": ["productCardTopPt", "productCardBottomPt", "photoWidthPt"], "criterion": "商品照片、商品 ID、名稱、價格與幣別一致；不公開私人原圖。" },
+    { "id": "message-order-bubbles", "weight": 20, "critical": true, "criterion": "雙方訊息順序、時間與氣泡層級符合核准狀態，訊息不漏失或重複。" },
+    { "id": "meetup-state-entry", "weight": 10, "critical": true, "requiredMetrics": ["meetupCardTopPt", "meetupCardBottomPt"], "criterion": "面交入口、狀態、版本、時間、地點及詳情操作正確且保護私密位置。" },
+    { "id": "composer-keyboard", "weight": 20, "critical": true, "requiredMetrics": ["composerTopPt", "sendButtonCenterXPt"], "criterion": "輸入列與傳送鍵在鍵盤開啟及放大字級時仍可見、可點、可送出。" },
+    { "id": "refresh-meetup-state", "weight": 10, "critical": true, "criterion": "在本提議中狀態點擊刷新後，最新訊息與同版面交摘要仍正確；地點只對聊天室成員呈現，且操作與訊息區不互相遮擋。" },
+    { "id": "touch-screen-reader", "weight": 5, "critical": true, "criterion": "主要觸控區至少 44pt，VoiceOver／TalkBack 名稱、順序與操作可用。" }
+  ]
+}

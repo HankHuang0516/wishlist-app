@@ -6,7 +6,7 @@
 
 - 必須明確指定本機、獨立命名的 `TEST_DATABASE_URL`；查詢參數及 fragment 一律拒絕，不載入 `.env`。正式資料庫與一般本機資料庫不可使用。
 - 子程序只接收白名單設定，JWT 簽署金鑰每次以密碼學亂數產生，不沿用任何正式管理、提供者或簽章憑證。macOS 自動加入的 `__CF_USER_TEXT_ENCODING` 僅作程序執行設定。
-- 伺服器只監聽 `127.0.0.1` 的動態連接埠，建立三個 UUID 隔離的合成買家、賣家與第三人帳號；驗證狀態僅為本機 fixture。登入仍經過真實 bcrypt、JWT 與資料庫版本檢查。
+- 伺服器通常只監聽 `127.0.0.1` 的動態連接埠，建立三個 UUID 隔離的合成買家、賣家與第三人帳號；驗證狀態僅為本機 fixture。首頁視覺 QA 明確 opt-in 時才固定監聽 `127.0.0.1:18889` 並額外建立兩名合成賣家，埠已占用即拒絕啟動；登入仍經過真實 bcrypt、JWT 與資料庫版本檢查。
 - 合成 Email、密碼與登入 token 只存在控制程序記憶體／IPC，不輸出、不存入 repo 或報告，也不可截入登入畫面證據。
 - 實際掛載現行 auth、users、native-wishes、listings、listing-media、chat 路由，不偽造登入、預覽、刪除或恢復成功。沒有注入 `req.user` 的測試捷徑。
 - 只允許合成身份登入／寫入。其他帳號、跨 fixture 聊天／封鎖、管理端點、API key 產生、寄信與外部提供者操作不開放。這是路由與設定隔離，**不是 OS 層網路封鎖**；地圖圖磚等原生端公共服務另須按實際環境驗證。
@@ -41,6 +41,16 @@
 `--authenticated-listing-batch-two-ai-publish-one` 是新增且**尚未執行**的 iOS 高規格關卡：沿用上項雙件私照、真 MiniMax AI 回填與賣家編輯／重開，再於原生畫面填入合成雙北位置、明確賣家售價及公開同意，只逐件確認橘燈後按刊登。後台核對恰一件 ACTIVE、售價 NT$450、預設 30 天、約 2 公里模糊座標與橘燈照片已公開；藍杯仍是私人草稿，匿名及其他帳號均不能取圖。新截圖與收據只有實際原生執行且清理成功才可算通過。2026-09-25 本輪磁碟約餘 14.5 GiB，仍不足 15 GiB 建置門檻；保留既有簽章測試 App 與結果，不用舊來源 build 代替新關卡。
 
 ## 原生操作驗收與已完成證據
+
+### Android Release 等效視覺審查包（首頁固定資料局部實拍）
+
+`node mobile/scripts/build-android-visual-qa.cjs YYYYMMDDHHmm` 會明確 opt-in 建置不可除錯、內含靜態 JS 的 Android `visualQa` 變體。它使用獨立的 `.visualqaLABEL` package、既有本機測試簽章與固定 `http://127.0.0.1:18889` 本機測試 API 入口；僅此 QA package＋公開 opt-in 旗標＋精確 loopback 位址可接受明文 HTTP，正式 Release 仍強制 HTTPS。不讀正式上傳金鑰或 Railway 連線設定，不更動一般 Release 的 package／簽章，也不可上傳商店。每次 label 只能用一次，輸出至新的 `mobile/build/android-visual-qa-LABEL/`，並檢查 APK 身分、不可除錯、靜態 bundle、簽章及來源指紋。
+
+`202609281220` 的主機建置成功，APK SHA-256 為 `595ab5ff487ec4bae6dedcabfb7ae8ae91c1a776f2b1fb35fbc37921325cfa11`。`test-uiux-home-qa.cjs` 已在獨立本機測試資料庫用真實 HTTP 登入、上傳合成杯子照片、刊登三位不同賣家的商品、建立兩個願望並取得 73／46／41 分的三筆配對；停機後資料與媒體清理計數皆 0。這也發現先前首頁 r3 候選的第三件其實不會配對、92 分不符後台；已改用待 Hank 確認的 r4 候選與 v2 fixture。
+
+在受管理 Android 16／320×640 模擬器上，`android-visual-home-smoke.cjs 202609281220` 已將精確 `tcp:18889` 反向通道接到只監聽主機 loopback 的隔離服務，實際開啟這個獨立包、經現行登入表單登入合成買家、取得照片與配對、展開多件清單並捲到地圖入口。通過收據與三張原始截圖位於 `mobile/build/android-visual-home-570a8c57-fe44-4b38-953a-ec5995102086/`：`passed:true`，73／46／41 分、照片載入後畫面、APP package 卸載與自己建立的 reverse 移除均已記錄，六類 fixture 清理皆為 0；另以唯讀 SQL 回查 User／Listing／ListingMedia 為 `0／0／0`。登入憑證只在控制程序記憶體，不在畫面或報告。之前未通過的收據保留，不算成功。
+
+人工檢視最終收合、展開與捲動畫面：320px 的主商品名稱、NT$50、地點與「吻合 73 分」可完整閱讀，縮圖列不再拆斷尾字；展開後 NT$55／60 和 46／41 分及地圖入口都可達。與獨立設計 r4 候選仍有明顯排版差異（原生較大文字使說明多換行、卡片下移，小螢幕「今天想找什麼」只露出開頭）；**Hank 尚未核准候選，不能產生正式相似度分數**。此包只驗固定首頁狀態，沒有證明整頁所有手勢／輔助朗讀、iOS 同 fixture、正式 Flickr／Railway、商店配發或全 APP 99%；不能上傳 Google Play。
 
 Android 已加入獨立的 debug QA 建置、真實介面 instrumentation 與受監督裝置控制器；iOS 已加入獨立 XCUITest runner、Simulator Debug 建置、匿名導覽及多個單一 authenticated flow。是否通過仍以各次實際 `result.json`／畫面證據為準，不能由控制器已寫好倒推通過。2026-09-24 最新來源證據：iOS 匿名2／2、刪除1／1、商品探索1／1、聊天1／1、面交1／1、連拍刊登入口1／1、相簿商品照單張私有上傳1／1、相簿同批兩張不同商品私有上傳1／1；Android 兩張連拍私有上傳已在獨立流程通過。正式 Release 禁止明文 HTTP，不能直接用此 loopback API 取代正式服務；不覆寫已安裝正式簽章 App、不卸載／清除既有使用者資料、不放寬 Release 的 HTTPS 限制。
 

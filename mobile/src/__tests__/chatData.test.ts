@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { mergeMessages, messageBody, parseChatInbox, parseChatMessage, parseChatRoom, parseMessagePage, retainMemberMessages } from '../chatData';
 const roomID = randomUUID(); const listingID = randomUUID();
-const rawRoom = { id: roomID, listingId: listingID, buyerUserId: 1, sellerUserId: 2, lastMessageSequence: 10, lastReadSequence: 2, unreadCount: 3, blocked: false, blockedByMe: false, blockedByOther: false, listingAvailable: true, lastMessageAt: '2026-09-15T08:00:00.000Z',
-  buyer: { id: 1, name: '合成買家' }, seller: { id: 2, name: '合成賣家' }, listing: { id: listingID, title: '合成相機', status: 'ACTIVE', expiresAt: '2026-10-15T15:59:59.999Z' } };
+const rawRoom = { id: roomID, listingId: listingID, buyerUserId: 1, sellerUserId: 2, lastMessageSequence: 10, lastReadSequence: 2, unreadCount: 3, blocked: false, blockedByMe: false, blockedByOther: false, listingAvailable: true, lastMessageAt: '2026-09-15T08:00:00.000Z', lastMessageText: '還在嗎？',
+  buyer: { id: 1, name: '合成買家' }, seller: { id: 2, name: '合成賣家' }, listing: { id: listingID, title: '合成相機', status: 'ACTIVE', expiresAt: '2026-10-15T15:59:59.999Z', price: 590, currency: 'TWD', thumbnailUrl: null } };
 const room = () => parseChatRoom(rawRoom, 1);
 const message = (sequence = 1) => ({ id: randomUUID(), conversationId: roomID, senderUserId: 2, clientMessageId: randomUUID(), sequence, text: '週六下午面交可以嗎？', createdAt: '2026-09-15T08:00:00.000Z' });
 describe('private chat response boundaries', () => {
@@ -16,6 +16,8 @@ describe('private chat response boundaries', () => {
     { id: 'invalid' }, { buyerUserId: 0 }, { sellerUserId: 1 }, { lastMessageSequence: -1 }, { lastReadSequence: 99 }, { unreadCount: 99 }, { blocked: true },
     { blockedByMe: 'true' }, { listingAvailable: 'true' }, { lastMessageAt: 'invalid' }, { buyer: { id: 3, name: null } }, { seller: { id: 2, name: 42 } }, { listing: null },
     { listing: { ...rawRoom.listing, id: randomUUID() } }, { listing: { ...rawRoom.listing, title: '' } }, { listing: { ...rawRoom.listing, status: 'PAYMENT' } },
+    { lastMessageText: 42 }, { listing: { ...rawRoom.listing, price: -1 } }, { listing: { ...rawRoom.listing, currency: 'USD' } },
+    { listingAvailable: false, listing: { ...rawRoom.listing, thumbnailUrl: 'https://example.invalid/photo' } },
   ])('rejects unsafe or inconsistent conversation state %j', change => expect(() => parseChatRoom({ ...rawRoom, ...change }, 1)).toThrow());
   it('distinguishes a block by the other participant from my own block', () => {
     expect(parseChatRoom({ ...rawRoom, blocked: true, blockedByOther: true }, 1)).toMatchObject({ blocked: true, blockedByMe: false, blockedByOther: true });

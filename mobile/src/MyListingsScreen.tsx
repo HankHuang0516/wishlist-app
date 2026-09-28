@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError, createApi } from './api';
 import { ListingExpiryPicker } from './ListingExpiryPicker';
@@ -8,6 +8,7 @@ import { earliestExtensionDate, listingEditBody, managementTab, MANAGEMENT_TABS,
   ManagementTab, parseManagedListing, parseManagedListingPage } from './managedListing';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { MarketingAssistant } from './MarketingAssistant';
+import { listingShareUrl } from './listingShare';
 
 const labels: Record<ManagedListing['status'], string> = {
   DRAFT: '草稿', PENDING_CONFIRMATION: '待確認', ACTIVE: '在售', RESERVED: '已保留',
@@ -16,6 +17,8 @@ const labels: Record<ManagedListing['status'], string> = {
 type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string; onClose: () => void };
 
 export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props) {
+  const { width, fontScale } = useWindowDimensions();
+  const compactCardActions = width >= 390 && fontScale < 1.3;
   const [tab, setTab] = useState<ManagementTab>('在售');
   const [rows, setRows] = useState<ManagedListing[]>([]), [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -77,14 +80,24 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
     try { void mutate(item, `/listings/${item.id}`, 'PATCH', listingEditBody(item, title, description, price), item.status, `「${item.title}」資料已更新。`); }
     catch (failure) { setError(failure instanceof Error ? failure.message : '請確認商品資料。'); }
   }
+  async function share(item: ManagedListing) {
+    try {
+      const url = listingShareUrl(item, apiUrl, __DEV__);
+      if (!url) return;
+      await Share.share({ message: `看看「${item.title}」：${url}`, url, title: item.title });
+    } catch { Alert.alert('分享失敗', '無法開啟分享選單，請稍後重試。'); }
+  }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);
-  const action = (label: string, press: () => void, danger = false) => <Pressable accessibilityRole="button" disabled={loading} onPress={press}
-    style={[s.action, danger && s.dangerAction, loading && s.disabled]}><Text style={[s.actionText, danger && s.dangerText]}>{label}</Text></Pressable>;
+  const action = (label: string, press: () => void, danger = false, compact = false) => <Pressable accessibilityRole="button" disabled={loading} onPress={press}
+    style={[s.action, compact && s.compactAction, danger && s.dangerAction, loading && s.disabled]}><Text style={[s.actionText, compact && s.compactActionText, danger && s.dangerText]}>{label}</Text></Pressable>;
+  const cardAction = (label: string, press: () => void, danger = false) => action(label, press, danger, compactCardActions);
   return <SafeAreaView style={s.screen}>
-    <View style={s.header}><View><Text accessibilityRole="header" style={s.heading}>我的商品</Text><Text style={s.muted}>管理本人刊登與草稿</Text></View>{action('完成', onClose)}</View>
-    <View style={s.tabs}>{MANAGEMENT_TABS.map(name => <Pressable key={name} accessibilityRole="tab" accessibilityState={{ selected: tab === name }}
-      onPress={() => { setTab(name); setEditing(null); setExpiryId(null); }} style={[s.tab, tab === name && s.activeTab]}><Text style={[s.tabText, tab === name && s.activeTabText]}>{name}</Text></Pressable>)}</View>
-    <Text style={s.summary}>本頁「{tab}」已載入 {visible.length} 件；全部狀態共已載入 {rows.length} 件{cursor ? '，還有更多' : ''}。</Text>
+    <View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel="關閉我的商品" accessibilityHint="返回我的頁面"
+      onPress={onClose} style={s.closeButton}><Text style={s.closeGlyph}>×</Text></Pressable>
+      <Text accessibilityRole="header" style={s.heading}>我的商品</Text><View style={s.headerSpacer} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" /></View>
+    <ScrollView horizontal style={s.tabRail} showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs}>{MANAGEMENT_TABS.map(name => <Pressable key={name} accessibilityRole="tab" accessibilityState={{ selected: tab === name }}
+      onPress={() => { setTab(name); setEditing(null); setExpiryId(null); }} style={[s.tab, tab === name && s.activeTab]}><Text style={[s.tabText, tab === name && s.activeTabText]}>{name} ({rows.filter(item => managementTab(item, now) === name).length})</Text></Pressable>)}</ScrollView>
+    {!!cursor && <Text style={s.summary}>本頁「{tab}」已載入 {visible.length} 件；全部狀態共已載入 {rows.length} 件，還有更多。</Text>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
     <FlatList data={visible} keyExtractor={item => item.id} keyboardShouldPersistTaps="handled" contentContainerStyle={s.list}
@@ -92,23 +105,27 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
       renderItem={({ item }) => <View style={s.card}>
         <View style={s.cardTop}><View style={s.photoShell}>{item.media[0] ? <PrivateListingPhoto thumbnailUrl={item.media[0].thumbnailUrl} apiUrl={apiUrl} token={token}
           label={`${item.title}商品縮圖`} style={s.photo} /> : <View style={s.photo}><Text style={s.muted}>無照片</Text></View>}</View>
-          <View style={s.info}><Text style={s.title}>{item.title}</Text><Text style={s.muted}>{labels[item.status]}{managementTab(item, now) === '已失效' && item.status !== 'EXPIRED' ? ' · 日期已過' : ''} · {item.condition === 'USED' ? '二手' : '新品'}</Text>
+          <View style={s.info}><Text style={s.title}>{item.title}</Text>
             <Text style={s.price}>{item.price === null ? '售價未填' : item.price === 0 ? '免費贈送' : `NT$ ${new Intl.NumberFormat('zh-TW').format(item.price)}`}</Text>
+            <View style={s.statusRow}><Text style={[s.statusBadge, managementTab(item, now) === '在售' && s.activeStatusBadge]}>{managementTab(item, now) === '已失效' && item.status !== 'EXPIRED' ? '已失效 · 日期已過' : labels[item.status]}</Text>
+              <Text style={s.muted}>{item.condition === 'USED' ? '二手' : '新品'}</Text></View>
             <Text style={s.muted}>{item.location ? `${item.location.county}${item.location.district}` : '地點未填'}{item.expiresAt ? ` · 至 ${item.expiresAt.slice(0, 10)}` : ''}</Text></View></View>
-        {!!item.description && <Text numberOfLines={detailId === item.id ? undefined : 3} style={s.body}>{item.description}</Text>}
+        {detailId === item.id && !!item.description && <Text style={s.body}>{item.description}</Text>}
         {detailId === item.id && <Text style={s.muted}>分類：{item.category ?? '未分類'} · 建立日期：{item.createdAt.slice(0, 10)} · 商品編號：{item.id}</Text>}
-        <View style={s.actions}>{action(detailId === item.id ? '收合詳情' : '查看詳情', () => setDetailId(current => current === item.id ? null : item.id))}</View>
+        <View style={s.actions}>{cardAction(detailId === item.id ? '收合詳情' : '查看詳情', () => setDetailId(current => current === item.id ? null : item.id))}
+        {listingShareUrl(item, apiUrl, __DEV__) && cardAction('分享連結', () => void share(item))}
         {(item.status === 'DRAFT' || item.status === 'ACTIVE' || item.status === 'RESERVED' || item.status === 'EXPIRED') &&
-          <View style={s.actions}>{managementTab(item, now) !== '已失效' && action('編輯資訊', () => { setEditing(item.id); setTitle(item.title); setDescription(item.description ?? ''); setPrice(item.price === null ? '' : String(item.price)); })}
-            {item.status === 'ACTIVE' && managementTab(item, now) === '在售' && action('標記保留', () => askStatus(item, 'reserve', 'RESERVED'))}
-            {item.status === 'RESERVED' && managementTab(item, now) === '已保留' && action('恢復在售', () => askStatus(item, 'release', 'ACTIVE'))}
-            {['ACTIVE', 'RESERVED'].includes(item.status) && managementTab(item, now) !== '已失效' && action('標記售出', () => askStatus(item, 'sold', 'SOLD'))}
-            {['ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && action('延長期限', () => setExpiryId(item.id))}
-            {action('移除', () => askStatus(item, 'remove', 'REMOVED'), true)}</View>}
+          <>{managementTab(item, now) !== '已失效' && cardAction('編輯資訊', () => { setEditing(item.id); setTitle(item.title); setDescription(item.description ?? ''); setPrice(item.price === null ? '' : String(item.price)); })}
+            {item.status === 'ACTIVE' && managementTab(item, now) === '在售' && detailId === item.id && cardAction('標記保留', () => askStatus(item, 'reserve', 'RESERVED'))}
+            {item.status === 'RESERVED' && managementTab(item, now) === '已保留' && cardAction('恢復在售', () => askStatus(item, 'release', 'ACTIVE'))}
+            {['ACTIVE', 'RESERVED'].includes(item.status) && managementTab(item, now) !== '已失效' && cardAction('標記售出', () => askStatus(item, 'sold', 'SOLD'))}
+            {['ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && cardAction('延長期限', () => setExpiryId(item.id))}
+            {detailId === item.id && cardAction('移除', () => askStatus(item, 'remove', 'REMOVED'), true)}</>}</View>
         {managementTab(item, now) === '已失效' && <Text style={s.muted}>此商品已失效；請先延長期限，再編輯或繼續刊登。</Text>}
+        {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <Text style={s.muted}>分享連結仍可複製，但其他人只會看到「已停止刊登」。</Text>}
         {editing === item.id && <View style={s.editor}><Text style={s.subheading}>編輯商品資訊</Text>
           <Text style={s.fieldLabel}>商品名稱</Text><TextInput accessibilityLabel="編輯商品名稱" value={title} onChangeText={setTitle} maxLength={100} style={s.input} />
-          <Text style={s.fieldLabel}>商品說明</Text><TextInput accessibilityLabel="編輯商品說明" value={description} onChangeText={setDescription} multiline maxLength={3000} style={[s.input, s.description]} />
+          <Text style={s.fieldLabel}>商品說明</Text><TextInput accessibilityLabel="編輯商品說明" value={description} onChangeText={setDescription} multiline scrollEnabled maxLength={3000} style={[s.input, s.description]} />
           <Text style={s.fieldLabel}>售價（NT$，0 代表免費贈送）</Text><TextInput accessibilityLabel="編輯商品售價，新臺幣" value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={s.input} />
           <View style={s.actions}>{action('取消編輯', () => setEditing(null))}{action('儲存修改', () => save(item))}</View>
           <Text style={s.subheading}>額外選項</Text>
@@ -128,26 +145,33 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: iosColors.background },
-  header: { padding: iosSpacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: { ...iosType.title2, color: iosColors.label }, subheading: { ...iosType.headline, color: iosColors.label },
+  header: { minHeight: 56, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator },
+  closeButton: { width: minimumTapSize, height: minimumTapSize, alignItems: 'center', justifyContent: 'center' },
+  closeGlyph: { ...iosType.title2, color: iosColors.label }, headerSpacer: { width: minimumTapSize },
+  heading: { ...iosType.headline, color: iosColors.label, fontWeight: '700' }, subheading: { ...iosType.headline, color: iosColors.label },
   fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' },
-  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.lg },
+  tabRail: { flexGrow: 0 },
+  tabs: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.lg },
   tab: { minHeight: minimumTapSize, justifyContent: 'center', paddingHorizontal: iosSpacing.sm, borderRadius: iosRadius.pill, backgroundColor: iosColors.surface },
   activeTab: { backgroundColor: iosColors.tint }, tabText: { ...iosType.footnote, color: iosColors.secondaryLabel },
   activeTabText: { color: iosColors.white, fontWeight: '700' },
   summary: { ...iosType.footnote, color: iosColors.secondaryLabel, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.sm },
-  list: { paddingHorizontal: iosSpacing.lg, paddingBottom: iosSpacing.xxl, gap: iosSpacing.md },
+  list: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.xs, paddingBottom: iosSpacing.xxl, gap: iosSpacing.md },
   card: { padding: iosSpacing.md, borderRadius: iosRadius.card, backgroundColor: iosColors.surface, gap: iosSpacing.sm, ...iosShadow },
   cardTop: { flexDirection: 'row', gap: iosSpacing.sm }, photoShell: { width: 86, height: 86, overflow: 'hidden' }, photo: { width: 86, height: 86, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
   info: { flex: 1, gap: iosSpacing.xxs }, title: { ...iosType.headline, color: iosColors.label },
+  statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: iosSpacing.xxs },
+  statusBadge: { ...iosType.caption, color: iosColors.secondaryLabel, backgroundColor: iosColors.surfaceSecondary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: iosRadius.small, overflow: 'hidden' },
+  activeStatusBadge: { color: iosColors.brand, backgroundColor: iosColors.brandSoft },
   price: { ...iosType.headline, color: iosColors.tint }, body: { ...iosType.subheadline, color: iosColors.label },
   muted: { ...iosType.footnote, color: iosColors.secondaryLabel }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs },
   action: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, borderRadius: iosRadius.control, justifyContent: 'center', backgroundColor: iosColors.tintSoft },
   actionText: { ...iosType.subheadline, color: iosColors.tint, fontWeight: '700' }, dangerAction: { backgroundColor: iosColors.dangerSoft },
+  compactAction: { paddingHorizontal: iosSpacing.xs }, compactActionText: { ...iosType.footnote, fontWeight: '700' },
   dangerText: { color: iosColors.danger }, disabled: { opacity: 0.45 },
-  editor: { gap: iosSpacing.sm, borderTopColor: iosColors.separator, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: iosSpacing.sm },
-  input: { minHeight: 50, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary, padding: iosSpacing.sm, ...iosType.body, color: iosColors.label },
-  description: { minHeight: 90, textAlignVertical: 'top' }, footer: { gap: iosSpacing.sm, alignItems: 'center', padding: iosSpacing.md },
+  editor: { gap: iosSpacing.sm, borderTopColor: iosColors.separator, borderTopWidth: StyleSheet.hairlineWidth, padding: iosSpacing.md, backgroundColor: iosColors.surfaceSecondary, borderRadius: iosRadius.control },
+  input: { minHeight: 50, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, padding: iosSpacing.sm, ...iosType.body, color: iosColors.label },
+  description: { height: 110, textAlignVertical: 'top' }, footer: { gap: iosSpacing.sm, alignItems: 'center', padding: iosSpacing.md },
   notice: { ...iosType.footnote, color: iosColors.brand, backgroundColor: iosColors.brandSoft, marginHorizontal: iosSpacing.lg, padding: iosSpacing.sm, borderRadius: iosRadius.control },
   error: { ...iosType.footnote, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, marginHorizontal: iosSpacing.lg, padding: iosSpacing.sm, borderRadius: iosRadius.control },
 });

@@ -1,16 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, ViewToken } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
+import { Ionicons } from '@expo/vector-icons';
 import { ApiError, createApi } from './api';
 import { ChatDataError, ChatMessage, ChatRoomRecord, mergeMessages, messageBody, parseChatInbox, parseChatMessage, parseChatRoom, parseMessagePage, retainMemberMessages } from './chatData';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { PendingStoreError } from './pendingStore';
 import { MeetupSheet } from './MeetupSheet';
+import { MeetupRecord, parseMeetup } from './meetupData';
+import { PrivateListingPhoto } from './PrivateListingPhoto';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
-type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; activeRoom: string | null; onRoomChange: (id: string | null) => void };
+type Props = { api: ReturnType<typeof createApi>; apiUrl: string; token: string; userId: number; activeRoom: string | null; onRoomChange: (id: string | null) => void };
+const listingPrice = (room: ChatRoomRecord) => room.listing.price === null ? '售價未提供' : `NT$${room.listing.price.toLocaleString('zh-TW')}`;
+function ChatListingPhoto({ room, apiUrl, token }: { room: ChatRoomRecord; apiUrl: string; token: string }) {
+  return <View style={s.photoShell}>{room.listingAvailable && room.listing.thumbnailUrl && token
+    ? <PrivateListingPhoto thumbnailUrl={room.listing.thumbnailUrl} apiUrl={apiUrl} token={token} label="聊天商品照片" style={s.photo} qaStatus={false} />
+    : <Ionicons name="image-outline" size={25} color={iosColors.tertiaryLabel} />}</View>;
+}
 
-export function ChatInbox({ api, apiUrl, userId, activeRoom, onRoomChange }: Props) {
+export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange }: Props) {
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const sequence = useRef(0); const alive = useRef(true); const loading = useRef(false);
   async function load(next?: string) {
@@ -24,18 +33,26 @@ export function ChatInbox({ api, apiUrl, userId, activeRoom, onRoomChange }: Pro
     finally { if (alive.current && current === sequence.current) { setBusy(false); loading.current = false; } }
   }
   useEffect(() => { alive.current = true; void load(); const timer = setInterval(() => { if (AppState.currentState === 'active' && !activeRoom) void load(); }, 30_000); return () => { alive.current = false; sequence.current++; loading.current = false; clearInterval(timer); }; }, [api, userId, activeRoom]);
-  return <View style={s.screen}><View style={s.header}><Text style={s.heading}>聊天與面交</Text>{busy && <ActivityIndicator />}</View>{!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    <FlatList data={rooms} keyExtractor={room => room.id} contentContainerStyle={s.list} renderItem={({ item }) => <Pressable accessibilityRole="button" style={s.card} onPress={() => onRoomChange(item.id)}><Text style={s.title}>{item.listing.title}</Text><Text style={s.text}>{(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || (item.archived ? '對方帳號已刪除或商品已移除' : '商品聯絡人')}{item.unreadCount ? ` · ${item.unreadCount} 則未讀` : ''}</Text>{(!item.listingAvailable || item.blocked) && <Text style={s.small}>{item.archived ? '已封存 · 僅供查看' : item.blocked ? '已封鎖 · 歷史仍可查看' : '商品已停止刊登 · 歷史仍可查看'}</Text>}</Pressable>} ListEmptyComponent={!busy && !error ? <Text style={s.text}>還沒有商品聊天。可從商品頁聯絡賣家。</Text> : null} ListFooterComponent={<View style={s.list}>{cursor && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>載入較早的聊天</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View>} />
-    {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} userId={userId} roomId={activeRoom} onClose={() => onRoomChange(null)} />}
+  return <View style={s.screen}><View style={s.inboxHeader}><Text style={s.heading}>聊天與面交</Text><Text style={s.inboxSubtitle}>與買家或賣家聯繫，討論商品細節並約面交。</Text>{busy && <ActivityIndicator style={s.inboxActivity} />}</View>{!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
+    <FlatList data={rooms} keyExtractor={room => room.id} contentContainerStyle={[s.list, !rooms.length && s.emptyList]} renderItem={({ item }) => <Pressable accessibilityRole="button" accessibilityLabel={`${item.listing.title}，與${(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || '商品聯絡人'}聊天${item.unreadCount ? `，${item.unreadCount} 則未讀` : ''}`} style={s.inboxCard} onPress={() => onRoomChange(item.id)}>
+      <ChatListingPhoto room={item} apiUrl={apiUrl} token={token} />
+      <View style={s.inboxCardBody}><View style={s.inboxCardTop}><Text numberOfLines={1} style={s.inboxTitle}>{item.listing.title}</Text><Text style={s.inboxTime}>{new Date(item.lastMessageAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</Text></View>
+        <Text numberOfLines={1} style={s.inboxContact}>與 {(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || (item.archived ? '已移除的帳號' : '商品聯絡人')} · {listingPrice(item)}</Text>
+        <Text numberOfLines={1} style={s.inboxPreview}>{item.archived ? '已封存 · 僅供查看' : item.blocked ? '已封鎖 · 歷史仍可查看' : !item.listingAvailable ? '商品已停止刊登 · 歷史仍可查看' : item.lastMessageText || '開始討論這件商品'}</Text>
+      </View>{item.unreadCount > 0 && <View style={s.unreadDot} accessibilityLabel={`${item.unreadCount} 則未讀`} />}</Pressable>} ListEmptyComponent={!busy && !error ? <View style={s.empty}><View style={s.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={40} color={iosColors.tertiaryLabel} /></View><Text style={s.emptyTitle}>其他商品尚無聊天</Text><Text style={s.emptyDescription}>當有買家或賣家聯繫時，對話會顯示在這裡。</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} ListFooterComponent={rooms.length ? <View style={s.list}>{cursor && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>載入較早的聊天</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} />
+    {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} token={token} userId={userId} roomId={activeRoom} onClose={() => { onRoomChange(null); void load(); }} />}
   </View>;
 }
-function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api']; apiUrl: string; userId: number; roomId: string; onClose: () => void }) {
+function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props['api']; apiUrl: string; token: string; userId: number; roomId: string; onClose: () => void }) {
   const insets = useSafeAreaInsets();
+  const { fontScale, width } = useWindowDimensions();
   const [showMeetup, setShowMeetup] = useState(false);
+  const [meetupPreview, setMeetupPreview] = useState<MeetupRecord | null>(null);
+  const [meetupIssue, setMeetupIssue] = useState('');
   const [room, setRoom] = useState<ChatRoomRecord | null>(null); const [messages, setMessages] = useState<ChatMessage[]>([]); const [before, setBefore] = useState<number | null>(null);
-  const [text, setText] = useState(''); const [pending, setPending] = useState<string | null>(null); const [ready, setReady] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [text, setText] = useState(''); const [pending, setPending] = useState<string | null>(null); const [ready, setReady] = useState(false); const [busy, setBusy] = useState(false); const [manualRefreshing, setManualRefreshing] = useState(false); const [error, setError] = useState('');
   const alive = useRef(true); const loading = useRef(false); const sending = useRef(false); const pendingRef = useRef<string | null>(null); const key = useRef<string | null>(null); const messagesRef = useRef<ChatMessage[]>([]); const roomRef = useRef<ChatRoomRecord | null>(null);
-  const viewSequence = useRef(0); const readTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const reading = useRef(false);
+  const viewSequence = useRef(0); const meetupSequence = useRef(0); const readTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const reading = useRef(false);
   const read = useRef<() => Promise<void>>(async () => undefined);
   read.current = async () => {
     const current = roomRef.current; const throughSequence = viewSequence.current;
@@ -55,7 +72,18 @@ function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api'];
   function admitRoom(current: ChatRoomRecord) {
     roomRef.current = current; setRoom(current);
     messagesRef.current = retainMemberMessages(messagesRef.current, current); setMessages(messagesRef.current);
-    if (current.archived) setShowMeetup(false);
+    if (current.archived) { meetupSequence.current++; setMeetupPreview(null); setMeetupIssue(''); setShowMeetup(false); }
+  }
+  async function refreshMeetup(current: ChatRoomRecord) {
+    const sequence = ++meetupSequence.current;
+    if (current.archived) return;
+    try {
+      const response = await api<{ appointment: unknown }>('/chat/conversations/' + roomId + '/meetup');
+      const appointment = parseMeetup(response.appointment, current);
+      if (alive.current && sequence === meetupSequence.current) { setMeetupPreview(appointment); setMeetupIssue(''); }
+    } catch {
+      if (alive.current && sequence === meetupSequence.current) { setMeetupPreview(null); setMeetupIssue('面交狀態暫時無法確認，請開啟預約頁重試。'); }
+    }
   }
   async function acknowledge(message: ChatMessage) {
     if (!pendingRef.current || !key.current) return;
@@ -69,7 +97,7 @@ function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api'];
     if (loading.current) return; loading.current = true; setError('');
     try {
       const current = parseChatRoom(await api<unknown>('/chat/conversations/' + roomId), userId);
-      if (!alive.current) return; admitRoom(current);
+      if (!alive.current) return; admitRoom(current); if (!older) void refreshMeetup(current);
       const last = messagesRef.current.at(-1)?.sequence;
       const query = older ? '&beforeSequence=' + older : last !== undefined ? '&afterSequence=' + last : '';
       let page = parseMessagePage(await api<unknown>('/chat/conversations/' + roomId + '/messages?limit=50' + query), current);
@@ -84,6 +112,11 @@ function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api'];
       if (!older) void read.current();
     } catch (failure) { if (alive.current) setError(failure instanceof ChatDataError ? failure.message : '暫時無法更新聊天，待確認訊息仍保留；請重試。'); }
     finally { loading.current = false; }
+  }
+  async function refreshByUser() {
+    if (manualRefreshing) return;
+    setManualRefreshing(true);
+    try { await refresh(); } finally { if (alive.current) setManualRefreshing(false); }
   }
   async function restore() {
     setReady(false); setError('');
@@ -101,7 +134,7 @@ function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api'];
   useEffect(() => {
     alive.current = true; void restore(); const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 15_000);
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
-    return () => { alive.current = false; clearInterval(timer); clearTimeout(readTimer.current); subscription.remove(); };
+    return () => { alive.current = false; meetupSequence.current++; clearInterval(timer); clearTimeout(readTimer.current); subscription.remove(); };
   }, []);
   async function send() {
     const current = roomRef.current;
@@ -128,16 +161,88 @@ function ChatRoom({ api, apiUrl, userId, roomId, onClose }: { api: Props['api'];
     finally { sending.current = false; if (alive.current) setBusy(false); }
   }
   const inputDisabled = !ready || busy || !!pending || !!room?.blocked || !!room?.archived;
-  return <Modal visible animationType="slide" onRequestClose={onClose}><View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={s.header}><Pressable accessibilityRole="button" style={s.chip} onPress={onClose}><Text style={s.text}>返回</Text></Pressable><Text numberOfLines={2} style={[s.title, s.flex]}>{room?.listing.title || '商品聊天'}</Text><Pressable accessibilityRole="button" disabled={busy || !room || room.archived} style={s.chip} onPress={() => void block()}><Text style={s.text}>{room?.blockedByMe ? '解除封鎖' : '封鎖'}</Text></Pressable></View>
+  const compactMeetup = fontScale >= 1.5 && !!meetupPreview;
+  const meetupStatus = meetupPreview?.status === 'PROPOSED' ? '提議中' : meetupPreview?.status === 'CONFIRMED' ? '已確認' : meetupPreview?.status === 'COMPLETED' ? '已完成' : '已取消';
+  const meetupDate = meetupPreview ? new Date(meetupPreview.startsAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const meetupActionLabel = meetupPreview?.status === 'CANCELLED' || meetupPreview?.status === 'COMPLETED' ? '查看面交預約詳情' : '查看面交預約詳情並確認或調整';
+  const meetupThread = room && !room.archived ? <View style={s.meetupThread}>
+    {!compactMeetup && <Pressable accessibilityRole="button" accessibilityLabel="查看或提議面交預約" style={s.meetupButton} onPress={() => setShowMeetup(true)}><Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><Text style={s.meetupText}>查看或提議面交預約</Text></Pressable>}
+    {compactMeetup && meetupPreview && <Pressable accessibilityRole="button" accessibilityLabel={meetupActionLabel} accessibilityValue={{ text: `面交預約${meetupStatus}，第 ${meetupPreview.version} 版，${meetupDate} 台灣時間，${meetupPreview.placeName}` }} style={s.meetupCompact} onPress={() => setShowMeetup(true)}>
+      <Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><View style={s.meetupCompactBody}><Text numberOfLines={1} style={s.meetupCompactTitle}>{meetupStatus} · 第 {meetupPreview.version} 版</Text><Text numberOfLines={2} style={s.meetupCompactDetail}>{meetupDate} · {meetupPreview.placeName}</Text></View><Ionicons name="chevron-forward" size={16} color={iosColors.tint} />
+    </Pressable>}
+    {meetupPreview && !compactMeetup && <View style={s.meetupPreview}>
+      <View style={s.meetupPreviewHeader}><Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><Text style={s.meetupPreviewTitle}>面交預約 · {meetupStatus}</Text><Text style={s.meetupVersion}>第 {meetupPreview.version} 版</Text></View>
+      <Text style={s.meetupPreviewDetail}>{meetupDate}（台灣時間）</Text>
+      <Text style={s.meetupPreviewDetail}>{meetupPreview.placeName}</Text>
+      {meetupPreview.status === 'PROPOSED' && <Text style={s.meetupPreviewHint}>時間與地點仍待雙方確認，請在預約詳情核對後回覆。</Text>}
+      <Pressable accessibilityRole="button" accessibilityLabel={meetupActionLabel} style={s.meetupPreviewAction} onPress={() => setShowMeetup(true)}><Text style={s.meetupText}>{meetupPreview.status === 'CANCELLED' || meetupPreview.status === 'COMPLETED' ? '查看預約詳情' : '查看詳情並確認或調整'}</Text><Ionicons name="chevron-forward" size={16} color={iosColors.tint} /></Pressable>
+    </View>}
+    {!!meetupIssue && <Text accessibilityRole="alert" style={s.meetupIssue}>{meetupIssue}</Text>}
+  </View> : null;
+  return <Modal visible animationType="slide" onRequestClose={onClose}><View style={[s.roomScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={s.roomHeader}><Pressable accessibilityRole="button" accessibilityLabel="返回" style={s.roomBack} onPress={onClose}><Ionicons name="chevron-back" color={iosColors.tint} size={22} /><Text style={s.backText}>返回</Text></Pressable><Text numberOfLines={1} accessibilityLabel={room?.listing.title || '商品聊天'} style={s.roomHeading}>{fontScale >= 1.5 || width < 360 ? '商品聊天' : room?.listing.title || '商品聊天'}</Text><View style={s.roomHeaderActions}><Pressable accessibilityRole="button" accessibilityLabel="更新聊天" disabled={manualRefreshing} style={s.roomRefresh} onPress={() => void refreshByUser()}>{manualRefreshing ? <ActivityIndicator size="small" /> : <Ionicons name="refresh-outline" color={iosColors.tint} size={21} />}</Pressable><Pressable accessibilityRole="button" disabled={busy || !room || room.archived} style={s.roomBlock} onPress={() => void block()}><Text style={s.blockText}>{room?.blockedByMe ? '解除封鎖' : '封鎖'}</Text></Pressable></View></View>
+    {room && <View style={s.productContext}><ChatListingPhoto room={room} apiUrl={apiUrl} token={token} /><View style={s.productContextBody}><Text numberOfLines={fontScale >= 1.5 ? 2 : 1} style={s.productTitle}>{room.listing.title}</Text><Text style={s.productPrice}>{listingPrice(room)}{room.listingAvailable ? '' : ' · 已停止刊登'}</Text></View></View>}
     {room && (!room.listingAvailable || room.blocked) && <Text style={s.notice}>{room.archived ? '聊天室已封存，不能再傳送訊息或預約面交。若對方刪除帳號，其訊息與私密預約也會移除。' : room.blocked ? '已封鎖，停止傳送新訊息；歷史仍可查看。' : '商品已停止刊登；請與對方確認交易狀態。'}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    {room && !room.archived && <Pressable accessibilityRole="button" style={s.chip} onPress={() => setShowMeetup(true)}><Text style={s.text}>查看或提議面交預約</Text></Pressable>}
-    <FlatList inverted data={[...messages].reverse()} keyExtractor={m => m.id} contentContainerStyle={s.list} onViewableItemsChanged={viewable} viewabilityConfig={{ itemVisiblePercentThreshold: 80, minimumViewTime: 500 }} renderItem={({ item }) => { const mine = item.senderUserId === userId; return <View style={[s.bubble, mine ? s.mine : s.theirs]}><Text style={[s.text, mine && s.mineText]}>{item.text}</Text><Text style={[s.small, mine && s.mineMeta]}>{new Date(item.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</Text></View>; }} ListEmptyComponent={room && !error ? <Text style={s.text}>還沒有訊息，打聲招呼吧。</Text> : null} ListFooterComponent={before ? <Pressable accessibilityRole="button" style={s.chip} onPress={() => void refresh(before)}><Text style={s.text}>載入較早訊息</Text></Pressable> : null} />
-    <View style={s.composer}>{pending && <Text style={s.small}>{room?.archived ? '聊天室已封存，待確認訊息不會重新送出。可更新聊天核對先前結果。' : '上一則訊息結果尚未確認，已安全保存；重試不會建立重複訊息。'}</Text>}{!ready && <Pressable accessibilityRole="button" style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復</Text></Pressable>}<TextInput testID="商品聊天訊息" accessibilityLabel="商品聊天訊息" accessibilityState={{ disabled: inputDisabled }} placeholder="輸入訊息，預約前請確認商品狀態" value={text} onChangeText={setText} maxLength={2000} multiline editable={!inputDisabled} style={s.input} /><View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))} style={s.button} onPress={() => void send()}><Text style={s.white}>{pending ? '重試相同訊息' : '傳送'}</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => void refresh()}><Text style={s.text}>更新聊天</Text></Pressable>{busy && <ActivityIndicator />}</View></View>
+    <FlatList inverted data={[...messages].reverse()} keyExtractor={m => m.id} contentContainerStyle={s.list} onViewableItemsChanged={viewable} viewabilityConfig={{ itemVisiblePercentThreshold: 80, minimumViewTime: 500 }} renderItem={({ item }) => { const mine = item.senderUserId === userId; return <View style={[s.bubble, mine ? s.mine : s.theirs]}><Text style={[s.text, mine && s.mineText]}>{item.text}</Text><Text style={[s.small, mine && s.mineMeta]}>{new Date(item.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</Text></View>; }} ListHeaderComponent={meetupThread} ListEmptyComponent={room && !error ? <Text style={s.text}>還沒有訊息，打聲招呼吧。</Text> : null} ListFooterComponent={before ? <Pressable accessibilityRole="button" style={s.chip} onPress={() => void refresh(before)}><Text style={s.text}>載入較早訊息</Text></Pressable> : null} />
+    <View style={s.composer}>{pending && <Text style={s.small}>{room?.archived ? '聊天室已封存，待確認訊息不會重新送出。可更新聊天核對先前結果。' : '上一則訊息結果尚未確認，已安全保存；重試不會建立重複訊息。'}</Text>}{!ready && <Pressable accessibilityRole="button" style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復</Text></Pressable>}<View style={s.composerRow}><TextInput testID="商品聊天訊息" accessibilityLabel="商品聊天訊息" accessibilityState={{ disabled: inputDisabled }} placeholder="輸入訊息，預約前請確認商品狀態" value={text} onChangeText={setText} maxLength={2000} multiline editable={!inputDisabled} style={[s.input, s.composerInput]} /><Pressable accessibilityRole="button" accessibilityLabel={pending ? '重試相同訊息' : '傳送'} disabled={busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))} style={[s.sendButton, (busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))) && s.sendDisabled]} onPress={() => void send()}><Ionicons name="send" size={23} color={iosColors.white} /></Pressable></View>{busy && <ActivityIndicator />}</View>
     {showMeetup && room && !room.archived && <MeetupSheet key={room.id} api={api} apiUrl={apiUrl} userId={userId} room={room} onClose={() => { setShowMeetup(false); void refresh(); }} />}
   </KeyboardAvoidingView></View></Modal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, flexDirection: 'row', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.sm, paddingVertical: iosSpacing.xs, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, heading: { ...iosType.title, color: iosColors.label }, title: { ...iosType.headline, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.footnote, color: iosColors.secondaryLabel },
-  list: { padding: iosSpacing.md, gap: iosSpacing.sm }, card: { padding: iosSpacing.md, borderRadius: iosRadius.card, backgroundColor: iosColors.surface, gap: iosSpacing.xs, ...iosShadow }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, backgroundColor: iosColors.tint, justifyContent: 'center', alignItems: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, padding: iosSpacing.sm, backgroundColor: iosColors.dangerSoft }, notice: { padding: iosSpacing.sm, color: iosColors.secondaryLabel, ...iosType.subheadline }, bubble: { paddingHorizontal: iosSpacing.md, paddingVertical: 10, borderRadius: 18, maxWidth: '82%', gap: iosSpacing.xxs }, mine: { alignSelf: 'flex-end', backgroundColor: iosColors.tint, borderBottomRightRadius: 5 }, mineText: { color: iosColors.white }, mineMeta: { color: '#D9ECFF' }, theirs: { alignSelf: 'flex-start', backgroundColor: iosColors.surface, borderBottomLeftRadius: 5, ...iosShadow }, composer: { padding: iosSpacing.sm, gap: iosSpacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: iosColors.separator, backgroundColor: iosColors.surface }, input: { maxHeight: 130, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.card, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary, fontSize: 17, color: iosColors.label }, row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
+  inboxHeader: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.lg, paddingBottom: iosSpacing.sm, gap: iosSpacing.xxs },
+  inboxSubtitle: { ...iosType.subheadline, color: iosColors.secondaryLabel },
+  inboxActivity: { position: 'absolute', right: iosSpacing.lg, top: iosSpacing.xl },
+  inboxCard: { minHeight: 88, padding: iosSpacing.sm, borderRadius: iosRadius.card, backgroundColor: iosColors.surface,
+    flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, ...iosShadow },
+  inboxCardBody: { flex: 1, minWidth: 0, gap: iosSpacing.xxs },
+  inboxCardTop: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
+  inboxTitle: { ...iosType.headline, color: iosColors.label, flex: 1 },
+  inboxTime: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  inboxContact: { ...iosType.footnote, color: iosColors.label },
+  inboxPreview: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: iosColors.tint },
+  photoShell: { width: 56, height: 56, borderRadius: iosRadius.small, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.surfaceSecondary },
+  photo: { width: 56, height: 56, borderRadius: iosRadius.small },
+  roomScreen: { flex: 1, backgroundColor: iosColors.surface },
+  roomHeader: { minHeight: 52, paddingHorizontal: iosSpacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator },
+  roomBack: { minWidth: 68, minHeight: minimumTapSize, flexDirection: 'row', alignItems: 'center' },
+  backText: { ...iosType.subheadline, color: iosColors.tint },
+  roomHeading: { ...iosType.headline, color: iosColors.label, textAlign: 'center', flex: 1 },
+  roomHeaderActions: { flexDirection: 'row', alignItems: 'center' },
+  roomRefresh: { minWidth: minimumTapSize, minHeight: minimumTapSize, alignItems: 'center', justifyContent: 'center' },
+  roomBlock: { minWidth: 68, minHeight: minimumTapSize, alignItems: 'flex-end', justifyContent: 'center' },
+  blockText: { ...iosType.subheadline, color: iosColors.danger },
+  productContext: { minHeight: 72, margin: iosSpacing.sm, padding: iosSpacing.xs, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control,
+    flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, backgroundColor: iosColors.surface },
+  productContextBody: { flex: 1, minWidth: 0, gap: iosSpacing.xxs },
+  productTitle: { ...iosType.subheadline, fontWeight: '700', color: iosColors.label },
+  productPrice: { ...iosType.subheadline, fontWeight: '700', color: iosColors.label },
+  meetupThread: { gap: iosSpacing.xs },
+  meetupButton: { minHeight: minimumTapSize, borderWidth: 1, borderColor: iosColors.tint,
+    borderRadius: iosRadius.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: iosSpacing.xs },
+  meetupText: { ...iosType.subheadline, fontWeight: '700', color: iosColors.tint },
+  meetupPreview: { paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.card, backgroundColor: iosColors.surfaceSecondary, gap: iosSpacing.xxs },
+  meetupPreviewHeader: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
+  meetupPreviewTitle: { ...iosType.headline, color: iosColors.label, flex: 1 },
+  meetupVersion: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  meetupPreviewDetail: { ...iosType.subheadline, color: iosColors.label },
+  meetupPreviewHint: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  meetupPreviewAction: { minHeight: minimumTapSize, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: iosColors.separator },
+  meetupCompact: { minHeight: minimumTapSize, padding: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.card, flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs, backgroundColor: iosColors.surfaceSecondary },
+  meetupCompactBody: { flex: 1, minWidth: 0 },
+  meetupCompactTitle: { ...iosType.subheadline, fontWeight: '700', color: iosColors.label },
+  meetupCompactDetail: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  meetupIssue: { ...iosType.footnote, color: iosColors.danger },
+  composerRow: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
+  composerInput: { flex: 1 },
+  sendButton: { width: minimumTapSize, height: minimumTapSize, borderRadius: minimumTapSize / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.tint },
+  sendDisabled: { opacity: 0.45 },
+  list: { padding: iosSpacing.md, gap: iosSpacing.sm }, emptyList: { flexGrow: 1, justifyContent: 'center' },
+  empty: { alignItems: 'center', gap: iosSpacing.md, paddingHorizontal: iosSpacing.xl },
+  emptyIcon: { width: 76, height: 76, borderRadius: 24, backgroundColor: iosColors.surfaceSecondary,
+    alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { ...iosType.title2, color: iosColors.label, textAlign: 'center' },
+  emptyDescription: { ...iosType.subheadline, color: iosColors.secondaryLabel, textAlign: 'center' },
+  card: { padding: iosSpacing.md, borderRadius: iosRadius.card, backgroundColor: iosColors.surface, gap: iosSpacing.xs, ...iosShadow }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, backgroundColor: iosColors.tint, justifyContent: 'center', alignItems: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, padding: iosSpacing.sm, backgroundColor: iosColors.dangerSoft }, notice: { padding: iosSpacing.sm, color: iosColors.secondaryLabel, ...iosType.subheadline }, bubble: { paddingHorizontal: iosSpacing.md, paddingVertical: 10, borderRadius: 18, maxWidth: '82%', gap: iosSpacing.xxs }, mine: { alignSelf: 'flex-end', backgroundColor: iosColors.tint, borderBottomRightRadius: 5 }, mineText: { color: iosColors.white }, mineMeta: { color: '#D9ECFF' }, theirs: { alignSelf: 'flex-start', backgroundColor: iosColors.surface, borderBottomLeftRadius: 5, ...iosShadow }, composer: { padding: iosSpacing.sm, gap: iosSpacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: iosColors.separator, backgroundColor: iosColors.surface }, input: { maxHeight: 130, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.card, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary, fontSize: 17, color: iosColors.label }, row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
 });

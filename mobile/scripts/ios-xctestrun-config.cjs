@@ -12,6 +12,8 @@ const AUTHENTICATED_LISTING_AI_PHOTO_TESTS = ['NativeQaTests/test11RealLoginList
 const AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS = ['NativeQaTests/test12RealLoginListingBatchTwoAiPhotos'];
 const AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS = ['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne'];
 const AUTHENTICATED_EXTERNAL_MAP_TESTS = ['NativeQaTests/test10RealLoginExternalSourceMapAndDetail'];
+const AUTHENTICATED_MY_LISTINGS_TESTS = ['NativeQaTests/test14RealLoginMyListingsVisual'];
+const AUTHENTICATED_HOME_VISUAL_TESTS = ['NativeQaTests/test15RealLoginHomeVisual'];
 const AUTHENTICATED_TESTS = AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS;
 const AUTHENTICATED_FLOWS = {
   'marketplace-discovery': AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS,
@@ -25,6 +27,8 @@ const AUTHENTICATED_FLOWS = {
   'listing-batch-two-ai-photos': AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS,
   'listing-batch-two-ai-publish-one': AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS,
   'external-map': AUTHENTICATED_EXTERNAL_MAP_TESTS,
+  'marketplace-my-listings': AUTHENTICATED_MY_LISTINGS_TESTS,
+  'home-visual': AUTHENTICATED_HOME_VISUAL_TESTS,
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||
@@ -87,4 +91,6 @@ module.exports = { TESTS, AUTHENTICATED_TESTS, AUTHENTICATED_MARKETPLACE_DISCOVE
   AUTHENTICATED_LISTING_TWO_AI_PHOTO_TESTS,
   AUTHENTICATED_LISTING_TWO_AI_PUBLISH_ONE_TESTS,
   AUTHENTICATED_EXTERNAL_MAP_TESTS,
+  AUTHENTICATED_MY_LISTINGS_TESTS,
+  AUTHENTICATED_HOME_VISUAL_TESTS,
   destinationTestRun, anonymousSummaryPassed, iosSummaryPassed };

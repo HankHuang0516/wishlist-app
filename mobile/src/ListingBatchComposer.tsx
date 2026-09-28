@@ -413,31 +413,6 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
       {!!captureProgress && <Text accessibilityLiveRegion="polite" style={s.small}>{captureProgress}</Text>}
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onAdvanced)} style={s.modeAlternative}><Text style={s.modeAlternativeTitle}>進階模式 · 選用  ↗</Text><Text style={s.small}>同一件商品多角度拍攝，或自行逐欄精細刊登</Text></Pressable>
-      <View onLayout={event => { offsets.current['shared:location'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:location' && s.highlight]}>
-        <Text style={s.section}>商品地點 · 刊登必要</Text>
-        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置並自動填行政區</Text></Pressable>
-        {input(shared.county, '縣市', value => changeShared('county', value))}{input(shared.district, '行政區', value => changeShared('district', value))}
-        <Text style={s.small}>需同時有縣市、行政區與地圖座標。公開地圖只顯示約 2 公里模糊位置。</Text>
-        {input(shared.latitude, '位置緯度', value => changeShared('latitude', value), true)}{input(shared.longitude, '位置經度', value => changeShared('longitude', value), true)}
-        {issueText('shared:location')}
-      </View>
-      <View onLayout={event => { offsets.current['shared:delivery'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:delivery' && s.highlight]}>
-        <Text style={s.section}>交付方式 · 至少選一項</Text>
-        {(['meetup', 'shipping', 'negotiable'] as const).map(key => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: shared[key] }} disabled={busy || !!pending} onPress={() => changeShared(key, !shared[key])} style={s.chip}><Text style={s.text}>{shared[key] ? '☑' : '☐'} {key === 'meetup' ? '可面交' : key === 'shipping' ? '可寄送' : '價格可議'}</Text></Pressable>)}
-        {issueText('shared:delivery')}
-      </View>
-      <View onLayout={event => { offsets.current['shared:expiryDate'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:expiryDate' && s.highlight]}>
-        <Text style={s.section}>失效日期 · 選用</Text><Text style={s.defaultBadge}>{shared.expiryDate ? `已自訂：${shared.expiryDate}` : '預設：刊登後 30 天'}</Text>
-        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => setExpiryPicker(true)} style={s.chip}><Text style={s.text}>自訂失效日期</Text></Pressable>
-        {!!shared.expiryDate && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => changeShared('expiryDate', '')} style={s.chip}><Text style={s.text}>改用預設 30 天</Text></Pressable>}
-        {expiryPicker && !busy && !pending && <ListingExpiryPicker value={shared.expiryDate} onApply={date => { changeShared('expiryDate', date); setExpiryPicker(false); }} onCancel={() => setExpiryPicker(false)} />}
-        {issueText('shared:expiryDate')}
-      </View>
-      <View onLayout={event => { offsets.current['shared:consent'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:consent' && s.highlight]}>
-        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 我確認資料屬實並同意公開照片與約略位置</Text></Pressable>
-        {issueText('shared:consent')}
-      </View>
-      <Text style={s.small}>重新開啟草稿時，位置、交付方式與失效日期需再次確認；精確定位不保存在私人商品草稿。</Text>
       <Text style={s.section}>商品草稿 {cards.filter(card => !card.published).length}/{MAX_ITEMS}</Text>
       {legacyRecoveryError && <Text style={s.error}>舊版未分類照片暫時無法讀取；批次照片仍可使用。請稍後重開再檢查舊照片。</Text>}
       {legacyPhotos.length > 0 && <View style={s.card}><Text style={s.cardTitle}>舊版未分類照片</Text>
@@ -479,6 +454,31 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           disabled={busy || !!pending || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
         {!card.published && <View style={s.row}>{(!card.record || aiAvailable !== false) && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
       </View>)}
+      <View onLayout={event => { offsets.current['shared:location'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:location' && s.highlight]}>
+        <Text style={s.section}>商品地點 · 刊登必要</Text>
+        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置並自動填行政區</Text></Pressable>
+        {input(shared.county, '縣市', value => changeShared('county', value))}{input(shared.district, '行政區', value => changeShared('district', value))}
+        <Text style={s.small}>需同時有縣市、行政區與地圖座標。公開地圖只顯示約 2 公里模糊位置。</Text>
+        {input(shared.latitude, '位置緯度', value => changeShared('latitude', value), true)}{input(shared.longitude, '位置經度', value => changeShared('longitude', value), true)}
+        {issueText('shared:location')}
+      </View>
+      <View onLayout={event => { offsets.current['shared:delivery'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:delivery' && s.highlight]}>
+        <Text style={s.section}>交付方式 · 至少選一項</Text>
+        {(['meetup', 'shipping', 'negotiable'] as const).map(key => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: shared[key] }} disabled={busy || !!pending} onPress={() => changeShared(key, !shared[key])} style={s.chip}><Text style={s.text}>{shared[key] ? '☑' : '☐'} {key === 'meetup' ? '可面交' : key === 'shipping' ? '可寄送' : '價格可議'}</Text></Pressable>)}
+        {issueText('shared:delivery')}
+      </View>
+      <View onLayout={event => { offsets.current['shared:expiryDate'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:expiryDate' && s.highlight]}>
+        <Text style={s.section}>失效日期 · 選用</Text><Text style={s.defaultBadge}>{shared.expiryDate ? `已自訂：${shared.expiryDate}` : '預設：刊登後 30 天'}</Text>
+        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => setExpiryPicker(true)} style={s.chip}><Text style={s.text}>自訂失效日期</Text></Pressable>
+        {!!shared.expiryDate && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => changeShared('expiryDate', '')} style={s.chip}><Text style={s.text}>改用預設 30 天</Text></Pressable>}
+        {expiryPicker && !busy && !pending && <ListingExpiryPicker value={shared.expiryDate} onApply={date => { changeShared('expiryDate', date); setExpiryPicker(false); }} onCancel={() => setExpiryPicker(false)} />}
+        {issueText('shared:expiryDate')}
+      </View>
+      <View onLayout={event => { offsets.current['shared:consent'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:consent' && s.highlight]}>
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 我確認資料屬實並同意公開照片與約略位置</Text></Pressable>
+        {issueText('shared:consent')}
+      </View>
+      <Text style={s.small}>重新開啟草稿時，位置、交付方式與失效日期需再次確認；精確定位不保存在私人商品草稿。</Text>
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
       {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}
       <Text style={s.small}>AI 參考價不是已驗證行情；無法可靠估價的商品仍須由賣家決定售價。未刊登照片只對本人可見，稍後可恢復或刪除。</Text>

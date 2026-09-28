@@ -7,7 +7,13 @@ const { spawnSync } = require('node:child_process');
 
 const mobile = path.resolve(__dirname, '..');
 if (process.argv[2] !== '--discard-rebuildable-intermediates' || process.argv.length < 4) throw new Error('Explicit simulator cache operation required');
-const approved = new Set(['ios-simulator', 'ios-simulator-20260915-1918', 'ios-simulator-20260915-2011', 'ios-simulator-signed', 'ios-archive-derived']);
+const approved = new Set(['ios-simulator', 'ios-simulator-20260915-1918', 'ios-simulator-20260915-2011',
+  'ios-simulator-signed', 'ios-archive-derived', 'ios-simulator-20260928-1028',
+  'ios-simulator-20260927-2106', 'ios-simulator-20260928-1036',
+  'ios-native-qa-202609272124', 'ios-native-qa-202609272127', 'ios-native-qa-202609272131',
+  'ios-native-qa-202609272137', 'ios-native-qa-202609272318', 'ios-native-qa-202609272324',
+  'ios-native-qa-202609272328', 'ios-native-qa-202609272334', 'ios-native-qa-202609272345',
+  'ios-native-qa-202609272350']);
 const names = process.argv.slice(3);
 if (new Set(names).size !== names.length || names.some(name => !approved.has(name))) throw new Error('Only exact approved simulator roots are allowed');
 const probe = spawnSync('/usr/bin/pgrep', ['-f', 'xcodebuild'], { encoding: 'utf8', timeout: 5000, maxBuffer: 16384 });
@@ -36,7 +42,7 @@ const cacheNames = ['Build/Intermediates.noindex', 'ModuleCache.noindex', 'Compi
   'Index.noindex', 'SourcePackages', 'SDKExplicitPrecompiledModules'];
 const targets = [], snapshots = [];
 for (const name of names) {
-  const root = path.join(mobile, 'build', name);
+  const root = name.startsWith('ios-native-qa-') ? path.join(mobile, 'build', name, 'app-derived') : path.join(mobile, 'build', name);
   if (!fs.existsSync(root) || !fs.lstatSync(root).isDirectory() || fs.realpathSync(root) !== root) throw new Error('Exact simulator root unavailable');
   snapshots.push({ root, snapshot: productSnapshot(root) });
   for (const cacheName of cacheNames) {

@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { withAppBuildGradle, withAppDelegate } = require('expo/config-plugins');
+const { withAppBuildGradle, withAppDelegate, withDangerousMod } = require('expo/config-plugins');
 
 // Only an explicit debug QA build may use a distinct package. Release keeps
 // the production applicationId and its existing signing configuration.
@@ -17,6 +17,38 @@ function isolatedDebugQa(source) {
             }`;
   return source.replace(pattern, `$1${suffix}`);
 }
+
+// A non-debuggable, statically bundled visual-QA APK with a distinct identity.
+// It inherits Release optimization but never inherits the upload signing key.
+// The normal release build type and store package are untouched.
+const visualQaBlock = `if ((findProperty('wishlistVisualQa') ?: 'false').toBoolean()) {
+            visualQa {
+                initWith release
+                def wishlistVisualQaSuffix = findProperty('wishlistVisualQaSuffix') ?: ''
+                if (!(wishlistVisualQaSuffix ==~ /\\.visualqa[0-9]{12}/)) throw new GradleException('Invalid visual QA package suffix')
+                applicationIdSuffix wishlistVisualQaSuffix
+                signingConfig signingConfigs.debug
+                debuggable false
+                matchingFallbacks = ['release']
+            }
+        }`;
+function isolatedVisualQa(source) {
+  if (source.includes('wishlistVisualQaSuffix')) {
+    if (!source.includes(visualQaBlock)) throw new Error('Unknown partial visual QA Gradle configuration');
+    return source;
+  }
+  const pattern = /(buildTypes\s*\{\s*)debug\s*\{/;
+  if (!pattern.test(source) || !/(release\s*\{[^{}]*?)signingConfig signingConfigs\.release/.test(source))
+    throw new Error('Unrecognized Release signing or build-type layout; refusing visual QA injection');
+  return source.replace(pattern, `$1${visualQaBlock}\n        debug {`);
+}
+
+const visualQaManifest = `<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- This source set exists only for the opt-in, non-store visualQa build type. -->
+    <application android:usesCleartextTraffic="true" tools:targetApi="28"
+        tools:replace="android:usesCleartextTraffic" />
+</manifest>\n`;
 
 // React-Core is prebuilt, so the xcodebuild RCT_METRO_PORT setting alone does
 // not change its default. This branch is compiled only for isolated iOS QA.
@@ -68,9 +100,17 @@ function isolatedIosQaInput(source) {
 module.exports = config => {
   config = withAppBuildGradle(config, mod => {
     if (mod.modResults.language !== 'groovy') throw new Error('Only the audited Groovy Android layout is supported');
-    mod.modResults.contents = isolatedDebugQa(mod.modResults.contents);
+    mod.modResults.contents = isolatedVisualQa(isolatedDebugQa(mod.modResults.contents));
     return mod;
   });
+  config = withDangerousMod(config, ['android', async mod => {
+    const file = path.join(mod.modRequest.platformProjectRoot, 'app/src/visualQa/AndroidManifest.xml');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') !== visualQaManifest)
+      throw new Error('Unknown visual QA Android manifest; refusing overwrite');
+    if (!fs.existsSync(file)) fs.writeFileSync(file, visualQaManifest, { flag: 'wx' });
+    return mod;
+  }]);
   return withAppDelegate(config, mod => {
     if (mod.modResults.language !== 'swift') throw new Error('Only the audited Swift iOS layout is supported');
     mod.modResults.contents = isolatedIosQaInput(isolatedIosQaMetro(mod.modResults.contents));
@@ -78,5 +118,7 @@ module.exports = config => {
   });
 };
 module.exports.isolatedDebugQa = isolatedDebugQa;
+module.exports.isolatedVisualQa = isolatedVisualQa;
+module.exports.visualQaManifest = visualQaManifest;
 module.exports.isolatedIosQaMetro = isolatedIosQaMetro;
 module.exports.isolatedIosQaInput = isolatedIosQaInput;

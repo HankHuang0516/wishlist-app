@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { earliestExtensionDate, listingEditBody, managementTab, parseManagedListing, parseManagedListingPage } from '../managedListing';
+import { earliestExtensionDate, listingEditBody, managementTab, MANAGEMENT_TABS, parseManagedListing, parseManagedListingPage } from '../managedListing';
 
 const id = 'b5abf861-a66d-4072-876b-4f0ab3172dac';
 const mediaId = 'fab22941-2df0-4ca4-90c2-70c504527243';
 const api = 'https://example.com';
 const row = { id, ownerUserId: 42, owner: { id: 42, name: 'Tester' }, version: 3,
   title: '檯燈', description: '二手檯燈', status: 'ACTIVE', condition: 'USED', category: 'home',
-  price: '590', currency: 'TWD', createdAt: '2026-09-25T00:00:00.000Z', expiresAt: '2026-10-25T00:00:00.000Z',
+  price: '590', currency: 'TWD', createdAt: '2026-09-25T00:00:00.000Z', publishedAt: '2026-09-25T00:00:00.000Z', expiresAt: '2026-10-25T00:00:00.000Z',
   location: { county: '新北市', district: '板橋區' }, media: [{ id: mediaId, thumbnailUrl: `${api}/api/listing-media/${mediaId}/thumbnail` }] };
 
 describe('my listings safety and management', () => {
+  it('keeps the approved seller tab order without losing removed listings', () => {
+    expect(MANAGEMENT_TABS).toEqual(['在售', '已保留', '草稿', '已售出', '已失效', '已移除']);
+  });
   it('projects only own listing fields and checks owner identity', () => {
     expect(parseManagedListing({ ...row, requestHash: 'private' }, 42, api)).not.toHaveProperty('requestHash');
     expect(() => parseManagedListing({ ...row, ownerUserId: 43 }, 42, api)).toThrow();

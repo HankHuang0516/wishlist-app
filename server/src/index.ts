@@ -20,6 +20,7 @@ import feedbackRoutes from './routes/feedbackRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
 import listingRoutes from './routes/listingRoutes';
+import { createListingSharePageRoutes } from './routes/listingSharePageRoutes';
 import listingMediaRoutes from './routes/listingMediaRoutes';
 import minimaxRecognitionRoutes from './routes/minimaxRecognitionRoutes';
 import marketingRoutes from './routes/marketingRoutes';
@@ -184,6 +185,8 @@ app.get('/api/swagger.json', (req: Request, res: Response) => {
 // Serve static files from the client build directory
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
+// Product-specific metadata must be in the initial HTML for LINE and other link crawlers.
+app.use('/listings', createListingSharePageRoutes(path.join(clientBuildPath, 'index.html')));
 
 // Serve .well-known directory explicitly for AI agent discovery
 // This must be before SPA fallback to prevent interception

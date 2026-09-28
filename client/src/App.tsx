@@ -22,6 +22,7 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiShowcasePage from "./pages/ApiShowcasePage";
 import ChangelogPage from "./pages/ChangelogPage";
 import ListingBatchPage from "./pages/ListingBatchPage";
+import PublicListingPage from "./pages/PublicListingPage";
 import AccountDeletionPage from "./pages/AccountDeletionPage";
 import { AuthProvider } from "./context/AuthContext";
 
@@ -63,6 +64,7 @@ function App() {
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="sell" element={<ListingBatchPage />} />
+            <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsPage />} />

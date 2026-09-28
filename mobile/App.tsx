@@ -3,9 +3,10 @@ import { ActivityIndicator, Alert, AppState, Linking, Modal, Pressable, StyleShe
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
-import { ApiError, createApi } from './src/api';
+import { ApiError, createApi, registerVisualQaRuntimeApplicationId } from './src/api';
 import { parseSessionUser, restoreSession, SESSION_KEY, sessionIssueMessage } from './src/session';
 import type { SessionUser, SessionIssue } from './src/session';
 import { ListingComposer } from './src/ListingComposer';
@@ -43,10 +44,12 @@ const TAB_ICONS: Record<Tab, { active: React.ComponentProps<typeof Ionicons>['na
 configureMapLogging();
 
 export default function App() {
+  registerVisualQaRuntimeApplicationId(Application.applicationId);
   // Expo statically inlines the public endpoint in the JS bundle. A debug
   // bundle can therefore use its isolated loopback API without rebuilding the
   // embedded native manifest. This is never a place for credentials; API and
-  // session validators still require HTTPS when __DEV__ is false.
+  // session validators require HTTPS in every store build. The exact isolated
+  // visual QA package and endpoint are separately checked in api.ts.
   const apiUrl = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl as string | undefined;
   return <SafeAreaProvider><StatusBar style="dark" />{
     apiUrl ? <NativeApp key={apiUrl} apiUrl={apiUrl} /> : <SafeAreaView style={styles.screen}><Text style={styles.title}>Wishlist.ai</Text><Text style={styles.body}>尚未設定服務連線，請設定 EXPO_PUBLIC_API_URL 後重新建置。</Text></SafeAreaView>
@@ -211,7 +214,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
+    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
       <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
     <View style={styles.tabs}>{TABS.map(item => {
       const selected = item === tab;
@@ -222,7 +225,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     })}</View>
     {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('探索'); Alert.alert('商品已刊登', `已確認 ${count} 件商品，可在探索地圖查看。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
     {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('探索'); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可至探索地圖查找商品。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
-    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></Modal>}
+    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
     {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
   </SafeAreaView>;
 }

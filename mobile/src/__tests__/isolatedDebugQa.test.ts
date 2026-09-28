@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-const { isolatedDebugQa, isolatedIosQaMetro, isolatedIosQaInput } = require('../../plugins/withIsolatedDebugQa.js');
+const { isolatedDebugQa, isolatedVisualQa, visualQaManifest, isolatedIosQaMetro, isolatedIosQaInput } = require('../../plugins/withIsolatedDebugQa.js');
 const { qaEnvironment } = require('../../scripts/native-qa.cjs');
 const { assertNativeQaMigrations } = require('../../scripts/native-qa-migrations.cjs');
 const { AUTHENTICATED_FLOWS, destinationTestRun } = require('../../scripts/ios-xctestrun-config.cjs');
@@ -25,6 +25,26 @@ describe('isolated Android debug QA package', () => {
   it('refuses an unknown native template', () => expect(() => isolatedDebugQa('android {}')).toThrow());
 });
 
+describe('isolated Release-equivalent Android visual QA package', () => {
+  it('uses a distinct opt-in package, static Release behavior and debug key only for this local variant', () => {
+    const result = isolatedVisualQa(isolatedDebugQa(template));
+    expect(result).toContain("findProperty('wishlistVisualQa')");
+    expect(result).toContain('applicationIdSuffix wishlistVisualQaSuffix');
+    expect(result).toContain('initWith release');
+    expect(result).toContain('signingConfig signingConfigs.debug');
+    expect(result).toContain('debuggable false');
+    expect(result).toContain("matchingFallbacks = ['release']");
+    expect(result.slice(result.lastIndexOf('release {'))).toBe(template.slice(template.indexOf('release {')));
+    expect(isolatedVisualQa(result)).toBe(result);
+    expect(visualQaManifest).toContain('android:usesCleartextTraffic="true"');
+  });
+  it('rejects an unfamiliar or partially modified Release block', () => {
+    expect(() => isolatedVisualQa('android {}')).toThrow();
+    expect(() => isolatedVisualQa(template.replace('signingConfigs.release', 'signingConfigs.debug'))).toThrow();
+    expect(() => isolatedVisualQa(template + ' wishlistVisualQaSuffix')).toThrow();
+  });
+});
+
 describe('isolated listing AI QA process', () => {
   it('starts opt-in only and never inherits production provider or admin credentials', () => {
     const database = 'postgresql://hank@127.0.0.1:5432/wishlist_marketplace_test_listingai_qa';
@@ -39,10 +59,20 @@ describe('isolated listing AI QA process', () => {
     expect(pilot.WISHLIST_MINIMAX_CALLBACK_TOKEN).toBeUndefined();
     expect(pilot.LISTING_MEDIA_STORAGE_PROVIDER).toBeUndefined();
     expect(pilot.MINIMAX_LISTING_AI_ENABLED).toBeUndefined();
+    const marketingVisual = qaEnvironment(database, 60, inherited, { marketingVisualOwnerRole: 'seller' });
+    expect(marketingVisual.NATIVE_QA_MARKETING_VISUAL_OWNER).toBe('seller');
+    expect(marketingVisual.WISHLIST_MINIMAX_CALLBACK_TOKEN).toBeUndefined();
+    expect(marketingVisual.MARKETING_ASSISTANT_ENABLED).toBeUndefined();
+    expect(() => qaEnvironment(database, 60, inherited, { marketingVisualOwnerRole: 'stranger' })).toThrow();
     const external = qaEnvironment(database, 60, inherited, { externalListingsPilot: true });
     expect(external.NATIVE_QA_EXTERNAL_LISTINGS_PILOT).toBe('1');
     expect(external.EXTERNAL_LISTINGS_PUBLIC_ENABLED).toBeUndefined();
     expect(external.ADMIN_API_KEY).toBeUndefined();
+    const visual = qaEnvironment(database, 60, inherited, { visualHomeFixture: true });
+    expect(visual.NATIVE_QA_VISUAL_HOME_FIXTURE).toBe('1');
+    expect(visual.NATIVE_QA_VISUAL_PORT).toBe('18889');
+    expect(normal.NATIVE_QA_VISUAL_PORT).toBeUndefined();
+    expect(visual.ADMIN_API_KEY).toBeUndefined();
     expect(pilot.DATABASE_URL).toBe(database);
     expect(qaEnvironment(database, 750, inherited, { listingAiPilot: true }).NATIVE_QA_LIFETIME_SECONDS).toBe('750');
     expect(() => qaEnvironment(database, 901, inherited, { listingAiPilot: true })).toThrow('QA lifetime');
@@ -114,6 +144,7 @@ describe('isolated iOS two-item AI acceptance selection', () => {
     expect(configured.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_INPUT_PORT).toBe('34123');
     expect(template.WishlistNativeQa.EnvironmentVariables).toEqual({});
     expect(AUTHENTICATED_FLOWS['listing-batch-two-ai-publish-one']).toEqual(['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne']);
+    expect(AUTHENTICATED_FLOWS['home-visual']).toEqual(['NativeQaTests/test15RealLoginHomeVisual']);
     const publishOne = destinationTestRun(template, label, '/tmp/isolated-ios-qa-products', 34123, 'listing-batch-two-ai-publish-one');
     expect(publishOne.WishlistNativeQa.OnlyTestIdentifiers).toEqual(['NativeQaTests/test13RealLoginListingBatchTwoAiPublishOne']);
     expect(publishOne.WishlistNativeQa.MaximumTestExecutionTimeAllowance).toBe(620);

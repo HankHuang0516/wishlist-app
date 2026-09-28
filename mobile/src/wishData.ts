@@ -3,6 +3,16 @@ import { Bounds, PublicListing, SearchFilters, clipBounds, listingSearchPath, pa
 export class WishDataError extends Error { constructor(message = '願望配對資料不正確') { super(message); } }
 export type MatchWish = { id: number; name: string; maxPrice: number | null; priceCurrency: string | null; wishlist: { id: number; title: string; isPublic: boolean } };
 export type WishMatch = { wishItemId: number; listing: PublicListing; score: number; reasons: { code: string; text: string }[]; budget: 'WITHIN' | 'UNSPECIFIED' | 'CURRENCY_UNKNOWN'; distanceKm: number | null };
+/** A home card represents one wish, ranked across every loaded match page. */
+export function rankHomeMatches(matches: WishMatch[], userId: number): WishMatch[] {
+  const unique = new Map<string, WishMatch>();
+  for (const match of matches) {
+    if (match.listing.owner.id === userId || Date.parse(match.listing.expiresAt) <= Date.now()) continue;
+    const previous = unique.get(match.listing.id);
+    if (!previous || match.score > previous.score) unique.set(match.listing.id, match);
+  }
+  return [...unique.values()].sort((a, b) => b.score - a.score || a.listing.id.localeCompare(b.listing.id));
+}
 const object = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new WishDataError(); return v as Record<string, unknown>; };
 const id = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v <= 2147483647;
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && !!v.trim() && v.length <= max;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandedSearchBounds, resultCamera } from '../exploreMapView';
+import { clusterLeafIds, expandedSearchBounds, resultCamera } from '../exploreMapView';
 import { TAIWAN_BOUNDS } from '../listingSearch';
 
 describe('explore result camera', () => {
@@ -23,5 +23,15 @@ describe('explore result camera', () => {
     const expanded = expandedSearchBounds([121.5, 25, 121.6, 25.1]);
     [121.45, 24.95, 121.65, 25.15].forEach((value, index) => expect(expanded[index]).toBeCloseTo(value, 5));
     expect(expandedSearchBounds(TAIWAN_BOUNDS)).toEqual(TAIWAN_BOUNDS);
+  });
+  it('shows only the tapped cluster leaves, ignoring malformed and duplicate feature IDs', () => {
+    const features = [
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [121.5, 25] }, properties: { listingId: 'a' } },
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [121.5, 25] }, properties: { listingId: 'b' } },
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [121.5, 25] }, properties: { listingId: 'a' } },
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [121.5, 25] }, properties: { externalId: 'outside' } },
+    ] as const;
+    expect(clusterLeafIds(features as unknown as import('geojson').Feature[], 'listingId')).toEqual(['a', 'b']);
+    expect(clusterLeafIds(features as unknown as import('geojson').Feature[], 'externalId')).toEqual(['outside']);
   });
 });

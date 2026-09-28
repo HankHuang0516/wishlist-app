@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, CameraRef, GeoJSONSource, GeoJSONSourceRef, Images, Layer, Map as NativeMap } from '@maplibre/maplibre-react-native';
 import type { Feature } from 'geojson';
@@ -12,17 +12,42 @@ import { ListingReportSheet } from './ListingReportSheet';
 import { iosColors, iosFloatingShadow, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { externalGeoJSON, externalPrice, externalSearchPath, externalWishSearchPath, parseExternalListing,
   parseExternalListingPage, type ExternalListing } from './externalListingSearch';
-import { expandedSearchBounds, resultCamera, type ResultCamera } from './exploreMapView';
+import { clusterLeafIds, expandedSearchBounds, resultCamera, type ResultCamera } from './exploreMapView';
+import { externalPhotoPresentation, type ExternalPhotoLoadState } from './externalPhotoState';
+import { libertyZhHantStyle } from './libertyZhHantStyle';
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const MAX_LOADED = 500;
 type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onOpenChat: (id: string) => void; wishItemId?: number; onClearWish?: () => void; initialListing?: PublicListing | null; onInitialListingHandled?: () => void };
 
+function ExternalDetailPhoto({ imageUrl, thumbnailUrl }: { imageUrl: string; thumbnailUrl: string }) {
+  const [thumbnailState, setThumbnailState] = useState<ExternalPhotoLoadState>('loading');
+  const [originalState, setOriginalState] = useState<ExternalPhotoLoadState>('loading');
+  const presentation = externalPhotoPresentation(thumbnailState, originalState);
+  return <View accessible accessibilityRole="image" accessibilityLabel={presentation.label} style={s.detailPhotoFrame}>
+    <Image source={{ uri: thumbnailUrl }} resizeMode="cover" accessible={false} style={s.detailPhotoLayer}
+      onLoad={() => setThumbnailState('loaded')} onError={() => setThumbnailState('failed')} />
+    <Image source={{ uri: imageUrl }} resizeMode="cover" accessible={false}
+      style={[s.detailPhotoLayer, presentation.visible !== 'original' && s.detailPhotoHidden]}
+      onLoad={() => setOriginalState('loaded')} onError={() => setOriginalState('failed')} />
+    {presentation.visible === 'placeholder' && <View style={s.detailPhotoPlaceholder}>
+      {presentation.label === '來源商品圖片載入中' && <ActivityIndicator color={iosColors.tint} />}
+      <Text style={s.small}>{presentation.hint}</Text>
+    </View>}
+    {presentation.visible === 'thumbnail' && presentation.hint &&
+      <Text style={s.detailPhotoFallback}>{presentation.hint}</Text>}
+  </View>;
+}
+
 export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onClearWish, initialListing, onInitialListingHandled }: Props) {
   const insets = useSafeAreaInsets();
+  const { fontScale, width } = useWindowDimensions();
+  const compactControls = fontScale >= 1.3;
+  const narrowMapCard = width <= 360 && fontScale < 1.3;
   const [filters, setFilters] = useState<SearchFilters>({ ...emptySearchFilters });
   const [applied, setApplied] = useState<SearchFilters>({ ...emptySearchFilters });
   const [filtering, setFiltering] = useState(false); const [listMode, setListMode] = useState(false);
+  const [matchExplanationOpen, setMatchExplanationOpen] = useState(false);
+  const [clusterPreview, setClusterPreview] = useState<{ kind: 'seller' | 'external'; ids: string[] } | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(initialListing ? clipBounds([initialListing.location.publicLongitude - 0.06, initialListing.location.publicLatitude - 0.06, initialListing.location.publicLongitude + 0.06, initialListing.location.publicLatitude + 0.06]) : TAIWAN_BOUNDS);
   const [items, setItems] = useState<PublicListing[]>([]); const [cursor, setCursor] = useState<string | null>(null);
   const [externalItems, setExternalItems] = useState<ExternalListing[]>([]);
@@ -40,12 +65,13 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
   const [clock, setClock] = useState(Date.now());
   const [matchReasons, setMatchReasons] = useState<Record<string, string[]>>({});
   const [radiusInput, setRadiusInput] = useState(''), [radiusApplied, setRadiusApplied] = useState('');
-  const [searchCycle, setSearchCycle] = useState(0), [sellerDoneCycle, setSellerDoneCycle] = useState(-1),
+  // The first page is a search too: frame it as soon as both sources finish.
+  const [searchCycle, setSearchCycle] = useState(1), [sellerDoneCycle, setSellerDoneCycle] = useState(-1),
     [externalDoneCycle, setExternalDoneCycle] = useState(-1);
   const [resultFrame, setResultFrame] = useState<{ frame: ResultCamera; scope: Bounds } | null>(null);
   const [pendingFrame, setPendingFrame] = useState<ResultCamera | null>(null);
   const searchScope = useRef<Bounds>(bounds ?? TAIWAN_BOUNDS), latestViewport = useRef<Bounds | null>(bounds),
-    lastFocusedCycle = useRef(0);
+    lastFocusedCycle = useRef(initialListing ? 1 : 0);
   const focusTarget = useRef(initialListing ?? null);
   const sequence = useRef(0); const loading = useRef(false); const mounted = useRef(true);
   const externalSequence = useRef(0), externalLoading = useRef(false);
@@ -87,7 +113,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
   const load = useCallback(async (next?: string) => {
     if (!path) { sequence.current++; loading.current = false; setItems([]); setCursor(null); setBusy(false); return; }
     if (next && loading.current) return;
-    const current = ++sequence.current; loading.current = true; setBusy(true); setError('');
+    const current = ++sequence.current; loading.current = true; setBusy(true); setError(''); setClusterPreview(null);
     if (!next) { setItems([]); setCursor(null); setSelected(null); setDetail(null); setMatchReasons({}); }
     try {
       const query = next ? path + '&cursor=' + next : path;
@@ -101,7 +127,11 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
         setCursor(page.nextCursor);
         if (matches) setMatchReasons(old => ({ ...(next ? old : {}), ...Object.fromEntries(matches.items.map(m => [m.listing.id, m.reasons.map(r => r.text)])) }));
         const target = focusTarget.current;
-        if (target) void openDetail(target).then(handled => { if (handled && focusTarget.current?.id === target.id) { focusTarget.current = null; onInitialListingHandled?.(); } });
+        if (target) {
+          setPendingFrame(resultCamera([{ longitude: target.location.publicLongitude, latitude: target.location.publicLatitude }]));
+          setSelected(target.id);
+          void openDetail(target).then(handled => { if (handled && focusTarget.current?.id === target.id) { focusTarget.current = null; onInitialListingHandled?.(); } });
+        }
       }
     } catch (failure) {
       if (mounted.current && current === sequence.current) setError(failure instanceof ListingSearchError ? failure.message : '暫時無法載入商品；請確認網路後重試。');
@@ -115,7 +145,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
       setSelectedExternal(null); setExternalDetail(null); setExternalError(''); setExternalDoneCycle(searchCycle); return; }
     if (next && externalLoading.current) return;
     const current = ++externalSequence.current; externalLoading.current = true;
-    setExternalBusy(true); setExternalError('');
+    setExternalBusy(true); setExternalError(''); setClusterPreview(null);
     if (!next) { detailSequence.current++; setExternalItems([]); setExternalCursor(null);
       setSelectedExternal(null); setExternalDetail(null); }
     try {
@@ -150,10 +180,11 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
     const frame = resultCamera(points);
     if (!frame) { setResultFrame(null); return; }
     setResultFrame({ frame, scope: searchScope.current });
-    if (points.length === 1) {
-      if (visible.length === 1) { setSelected(visible[0].id); setSelectedExternal(null); }
-      else { setSelectedExternal(externalVisible[0].id); setSelected(null); }
-    }
+    // Keep the strongest/first loaded result visible as a bottom card even
+    // when the map contains clusters. A map full of dots without a product
+    // preview hides the most useful action on the first screen.
+    if (visible.length) { setSelected(visible[0].id); setSelectedExternal(null); }
+    else if (externalVisible.length) { setSelectedExternal(externalVisible[0].id); setSelected(null); }
     setListMode(false);
     setPendingFrame(frame);
   }, [searchCycle, sellerDoneCycle, externalDoneCycle, busy, externalBusy, error, externalError, visible, externalVisible]);
@@ -174,14 +205,14 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
   function showOnMap(kind: 'seller' | 'external', id: string, longitude: number, latitude: number) {
     if (kind === 'seller') { setSelected(id); setSelectedExternal(null); }
     else { setSelectedExternal(id); setSelected(null); }
-    setListMode(false);
+    setClusterPreview(null); setListMode(false);
     setPendingFrame(resultCamera([{ longitude, latitude }]));
   }
   function returnToResults() {
     if (!resultFrame) return;
     latestViewport.current = resultFrame.scope;
     setBounds(resultFrame.scope);
-    setListMode(false);
+    setClusterPreview(null); setListMode(false);
     setPendingFrame(resultFrame.frame);
   }
   function expandSearch() {
@@ -192,7 +223,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
     setResultFrame(null); setSellerDoneCycle(-1); setExternalDoneCycle(-1);
     setSearchCycle(old => old + 1);
     setBounds(expanded);
-    setListMode(false);
+    setClusterPreview(null); setListMode(false);
     setPendingFrame({ kind: 'multiple', bounds: expanded });
   }
 
@@ -201,7 +232,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
       if (!scope) throw new ListingSearchError('請將地圖移回台灣範圍');
       if (wishItemId) wishMatchPath(wishItemId, filters, scope, radiusInput); else listingSearchPath(filters, scope);
       searchScope.current = scope; setBounds(scope); setResultFrame(null); setSellerDoneCycle(-1); setExternalDoneCycle(-1);
-      setSearchCycle(old => old + 1); setApplied({ ...filters }); setRadiusApplied(radiusInput); setFiltering(false); setError(''); }
+      setSearchCycle(old => old + 1); setApplied({ ...filters }); setRadiusApplied(radiusInput); setFiltering(false); setError(''); setClusterPreview(null); }
     catch (failure) { setError(failure instanceof ListingSearchError ? failure.message : '請檢查篩選條件'); }
   }
   function viewport(value: Bounds) {
@@ -217,7 +248,13 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
         const zoom = await source.current?.getClusterExpansionZoom(properties.cluster_id);
         if (!mounted.current) return;
         if (zoom !== undefined && zoom <= 19) camera.current?.easeTo({ center: feature.geometry.coordinates.slice(0, 2) as [number, number], zoom, duration: 350 });
-        else setListMode(true);
+        else {
+          const leaves = await source.current?.getClusterLeaves(properties.cluster_id, Math.min(properties.point_count ?? MAX_LOADED, MAX_LOADED), 0);
+          const ids = clusterLeafIds(leaves ?? [], 'listingId').filter(id => visible.some(item => item.id === id));
+          if (!mounted.current) return;
+          if (!ids.length) throw new Error('Cluster leaves unavailable');
+          setClusterPreview({ kind: 'seller', ids }); setListMode(true);
+        }
       } catch { if (mounted.current) setError('無法展開群聚；可切換清單瀏覽同範圍商品。'); }
     } else if (typeof properties?.listingId === 'string') { setSelected(properties.listingId); setSelectedExternal(null); }
   }
@@ -229,7 +266,13 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
         const zoom = await externalSource.current?.getClusterExpansionZoom(properties.cluster_id);
         if (!mounted.current) return;
         if (zoom !== undefined && zoom <= 19) camera.current?.easeTo({ center: feature.geometry.coordinates.slice(0, 2) as [number, number], zoom, duration: 350 });
-        else setListMode(true);
+        else {
+          const leaves = await externalSource.current?.getClusterLeaves(properties.cluster_id, Math.min(properties.point_count ?? MAX_LOADED, MAX_LOADED), 0);
+          const ids = clusterLeafIds(leaves ?? [], 'externalId').filter(id => externalVisible.some(item => item.id === id));
+          if (!mounted.current) return;
+          if (!ids.length) throw new Error('Cluster leaves unavailable');
+          setClusterPreview({ kind: 'external', ids }); setListMode(true);
+        }
       } catch { if (mounted.current) setExternalError('無法展開外部商品群聚；可切換清單瀏覽。'); }
     } else if (typeof properties?.externalId === 'string') {
       setSelectedExternal(properties.externalId); setSelected(null);
@@ -271,37 +314,55 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
     } catch { if (mounted.current) { setExternalDetail(null); setExternalError('無法開啟來源商品；可能已失效或連結不可用。'); } }
     finally { if (mounted.current) setExternalOpening(false); }
   }
-  const card = (item: PublicListing, compact = false) => <Pressable accessibilityRole="button" accessibilityLabel={`${wishItemId && item.owner.id === userId ? '我的商品配對預覽，' : ''}${item.title}，${listingPrice(item)}，${item.location.county}${item.location.district}`} onPress={() => void openDetail(item)} style={[s.card, compact && s.floatingCard]}>
-    <Image source={{ uri: item.media[0].thumbnailUrl }} accessibilityLabel="商品縮圖" style={s.thumbnail} />
-    <View style={s.cardText}>{wishItemId && item.owner.id === userId && <Text style={s.small}>我的商品 · 配對預覽，非買家推薦</Text>}<Text numberOfLines={2} style={s.cardTitle}>{item.title}</Text><Text style={s.price}>{listingPrice(item)}</Text><Text style={s.small}>{item.location.county} {item.location.district} · {item.condition === 'NEW' ? '新品' : '二手'}{item.status === 'RESERVED' ? ' · 已保留' : ''}</Text>{matchReasons[item.id]?.slice(0, 2).map(reason => <Text key={reason} style={s.small}>{reason}</Text>)}</View>
+  const card = (item: PublicListing, compact = false) => <Pressable accessibilityRole="button" accessibilityLabel={`${wishItemId && item.owner.id === userId ? '我的商品配對預覽，' : ''}${item.title}，${listingPrice(item)}，${item.location.county}${item.location.district}`} onPress={() => void openDetail(item)} style={[s.card, compact && s.floatingCard, compact && narrowMapCard && s.narrowFloatingCard]}>
+    <Image source={{ uri: item.media[0].thumbnailUrl }} accessibilityLabel="商品縮圖" style={[s.thumbnail, compact && narrowMapCard && s.narrowFloatingThumbnail]} />
+    <View style={s.cardText}>{wishItemId && item.owner.id === userId && <Text numberOfLines={compact && narrowMapCard ? 1 : undefined} style={s.small}>我的商品 · 配對預覽，非買家推薦</Text>}<Text numberOfLines={compact && narrowMapCard ? 1 : 2} style={s.cardTitle}>{item.title}</Text><Text numberOfLines={1} style={[s.price, compact && narrowMapCard && s.narrowFloatingPrice]}>{listingPrice(item)}</Text><Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.location.county} {item.location.district} · {item.condition === 'NEW' ? '新品' : '二手'}{item.status === 'RESERVED' ? ' · 已保留' : ''}</Text>{(!compact || !narrowMapCard) && matchReasons[item.id]?.slice(0, 2).map(reason => <Text key={reason} style={s.small}>{reason}</Text>)}</View>
   </Pressable>;
   const externalCard = (item: ExternalListing, compact = false) => <Pressable accessibilityRole="button"
     accessibilityLabel={`外部來源商品，${item.title}，${externalPrice(item)}，${item.county}${item.district}`}
-    onPress={() => void openExternalDetail(item)} style={[s.card, s.externalCard, compact && s.floatingCard]}>
-    <Image source={{ uri: item.thumbnailUrl }} accessibilityLabel="來源商品縮圖" style={s.thumbnail} />
+    onPress={() => void openExternalDetail(item)} style={[s.card, s.externalCard, compact && s.floatingCard, compact && narrowMapCard && s.narrowFloatingCard]}>
+    <Image source={{ uri: item.thumbnailUrl }} accessibilityLabel="來源商品縮圖" style={[s.thumbnail, compact && narrowMapCard && s.narrowFloatingThumbnail]} />
     <View style={s.cardText}><Text style={s.externalBadge}>外部來源 · {item.source.host}</Text>
-      <Text numberOfLines={2} style={s.cardTitle}>{item.title}</Text><Text style={s.price}>{externalPrice(item)}</Text>
-      <Text style={s.small}>{item.county} {item.district} · 行政區中心示意 · 回原站交易</Text></View>
+      <Text numberOfLines={compact && narrowMapCard ? 1 : 2} style={s.cardTitle}>{item.title}</Text><Text numberOfLines={1} style={[s.price, compact && narrowMapCard && s.narrowFloatingPrice]}>{externalPrice(item)}</Text>
+      <Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.county} {item.district} · {compact && narrowMapCard ? '約略位置' : '行政區中心示意 · 回原站交易'}</Text></View>
   </Pressable>;
-  const listItems = [...visible.map(item => ({ kind: 'seller' as const, item })),
+  const allListItems = [...visible.map(item => ({ kind: 'seller' as const, item })),
     ...externalVisible.map(item => ({ kind: 'external' as const, item }))];
+  const listItems = clusterPreview ? allListItems.filter(entry =>
+    entry.kind === clusterPreview.kind && clusterPreview.ids.includes(entry.item.id)) : allListItems;
   const canExpand = !!bounds && JSON.stringify(expandedSearchBounds(bounds)) !== JSON.stringify(bounds);
   const loadedCount = visible.length + externalVisible.length;
+  const resultSummary = `此次搜尋範圍（搜尋時的地圖視野）· 已載入 ${loadedCount} 件（站內 ${visible.length} 件${wishItemId ? `，其中自己的配對預覽 ${visible.filter(item => item.owner.id === userId).length} 件` : ''}${externalEnabled ? `／外部 ${externalVisible.length} 件` : ''}）${cursor || externalCursor ? ' · 還有更多' : ''}`;
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
   return <View style={s.screen}>
-    {wishItemId && <View style={s.toolbar}><Text style={s.small}>符合所選願望 · 自己刊登的商品會標為配對預覽，不是買家推薦；圖片不直接比對。站內本頁評分排序；外部來源依文字及可比較的台幣預算篩出候選，請到來源核對型號、庫存與真偽。</Text><Pressable accessibilityRole="button" style={s.chip} onPress={onClearWish}><Text style={s.text}>取消願望篩選</Text></Pressable></View>}
+    {wishItemId && <View style={s.wishBanner}>
+      <View style={s.wishBannerRow}>
+        <Text style={s.wishBannerTitle}>符合所選願望</Text>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: matchExplanationOpen }}
+          accessibilityHint="查看願望配對與外部來源的限制" style={[s.chip, s.compactToolbarChip]}
+          onPress={() => setMatchExplanationOpen(open => !open)}>
+          <Text style={s.text}>{matchExplanationOpen ? (compactControls ? '收合' : '收合說明') : (compactControls ? '說明' : '比對說明')}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="取消願望篩選" style={[s.chip, s.compactToolbarChip]} onPress={onClearWish}>
+          <Text style={s.text}>取消</Text>
+        </Pressable>
+      </View>
+      {matchExplanationOpen && <Text style={s.small}>自己刊登的商品會標為配對預覽，不是買家推薦；圖片不直接比對。站內本頁評分排序；外部來源依文字及可比較的台幣預算篩出候選，請到來源核對型號、庫存與真偽。</Text>}
+    </View>}
     <View style={s.search}><TextInput accessibilityLabel="搜尋商品名稱與說明" placeholder="想找什麼好物？" value={filters.q} onChangeText={q => setFilters(old => ({ ...old, q }))} returnKeyType="search" onSubmitEditing={apply} style={s.searchInput} /><Pressable accessibilityRole="button" style={s.chip} onPress={apply}><Text style={s.text}>搜尋</Text></Pressable></View>
-    <View style={s.toolbar}><Pressable accessibilityRole="button" style={s.chip} onPress={() => setFiltering(true)}><Text style={s.text}>篩選</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => setListMode(old => !old)}><Text style={s.text}>{listMode ? '切換地圖' : '切換清單'}</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => openReport(null)}><Text style={s.text}>我的檢舉</Text></Pressable>
-      <Text accessibilityLiveRegion="polite" style={s.small}>此次搜尋範圍（搜尋時的地圖視野）· 已載入 {loadedCount} 件（站內 {visible.length} 件{wishItemId ? `，其中自己的配對預覽 ${visible.filter(item => item.owner.id === userId).length} 件` : ''}{externalEnabled ? `／外部 ${externalVisible.length} 件` : ''}）{cursor || externalCursor ? ' · 還有更多' : ''}</Text>
+    <View style={s.toolbar}><Pressable accessibilityRole="button" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => setFiltering(true)}><Text style={s.text}>篩選</Text></Pressable><Pressable accessibilityRole="button" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => { setClusterPreview(null); setListMode(old => !old); }}><Text style={s.text}>{listMode ? '切換地圖' : '切換清單'}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="我的檢舉" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => openReport(null)}><Text style={s.text}>{compactControls ? '檢舉' : '我的檢舉'}</Text></Pressable>
       {(busy || externalBusy) && <ActivityIndicator accessibilityLabel="搜尋商品中" />}</View>
-    <View style={s.toolbar}>{canExpand && <Pressable accessibilityRole="button" style={s.scopeButton} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
-      {!!resultFrame && <Pressable accessibilityRole="button" style={s.chip} onPress={returnToResults}><Text style={s.text}>回到搜尋結果</Text></Pressable>}</View>
     {!!error && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{error}</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View>}
     {!!externalError && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{externalError}</Text><Pressable accessibilityRole="button" disabled={externalBusy} style={s.chip} onPress={() => void loadExternal()}><Text style={s.text}>重載外部商品</Text></Pressable></View>}
     {bounds && !externalPath && <Text style={s.notice}>目前篩選包含外部來源無法驗證的欄位{wishItemId && radiusApplied ? '（含距離）' : ''}，因此只顯示站內刊登。</Text>}
     {!bounds && <Text style={s.notice}>目前視野不在台灣，請將地圖移回台灣範圍。</Text>}
     {listMode ? <FlatList data={listItems} keyExtractor={entry => entry.kind + ':' + entry.item.id}
+      ListHeaderComponent={<View style={s.listStatus}><Text accessibilityLiveRegion="polite" style={s.small}>{clusterPreview ? `此圖釘包含 ${listItems.length} 件商品 · 此次搜尋共載入 ${loadedCount} 件` : resultSummary}</Text><View style={s.wrap}>
+        {clusterPreview && <Pressable accessibilityRole="button" style={s.chip} onPress={() => setClusterPreview(null)}><Text style={s.text}>查看全部已載入商品</Text></Pressable>}
+        {!clusterPreview && canExpand && <Pressable accessibilityRole="button" style={s.scopeButton} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
+        {!clusterPreview && !!resultFrame && <Pressable accessibilityRole="button" style={s.chip} onPress={returnToResults}><Text style={s.text}>回到搜尋結果</Text></Pressable>}
+      </View></View>}
       renderItem={({ item }) => <View>{item.kind === 'seller' ? card(item.item) : externalCard(item.item)}
         <Pressable accessibilityRole="button" accessibilityLabel={`在地圖上查看${item.item.title}`}
           onPress={() => item.kind === 'seller'
@@ -310,9 +371,9 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
           <Text style={s.mapLinkText}>在地圖上查看</Text>
         </Pressable></View>}
       contentContainerStyle={s.list} ListEmptyComponent={!busy && !externalBusy && bounds && !error && !externalError ? <Text style={s.text}>目前地圖範圍 0 件，不代表全站沒有商品。可擴大範圍或減少篩選。</Text> : null}
-      ListFooterComponent={<View style={s.wrap}>{cursor && <Pressable accessibilityRole="button" disabled={busy || items.length >= MAX_LOADED} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>{items.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多站內商品'}</Text></Pressable>}
+      ListFooterComponent={clusterPreview ? null : <View style={s.wrap}>{cursor && <Pressable accessibilityRole="button" disabled={busy || items.length >= MAX_LOADED} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>{items.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多站內商品'}</Text></Pressable>}
         {externalCursor && <Pressable accessibilityRole="button" disabled={externalBusy || externalItems.length >= MAX_LOADED} style={s.chip} onPress={() => void loadExternal(externalCursor)}><Text style={s.text}>{externalItems.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多外部商品'}</Text></Pressable>}</View>} /> : <View style={s.flex}>
-      <NativeMap style={s.flex} mapStyle={MAP_STYLE} attribution onRegionDidChange={event => viewport(event.nativeEvent.bounds)} onDidFailLoadingMap={() => setMapError(true)} onDidFinishLoadingStyle={() => { setMapError(false); setMapReady(true); }} onDidFinishLoadingMap={() => { setMapError(false); setMapReady(true); }}>
+      <NativeMap style={s.flex} mapStyle={libertyZhHantStyle} attribution onRegionDidChange={event => viewport(event.nativeEvent.bounds)} onDidFailLoadingMap={() => setMapError(true)} onDidFinishLoadingStyle={() => { setMapError(false); setMapReady(true); }} onDidFinishLoadingMap={() => { setMapError(false); setMapReady(true); }}>
         <Camera ref={camera} initialViewState={{ bounds: latestViewport.current ?? bounds ?? TAIWAN_BOUNDS }} maxZoom={19} />
         <Images images={images} />
         <GeoJSONSource ref={source} id="marketplace-items" data={data} cluster clusterRadius={48} clusterMaxZoom={20} onPress={event => void pressFeature(event.nativeEvent.features[0])}>
@@ -328,7 +389,14 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
           <Layer id="external-photos" type="symbol" filter={['!', ['has', 'point_count']]} layout={{ 'icon-image': ['get', 'icon'], 'icon-size': 0.15, 'icon-allow-overlap': false }} />
         </GeoJSONSource>
       </NativeMap>
-      {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && bounds && !error && !externalError) || cursor || externalCursor) && <View pointerEvents="box-none" style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
+      <View pointerEvents="box-none" style={s.mapTopActions}>
+        <View pointerEvents="box-none" style={s.mapMetaRow}>
+          <Text accessibilityLabel={resultSummary} accessibilityLiveRegion="polite" numberOfLines={1} style={s.mapCount}>已載入 {loadedCount} 件{externalEnabled ? ` · 外部 ${externalVisible.length}` : ''}</Text>
+          {!!resultFrame && <Pressable accessibilityRole="button" accessibilityLabel="回到搜尋結果" style={s.mapAction} onPress={returnToResults}><Text style={s.scopeText}>回到結果</Text></Pressable>}
+        </View>
+        {canExpand && <Pressable accessibilityRole="button" style={s.mapAction} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
+        {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && bounds && !error && !externalError) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
+      </View>
       {chosen && card(chosen, true)}
       {chosenExternal && externalCard(chosenExternal, true)}
     </View>}
@@ -358,7 +426,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
         <Pressable accessibilityRole="button" style={s.chip} onPress={() => { detailSequence.current++; setExternalDetail(null); }}><Text style={s.text}>返回探索</Text></Pressable>
         {externalDetail && <><Text style={s.externalBadge}>外部來源 · {externalDetail.source.host}</Text>
           <Text style={s.heading}>{externalDetail.title}</Text><Text style={s.price}>{externalPrice(externalDetail)}</Text>
-          <Image source={{ uri: externalDetail.imageUrl }} style={s.detailPhoto} accessibilityLabel="來源商品圖片" />
+          <ExternalDetailPhoto key={externalDetail.id} imageUrl={externalDetail.imageUrl} thumbnailUrl={externalDetail.thumbnailUrl} />
           <Text style={s.text}>{externalDetail.description}</Text>
           {externalDetail.aiSupplement && <><Text style={s.externalBadge}>AI 補充說明 · 已人工審核</Text>
             <Text style={s.text}>{externalDetail.aiSupplement}</Text>
@@ -372,12 +440,15 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, wishItemId, onC
     </Modal>
   </View>;
 }
-const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, search: { flexDirection: 'row', paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.xs, gap: iosSpacing.xs }, searchInput: { flex: 1, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.pill, paddingHorizontal: iosSpacing.md, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, toolbar: { flexDirection: 'row', padding: iosSpacing.sm, gap: iosSpacing.xs, alignItems: 'center', flexWrap: 'wrap' },
-  list: { padding: iosSpacing.md, gap: iosSpacing.md, paddingBottom: iosSpacing.xxl }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, justifyContent: 'center' }, activeChip: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, heading: { ...iosType.title, color: iosColors.label }, price: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: iosColors.tint }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, padding: iosSpacing.md, fontSize: 17, backgroundColor: iosColors.surface, color: iosColors.label },
-  card: { flexDirection: 'row', backgroundColor: iosColors.surface, borderRadius: iosRadius.card, padding: iosSpacing.sm, gap: iosSpacing.sm, marginBottom: iosSpacing.sm, ...iosShadow }, externalCard: { borderWidth: 1, borderColor: '#A75615' }, externalBadge: { ...iosType.subheadline, color: '#A75615', fontWeight: '700' }, floatingCard: { position: 'absolute', bottom: iosSpacing.sm, left: iosSpacing.sm, right: iosSpacing.sm, ...iosFloatingShadow }, thumbnail: { width: 84, height: 84, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary }, cardText: { flex: 1, gap: iosSpacing.xxs }, cardTitle: { ...iosType.headline, color: iosColors.label }, detailPhoto: { width: 248, height: 248, borderRadius: iosRadius.card, marginRight: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary }, button: { minHeight: 52, padding: iosSpacing.md, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' }, white: { color: iosColors.white, ...iosType.headline }, notice: { padding: iosSpacing.sm, gap: iosSpacing.xs }, error: { color: iosColors.danger, ...iosType.subheadline }, mapNotice: { position: 'absolute', top: iosSpacing.sm, left: iosSpacing.sm, right: iosSpacing.sm, padding: iosSpacing.sm, backgroundColor: iosColors.surface, borderRadius: iosRadius.control, ...iosFloatingShadow },
+const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, search: { flexDirection: 'row', paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.xs, gap: iosSpacing.xs }, searchInput: { flex: 1, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.pill, paddingHorizontal: iosSpacing.md, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, toolbar: { flexDirection: 'row', padding: iosSpacing.sm, gap: iosSpacing.xs, alignItems: 'center', flexWrap: 'wrap' }, wishBanner: { paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.xs, gap: iosSpacing.xxs }, wishBannerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: iosSpacing.xs }, wishBannerTitle: { ...iosType.subheadline, color: iosColors.label, fontWeight: '700', flexShrink: 1 },
+  list: { padding: iosSpacing.md, gap: iosSpacing.md, paddingBottom: iosSpacing.xxl }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, justifyContent: 'center' }, compactToolbarChip: { paddingHorizontal: iosSpacing.xs }, activeChip: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, heading: { ...iosType.title, color: iosColors.label }, price: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: iosColors.tint }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, padding: iosSpacing.md, fontSize: 17, backgroundColor: iosColors.surface, color: iosColors.label },
+  card: { flexDirection: 'row', backgroundColor: iosColors.surface, borderRadius: iosRadius.card, padding: iosSpacing.sm, gap: iosSpacing.sm, marginBottom: iosSpacing.sm, ...iosShadow }, externalCard: { borderWidth: 1, borderColor: '#A75615' }, externalBadge: { ...iosType.subheadline, color: '#A75615', fontWeight: '700' }, floatingCard: { position: 'absolute', bottom: iosSpacing.sm, left: iosSpacing.sm, right: iosSpacing.sm, ...iosFloatingShadow }, thumbnail: { width: 84, height: 84, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary }, cardText: { flex: 1, gap: iosSpacing.xxs }, cardTitle: { ...iosType.headline, color: iosColors.label }, detailPhoto: { width: 248, height: 248, borderRadius: iosRadius.card, marginRight: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary }, detailPhotoFrame: { width: 248, height: 248, borderRadius: iosRadius.card, marginRight: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary, overflow: 'hidden' }, detailPhotoLayer: { ...StyleSheet.absoluteFill }, detailPhotoHidden: { opacity: 0 }, detailPhotoPlaceholder: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: iosSpacing.xs }, detailPhotoFallback: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: iosSpacing.xs, backgroundColor: 'rgba(255,255,255,0.92)', textAlign: 'center', color: iosColors.secondaryLabel, ...iosType.caption }, button: { minHeight: 52, padding: iosSpacing.md, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' }, white: { color: iosColors.white, ...iosType.headline }, notice: { padding: iosSpacing.sm, gap: iosSpacing.xs }, error: { color: iosColors.danger, ...iosType.subheadline }, mapTopActions: { position: 'absolute', top: iosSpacing.sm, left: iosSpacing.sm, right: iosSpacing.sm, gap: iosSpacing.xs, alignItems: 'flex-start' }, mapMetaRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs }, mapCount: { flexShrink: 1, overflow: 'hidden', paddingHorizontal: iosSpacing.sm, paddingVertical: iosSpacing.xs, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, color: iosColors.label, ...iosType.subheadline, ...iosFloatingShadow }, mapAction: { minHeight: minimumTapSize, justifyContent: 'center', paddingHorizontal: iosSpacing.sm, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, ...iosFloatingShadow }, mapNotice: { padding: iosSpacing.sm, backgroundColor: iosColors.surface, borderRadius: iosRadius.control, ...iosFloatingShadow }, listStatus: { gap: iosSpacing.sm },
   scopeButton: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, justifyContent: 'center',
     backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint, borderWidth: 1, borderRadius: iosRadius.pill },
   scopeText: { ...iosType.subheadline, fontWeight: '700', color: iosColors.tint },
   mapLink: { minHeight: minimumTapSize, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: iosSpacing.md },
   mapLinkText: { ...iosType.subheadline, fontWeight: '700', color: iosColors.tint },
+  narrowFloatingCard: { padding: iosSpacing.xs, gap: iosSpacing.xs },
+  narrowFloatingThumbnail: { width: 68, height: 68 },
+  narrowFloatingPrice: { fontSize: 17, lineHeight: 22 },
 });

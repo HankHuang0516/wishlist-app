@@ -1,7 +1,7 @@
 import { uuid } from './listingForm';
 export class ChatDataError extends Error { constructor(message = '聊天資料回應不正確') { super(message); } }
-export type ChatRoomRecord = { id: string; listingId: string | null; buyerUserId: number | null; sellerUserId: number | null; archived: boolean; lastMessageSequence: number; lastReadSequence: number; unreadCount: number; blocked: boolean; blockedByMe: boolean; blockedByOther: boolean; listingAvailable: boolean; lastMessageAt: string;
-  buyer: { id: number | null; name: string | null }; seller: { id: number | null; name: string | null }; listing: { id: string | null; title: string; status: string; expiresAt: string | null } };
+export type ChatRoomRecord = { id: string; listingId: string | null; buyerUserId: number | null; sellerUserId: number | null; archived: boolean; lastMessageSequence: number; lastReadSequence: number; unreadCount: number; blocked: boolean; blockedByMe: boolean; blockedByOther: boolean; listingAvailable: boolean; lastMessageAt: string; lastMessageText: string | null;
+  buyer: { id: number | null; name: string | null }; seller: { id: number | null; name: string | null }; listing: { id: string | null; title: string; status: string; expiresAt: string | null; price: number | null; currency: 'TWD'; thumbnailUrl: string | null } };
 export type ChatMessage = { id: string; conversationId: string; senderUserId: number; clientMessageId: string; sequence: number; text: string; createdAt: string };
 const record = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ChatDataError(); return v as Record<string, unknown>; };
 const seq = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 2147483647;
@@ -12,12 +12,18 @@ export function parseChatRoom(v: unknown, currentUserId: number): ChatRoomRecord
   const r = record(v); const archived = r.archived === true;
   if (r.archived !== undefined && typeof r.archived !== 'boolean') throw new ChatDataError();
   const identity = (id: unknown): id is number | null => (archived && id === null) || (seq(id) && id > 0);
-  const listing = archived && r.listing === null && r.listingId === null ? { id: null, title: '已封存的商品聊天', status: 'REMOVED', expiresAt: null } : record(r.listing);
+  const listing = archived && r.listing === null && r.listingId === null ? { id: null, title: '已封存的商品聊天', status: 'REMOVED', expiresAt: null,
+    price: null, currency: 'TWD', thumbnailUrl: null } : record(r.listing);
   if (!uuid(r.id) || !(uuid(r.listingId) || (archived && r.listingId === null)) || !identity(r.buyerUserId) || !identity(r.sellerUserId) || r.buyerUserId === r.sellerUserId || ![r.buyerUserId, r.sellerUserId].includes(currentUserId) ||
       !seq(r.lastMessageSequence) || !seq(r.lastReadSequence) || r.lastReadSequence > r.lastMessageSequence || !seq(r.unreadCount) || r.unreadCount > r.lastMessageSequence || typeof r.blocked !== 'boolean' || typeof r.blockedByMe !== 'boolean' || typeof r.blockedByOther !== 'boolean' || r.blocked !== (r.blockedByMe || r.blockedByOther) || typeof r.listingAvailable !== 'boolean' || !date(r.lastMessageAt) ||
-      (archived && r.listingAvailable) || listing.id !== r.listingId || !text(listing.title, 100) || !['DRAFT', 'PENDING_CONFIRMATION', 'ACTIVE', 'RESERVED', 'SOLD', 'REMOVED', 'EXPIRED'].includes(listing.status as string) || !(listing.expiresAt === null || date(listing.expiresAt))) throw new ChatDataError();
+      (archived && r.listingAvailable) || listing.id !== r.listingId || !text(listing.title, 100) || !['DRAFT', 'PENDING_CONFIRMATION', 'ACTIVE', 'RESERVED', 'SOLD', 'REMOVED', 'EXPIRED'].includes(listing.status as string) || !(listing.expiresAt === null || date(listing.expiresAt)) ||
+      !(listing.price === null || (typeof listing.price === 'number' && Number.isFinite(listing.price) && listing.price >= 0 && listing.price <= 99999999)) || listing.currency !== 'TWD' ||
+      !(listing.thumbnailUrl === null || (typeof listing.thumbnailUrl === 'string' && listing.thumbnailUrl.length <= 2048)) ||
+      (!r.listingAvailable && listing.thumbnailUrl !== null) || !(r.lastMessageText === null || text(r.lastMessageText, 2000))) throw new ChatDataError();
   return { id: r.id, listingId: r.listingId, buyerUserId: r.buyerUserId, sellerUserId: r.sellerUserId, archived, lastMessageSequence: r.lastMessageSequence, lastReadSequence: r.lastReadSequence, unreadCount: r.unreadCount, blocked: r.blocked, blockedByMe: r.blockedByMe, blockedByOther: r.blockedByOther, listingAvailable: r.listingAvailable, lastMessageAt: r.lastMessageAt,
-    buyer: profile(r.buyer, r.buyerUserId), seller: profile(r.seller, r.sellerUserId), listing: { id: listing.id as string | null, title: listing.title, status: listing.status as string, expiresAt: listing.expiresAt as string | null } };
+    lastMessageText: r.lastMessageText as string | null,
+    buyer: profile(r.buyer, r.buyerUserId), seller: profile(r.seller, r.sellerUserId), listing: { id: listing.id as string | null, title: listing.title as string, status: listing.status as string, expiresAt: listing.expiresAt as string | null,
+      price: listing.price as number | null, currency: 'TWD', thumbnailUrl: listing.thumbnailUrl as string | null } };
 }
 export function parseChatInbox(v: unknown, userId: number) {
   const page = record(v); if (!Array.isArray(page.items) || page.items.length > 50 || !(page.nextCursor === null || uuid(page.nextCursor))) throw new ChatDataError();

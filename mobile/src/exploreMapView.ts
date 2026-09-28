@@ -1,4 +1,5 @@
 import { clipBounds, TAIWAN_BOUNDS, type Bounds } from './listingSearch';
+import type { Feature } from 'geojson';
 
 export type PublicMapPoint = { longitude: number; latitude: number };
 export type ResultCamera = { kind: 'single'; center: [number, number]; zoom: number } |
@@ -25,4 +26,10 @@ export function expandedSearchBounds(bounds: Bounds): Bounds {
   const halfLng = Math.max(0.05, bounds[2] - bounds[0]);
   const halfLat = Math.max(0.05, bounds[3] - bounds[1]);
   return clipBounds([centerLng - halfLng, centerLat - halfLat, centerLng + halfLng, centerLat + halfLat]) ?? TAIWAN_BOUNDS;
+}
+
+/** Keep a collapsed cluster's list scoped to its actual loaded leaves. */
+export function clusterLeafIds(features: Feature[], property: 'listingId' | 'externalId'): string[] {
+  return [...new Set(features.map(feature => feature.properties?.[property])
+    .filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }

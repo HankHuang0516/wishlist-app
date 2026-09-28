@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { ApiError, createApi, validateApiUrl } from '../api';
+import { ApiError, createApi, isIsolatedVisualQaUrl, validateApiUrl } from '../api';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -10,6 +10,17 @@ describe('native API safety', () => {
   it('allows HTTP only for explicit loopback development', () => {
     expect(validateApiUrl('http://localhost:3000', true)).toBe('http://localhost:3000');
     expect(() => validateApiUrl('http://example.com', true)).toThrow();
+  });
+  it('limits Release-equivalent HTTP to the exact isolated APK, flag and loopback port', () => {
+    const qa = 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.visualqa202609281136';
+    expect(isIsolatedVisualQaUrl('http://127.0.0.1:18889', '1', qa)).toBe(true);
+    for (const [url, flag, packageName] of [
+      ['http://10.0.2.2:18889', '1', qa],
+      ['http://127.0.0.1:18890', '1', qa],
+      ['http://127.0.0.1:18889', undefined, qa],
+      ['http://127.0.0.1:18889', '1', 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1'],
+    ] as const) expect(isIsolatedVisualQaUrl(url, flag, packageName)).toBe(false);
+    expect(() => validateApiUrl('http://127.0.0.1:18889')).toThrow();
   });
   it('uses the current token and does not log or embed it in a URL', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 1 }) });

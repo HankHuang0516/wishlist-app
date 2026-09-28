@@ -6,11 +6,27 @@ export class ApiError extends Error {
 
 export type ApiRequestOptions = RequestInit & { timeoutMs?: number };
 
+const visualQaApi = 'http://127.0.0.1:18889';
+const visualQaPackage = /^com\.hank_huang0516\.snack425e646aa6a74ad8a964aadeb4741fc1\.visualqa\d{12}$/;
+let visualQaApplicationId: string | null = null;
+export function registerVisualQaRuntimeApplicationId(value: string | null): void {
+  if (process.env.EXPO_PUBLIC_VISUAL_QA === '1') visualQaApplicationId = value;
+}
+export function isIsolatedVisualQaUrl(value: string, flag: string | undefined, applicationId: string | null): boolean {
+  return flag === '1' && value === visualQaApi && typeof applicationId === 'string' &&
+    visualQaPackage.test(applicationId);
+}
+function runtimeIsolatedVisualQaUrl(value: string): boolean {
+  if (process.env.EXPO_PUBLIC_VISUAL_QA !== '1' || value !== visualQaApi) return false;
+  return isIsolatedVisualQaUrl(value, process.env.EXPO_PUBLIC_VISUAL_QA, visualQaApplicationId);
+}
+
 export function validateApiUrl(value: string, allowLocalHttp = false): string {
   const url = new URL(value);
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if (url.username || url.password || url.search || url.hash ||
-      (url.protocol !== 'https:' && !(allowLocalHttp && local && url.protocol === 'http:'))) {
+      (url.protocol !== 'https:' && !(allowLocalHttp && local && url.protocol === 'http:') &&
+        !runtimeIsolatedVisualQaUrl(value))) {
     throw new Error('API 必須使用 HTTPS，且不可包含憑證或查詢參數。');
   }
   return url.href.replace(/\/$/, '').replace(/\/api$/, '');

@@ -27,6 +27,7 @@ async function tap(label) {
 (async () => {
   const installed = adb(['shell', 'dumpsys', 'package', pkg]);
   if (!installed.includes('versionCode=28 ') || !installed.includes('versionName=2.0.11')) throw new Error('Expected internal candidate is not installed');
+  adb(['shell', 'am', 'force-stop', pkg]);
   adb(['shell', 'am', 'start', '-W', '-n', `${pkg}/.MainActivity`]);
   await waitFor('我的');
   await tap('我的');
@@ -50,7 +51,19 @@ async function tap(label) {
   const focus = adb(['shell', 'dumpsys', 'window', 'windows']);
   if (!/ChooserActivity|ResolverActivity|sharesheet/i.test(focus)) throw new Error('System share sheet did not open');
   adb(['shell', 'input', 'keyevent', '4']);
+  await tap('關閉我的商品');
+  await tap('社交');
+  await waitFor('聊天與面交');
+  let inboxReady = false;
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const all = dump();
+    if (found(all, '暫時無法載入聊天；請確認網路後重試。')) throw new Error('Chat inbox rejected the production response');
+    if (found(all, '其他商品尚無聊天') || all.some(node => /，與.+聊天/.test(node['content-desc'] ?? ''))) { inboxReady = true; break; }
+    await pause(500);
+  }
+  if (!inboxReady) throw new Error('Chat inbox never rendered a final state');
   console.log(JSON.stringify({ versionCode: 28, managementEntry: true, publishedListingTab: tab,
-    shareActionVisible: true, systemShareSheetOpened: true, messageSent: false, productionDataChanged: false }));
+    shareActionVisible: true, systemShareSheetOpened: true, chatInboxRendered: true,
+    messageSent: false, productionDataChanged: false }));
 })().catch(error => { console.error(error instanceof Error ? error.message : 'Listing share smoke failed'); process.exitCode = 1; })
   .finally(() => { try { adb(['shell', 'rm', '-f', xmlPath]); } catch { /* supervisor releases device */ } });

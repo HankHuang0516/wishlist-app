@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "screen": "home-match-multiple",
+  "allowedScreenStates": ["multiple-matches-one-wish-collapsed"],
+  "designReference": "wishlist-uiux-buyer-v2-20260927.png",
+  "items": [
+    { "id": "safe-area-brand-tabs", "weight": 10, "critical": false, "requiredMetrics": ["brandTopPt", "brandBottomPt", "bottomTabTopPt"], "criterion": "同畫布的系統安全區、品牌列與五分頁不遮擋主內容；主要邊界差不超過 4pt。" },
+    { "id": "hero-hierarchy", "weight": 10, "critical": false, "requiredMetrics": ["heroTopPt", "heroBottomPt"], "criterion": "讓願望更靠近的標題、說明、字級與留白遵循審定首頁基準；長字級仍可閱讀。" },
+    { "id": "matches-heading-explanation", "weight": 8, "critical": false, "requiredMetrics": ["matchesHeadingTopPt", "matchesExplanationBottomPt"], "criterion": "所有願望吻合商品標題及每個願望先顯示一件的說明層級清楚，不以圖片直接比對或保證真偽誤導買家。" },
+    { "id": "one-best-per-wish", "weight": 10, "critical": true, "criterion": "每個願望在預設收合狀態只顯示一件排序最高的其他賣家商品；本人的刊登不得進入買家推薦，資料 ID 與排行可回查。" },
+    { "id": "match-card-geometry", "weight": 15, "critical": false, "requiredMetrics": ["cardTopPt", "cardBottomPt", "cardLeftPt", "cardRightPt"], "criterion": "願望標題、主商品行及多件吻合列均在同一卡內，位置、尺寸、內距及圓角符合審定基準，不被固定分頁覆蓋。" },
+    { "id": "product-photo-price-identity", "weight": 17, "critical": true, "requiredMetrics": ["primaryPhotoWidthPt", "primaryPhotoHeightPt"], "criterion": "固定合成商品縮圖、名稱、NT$ 售價、約略行政區與吻合分數對應同一商品 ID；不得顯示私人原圖或另一件商品的圖片。" },
+    { "id": "multiple-match-expander", "weight": 12, "critical": true, "requiredMetrics": ["multipleRowTopPt", "multipleRowBottomPt"], "criterion": "多件吻合列顯示正確件數與最多三張對應縮圖；預設為收合，可點開全部符合商品，再收合，狀態朗讀正確。" },
+    { "id": "wish-selector-map-entry", "weight": 12, "critical": true, "criterion": "今天想找什麼的願望選擇狀態清楚，地圖入口使用目前選取願望；小螢幕允許捲動但入口必須可達、完整可點且不被底部分頁蓋住。" },
+    { "id": "type-color-touch-reader", "weight": 6, "critical": true, "criterion": "品牌色、文字層級、縮圖裁切與圖示符合審定 token；卡片、展開列、願望選擇、地圖入口及五分頁至少 44pt 可點，VoiceOver／TalkBack 名稱與焦點可用。" }
+  ]
+}

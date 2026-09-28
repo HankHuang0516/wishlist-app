@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "screen": "my-listings-active-card",
+  "allowedScreenStates": ["active-one-item-card-collapsed"],
+  "designReference": "wishlist-uiux-seller-v2-20260927.png",
+  "items": [
+    { "id": "safe-area-heading", "weight": 15, "critical": false, "requiredMetrics": ["headerTopPt", "headerBottomPt", "safeAreaBottomPt"], "criterion": "我的商品頁首置中、關閉控制及系統安全區符合審定同畫布基準，且無裁切。" },
+    { "id": "status-tabs", "weight": 15, "critical": true, "requiredMetrics": ["tabsTopPt", "tabsBottomPt"], "criterion": "在售與其餘真實狀態的順序、數量及選取狀態正確；小螢幕可橫向存取，不隱藏第六個已移除狀態。" },
+    { "id": "card-geometry", "weight": 15, "critical": false, "requiredMetrics": ["cardTopPt", "cardBottomPt", "cardLeftPt", "cardRightPt"], "criterion": "單件商品卡的位置、留白、圓角與照片／資訊分欄依審定基準，主要內容未被固定控制覆蓋。" },
+    { "id": "photo-and-identity", "weight": 15, "critical": true, "requiredMetrics": ["photoWidthPt", "photoHeightPt"], "criterion": "固定合成商品的縮圖、名稱、NT$ 售價、二手狀態與地點正確對應；私人原圖不可誤公開或被其他商品圖取代。" },
+    { "id": "actions-and-order", "weight": 15, "critical": true, "requiredMetrics": ["actionsTopPt", "actionsBottomPt"], "criterion": "查看詳情、編輯資訊、標記售出與延長期限的順序及可用狀態正確；402pt 一列、小畫布或放大字級可自適應而非縮到不可讀。" },
+    { "id": "content-hierarchy", "weight": 10, "critical": false, "criterion": "名稱、價格、在售狀態、地點及到期日的層級與單位明確；日期和商品編號不壓過購買判斷資訊。" },
+    { "id": "color-type-icons", "weight": 10, "critical": false, "criterion": "品牌色、背景、卡片、字級、粗細、圖示及選取色使用審定 token，文字不得因截斷變成錯價或錯狀態。" },
+    { "id": "touch-and-screen-reader", "weight": 5, "critical": true, "criterion": "關閉、狀態分頁、商品卡操作的點擊區至少 44pt，VoiceOver／TalkBack 名稱、焦點和操作可用。" }
+  ]
+}

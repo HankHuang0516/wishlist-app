@@ -15,17 +15,25 @@ const { credentialFreeResultLogs } = require('./ios-qa-result-privacy.cjs');
 const { buyerErasureProof } = require('./android-qa-config.cjs');
 const { startNativeQa } = require('./native-qa.cjs');
 const { seedNativeMarketplace } = require('./native-qa-marketplace-fixture.cjs');
+const { seedUiuxHomeQa } = require('./seed-uiux-home-qa.cjs');
 const { fixtureDistance } = require('./native-qa-photo-fingerprint.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 const mobile = path.resolve(__dirname, '..');
 const label = qaLabel(process.argv[2]), udid = assignedUdid(process.env);
 const option = process.argv[3];
 const flow = option?.startsWith('--authenticated-') ? option.slice('--authenticated-'.length) : null;
+const requestedContentSize = process.argv[4] === '--content-size=accessibility-large' ? 'accessibility-large' : null;
+const accessibilityAudit = process.env.NATIVE_QA_ACCESSIBILITY_AUDIT === '1';
+const visualFixture = process.env.NATIVE_QA_VISUAL_FIXTURE ?? null;
 const publishOneAiFlow = flow === 'listing-batch-two-ai-publish-one';
 const listingAiFlow = flow === 'listing-batch-ai-photo' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
 const twoPhotoFlow = flow === 'listing-batch-two-photos' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
 const authenticated = flow !== null;
-if ((option && (!authenticated || !Object.hasOwn(AUTHENTICATED_FLOWS, flow))) || process.argv[4]) throw new Error('Unexpected runtime option');
+if ((option && (!authenticated || !Object.hasOwn(AUTHENTICATED_FLOWS, flow))) ||
+  process.argv[4] && (!requestedContentSize || !['marketplace-my-listings', 'marketplace-meetup'].includes(flow)) || process.argv[5]) throw new Error('Unexpected runtime option');
+if (process.env.NATIVE_QA_ACCESSIBILITY_AUDIT !== undefined && !accessibilityAudit ||
+    accessibilityAudit && flow !== 'marketplace-meetup') throw new Error('Unsupported accessibility audit route');
+if (visualFixture && (visualFixture !== 'visual-mug' || flow !== 'marketplace-my-listings')) throw new Error('Unsupported visual QA fixture');
 const selectedTests = authenticated ? AUTHENTICATED_FLOWS[flow] : null;
 const database = process.env.TEST_DATABASE_URL;
 assertTestDatabase(database);
@@ -61,6 +69,8 @@ let stopping = false, child, metro, metroExit, qa, requestedStop = false, instal
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
 let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
+let homeVisualFixtureSeeded = false, homeVisualMatchScores = null;
+let originalContentSize = null, contentSizeActiveVerified = false, contentSizeRestored = false;
 let listingPhotoFixtureVerified = false, listingAiDraftVerified = false, listingAiTask = null, listingAiTaskFailed = false;
 let listingPublicationVerified = false;
 const listingAiDrafts = new Map();
@@ -249,6 +259,17 @@ async function completeListingAiDrafts() {
   if (observed.size !== (twoPhotoFlow ? 2 : 1)) throw new Error('QA_AI_JOB_MISSING');
 }
 async function main() {
+  if (requestedContentSize) {
+    stage = 'content-size-preflight';
+    const allowed = new Set(['extra-small', 'small', 'medium', 'large', 'extra-large', 'extra-extra-large', 'extra-extra-extra-large',
+      'accessibility-medium', 'accessibility-large', 'accessibility-extra-large', 'accessibility-extra-extra-large', 'accessibility-extra-extra-extra-large']);
+    const observed = (await simctl(['ui', 'content_size'], 10000)).trim();
+    if (!allowed.has(observed)) throw new Error('Preferred content size unavailable');
+    originalContentSize = observed;
+    await simctl(['ui', 'content_size', requestedContentSize], 10000);
+    contentSizeActiveVerified = (await simctl(['ui', 'content_size'], 10000)).trim() === requestedContentSize;
+    if (!contentSizeActiveVerified) throw new Error('Preferred content size not applied');
+  }
   const inventory = await simctl(['listapps']);
   // simctl listapps emits an OpenStep property list, not JSON. Convert in
   // memory; never serialize the user's application inventory as evidence.
@@ -266,11 +287,21 @@ async function main() {
   const serviceLifetimeSeconds = publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
-    listingAiPilot: listingAiFlow });
+    listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
+    visualHomeFixture: flow === 'home-visual' });
+  if (flow === 'home-visual') {
+    stage = 'isolated-home-visual-fixture';
+    const seeded = await seedUiuxHomeQa(qa);
+    homeVisualMatchScores = seeded.scores.map(item => item.score);
+    homeVisualFixtureSeeded = homeVisualMatchScores.join(',') === '73,46,41';
+    if (!homeVisualFixtureSeeded) throw new Error('Home visual QA scores differ from fixed fixture');
+  }
   if (listingAiFlow) listingAiTask = completeListingAiDrafts().catch(() => { listingAiTaskFailed = true; });
   if (flow?.startsWith('marketplace-')) {
     stage = 'isolated-marketplace-fixture';
-    await seedNativeMarketplace(qa); marketplaceFixtureSeeded = true;
+    await seedNativeMarketplace(qa, flow === 'marketplace-my-listings' ? 'buyer' : 'seller', visualFixture ?? 'switch',
+      { seedChatForVisualQa: flow === 'marketplace-chat' || flow === 'marketplace-meetup' });
+    marketplaceFixtureSeeded = true;
   }
   qa.exited.then(() => { qaEnded = true; if (!requestedStop) { stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); } },
     () => { qaEnded = true; stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); });
@@ -310,7 +341,11 @@ async function main() {
   if (templates.length !== 1) throw new Error('Expected one Xcode-generated test template');
   const template = JSON.parse(await command('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(products, templates[0])]));
   const testRun = path.join(evidence, 'runtime.xctestrun');
-  fs.writeFileSync(testRun, JSON.stringify(destinationTestRun(template, label, products, broker?.port, flow ?? undefined)), { flag: 'wx', mode: 0o600 });
+  const configuredRun = destinationTestRun(template, label, products, broker?.port, flow ?? undefined);
+  if (requestedContentSize) configuredRun.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_CONTENT_SIZE = requestedContentSize;
+  if (accessibilityAudit) configuredRun.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_ACCESSIBILITY_AUDIT = '1';
+  if (visualFixture) configuredRun.WishlistNativeQa.EnvironmentVariables.NATIVE_QA_VISUAL_FIXTURE = visualFixture;
+  fs.writeFileSync(testRun, JSON.stringify(configuredRun), { flag: 'wx', mode: 0o600 });
   await command('/usr/bin/plutil', ['-convert', 'xml1', testRun]);
   stage = authenticated ? 'authenticated-native-tests' : 'anonymous-native-tests';
   const result = path.join(evidence, 'tests.xcresult');
@@ -340,13 +375,14 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || flow === 'home-visual' ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       ((flow === 'listing-batch-photo' || listingAiFlow) && !sellerDraftVerified) ||
       (listingAiFlow && (!listingAiDraftVerified || listingAiTaskFailed)) ||
       (publishOneAiFlow && !listingPublicationVerified) ||
+      (flow === 'home-visual' && !homeVisualFixtureSeeded) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -370,8 +406,12 @@ async function main() {
   const items = manifest.flatMap(item => Array.isArray(item.attachments) ? item.attachments : []);
   const flowAttachments = {
     'marketplace-discovery': ['product-notice', 'home', 'marketplace'],
-    'marketplace-chat': ['product-notice', 'home', 'chat-transition', 'chat'],
-    'marketplace-meetup': ['product-notice', 'home', 'meetup'],
+    'marketplace-chat': ['product-notice', 'home', 'chat-transition', 'chat', 'social-inbox'],
+    'marketplace-meetup': ['product-notice', 'home', 'chat-transition', 'meetup-submit-state', 'meetup', 'chat-meetup-preview', 'chat-history-oldest'],
+    'marketplace-my-listings': ['product-notice', 'home', 'account', 'my-listings',
+      ...(requestedContentSize ? ['my-listings-edit-opening'] : []), 'my-listings-edit',
+      ...(visualFixture === 'visual-mug' ? ['my-listings-marketing-entry', 'my-listings-marketing-open'] : [])],
+    'home-visual': ['product-notice', 'home', 'home-visual-collapsed', 'home-visual-expanded', 'home-visual-scrolled'],
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
@@ -416,6 +456,11 @@ async function main() {
   });
   await attempt(async () => { if (metro?.exitCode === null) metro.kill('SIGTERM'); if (metroExit) await metroExit; });
   if (qa) await attempt(async () => { requestedStop = true; cleanup = await qa.stop(); });
+  if (originalContentSize) await attempt(async () => {
+    await simctl(['ui', 'content_size', originalContentSize], 10000, true);
+    contentSizeRestored = (await simctl(['ui', 'content_size'], 10000, true)).trim() === originalContentSize;
+    if (!contentSizeRestored) throw new Error('Preferred content size not restored');
+  });
   const report = { kind: flow ? 'isolated-ios-authenticated-' + flow : 'isolated-ios-anonymous-native-ui', appBundle, runnerBundle, assignedDevice: udid,
     passed: passed && !failed && !cleanupFailed && !stopping, interrupted: stopping,
     failedStage: cleanupFailed ? 'exact-cleanup-failed' : failed ? failedStage : null,
@@ -423,7 +468,11 @@ async function main() {
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
     nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoFixtureVerified, listingPhotoCount, sellerDraftVerified,
     listingAiDraftVerified, listingAiTaskFailed, listingPublicationVerified,
-    privacyAuditPassed, marketplaceFixtureSeeded, inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
+    privacyAuditPassed, marketplaceFixtureSeeded, homeVisualFixtureSeeded, homeVisualMatchScores,
+    inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
+    contentSize: requestedContentSize ? { requested: requestedContentSize, before: originalContentSize, activeVerified: contentSizeActiveVerified, restored: contentSizeRestored } : null,
+    accessibilityAuditRequested: accessibilityAudit,
+    visualFixture,
     inputProbes: broker?.probes || [], inputRejections: broker?.rejections || [], inputTrigger: authenticated ? 'darwin-notification' : 'none',
     authenticatedBaselineVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,
     authenticatedFlowVerified: authenticated && passed && !failed && !cleanupFailed && !stopping,

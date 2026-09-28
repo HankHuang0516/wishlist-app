@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "uiux-home-multiple-blue-mug-v1",
+  "kind": "synthetic-design-and-future-isolated-qa-only",
+  "locale": "zh-TW",
+  "buyerDisplayName": "QA 買家",
+  "selectedWishKey": "wish-blue-mug",
+  "wishes": [
+    { "key": "wish-blue-mug", "name": "深藍色陶瓷馬克杯", "listTitle": "EClaw 辨識驗收", "aiState": "complete" },
+    { "key": "wish-orange-lamp", "name": "橘色二手桌燈", "listTitle": "EClaw 辨識驗收", "aiState": "complete" }
+  ],
+  "homeMatchGroups": [
+    {
+      "wishKey": "wish-blue-mug",
+      "expanded": false,
+      "topListingKey": "listing-blue-mug-1",
+      "listings": [
+        { "key": "listing-blue-mug-1", "title": "二手深藍色陶瓷馬克杯", "priceTwd": 50, "county": "新北市", "district": "板橋區", "score": 92, "sellerKey": "synthetic-seller-1", "photo": "synthetic-used-blue-mug.png" },
+        { "key": "listing-blue-mug-2", "title": "深藍色馬克杯（二手）", "priceTwd": 55, "county": "臺北市", "district": "中山區", "score": 87, "sellerKey": "synthetic-seller-2", "photo": "synthetic-used-blue-mug.png" },
+        { "key": "listing-blue-mug-3", "title": "陶瓷藍色杯", "priceTwd": 60, "county": "新北市", "district": "永和區", "score": 81, "sellerKey": "synthetic-seller-3", "photo": "synthetic-used-blue-mug.png" }
+      ]
+    }
+  ],
+  "scrollState": "top",
+  "keyboardState": "closed",
+  "colorScheme": "light",
+  "fontScale": "1.0"
+}

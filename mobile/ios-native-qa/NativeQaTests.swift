@@ -33,6 +33,14 @@ final class NativeQaTests: XCTestCase {
             scroller.swipeUp()
         }
     }
+    private func visibleVerticalScroller() -> XCUIElement? {
+        // A horizontal status-tab strip can be the first accessibility
+        // ScrollView. Swiping it vertically may tap another status instead of
+        // exposing an offscreen field in the product list below.
+        (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
+            .filter { $0.exists && $0.isHittable && $0.frame.height >= 120 }
+            .max { $0.frame.height < $1.frame.height }
+    }
     @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any) throws -> XCUIElement {
         let deadline = Date().addingTimeInterval(12)
         repeat {
@@ -41,13 +49,53 @@ final class NativeQaTests: XCTestCase {
             if scroll {
                 // Do not swipe a background/covered scroll view belonging to
                 // a screen underneath a native Modal or keyboard.
-                let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
+                let scroller = visibleVerticalScroller()
                 if let scroller { scrollToward(control, in: scroller) }
                 let observed = element(label, kind: kind)
                 if observed.exists && observed.isHittable { return observed }
             }
             Thread.sleep(forTimeInterval: 0.12)
         } while Date() < deadline
+        throw Failure.missingControl
+    }
+    @discardableResult private func requiredWithFineVerticalScroll(_ label: String) throws -> XCUIElement {
+        for _ in 0..<16 {
+            let control = element(label)
+            if control.exists && control.isHittable { return control }
+            guard let scroller = visibleVerticalScroller() else {
+                // Some React Native FlatList builds expose the list as a
+                // generic view. Gesture inside this modal's content viewport,
+                // never on the horizontal tab rail or another application.
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+                start.press(forDuration: 0.05, thenDragTo: end)
+                continue
+            }
+            let above = control.exists && !control.frame.isEmpty && control.frame.maxY <= scroller.frame.minY
+            let start = scroller.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.70))
+            let end = scroller.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.65 : 0.50))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        throw Failure.missingControl
+    }
+    @discardableResult private func requiredWithModalGutterScroll(_ label: String) throws -> XCUIElement {
+        // The marketing card sits below several multiline fields. Scroll in
+        // the card's right gutter so UIKit text input does not capture a drag.
+        for _ in 0..<8 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.76))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.49))
+            start.press(forDuration: 0.05, thenDragTo: end)
+            let control = element(label, kind: .button)
+            checkpoint("my-listings-marketing-query")
+            if control.exists {
+                checkpoint("my-listings-marketing-found")
+                let frame = control.frame
+                let viewport = app.frame
+                if frame.height >= 44 && frame.minX >= 0 && frame.maxX <= viewport.maxX &&
+                    frame.minY >= 120 && frame.maxY <= viewport.maxY - 20 { return control }
+            }
+            checkpoint("my-listings-marketing-not-visible")
+        }
         throw Failure.missingControl
     }
     private func publicInputControl(_ label: String) throws -> XCUIElement {
@@ -60,13 +108,21 @@ final class NativeQaTests: XCTestCase {
                 // Limit that compatibility path to the synthetic chat field.
                 if control.exists && control.isHittable && (control.isEnabled || label == "商品聊天訊息") { return control }
             }
-            let scroller = app.scrollViews.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
-            if let scroller {
+            // The chat composer is fixed below the message list. Scrolling the
+            // inverted list cannot expose its input, and can obscure the
+            // original accessibility failure before it is diagnosed.
+            if label != "商品聊天訊息", let scroller = visibleVerticalScroller() {
                 let field = element(label, kind: .textField)
                 scrollToward(field.exists ? field : element(label, kind: .textView), in: scroller)
             }
             Thread.sleep(forTimeInterval: 0.12)
         } while Date() < deadline
+        if label == "商品聊天訊息" {
+            let field = element(label, kind: .textView)
+            if !field.exists { checkpoint("chat-input-missing") }
+            else if !field.isHittable { checkpoint(field.frame.intersects(app.frame) ? "chat-input-visible-unhittable" : "chat-input-offscreen") }
+            else { checkpoint("chat-input-unavailable") }
+        }
         throw Failure.missingControl
     }
     private func tap(_ label: String, kind: XCUIElement.ElementType = .button) throws {
@@ -106,7 +162,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -125,7 +181,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("unexpected-logbox-warning")
             throw Failure.invalidIdentity
         }
-        if ["qa-marketplace", "qa-chat-transition", "qa-chat", "qa-meetup", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
+        if ["qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
@@ -181,7 +237,18 @@ final class NativeQaTests: XCTestCase {
         checkpoint("debug-warning-toast-dismissed")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.91)).tap()
         Thread.sleep(forTimeInterval: 0.5)
-        guard !hasCollapsedDebugWarningToast(app.screenshot()) else { throw Failure.unstableControl }
+        let after = app.screenshot()
+        if hasCollapsedDebugWarningToast(after) {
+            let beforeAttachment = XCTAttachment(screenshot: before)
+            beforeAttachment.name = "qa-debug-warning-before"
+            beforeAttachment.lifetime = .keepAlways
+            add(beforeAttachment)
+            let afterAttachment = XCTAttachment(screenshot: after)
+            afterAttachment.name = "qa-debug-warning-after"
+            afterAttachment.lifetime = .keepAlways
+            add(afterAttachment)
+            throw Failure.unstableControl
+        }
     }
     private func publicText(_ label: String, value: String, kind: XCUIElement.ElementType = .textField, replace: Bool = false) throws {
         let prefixes = ["清單名稱": "public-list", "願望名稱": "public-wish", "最高預算": "public-budget", "輸入刪除帳號以確認": "deletion-confirmation",
@@ -418,13 +485,20 @@ final class NativeQaTests: XCTestCase {
             checkpoint("marketplace-contact-seller")
             try tap("聯絡賣家")
             checkpoint("marketplace-chat-input")
+            try required("NT$7,500")
+            try required("週日下午可以，請先提出預約。", scroll: true)
             try safeScreenshot("qa-chat-transition")
             try publicInputControl("商品聊天訊息")
             checkpoint("marketplace-send-message")
-            try publicText("商品聊天訊息", value: "Native QA 買家詢問面交", kind: .any)
+            try publicText("商品聊天訊息", value: "NativeQAChatSmoke", kind: .any)
             try tap("傳送")
-            try required("Native QA 買家詢問面交", scroll: true)
+            try required("NativeQAChatSmoke", scroll: true)
             try safeScreenshot("qa-chat")
+            try tap("返回")
+            try tapTab("社交")
+            try required("聊天與面交")
+            try required("Native QA Switch OLED，與QA seller聊天", scroll: true, kind: .button)
+            try safeScreenshot("qa-social-inbox")
             checkpoint("marketplace-chat-complete")
             app.terminate()
         } catch { reportFailure() }
@@ -433,15 +507,24 @@ final class NativeQaTests: XCTestCase {
         executionTimeAllowance = 120
         do {
             try prepare()
+            let largeType = ProcessInfo.processInfo.environment["NATIVE_QA_CONTENT_SIZE"] == "accessibility-large"
             try loginBuyerAndRequireTabs()
             checkpoint("marketplace-meetup-listing")
             try openMarketplaceListing(search: false)
             try tap("聯絡賣家")
+            checkpoint("marketplace-meetup-chat-input")
+            try required("NT$7,500")
+            try required("週日下午可以，請先提出預約。", scroll: true)
+            try safeScreenshot("qa-chat-transition")
+            try publicInputControl("商品聊天訊息")
+            try publicText("商品聊天訊息", value: "NativeQAChatSmoke", kind: .any)
+            try tap("傳送")
+            try required("NativeQAChatSmoke", scroll: true)
             checkpoint("marketplace-meetup-proposal")
             try tap("查看或提議面交預約")
             try required("面交預約", scroll: true)
             try tap("提出面交邀約")
-            try publicText("私密面交地點名稱", value: "台北車站大廳 QA 集合點")
+            try publicText("私密面交地點名稱", value: "TaipeiStationQA")
             checkpoint("marketplace-meetup-keyboard-dismiss")
             try required("私密面交地點名稱", kind: .textField).typeText("\n")
             let keyboardDeadline = Date().addingTimeInterval(4)
@@ -449,9 +532,52 @@ final class NativeQaTests: XCTestCase {
             guard !app.keyboards.firstMatch.exists else { throw Failure.unstableControl }
             checkpoint("marketplace-meetup-submit")
             try tap("提出此版本（改期需對方重新同意）")
+            Thread.sleep(forTimeInterval: 1)
+            try safeScreenshot("qa-meetup-submit-state")
             try required("提議中 · 第1版", scroll: true)
-            try required("台北車站大廳 QA 集合點", scroll: true)
+            try required("TaipeiStationQA", scroll: true)
             try safeScreenshot("qa-meetup")
+            try tap("返回聊天")
+            let latest = try required("NativeQAChatSmoke")
+            if largeType {
+                // An accessibility-large preview must leave room for at least
+                // the latest message without requiring an initial gesture.
+                guard latest.isHittable else { throw Failure.missingControl }
+                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
+                guard summary.isHittable && summary.frame.height >= 44,
+                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+            } else {
+                try required("查看或提議面交預約", kind: .button)
+                try required("面交預約 · 提議中")
+                try required("TaipeiStationQA")
+                try required("查看面交預約詳情並確認或調整", kind: .button)
+            }
+            try safeScreenshot("qa-chat-meetup-preview")
+            checkpoint("marketplace-meetup-refresh")
+            try tap("更新聊天")
+            if largeType {
+                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
+                guard summary.isHittable,
+                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+            } else {
+                try required("TaipeiStationQA")
+            }
+            checkpoint("marketplace-meetup-refresh-verified")
+            if ProcessInfo.processInfo.environment["NATIVE_QA_ACCESSIBILITY_AUDIT"] == "1" {
+                checkpoint("marketplace-meetup-accessibility-audit")
+                if #available(iOS 17.0, *) { try app.performAccessibilityAudit() }
+                else { throw Failure.invalidIdentity }
+            }
+            checkpoint("marketplace-meetup-history-scroll")
+            let oldestText = "您好，這台目前還在。"
+            var oldest = element(oldestText, kind: .staticText)
+            for _ in 0..<8 where !oldest.exists || !oldest.isHittable {
+                guard let scroller = visibleVerticalScroller() else { throw Failure.missingControl }
+                scroller.swipeDown()
+                oldest = element(oldestText, kind: .staticText)
+            }
+            guard oldest.exists && oldest.isHittable else { throw Failure.missingControl }
+            try safeScreenshot("qa-chat-history-oldest")
             checkpoint("marketplace-meetup-complete")
             app.terminate()
         } catch { reportFailure() }
@@ -788,10 +914,15 @@ final class NativeQaTests: XCTestCase {
             try tap(card)
             try required("外部來源 · github.com", scroll: true)
             try required("來源售價 NT$ 590", scroll: true)
-            try required("地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。", scroll: true)
+            let readyPhoto = app.descendants(matching: .any).matching(NSPredicate(
+                format: "label == %@ OR label == %@ OR label == %@",
+                "來源商品圖片", "來源商品圖片，縮圖已載入", "來源商品圖片，顯示縮圖"
+            )).firstMatch
+            guard readyPhoto.waitForExistence(timeout: 30), readyPhoto.isHittable else { throw Failure.missingControl }
+            try safeScreenshot("qa-external-detail")
+            try required("地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與原始描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。", scroll: true)
             try required("前往來源網站查看", scroll: true, kind: .button)
             guard !app.buttons["聯絡賣家"].exists else { throw Failure.invalidIdentity }
-            try safeScreenshot("qa-external-detail")
             try tap("返回探索")
             try tapTab("願望")
             try required("Native QA 外部比對清單", scroll: true)
@@ -803,11 +934,93 @@ final class NativeQaTests: XCTestCase {
             let wishBanner = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "符合所選願望")).firstMatch
             guard wishBanner.waitForExistence(timeout: 20) else { throw Failure.missingControl }
             guard externalCount.waitForExistence(timeout: 20), externalCount.isHittable else { throw Failure.missingControl }
+            try tap("比對說明")
+            try required("自己刊登的商品會標為配對預覽，不是買家推薦；圖片不直接比對。站內本頁評分排序；外部來源依文字及可比較的台幣預算篩出候選，請到來源核對型號、庫存與真偽。")
+            try tap("收合說明")
             try safeScreenshot("qa-external-wish-map")
             checkpoint("external-wish-list-open")
             try tap("切換清單")
             try required(card, scroll: true, kind: .button)
             try safeScreenshot("qa-external-wish-list")
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test14RealLoginMyListingsVisual() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            let largeType = ProcessInfo.processInfo.environment["NATIVE_QA_CONTENT_SIZE"] == "accessibility-large"
+            let visualMug = ProcessInfo.processInfo.environment["NATIVE_QA_VISUAL_FIXTURE"] == "visual-mug"
+            try loginBuyerAndRequireTabs()
+            checkpoint("my-listings-account-entry")
+            try tapTab("我的")
+            checkpoint("my-listings-account-visible")
+            try required("我的商品 · 閱覽與管理", scroll: true, kind: .button)
+            if visualMug { try required("購買與訂閱操作暫停") }
+            try safeScreenshot("qa-account")
+            checkpoint("my-listings-open")
+            try tap("我的商品 · 閱覽與管理")
+            checkpoint("my-listings-card")
+            try required("我的商品")
+            try required(visualMug ? "深藍色陶瓷馬克杯" : "Native QA Switch OLED", scroll: true)
+            try required(visualMug ? "NT$ 50" : "NT$ 7,500", scroll: true)
+            checkpoint(largeType ? "my-listings-large-type-actions" : "my-listings-four-actions")
+            let actionFrames = try ["查看詳情", "編輯資訊", "標記售出", "延長期限"].map { label in
+                let control = try required(label, scroll: largeType, kind: .button)
+                guard control.isHittable && control.frame.height >= 44 else { throw Failure.invalidIdentity }
+                return control.frame
+            }
+            guard largeType || actionFrames.allSatisfy({ abs($0.midY - actionFrames[0].midY) <= 1 })
+            else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-my-listings")
+            checkpoint("my-listings-edit-open")
+            try tap("編輯資訊")
+            if largeType { try safeScreenshot("qa-my-listings-edit-opening") }
+            if largeType {
+                try requiredWithFineVerticalScroll("編輯商品名稱")
+                try requiredWithFineVerticalScroll("編輯商品售價，新臺幣")
+            } else {
+                try required("編輯商品名稱", scroll: true)
+                try required("編輯商品售價，新臺幣", scroll: true)
+            }
+            try safeScreenshot("qa-my-listings-edit")
+            if visualMug {
+                checkpoint("my-listings-marketing-entry-search")
+                let previewStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.76))
+                let previewEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.49))
+                previewStart.press(forDuration: 0.05, thenDragTo: previewEnd)
+                try safeScreenshot("qa-my-listings-marketing-entry")
+                let entry = try requiredWithModalGutterScroll("開啟行銷小助手 Beta")
+                let entryFrame = entry.frame
+                app.coordinate(withNormalizedOffset: CGVector(dx: entryFrame.midX / app.frame.width,
+                    dy: entryFrame.midY / app.frame.height)).tap()
+                checkpoint("my-listings-marketing-open")
+                try requiredWithModalGutterScroll("生成四張行銷圖")
+                try safeScreenshot("qa-my-listings-marketing-open")
+            }
+            app.terminate()
+        } catch { reportFailure() }
+    }
+    func test15RealLoginHomeVisual() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("home-visual-three-matches")
+            try required("所有願望吻合的商品")
+            let score = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "吻合 73 分")).firstMatch
+            guard score.waitForExistence(timeout: 35), score.isHittable else { throw Failure.missingControl }
+            try required("二手深藍色陶瓷馬克杯", kind: .staticText)
+            try required("NT$ 50", kind: .staticText)
+            try safeScreenshot("qa-home-visual-collapsed")
+            checkpoint("home-visual-expand")
+            try tap("深藍色陶瓷馬克杯共有3件吻合商品，查看全部")
+            try required("深藍陶瓷馬克杯（二手）", scroll: true, kind: .staticText)
+            try required("深藍色陶瓷杯", scroll: true, kind: .staticText)
+            try safeScreenshot("qa-home-visual-expanded")
+            checkpoint("home-visual-map-entry")
+            try required("在地圖交叉比對深藍色陶瓷馬克杯", scroll: true, kind: .button)
+            try safeScreenshot("qa-home-visual-scrolled")
             app.terminate()
         } catch { reportFailure() }
     }

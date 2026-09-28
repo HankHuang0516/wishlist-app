@@ -33,3 +33,10 @@ test('two serial MiniMax images get an extended native-test budget only for that
   assert.equal(oneAi.MaximumTestExecutionTimeAllowance, 240);
   assert.equal(template.WishlistNativeQa.MaximumTestExecutionTimeAllowance, undefined);
 });
+
+test('seller-management visual QA selects only its isolated iOS route', () => {
+  const listings = destinationTestRun(template, '202609251125', '/tmp/isolated-ios-test-products', 34567,
+    'marketplace-my-listings').WishlistNativeQa;
+  assert.deepEqual(listings.OnlyTestIdentifiers, ['NativeQaTests/test14RealLoginMyListingsVisual']);
+  assert.equal(listings.MaximumTestExecutionTimeAllowance, 240);
+});

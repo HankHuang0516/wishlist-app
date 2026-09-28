@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "screen": "explore-map-default",
+  "allowedScreenStates": ["loaded-with-selected-listing"],
+  "designReference": "wishlist-uiux-buyer-v2-20260927.png",
+  "items": [
+    { "id": "safe-area-header", "weight": 10, "critical": false, "requiredMetrics": ["safeAreaBottomPt", "headerBottomPt"], "criterion": "同畫布頁首、系統安全區與底部分頁不裁切或覆蓋；邊界誤差不超過 4pt。" },
+    { "id": "search-input", "weight": 10, "critical": true, "requiredMetrics": ["searchTopPt", "searchBottomPt"], "criterion": "搜尋提示、輸入與送出可用，搜尋欄幾何符合審定基準。" },
+    { "id": "toolbar-controls", "weight": 10, "critical": false, "requiredMetrics": ["toolbarBottomPt"], "criterion": "篩選、清單與檢舉入口語義、順序與幾何一致；在本狀態仍可操作。" },
+    { "id": "map-viewport", "weight": 15, "critical": true, "requiredMetrics": ["mapTopPt", "mapBottomPt"], "criterion": "地圖可視範圍、比例與遮擋符合審定基準；不為像素分數犧牲地圖操作空間。" },
+    { "id": "photo-pins-clusters", "weight": 15, "critical": true, "requiredMetrics": ["selectedPinCenterXPt", "selectedPinCenterYPt"], "criterion": "同固定商品的縮圖圖釘、數量與選取對應正確；不得顯示私人原圖或精確面交位置。" },
+    { "id": "selected-product-card", "weight": 15, "critical": true, "requiredMetrics": ["cardTopPt", "cardBottomPt", "photoWidthPt"], "criterion": "已選商品卡的圖、名稱、價格、幣別及模糊地點與資料一致；縮圖比例與邊界符合審定基準。" },
+    { "id": "typography", "weight": 8, "critical": false, "criterion": "文字層級、字級、粗細、行高、換行與截斷不造成商品或價格誤讀。" },
+    { "id": "color-shape", "weight": 5, "critical": false, "criterion": "背景、品牌色、卡片、圓角與圖示使用審定 token；不得以主觀近似給分。" },
+    { "id": "navigation-result-state", "weight": 7, "critical": true, "requiredMetrics": ["bottomTabTopPt"], "criterion": "探索分頁選取、商品卡開啟與返回結果可用，且已載入／選取狀態不矛盾。" },
+    { "id": "touch-screen-reader", "weight": 5, "critical": true, "criterion": "篩選、清單、圖釘、商品卡及底部分頁點擊區至少 44pt，VoiceOver／TalkBack 名稱、焦點與操作可用。" }
+  ]
+}

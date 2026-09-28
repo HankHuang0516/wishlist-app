@@ -5,11 +5,13 @@ const path = require('node:path');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
-  { listingAiPilot = false, externalListingsPilot = false, externalMapStress = false,
+  { listingAiPilot = false, marketingVisualOwnerRole = null, externalListingsPilot = false, externalMapStress = false,
     holdListingUploadAck = false, rejectFirstListingUpload = false,
-    staleBatchRecoverySnapshot = false } = {}) {
+    staleBatchRecoverySnapshot = false, visualHomeFixture = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 900) throw new Error('QA lifetime must be 1–900 seconds');
+  if (marketingVisualOwnerRole !== null && !['buyer', 'seller'].includes(marketingVisualOwnerRole))
+    throw new Error('Unsupported QA marketing visual owner');
   // Deliberately do NOT spread process.env: no Railway/admin/provider/signing
   // values, NODE_OPTIONS, PGHOST or dotenv configuration can enter this child.
   return {
@@ -19,11 +21,13 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     JWT_SECRET: randomBytes(32).toString('hex'),
     NATIVE_QA_LIFETIME_SECONDS: String(lifetimeSeconds),
     ...(listingAiPilot ? { NATIVE_QA_LISTING_AI_PILOT: '1' } : {}),
+    ...(marketingVisualOwnerRole ? { NATIVE_QA_MARKETING_VISUAL_OWNER: marketingVisualOwnerRole } : {}),
     ...(externalListingsPilot ? { NATIVE_QA_EXTERNAL_LISTINGS_PILOT: '1' } : {}),
     ...(externalMapStress ? { NATIVE_QA_EXTERNAL_MAP_STRESS: '1' } : {}),
     ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
     ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
     ...(staleBatchRecoverySnapshot ? { NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1' } : {}),
+    ...(visualHomeFixture ? { NATIVE_QA_VISUAL_HOME_FIXTURE: '1', NATIVE_QA_VISUAL_PORT: '18889' } : {}),
   };
 }
 

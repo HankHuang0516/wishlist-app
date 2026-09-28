@@ -27,7 +27,7 @@ beforeEach(async () => {
     await prisma.conversation.deleteMany({ where: { OR: [{ buyerUserId: { in: [seller, buyer, third] } }, { sellerUserId: { in: [seller, buyer, third] } }] } });
     await prisma.listing.deleteMany({ where: { ownerUserId: seller } });
     await prisma.userBlock.deleteMany({ where: { blockerUserId: { in: [seller, buyer, third] } } });
-    const now = new Date(); const listing = await prisma.listing.create({ data: { ownerUserId: seller, clientListingId: randomUUID(), requestHash: 'synthetic-only', title: '合成二手相機', status: 'ACTIVE', publishedAt: now, expiresAt: new Date(now.getTime() + 30 * 86400000) } }); listingId = listing.id;
+    const now = new Date(); const listing = await prisma.listing.create({ data: { ownerUserId: seller, clientListingId: randomUUID(), requestHash: 'synthetic-only', title: '合成二手相機', price: 590, status: 'ACTIVE', publishedAt: now, expiresAt: new Date(now.getTime() + 30 * 86400000) } }); listingId = listing.id;
 });
 afterAll(async () => {
     if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -47,7 +47,8 @@ describe('first-party chat / PostgreSQL integration', () => {
     it('infers buyer/seller from authentication/listing and deduplicates an existing room', async () => {
         const first = await open(); const retry = await open(); expect(first.status).toBe(201); expect(retry.status).toBe(200); expect(retry.body.id).toBe(first.body.id);
         const participants = await prisma.conversationParticipant.findMany({ where: { conversationId: first.body.id } }); expect(participants.map(p => [p.userId, p.role])).toEqual(expect.arrayContaining([[buyer, 'BUYER'], [seller, 'SELLER']])); expect(participants).toHaveLength(2);
-        expect(first.body).toMatchObject({ buyerUserId: buyer, sellerUserId: seller, unreadCount: 0, listingAvailable: true });
+        expect(first.body).toMatchObject({ buyerUserId: buyer, sellerUserId: seller, unreadCount: 0, listingAvailable: true,
+            lastMessageText: null, listing: { price: 590, currency: 'TWD', thumbnailUrl: null } });
         for (const privateKey of ['phoneNumber', 'email', 'password', 'apiKey', 'address', 'participants']) expect(first.body).not.toHaveProperty(privateKey);
         expect(first.body.buyer).toEqual({ id: buyer, name: '合成buyer' });
     });
@@ -77,6 +78,7 @@ describe('first-party chat / PostgreSQL integration', () => {
         const room = (await open()).body.id; const buyerMessage = await send(room, '週六可以面交嗎？'); const sellerMessage = await send(room, '可以，下午兩點方便嗎？', seller);
         expect(buyerMessage.status).toBe(201); expect(sellerMessage.status).toBe(201); expect(buyerMessage.body).toMatchObject({ senderUserId: buyer, sequence: 1 }); expect(sellerMessage.body).toMatchObject({ senderUserId: seller, sequence: 2 });
         const history = await call('get', '/conversations/' + room + '/messages'); expect(history.body.items.map((item: { text: string }) => item.text)).toEqual(['週六可以面交嗎？', '可以，下午兩點方便嗎？']);
+        const inbox = await call('get', '/conversations'); expect(inbox.body.items[0].lastMessageText).toBe('可以，下午兩點方便嗎？');
         expect(Object.keys(history.body.items[0]).sort()).toEqual(['id', 'conversationId', 'senderUserId', 'clientMessageId', 'sequence', 'text', 'createdAt'].sort());
     });
     it('deduplicates same-key retries, rejects conflicting content and does not increment sequence twice', async () => {

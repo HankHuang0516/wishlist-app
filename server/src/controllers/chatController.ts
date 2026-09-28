@@ -21,7 +21,11 @@ const messageSelect = { id: true, conversationId: true, senderUserId: true, clie
 const conversationSelect = {
     id: true, listingId: true, buyerUserId: true, sellerUserId: true, archivedAt: true, lastMessageSequence: true, lastMessageAt: true, createdAt: true,
     buyer: { select: { id: true, name: true } }, seller: { select: { id: true, name: true } },
-    listing: { select: { id: true, title: true, status: true, expiresAt: true, location: { select: { county: true, district: true } } } },
+    listing: { select: { id: true, title: true, status: true, expiresAt: true, price: true, currency: true,
+        location: { select: { county: true, district: true } },
+        media: { where: { OR: [{ capturePurpose: { not: 'AI_MARKETING' } }, { marketingSelected: true }] },
+            orderBy: { position: 'asc' }, take: 1, select: { thumbnailUrl: true } } } },
+    messages: { orderBy: { sequence: 'desc' }, take: 1, select: { text: true } },
     participants: { select: { userId: true, role: true, lastReadSequence: true } },
 } satisfies Prisma.ConversationSelect;
 type Room = Prisma.ConversationGetPayload<{ select: typeof conversationSelect }>;
@@ -48,11 +52,17 @@ async function projection(room: Room, userId: number) {
         prisma.message.count({ where: { conversationId: room.id, senderUserId: { not: userId }, sequence: { gt: me.lastReadSequence } } }),
         otherUserId === null ? Promise.resolve([]) : prisma.userBlock.findMany({ where: blockedWhere(userId, otherUserId), select: { blockerUserId: true } }),
     ]);
-    const { participants, ...publicToMembers } = room;
-    return { ...publicToMembers, lastReadSequence: me.lastReadSequence, unreadCount, blocked: block.length > 0,
+    const { participants, messages, listing, ...publicToMembers } = room;
+    const listingAvailable = !room.archivedAt && !!room.buyer && !!room.seller && !!listing && isDiscoverable(listing.status, listing.expiresAt, new Date());
+    return { ...publicToMembers,
+        listing: listing ? { id: listing.id, title: listing.title, status: listing.status, expiresAt: listing.expiresAt,
+            location: listing.location, price: listing.price?.toNumber() ?? null, currency: listing.currency,
+            thumbnailUrl: listingAvailable ? listing.media[0]?.thumbnailUrl ?? null : null } : null,
+        lastMessageText: messages[0]?.text ?? null,
+        lastReadSequence: me.lastReadSequence, unreadCount, blocked: block.length > 0,
         blockedByMe: block.some(row => row.blockerUserId === userId), blockedByOther: block.some(row => row.blockerUserId === otherUserId),
         archived: !!room.archivedAt || !room.buyer || !room.seller || !room.listing,
-        listingAvailable: !room.archivedAt && !!room.buyer && !!room.seller && !!room.listing && isDiscoverable(room.listing.status, room.listing.expiresAt, new Date()) };
+        listingAvailable };
 }
 
 export async function openConversation(req: AuthRequest, res: Response) {

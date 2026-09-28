@@ -12,7 +12,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('public listing share destination', () => {
   it('shows the public listing to a visitor without login or private fields', async () => {
-    const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id, title: '二手檯燈',
+    const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id, version: 3, title: '二手檯燈',
       description: '九成新', price: '590', status: 'ACTIVE', condition: 'USED',
       expiresAt: '2099-10-25T00:00:00.000Z', owner: { name: '賣家' },
       location: { county: '臺北市', district: '中山區' }, media: [], privatePhone: 'DO_NOT_SHOW' }) }));

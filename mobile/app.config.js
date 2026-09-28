@@ -4,13 +4,13 @@ module.exports = {
   expo: {
     name: 'Wishlist.ai',
     slug: 'weeshgifts',
-    version: '2.0.11',
+    version: '2.0.12',
     orientation: 'portrait',
     scheme: 'weesh',
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '9',
+      buildNumber: '10',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -24,7 +24,7 @@ module.exports = {
     },
     android: {
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 28,
+      versionCode: 29,
       allowBackup: false,
       blockedPermissions: [
         'android.permission.SYSTEM_ALERT_WINDOW',
@@ -36,8 +36,8 @@ module.exports = {
       ],
     },
     plugins: [
-      './plugins/withReleaseSigning',
       './plugins/withIsolatedDebugQa',
+      './plugins/withReleaseSigning',
       '@maplibre/maplibre-react-native',
       ['expo-location', {
         locationWhenInUsePermission: '用於查找附近商品；也可拒絕定位並手動選擇地區。',

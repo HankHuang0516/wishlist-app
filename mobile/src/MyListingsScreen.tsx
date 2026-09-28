@@ -8,7 +8,7 @@ import { earliestExtensionDate, listingEditBody, managementTab, MANAGEMENT_TABS,
   ManagementTab, parseManagedListing, parseManagedListingPage } from './managedListing';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { MarketingAssistant } from './MarketingAssistant';
-import { listingShareUrl } from './listingShare';
+import { listingShareMessage, listingShareUrl } from './listingShare';
 
 const labels: Record<ManagedListing['status'], string> = {
   DRAFT: '草稿', PENDING_CONFIRMATION: '待確認', ACTIVE: '在售', RESERVED: '已保留',
@@ -84,7 +84,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
     try {
       const url = listingShareUrl(item, apiUrl, __DEV__);
       if (!url) return;
-      await Share.share({ message: `看看「${item.title}」：${url}`, url, title: item.title });
+      await Share.share({ message: listingShareMessage(item, url), url, title: item.title });
     } catch { Alert.alert('分享失敗', '無法開啟分享選單，請稍後重試。'); }
   }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);

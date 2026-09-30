@@ -12,6 +12,10 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+    { version: "2.0.439", date: "2026-09-30", title: "合作與意見可靠收件", type: "Fullstack", items: [
+        { type: "Fix", content: "合作使用專用表單，匿名意見亦先保存並提供收件編號，AI 失敗不阻斷收件。" },
+        { type: "Enhancement", content: "記錄通知狀態並防止重複提交，供管理者查閱與聯絡回覆。" }
+    ] },
     {
         version: "2.0.0",
         date: "2026-09-22",

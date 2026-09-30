@@ -11,6 +11,6 @@ describe('partner introduction page', () => {
     expect(screen.getByText(/不表示任何來源已授權/)).toBeInTheDocument();
     expect(screen.getByText(/競標底價不會偽裝成固定售價/)).toBeInTheDocument();
     expect(screen.getByText(/不需要提供賣場密碼/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '提出合作意向' })).toHaveAttribute('href', '/support');
+    expect(screen.getByRole('link', { name: '提出合作意向' })).toHaveAttribute('href', '/partners/inquiry');
   });
 });

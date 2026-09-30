@@ -385,6 +385,34 @@ model ExternalListingSource {
   @@index([enabled, kind])
 }
 
+enum PartnerInquiryStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DECLINED
+}
+
+// A public expression of interest is not a source license. Only an operator
+// may create and activate an ExternalListingSource after independent review.
+model PartnerInquiry {
+  id                   String               @id @default(uuid())
+  organization         String
+  contactName          String
+  contactEmail         String
+  websiteUrl           String?
+  categories           String[]
+  estimatedActiveItems Int?
+  updateMethod         String
+  sampleUrls           String[]
+  message              String?
+  contactConsentAt     DateTime
+  status               PartnerInquiryStatus @default(NEW)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([status, createdAt])
+}
+
 // Immutable, compact receipts for accepted admin imports. Store hashes and
 // source item ID hashes, not another copy of partner identifiers, photos or descriptions.
 model ExternalIntakeBatch {
@@ -734,9 +762,10 @@ model Feedback {
   id         Int      @id @default(autoincrement())
   content    String
   aiResponse String?
-  userId     Int
+  userId     Int?
+  contactEmail String?
   createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
 }
 
 model Follow {
@@ -757,4 +786,17 @@ model CrawlerLog {
   debugMessage String?
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id])
+}
+
+model SubmissionReceipt {
+  id String @id @default(uuid())
+  clientSubmissionId String @unique
+  requestHash String
+  kind String
+  recordId String
+  notificationStatus String @default("PENDING")
+  notificationProviderId String?
+  notificationCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([createdAt, id])
 }

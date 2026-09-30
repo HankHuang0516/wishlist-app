@@ -4,6 +4,7 @@ import { Button } from "./ui/Button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/Tabs";
 import { Smartphone } from "lucide-react";
 import { API_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 // Add global TPDirect type definition manually or just use 'any' for speed
 declare const TPDirect: any;
@@ -18,6 +19,7 @@ interface PaymentModalProps {
 }
 
 export default function PaymentModal({ isOpen, onClose, onPaymentSuccess, amount, itemName, extraPayload }: PaymentModalProps) {
+    const { token } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [sdkReady, setSdkReady] = useState(false);
@@ -89,13 +91,14 @@ export default function PaymentModal({ isOpen, onClose, onPaymentSuccess, amount
     }, [isOpen]);
 
     const handlePrime = (prime: string, method: string) => {
+        if (!token) { setError('請先登入後再繼續。'); return; }
         setLoading(true);
         // Call Backend
         fetch(`${API_URL}/payment/pay`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
                 prime,

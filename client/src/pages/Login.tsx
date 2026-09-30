@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 import { API_URL } from '../config';
 import { useAuth } from "../context/AuthContext";
@@ -21,12 +21,14 @@ export default function Login() {
     const [showResendOption, setShowResendOption] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
     const [resendSuccess, setResendSuccess] = useState("");
+    const active = useRef(true), sending = useRef(false), controller = useRef<AbortController | null>(null);
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const securityCode = searchParams.get('security');
     const securityNotice = securityCode && Object.hasOwn(SECURITY_NOTICES, securityCode) ? SECURITY_NOTICES[securityCode as SecurityNotice] : null;
     const returnTo = authReturnTo(searchParams.get('next'));
+    useEffect(() => { active.current = true; return () => { active.current = false; controller.current?.abort(); }; }, []);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -36,6 +38,9 @@ export default function Login() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (sending.current) return;
+        sending.current = true;
+        const abort = new AbortController(); controller.current = abort;
         setError("");
         setShowResendOption(false);
         setResendSuccess("");
@@ -46,6 +51,7 @@ export default function Login() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phoneNumber: identifier, password }),
+                cache: 'no-store', redirect: 'error', signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]),
             });
 
             // Safely parse response - handle non-JSON responses
@@ -57,6 +63,7 @@ export default function Login() {
                 const text = await res.text();
                 data = { error: text || 'An unexpected error occurred' };
             }
+            if (!active.current || abort.signal.aborted) return;
 
             if (!res.ok) {
                 // Check if it's email verification error
@@ -69,9 +76,10 @@ export default function Login() {
             login(data.token, data.user, returnTo);
             Analytics.logLogin(identifier.includes('@') ? 'email' : 'phone');
         } catch (err: any) {
-            setError(err.message);
+            if (active.current && !abort.signal.aborted) setError(err.message || '暫時無法登入，請稍後重試。');
         } finally {
-            setLoading(false);
+            sending.current = false;
+            if (active.current) setLoading(false);
         }
     };
 

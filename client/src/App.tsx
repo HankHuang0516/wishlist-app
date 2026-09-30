@@ -19,6 +19,7 @@ import ResetPassword from "./pages/ResetPassword";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import SupportPage from "./pages/SupportPage";
+import PartnerPage from "./pages/PartnerPage";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiShowcasePage from "./pages/ApiShowcasePage";
 import ChangelogPage from "./pages/ChangelogPage";
@@ -60,6 +61,7 @@ function App() {
             <Route path="terms" element={<TermsOfUse />} />
             <Route path="privacy" element={<PrivacyPolicy />} />
             <Route path="support" element={<SupportPage />} />
+            <Route path="partners" element={<PartnerPage />} />
             <Route path="account-deletion" element={<AccountDeletionPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="verify-email" element={<EmailVerification />} />

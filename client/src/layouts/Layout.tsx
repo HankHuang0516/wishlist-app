@@ -112,6 +112,7 @@ export default function Layout() {
                             <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
                             <Link to="/support" className="hover:text-muji-primary transition-colors">支援與聯絡</Link>
                             <Link to="/account-deletion" className="hover:text-muji-primary transition-colors">刪除帳號</Link>
+                            <Link to="/partners" className="hover:text-muji-primary transition-colors">供給合作</Link>
                             <Link to="/changelog" className="hover:text-muji-primary transition-colors">進版日誌</Link>
                             <button onClick={() => setIsFeedbackOpen(true)} className="hover:text-muji-primary transition-colors text-left">意見回饋</button>
                         </div>

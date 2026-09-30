@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { isReplyMailbox } from './emailAddress';
 
 export const PARTNER_CATEGORIES = ['FURNITURE', 'BOOKS', 'ELECTRONICS', 'CAMERA', 'MUSIC', 'TOYS', 'FASHION', 'OTHER'] as const;
 export const PARTNER_UPDATE_METHODS = ['API', 'CSV', 'MANUAL', 'OTHER'] as const;
@@ -35,7 +36,7 @@ export function parsePartnerInquiry(raw: unknown) {
     if (Object.keys(body).some(key => !allowed.includes(key))) throw new PartnerInquiryInputError('body');
     if (body.contactConsent !== true) throw new PartnerInquiryInputError('contactConsent');
     const email = text(body.contactEmail, 'contactEmail', 5, 254).toLowerCase();
-    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/u.test(email)) throw new PartnerInquiryInputError('contactEmail');
+    if (!isReplyMailbox(email)) throw new PartnerInquiryInputError('contactEmail');
     if (!Array.isArray(body.categories) || body.categories.length < 1 || body.categories.length > 8 ||
         body.categories.some(value => typeof value !== 'string' || !PARTNER_CATEGORIES.includes(value as typeof PARTNER_CATEGORIES[number])) ||
         new Set(body.categories).size !== body.categories.length) throw new PartnerInquiryInputError('categories');

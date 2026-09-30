@@ -19,7 +19,7 @@ router.post('/', publicLimit, async (req, res) => {
   const {isHoneypot:_ignored,...data}=parsed;
   const receipt=await receiveSubmission('PARTNER',clientSubmissionId,data,async tx => {
    const record=await tx.partnerInquiry.create({data:{...data,contactConsentAt:new Date()}});return record.id;
-  },`商家：${data.organization}\n聯絡：${data.contactName} (${data.contactEmail})\n${data.message ?? ''}\n此意向不構成圖文授權，請以收件編號從管理端查閱。`);
+  },`商家：${data.organization}\n聯絡：${data.contactName} (${data.contactEmail})\n${data.message ?? ''}\n此意向不構成圖文授權，請以收件編號從管理端查閱。`, data.contactEmail);
   return res.status(201).json({received:true,inquiryId:receipt.id,notificationStatus:receipt.notificationStatus});
  } catch(error) {
   if(error instanceof SubmissionConflict) return res.status(409).json({error:'同一收件識別碼的內容不同，請勿覆寫先前提交'});

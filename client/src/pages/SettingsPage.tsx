@@ -228,6 +228,8 @@ function SettingsSession() {
             <Link to="/reports" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
                 <span><span className="block font-semibold">我的商品檢舉</span><span className="text-sm text-gray-600">查看處理狀態與恢復未確認操作</span></span>
             </Link>
+            <div className="grid gap-3 sm:grid-cols-2"><Link to="/chat" className="rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">聊天與面交</span><span className="text-sm text-gray-600">聯繫買賣雙方、查核訊息及預約</span></Link>
+                <Link to="/social" className="rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">好友與社交</span><span className="text-sm text-gray-600">保留原有朋友與送禮功能</span></Link></div>
             <AccountSecurityPanel key={token} />
             <AccountBenefits key={`benefits-${token}`} />
 

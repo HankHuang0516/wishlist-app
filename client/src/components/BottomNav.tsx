@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { House, Gift, Users, Settings, Map } from "lucide-react";
+import { House, Gift, MessageCircle, Settings, Map } from "lucide-react";
 import { t } from "../utils/localization";
 
 export default function BottomNav() {
@@ -10,7 +10,7 @@ export default function BottomNav() {
         { path: "/", icon: House, label: t('nav.home') },
         { path: "/dashboard", icon: Gift, label: t('nav.dashboard') },
         { path: "/explore", icon: Map, label: '探索' },
-        { path: "/social", icon: Users, label: t('nav.social') },
+        { path: "/chat", icon: MessageCircle, label: '聊天' },
         { path: "/settings", icon: Settings, label: t('nav.settings') }
     ];
 

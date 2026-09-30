@@ -1,0 +1,106 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthContext } from '../context/AuthContext';
+import { makeMessage, makeRoom, roomId } from '../__tests__/fixtures/chat';
+import ChatPage, { ChatRoomWeb } from './ChatPage';
+const { api, data, store } = vi.hoisted(() => ({ api: vi.fn(), data: new Map<string, string>(), store: { get: vi.fn(), save: vi.fn(), clear: vi.fn() } }));
+vi.mock('../lib/marketplaceApi', async original => ({ ...await original<typeof import('../lib/marketplaceApi')>(), api }));
+vi.mock('../lib/webPendingStore', async original => ({ ...await original<typeof import('../lib/webPendingStore')>(), privatePendingStore: store, pendingRequestKey: async (_: string, id: number, resource: string) => `${id}.${resource}` }));
+const props = { token: 'fixture', userId: 42, roomId, onBack: vi.fn() }, key = `42.message.${roomId}`;
+const auth = { token: 'fixture', user: { id: 42, phoneNumber: 'synthetic-only' }, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
+let room = makeRoom(), rows: ReturnType<typeof makeMessage>[] = [];
+beforeEach(() => {
+  data.clear(); api.mockReset(); room = makeRoom(); rows = [];
+  store.get.mockReset().mockImplementation(async (key: string) => data.get(key) ?? null);
+  store.save.mockReset().mockImplementation(async (key: string, body: string) => { if (data.has(key) && data.get(key) !== body) throw new Error('conflict'); data.set(key, body); });
+  store.clear.mockReset().mockImplementation(async (key: string, body: string) => { if (data.get(key) !== body) return false; data.delete(key); return true; });
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  api.mockImplementation(async (_token: string, path: string, init?: RequestInit) => {
+    if (path.includes('/messages?')) { const params = new URL(path, 'http://fixture.test').searchParams, after = Number(params.get('afterSequence') ?? 0), before = Number(params.get('beforeSequence') ?? Infinity); return { items: rows.filter(row => row.sequence > after && row.sequence < before), nextBeforeSequence: null, nextAfterSequence: null }; }
+    if (path.endsWith('/messages') && init?.method === 'POST') { const body = JSON.parse(init.body as string), item = makeMessage(rows.length + 1, body); rows.push(item); room = { ...room, lastMessageSequence: item.sequence, lastMessageText: item.text }; return item; }
+    if (path.endsWith('/meetup')) return { appointment: null };
+    if (path.endsWith('/read')) { const { throughSequence } = JSON.parse(init!.body as string); room = { ...room, lastReadSequence: throughSequence, unreadCount: 0 }; return room; }
+    const projection = { ...room, seller: room.sellerUserId === null ? null : room.seller, buyer: room.buyerUserId === null ? null : room.buyer, listing: room.listingId === null ? null : room.listing };
+    if (path.startsWith('/chat/conversations?')) return { items: [projection], nextCursor: null };
+    return projection;
+  });
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+const roomView = (value = props) => <ChatRoomWeb {...value} />;
+const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
+describe('private chat web parity', () => {
+  it('shows authenticated inbox identity, price, unread count and keeps legacy friends reachable', async () => {
+    room = makeRoom({ lastMessageSequence: 2, unreadCount: 2 }); render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: /合成測試漫畫.*2 則未讀/ })).toBeInTheDocument(); expect(screen.getByText(/合成賣家 · NT\$ 59/)).toBeInTheDocument(); expect(screen.getByRole('link', { name: '好友與原有社交功能' })).toHaveAttribute('href', '/social');
+  });
+  it('requires login before any private read, preserving a validated room return intention', () => {
+    render(<MemoryRouter initialEntries={['/chat?room=' + roomId]}><AuthContext.Provider value={{ ...auth, token: null, user: null, isAuthenticated: false }}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login?next=' + encodeURIComponent('/chat?room=' + roomId)); expect(api).not.toHaveBeenCalled();
+  });
+  it('does not treat failed inbox reads as zero conversations', async () => {
+    api.mockRejectedValue(new Error('offline')); render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/不代表沒有對話/); expect(screen.queryByText(/其他商品尚無聊天/)).not.toBeInTheDocument();
+  });
+  it('commits the exact body before a single POST and renders the confirmed outgoing message', async () => {
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: '  合成測試面交詢問  ' } });
+    const send = screen.getByRole('button', { name: '傳送訊息' }); fireEvent.click(send); fireEvent.click(send); await screen.findByText('合成測試面交詢問'); expect(posts()).toHaveLength(1);
+    expect(JSON.parse(posts()[0][2].body).text).toBe('合成測試面交詢問'); expect(store.save.mock.invocationCallOrder[0]).toBeLessThan(api.mock.invocationCallOrder.find((_, index) => api.mock.calls[index][2]?.method === 'POST')!); expect(data.has(key)).toBe(false);
+  });
+  it('freezes uncertain text and retries the same body only after an explicit click', async () => {
+    const base = api.getMockImplementation()!; let lost = true;
+    api.mockImplementation(async (...args) => { if (args[1].endsWith('/messages') && args[2]?.method === 'POST' && lost) { lost = false; throw new Error('lost ACK'); } return base(...args); });
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: '合成待確認訊息' } }); fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    await screen.findByText(/尚未確認訊息送出/); const body = data.get(key); expect(body).toBeTruthy(); expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toBeDisabled(); expect(posts()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '明確重試相同訊息' })); await screen.findByText('原訊息已確認送出。'); expect(posts().map(call => call[2].body)).toEqual([body, body]); expect(data.has(key)).toBe(false);
+  });
+  it('restores the original receipt with GET only, without sending or fabricating a replacement ID', async () => {
+    const message = makeMessage(1), body = JSON.stringify({ clientMessageId: message.clientMessageId, text: message.text }); data.set(key, body); room = makeRoom({ lastMessageSequence: 1 });
+    const base = api.getMockImplementation()!; api.mockImplementation(async (...args) => args[1].includes('/by-client-id/') ? message : base(...args));
+    render(roomView()); await screen.findByText('原訊息已確認送出。'); expect(posts()).toHaveLength(0); expect(screen.getByText(message.text)).toBeInTheDocument(); expect(data.has(key)).toBe(false);
+  });
+  it('does not erase a pending body when receipt lookup fails and allows read-only retry', async () => {
+    const message = makeMessage(), body = JSON.stringify({ clientMessageId: message.clientMessageId, text: message.text }); data.set(key, body);
+    const base = api.getMockImplementation()!; api.mockImplementation(async (...args) => { if (args[1].includes('/by-client-id/')) throw new Error('offline'); return base(...args); });
+    render(roomView()); await screen.findByText(/無法查核原訊息回執/); fireEvent.click(screen.getByRole('button', { name: '只查核原訊息回執' })); await waitFor(() => expect(api.mock.calls.filter(call => call[1].includes('/by-client-id/'))).toHaveLength(2)); expect(posts()).toHaveLength(0); expect(data.get(key)).toBe(body);
+  });
+  it('never writes if secure persistence fails or if the component leaves while persistence awaits', async () => {
+    let done!: () => void; store.save.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+    const view = render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: 'fixture' } }); fireEvent.click(screen.getByRole('button', { name: '傳送訊息' })); await waitFor(() => expect(done).toBeDefined()); view.unmount(); await act(async () => done()); expect(posts()).toHaveLength(0);
+  });
+  it('blocks new messages for blocked/archived rooms but preserves readable history', async () => {
+    room = makeRoom({ blocked: true, blockedByOther: true, lastMessageSequence: 1 }); rows = [makeMessage(1, { senderUserId: 43 })];
+    const view = render(roomView()); await screen.findByText('合成測試訊息'); expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toBeDisabled(); expect(screen.getByRole('button', { name: '傳送訊息' })).toBeDisabled();
+    view.unmount(); room = makeRoom({ archived: true, lastMessageSequence: 1, sellerUserId: null, seller: { id: null, name: null }, listingId: null, listingAvailable: false, listing: { id: null, title: '已封存的商品聊天', status: 'REMOVED', expiresAt: null, price: null, currency: 'TWD', thumbnailUrl: null } }); rows = [makeMessage(1)];
+    render(roomView()); await screen.findByText('已封存的商品聊天'); expect(screen.queryByRole('button', { name: '查看或提議面交預約' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '傳送訊息' })).toBeDisabled();
+  });
+  it('keeps block outcome unknown until a fresh GET and never auto reverses or retries the block', async () => {
+    const base = api.getMockImplementation()!; api.mockImplementation(async (...args) => { if (args[1].startsWith('/chat/blocks/')) { room = makeRoom({ blocked: true, blockedByMe: true }); throw new Error('lost ACK'); } return base(...args); });
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.click(screen.getByRole('button', { name: '封鎖對方' })); await screen.findByText(/封鎖狀態尚未確認/); expect(screen.getByRole('button', { name: '封鎖對方' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' })); await screen.findByRole('button', { name: '解除封鎖' }); expect(api.mock.calls.filter(call => call[1].startsWith('/chat/blocks/'))).toHaveLength(1); expect(api.mock.calls.some(call => call[2]?.method === 'DELETE')).toBe(false);
+  });
+  it('marks only actually visible messages after a delay, not on opening or unseen history', async () => {
+    let callback!: IntersectionObserverCallback;
+    vi.stubGlobal('IntersectionObserver', class { constructor(cb: IntersectionObserverCallback) { callback = cb; } observe() {} disconnect() {} });
+    room = makeRoom({ lastMessageSequence: 2, unreadCount: 2 }); rows = [makeMessage(1, { senderUserId: 43 }), makeMessage(2, { senderUserId: 43 })];
+    render(roomView()); await waitFor(() => expect(screen.getAllByText('合成測試訊息')).toHaveLength(2)); await screen.findByRole('button', { name: '只更新聊天' }); expect(posts()).toHaveLength(0); vi.useFakeTimers();
+    const articles = screen.getAllByRole('article', { name: '對方訊息' }); act(() => callback([{ target: articles[0], isIntersecting: true, intersectionRatio: 0.9 }, { target: articles[1], isIntersecting: false, intersectionRatio: 0 }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver));
+    await act(async () => { await vi.advanceTimersByTimeAsync(499); }); expect(posts()).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(601); }); expect(posts()).toHaveLength(1); expect(JSON.parse(posts()[0][2].body)).toEqual({ throughSequence: 1 });
+  });
+  it('does not mark messages read after a visible callback if the page becomes hidden', async () => {
+    let callback!: IntersectionObserverCallback, visible = true;
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visible ? 'visible' : 'hidden');
+    vi.stubGlobal('IntersectionObserver', class { constructor(cb: IntersectionObserverCallback) { callback = cb; } observe() {} disconnect() {} });
+    room = makeRoom({ lastMessageSequence: 1, unreadCount: 1 }); rows = [makeMessage(1, { senderUserId: 43 })];
+    render(roomView()); await screen.findByText('合成測試訊息'); await screen.findByRole('button', { name: '只更新聊天' }); vi.useFakeTimers();
+    const article = screen.getByRole('article', { name: '對方訊息' }); act(() => callback([{ target: article, isIntersecting: true, intersectionRatio: 1 }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver));
+    visible = false; await act(async () => { await vi.advanceTimersByTimeAsync(1100); }); expect(posts()).toHaveLength(0);
+  });
+  it('does not inject a delayed old-account conversation after switching session scope', async () => {
+    let finish!: (value: unknown) => void; const original = makeRoom();
+    api.mockImplementation((token: string, path: string) => token === 'fixture' && path === '/chat/conversations/' + roomId ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(path.endsWith('/meetup') ? { appointment: null } : path.includes('/messages?') ? { items: [], nextBeforeSequence: null, nextAfterSequence: null } : makeRoom({ buyerUserId: 44, buyer: { id: 44, name: '另一個合成買家' }, listing: { ...original.listing, title: '新帳號商品' } })));
+    const view = render(<ChatRoomWeb key="42" {...props} />); await waitFor(() => expect(finish).toBeDefined()); view.rerender(<ChatRoomWeb key="44" {...props} token="next" userId={44} />);
+    await screen.findByText('新帳號商品'); await act(async () => finish(original)); expect(screen.queryByText(original.listing.title)).not.toBeInTheDocument(); expect(store.get).toHaveBeenCalledWith(`44.message.${roomId}`);
+  });
+});

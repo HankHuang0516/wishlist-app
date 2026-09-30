@@ -5,6 +5,8 @@ import { AuthContext } from '../context/AuthContext';
 import { API_URL } from '../config';
 import { PENDING_DELETION_KEY } from '../lib/accountDeletionWeb';
 import AccountDeletionPage from './AccountDeletionPage';
+const { erasePrivatePendingData } = vi.hoisted(() => ({ erasePrivatePendingData: vi.fn(async () => {}) }));
+vi.mock('../lib/webPendingStore', () => ({ erasePrivatePendingData }));
 
 const actionId = '11111111-1111-4111-8111-111111111111';
 const auth = { user: { id: 19, phoneNumber: 'test' }, token: 'test-session', login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
@@ -16,6 +18,7 @@ const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value
 const mount = (value = auth) => render(<MemoryRouter><AuthContext.Provider value={value}><AccountDeletionPage /></AuthContext.Provider></MemoryRouter>);
 
 beforeEach(() => {
+  erasePrivatePendingData.mockReset().mockResolvedValue(undefined); auth.logout.mockClear();
   localStorage.clear();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.stubGlobal('crypto', { randomUUID: () => actionId });
@@ -116,5 +119,17 @@ describe('public browser account deletion path', () => {
     mount({ ...auth, user: { id: 20, phoneNumber: 'other' }, token: 'other-session' });
     expect(screen.getByRole('alert')).toHaveTextContent('另一帳號的未確認刪除操作');
     expect(fetch).not.toHaveBeenCalled();
+    expect(erasePrivatePendingData).not.toHaveBeenCalled();
+  });
+  it('cleans only the original scope after a real ERASED receipt, retaining recovery proof if local cleanup fails', async () => {
+    localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify({ version: 1, apiUrl: API_URL, userId: 19, clientActionId: actionId, originalToken: 'old-session' }));
+    erasePrivatePendingData.mockRejectedValueOnce(new Error('storage unavailable')); vi.stubGlobal('fetch', vi.fn(async () => ok(ack)));
+    mount({ ...auth, user: null, token: null, isAuthenticated: false });
+    await screen.findByText(/此瀏覽器的私密資料尚未完成清理/);
+    expect(erasePrivatePendingData).toHaveBeenCalledWith(new URL(API_URL, window.location.origin).href, 19);
+    expect(screen.getByRole('button', { name: '完成並登出' })).toBeDisabled(); expect(localStorage.getItem(PENDING_DELETION_KEY)).toContain(actionId);
+    fireEvent.click(screen.getByRole('button', { name: '重試本機資料清理' }));
+    await screen.findByText(/此瀏覽器的本人待確認資料已清理/); fireEvent.click(screen.getByRole('button', { name: '完成並登出' }));
+    expect(auth.logout).toHaveBeenCalledTimes(1); expect(localStorage.getItem(PENDING_DELETION_KEY)).toBeNull();
   });
 });

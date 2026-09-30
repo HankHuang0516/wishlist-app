@@ -28,6 +28,7 @@ import PublicListingPage from "./pages/PublicListingPage";
 import AccountDeletionPage from "./pages/AccountDeletionPage";
 import MyListingsPage from './pages/MyListingsPage';
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
+const ListingReportsPage = lazy(() => import('./pages/ListingReportsPage'));
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,7 @@ function App() {
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
             <Route path="explore" element={<Suspense fallback={<p role="status">正在載入探索地圖…</p>}><ExplorePage /></Suspense>} />
+            <Route path="reports" element={<Suspense fallback={<p role="status">正在載入檢舉紀錄…</p>}><ListingReportsPage /></Suspense>} />
             <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

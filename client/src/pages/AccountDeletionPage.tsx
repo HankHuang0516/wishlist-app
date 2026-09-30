@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
+import { erasePrivatePendingData } from '../lib/webPendingStore';
 import {
   PENDING_DELETION_KEY, abandonDeletion, createPendingDeletion, lookupDeletion,
   parsePendingDeletion, submitDeletion, type DeletionResult, type PendingDeletion,
@@ -37,8 +38,21 @@ export default function AccountDeletionPage() {
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState('');
+  const [cleanup, setCleanup] = useState<'idle' | 'pending' | 'done' | 'failed'>('idle');
+  const [cleanupAttempt, setCleanupAttempt] = useState(0);
   const operationBusy = useRef(false);
   const foreignPending = !!pending && !!user && user.id !== pending.userId;
+
+  useEffect(() => {
+    if (result?.kind !== 'confirmed' || result.ack.state !== 'ERASED' || !pending || foreignPending) return;
+    let live = true; setCleanup('pending');
+    // A server receipt authorizes only the original account's local cleanup.
+    // Keep the deletion journal until cleanup succeeds, including after reload.
+    void erasePrivatePendingData(new URL(pending.apiUrl, window.location.origin).href, pending.userId)
+      .then(() => { if (live) setCleanup('done'); })
+      .catch(() => { if (live) setCleanup('failed'); });
+    return () => { live = false; };
+  }, [result, pending, foreignPending, cleanupAttempt]);
 
   useEffect(() => {
     if (!initial.pending) return;
@@ -121,6 +135,7 @@ export default function AccountDeletionPage() {
 
   function finish() {
     if (result?.kind !== 'confirmed' || foreignPending) return;
+    if (result.ack.state === 'ERASED' && cleanup !== 'done') return;
     try { localStorage.removeItem(PENDING_DELETION_KEY); }
     catch { setIssue('刪除結果已確認，但瀏覽器恢復資料尚未清理；請先關閉此分頁。'); return; }
     if (result.ack.state === 'ERASED') logout();
@@ -146,6 +161,9 @@ export default function AccountDeletionPage() {
       {result?.kind === 'confirmed' && result.ack.state === 'ERASED' ? <div role="status" className="space-y-2 rounded-xl bg-emerald-50 p-4 text-emerald-900">
         <p className="font-semibold">伺服器已確認帳號刪除。</p>
         <p>商品照片待清理：{result.ack.photoCleanupPending}；舊資產待核對／清理：{result.ack.legacyCleanupPending}。這不是實體資產或備份全數清除證明。</p>
+        {cleanup === 'pending' && <p>正在清理此瀏覽器內本人私密的待確認資料…</p>}
+        {cleanup === 'done' && <p>此瀏覽器的本人待確認資料已清理，已防止較晚完成的舊操作重新寫入。</p>}
+        {cleanup === 'failed' && <div role="alert"><p>帳號刪除已確認，但此瀏覽器的私密資料尚未完成清理；原回執仍保留，請重試。這不是帳號刪除失敗。</p><button type="button" className="min-h-11 rounded-xl border px-4" onClick={() => setCleanupAttempt(value => value + 1)}>重試本機資料清理</button></div>}
       </div> : result?.kind === 'confirmed' ? <p role="status" className="rounded-xl bg-blue-50 p-4">伺服器已確認放棄原操作；帳號未刪除。</p> :
         <p>尚未取得成功或放棄的伺服器收據。重開瀏覽器只會查詢，不會自動重送刪除。</p>}
       {!foreignPending && <div className="flex flex-wrap gap-3">
@@ -153,7 +171,7 @@ export default function AccountDeletionPage() {
           <button type="button" disabled={busy} onClick={() => void check()} className="rounded-xl border px-4 py-3 disabled:opacity-50">只查詢原操作結果</button>
           <button type="button" disabled={busy} onClick={() => void abandon()} className="rounded-xl border px-4 py-3 disabled:opacity-50">安全放棄尚未成立的操作</button>
         </>}
-        {result?.kind === 'confirmed' && <button type="button" onClick={finish} className="rounded-xl bg-gray-900 px-4 py-3 text-white">{result.ack.state === 'ERASED' ? '完成並登出' : '返回刪除表單'}</button>}
+        {result?.kind === 'confirmed' && <button type="button" disabled={result.ack.state === 'ERASED' && cleanup !== 'done'} onClick={finish} className="rounded-xl bg-gray-900 px-4 py-3 text-white disabled:opacity-50">{result.ack.state === 'ERASED' ? '完成並登出' : '返回刪除表單'}</button>}
       </div>}
     </section> : !initial.invalid && (!token || !user) ? <section className="space-y-3">
       <p>請先以原帳號登入，再在此頁確認刪除影響並提出要求。若忘記密碼，可先使用網頁密碼重設；不需透過 App。</p>

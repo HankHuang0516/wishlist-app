@@ -225,6 +225,9 @@ function SettingsSession() {
             <Link to="/my-listings" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
                 <span><span className="block font-semibold">我的商品 · 閱覽與管理</span><span className="text-sm text-gray-600">查看、編輯、保留、售出或延長刊登</span></span>
             </Link>
+            <Link to="/reports" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
+                <span><span className="block font-semibold">我的商品檢舉</span><span className="text-sm text-gray-600">查看處理狀態與恢復未確認操作</span></span>
+            </Link>
             <AccountSecurityPanel key={token} />
             <AccountBenefits key={`benefits-${token}`} />
 

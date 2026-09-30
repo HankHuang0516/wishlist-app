@@ -62,6 +62,18 @@ describe('APP-equivalent map and list exploration', () => {
     render(view()); fireEvent.click(await screen.findByRole('button', { name: '載入更多站內商品' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('分頁重複'); expect(screen.getAllByRole('button', { name: `查看${item.title}商品詳情` })).toHaveLength(1);
   });
+  it('offers reports only for another app seller, and replaces rather than nests the product dialog', async () => {
+    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.includes('/listing-reports/mine') ? { items: [], nextCursor: null } : url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}商品詳情` }));
+    fireEvent.click(await screen.findByRole('button', { name: '檢舉此商品' }));
+    expect(await screen.findByRole('dialog', { name: `檢舉商品：${item.title}` })).toBeInTheDocument(); expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(fetch.mock.calls.some(call => (call as unknown[])[1] && ((call as unknown[])[1] as RequestInit).method === 'POST')).toBe(false);
+  });
+  it('routes own-product details to management instead of self-report', async () => {
+    const item = { ...makeListing(), owner: { id: 19, name: '本人' } }; vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })));
+    render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}商品詳情` }));
+    expect(await screen.findByRole('link', { name: '管理我的商品' })).toHaveAttribute('href', '/my-listings'); expect(screen.queryByRole('button', { name: '檢舉此商品' })).not.toBeInTheDocument();
+  });
   it('ignores delayed old-session listings after switching accounts', async () => {
     const item = makeListing(); let resolve!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => url.includes('/listings?') && (init.headers as Record<string, string>).Authorization === 'Bearer fixture'

@@ -10,7 +10,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '10',
+      buildNumber: '11',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -24,7 +24,7 @@ module.exports = {
     },
     android: {
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 29,
+      versionCode: 30,
       allowBackup: false,
       blockedPermissions: [
         'android.permission.SYSTEM_ALERT_WINDOW',

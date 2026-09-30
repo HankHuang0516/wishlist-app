@@ -35,7 +35,7 @@ export default function PartnerPage() {
                     <a href="#cooperation" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 font-medium text-white transition hover:bg-slate-700">
                         查看合作方式 <ArrowRight className="h-4 w-4" aria-hidden="true" />
                     </a>
-                    <Link to="/support" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-medium text-slate-700 transition hover:border-slate-400">
+                    <Link to="/partners/inquiry" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-medium text-slate-700 transition hover:border-slate-400">
                         聯絡 Wishlist.ai
                     </Link>
                 </div>
@@ -86,7 +86,7 @@ export default function PartnerPage() {
             <section className="rounded-2xl border border-slate-200 bg-slate-900 p-7 text-white sm:p-10">
                 <h2 className="text-2xl font-semibold">歡迎先討論一小批商品</h2>
                 <p className="mt-3 max-w-2xl leading-7 text-slate-300">請提供來源名稱、負責窗口、3–10 件真實在售商品範例，以及可使用的圖文與更新方式。試點前會先確認權利與作業範圍，不需要提供賣場密碼。</p>
-                <Link to="/support" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-medium text-slate-900 transition hover:bg-rose-50">
+                <Link to="/partners/inquiry" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-medium text-slate-900 transition hover:bg-rose-50">
                     提出合作意向 <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
             </section>

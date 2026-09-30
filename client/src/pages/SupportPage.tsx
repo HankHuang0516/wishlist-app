@@ -20,6 +20,7 @@ export default function SupportPage() {
       </button>
     </div>
     <div className="space-y-3 border-t border-muji-border pt-6">
+      <Link className="underline" to="/partners/inquiry">商家合作意向（專用收件表單）</Link>
       <h2 className="text-xl font-semibold">常用協助 / Quick links</h2>
       <ul className="list-inside list-disc space-y-2 text-muji-secondary">
         <li><Link className="underline" to="/forgot-password">忘記密碼 / Reset password</Link></li>

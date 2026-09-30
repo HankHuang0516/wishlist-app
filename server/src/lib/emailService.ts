@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { isReplyMailbox } from "./emailAddress";
 
 // Email provider configuration
 const EMAIL_PROVIDER = 'resend';
@@ -17,7 +18,8 @@ if (process.env.RESEND_API_KEY) {
 }
 
 // Send via Resend
-const sendViaResend = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; id?: string }> => {
+const sendViaResend = async (to: string, subject: string, html: string, replyTo?: string): Promise<{ success: boolean; error?: string; id?: string }> => {
+    if (replyTo !== undefined && !isReplyMailbox(replyTo)) return { success: false, error: 'Invalid reply mailbox' };
     if (!resend || !process.env.RESEND_API_KEY) {
         return { success: false, error: 'Resend not configured' };
     }
@@ -28,6 +30,7 @@ const sendViaResend = async (to: string, subject: string, html: string): Promise
             to: [to],
             subject: subject,
             html: html,
+            ...(replyTo !== undefined ? { replyTo } : {}),
         });
 
         if (response.error) {
@@ -44,12 +47,12 @@ const sendViaResend = async (to: string, subject: string, html: string): Promise
     }
 };
 
-export const sendEmail = async (to: string, subject: string, html: string): Promise<{ success: boolean; error?: string; log?: string; id?: string }> => {
+export const sendEmail = async (to: string, subject: string, html: string, replyTo?: string): Promise<{ success: boolean; error?: string; log?: string; id?: string }> => {
     console.log('[EmailService] Mail requested; recipient and link details withheld');
 
     // Try Resend (Sole Provider)
     try {
-        const result = await sendViaResend(to, subject, html);
+        const result = await sendViaResend(to, subject, html, replyTo);
 
         if (result.success) {
             return { success: true, log: `Sent via Resend (ID: ${result.id})`, id: result.id };

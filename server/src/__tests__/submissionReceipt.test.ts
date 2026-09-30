@@ -11,3 +11,5 @@ test('reuse with different payload fails',async()=>{db.submissionReceipt.findUni
 test('DB failure cannot report success or mail',async()=>{db.$transaction.mockRejectedValue(new Error('offline'));await expect(receiveSubmission('FEEDBACK',id,data,save,'test')).rejects.toThrow('offline');expect(mail).not.toHaveBeenCalled();});
 test('provider exception retains durable pending receipt',async()=>{mail.mockRejectedValue(new Error('offline'));const r=await receiveSubmission('FEEDBACK',id,data,save,'test');expect(r.notificationStatus).toBe('PENDING');});
 test('notification HTML escapes submitted content',()=>{expect(escapeSubmissionHtml('<script>"&')).toBe('&lt;script&gt;&quot;&amp;');});
+
+test('durable receipt forwards validated contact for reply routing',async()=>{await receiveSubmission('PARTNER',id,data,save,'TEST','contact@example.com');expect(mail).toHaveBeenCalledWith('hankhuang0516@gmail.com',expect.any(String),expect.any(String),'contact@example.com');});

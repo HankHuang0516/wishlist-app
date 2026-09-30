@@ -10,7 +10,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '11',
+      buildNumber: '12',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -36,6 +36,7 @@ module.exports = {
       ],
     },
     plugins: [
+      ['expo-build-properties', { ios: { enableSceneSupport: true } }],
       './plugins/withIsolatedDebugQa',
       './plugins/withReleaseSigning',
       '@maplibre/maplibre-react-native',

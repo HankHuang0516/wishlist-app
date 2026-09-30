@@ -30,7 +30,6 @@ export function ProductNoticeScreen({ apiUrl, onContinue }: { apiUrl: string; on
     {storageIssue && <Text accessibilityRole="alert" style={styles.error}>裝置暫時無法記住確認結果。可以重試，或僅這次繼續；下次開啟仍會提醒。</Text>}
     <Pressable accessibilityRole="button" accessibilityLabel="我了解，繼續使用" disabled={busy} onPress={() => void acknowledge()} style={[styles.button, busy && styles.disabled]}><Text style={styles.buttonText}>{busy ? '正在記住確認…' : '我了解，繼續使用'}</Text></Pressable>
     {storageIssue && <Pressable accessibilityRole="button" accessibilityLabel="這次繼續，下次再提醒" disabled={busy} onPress={onContinue} style={styles.link}><Text style={styles.linkText}>這次繼續，下次再提醒</Text></Pressable>}
-    <Text style={styles.note}>目前為開發驗證版本，完整雙平台與商店驗收尚未完成。</Text>
   </ScrollView>;
 }
 

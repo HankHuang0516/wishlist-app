@@ -103,7 +103,6 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
     </View>}
     {!!onClose && button('關閉，返回目前帳號', onClose)}
     <View>{button('隱私政策', () => void policy('/privacy'))}{button('使用條款', () => void policy('/terms'))}</View>
-    <Text style={styles.note}>目前為開發驗證版本，完整雙平台與商店驗收尚未完成。</Text>
   </ScrollView></KeyboardAvoidingView>;
 }
 const styles = StyleSheet.create({

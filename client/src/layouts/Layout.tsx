@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet } from "react-router-dom";
-import { Gift, House, Users, Settings as SettingsIcon, LogOut, LogIn, CircleHelp, Crown } from "lucide-react";
+import { Gift, House, Users, Map, Settings as SettingsIcon, LogOut, LogIn, CircleHelp, Crown } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import FeedbackModal from "../components/FeedbackModal";
 import BottomNav from "../components/BottomNav";
@@ -58,6 +58,9 @@ export default function Layout() {
                                     <Button variant="ghost" size="icon" title={t('nav.social')} className="shrink-0 flex items-center justify-center">
                                         <Users className="h-6 w-6" />
                                     </Button>
+                                </Link>
+                                <Link to="/explore" aria-label="探索商品地圖" title="探索商品地圖" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-gray-100">
+                                    <Map className="h-6 w-6" aria-hidden="true" />
                                 </Link>
                                 <Link to="/settings">
                                     <Button variant="ghost" size="icon" title={t('nav.settings')} className="shrink-0 flex items-center justify-center">

@@ -40,7 +40,11 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],  // Don't serve index.html for /api/* routes
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.destination === 'image',
+            // Cache only bundled public artwork, never product/owner photos.
+            // CacheFirst would otherwise bypass API no-store after removal/logout.
+            urlPattern: ({ request, url, sameOrigin }) => request.destination === 'image' &&
+              sameOrigin && !url.search &&
+              (url.pathname.startsWith('/features/') || ['/logo.png', '/favicon.ico', '/apple-touch-icon.png', '/masked-icon.svg'].includes(url.pathname)),
             handler: 'CacheFirst',
             options: {
               cacheName: 'images',

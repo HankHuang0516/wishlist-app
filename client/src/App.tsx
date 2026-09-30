@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./layouts/Layout";
 import Home from "./pages/Home";
@@ -27,6 +27,7 @@ import ListingBatchPage from "./pages/ListingBatchPage";
 import PublicListingPage from "./pages/PublicListingPage";
 import AccountDeletionPage from "./pages/AccountDeletionPage";
 import MyListingsPage from './pages/MyListingsPage';
+const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -70,6 +71,7 @@ function App() {
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
+            <Route path="explore" element={<Suspense fallback={<p role="status">正在載入探索地圖…</p>}><ExplorePage /></Suspense>} />
             <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

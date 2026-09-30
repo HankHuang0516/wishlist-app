@@ -1,0 +1,41 @@
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import WishHomeWeb from './WishHomeWeb';
+import { makeWish, makeMatch, makeMatchPage, makeListing, responseOk } from '../__tests__/fixtures/marketplace';
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key={token} token={token} userId={userId} /></MemoryRouter>;
+describe('APP-equivalent homepage match UX', () => {
+  it('shows one best match per wish, expands alternatives, and puts the wish selector below matches', async () => {
+    const first = makeMatch(), best = makeMatch(1, makeListing('最匹配的三國演義'), 98);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([first, best]))));
+    render(view());
+    await screen.findByRole('link', { name: /最匹配的三國演義/ });
+    expect(screen.queryByRole('link', { name: new RegExp(first.listing.title) })).not.toBeInTheDocument();
+    const expand = screen.getByRole('button', { name: /共有2件吻合商品/ });
+    expect(expand).toHaveAttribute('aria-expanded', 'false'); fireEvent.click(expand);
+    expect(screen.getByRole('link', { name: new RegExp(first.listing.title) })).toBeInTheDocument();
+    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['讓願望更靠近。', '所有願望吻合的商品', '三國演義漫畫', '今天想找什麼？']);
+    expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
+  });
+  it('passes the single match ID for fresh lookup and automatic map framing', async () => {
+    const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([match]))));
+    render(view()); const link = await screen.findByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
+    await screen.findByRole('link', { name: new RegExp(match.listing.title) });
+    expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
+  });
+  it('shows incomplete failure instead of no matching items, and offers a retry', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('match-wishes')) return responseOk({ items: [makeWish()], nextCursor: null }); throw new Error('offline'); }));
+    render(view()); expect(await screen.findByRole('alert')).toHaveTextContent('這不代表沒有商品');
+    expect(screen.queryByText(/目前沒有其他賣家/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: /重新整理願望與配對/ })).toBeEnabled();
+  });
+  it('ignores late private wishes when the account session is replaced', async () => {
+    let resolve!: (value: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
+      ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk({ items: [], nextCursor: null }))));
+    const mounted = render(view()); mounted.rerender(view('second', 20));
+    await screen.findByText('先留下你的第一個願望');
+    await act(async () => resolve(responseOk({ items: [makeWish()], nextCursor: null })));
+    expect(screen.queryByRole('radio', { name: /三國演義/ })).not.toBeInTheDocument();
+  });
+});

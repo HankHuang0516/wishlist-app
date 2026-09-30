@@ -6,36 +6,38 @@ import { API_URL, API_BASE_URL } from '../config';
 import { Info, Gift } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getNextHoliday, t } from "../utils/localization";
+import WishHomeWeb from '../components/WishHomeWeb';
 
 export default function Home() {
-    const { isAuthenticated, token } = useAuth();
-    const [upcomingBirthdays, setUpcomingBirthdays] = useState<any[]>([]);
+    const { isAuthenticated, token, user } = useAuth();
+    const [birthdayState, setBirthdayState] = useState<{ session: string; items: any[] }>({ session: '', items: [] });
+    const [birthdayError, setBirthdayError] = useState('');
+    const session = `${user?.id ?? ''}:${token ?? ''}`;
+    const upcomingBirthdays = birthdayState.session === session ? birthdayState.items : [];
     const nextHoliday = getNextHoliday();
 
     useEffect(() => {
-        if (isAuthenticated) {
-            fetchBirthdays();
-        }
-    }, [isAuthenticated]);
-
-    const fetchBirthdays = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/upcoming-birthdays`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
+        if (!isAuthenticated || !token) return;
+        let active = true; const controller = new AbortController(); setBirthdayError('');
+        void (async () => {
+            try {
+                const res = await fetch(`${API_URL}/users/upcoming-birthdays`, {
+                    headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store',
+                    signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+                });
+                if (!res.ok) throw new Error('讀取失敗');
                 const data = await res.json();
-                setUpcomingBirthdays(data);
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    };
+                if (!Array.isArray(data)) throw new Error('格式不正確');
+                if (active) setBirthdayState({ session, items: data });
+            } catch { if (active) setBirthdayError('好友生日無法載入；請重新整理。'); }
+        })();
+        return () => { active = false; controller.abort(); };
+    }, [isAuthenticated, token, session]);
 
     if (isAuthenticated) {
         return (
             <div className="container mx-auto p-4 space-y-8">
-                <h1 className="text-3xl font-bold text-muji-primary">Welcome Back.</h1>
+                {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id} />}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Holiday Card */}
@@ -59,7 +61,7 @@ export default function Home() {
                             <CardTitle className="text-lg font-medium text-blue-600">Upcoming Friend Birthdays</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4 max-h-[300px] overflow-y-auto">
-                            {upcomingBirthdays.length > 0 ? upcomingBirthdays.map(friend => (
+                            {birthdayError ? <p role="status">{birthdayError}</p> : upcomingBirthdays.length > 0 ? upcomingBirthdays.map(friend => (
                                 <div key={friend.id} className="flex items-center bg-white p-3 rounded-lg shadow-sm">
                                     {/* Avatar */}
                                     <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-100 mr-3">

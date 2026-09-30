@@ -5,9 +5,11 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2, LogOut } from "lucide-react";
+import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2 } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
+import AccountSecurityPanel from '../components/AccountSecurityPanel';
+import AccountBenefits from '../components/AccountBenefits';
 
 interface UserProfile {
     id: number;
@@ -30,13 +32,20 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
-    const { token, logout } = useAuth();
+    const { token, user } = useAuth();
+    return <SettingsSession key={`${user?.id ?? 'anonymous'}:${token ?? ''}`} />;
+}
+
+function SettingsSession() {
+    const { token } = useAuth();
     const navigate = useNavigate();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const active = useRef(true);
+    useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
     useEffect(() => {
         if (token) {
@@ -52,24 +61,25 @@ export default function SettingsPage() {
 
     const fetchProfile = async () => {
         try {
-            if (!token) return;
+            if (!token || !active.current) return;
 
             const res = await fetch(`${API_URL}/users/me`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
+                if (!active.current) return;
                 setProfile(data);
             } else {
                 console.error("Failed to fetch profile:", res.status);
-                if (res.status === 401 || res.status === 403) {
-                    window.location.href = '/login';
+                if (active.current && (res.status === 401 || res.status === 403)) {
+                    navigate('/login?next=%2Fsettings');
                 }
             }
         } catch (error) {
             console.error(error);
         } finally {
-            setLoading(false);
+            if (active.current) setLoading(false);
         }
     };
 
@@ -80,7 +90,7 @@ export default function SettingsPage() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setAiUsage(data);
+                if (active.current) setAiUsage(data);
             }
         } catch (error) {
             console.error('Failed to fetch AI usage:', error);
@@ -92,6 +102,7 @@ export default function SettingsPage() {
     const [changingLang, setChangingLang] = useState(false);
 
     const handleUpdate = async (updates: any) => {
+        if (!token || !active.current) return;
         try {
             const res = await fetch(`${API_URL}/users/me`, {
                 method: 'PUT',
@@ -103,6 +114,7 @@ export default function SettingsPage() {
             });
             if (res.ok) {
                 const data = await res.json();
+                if (!active.current) return;
                 setProfile(data);
                 // Trigger saved feedback logic
                 const key = Object.keys(updates)[0];
@@ -111,6 +123,7 @@ export default function SettingsPage() {
                     setTimeout(() => setSavedField(null), 2000);
                 }
             } else {
+                if (!active.current) return;
                 setFeedback({ message: "更新失敗", type: 'error' });
                 setTimeout(() => setFeedback(null), 3000);
             }
@@ -204,7 +217,16 @@ export default function SettingsPage() {
                     {feedback.message}
                 </div>
             )}
-            <h1 className="text-3xl font-bold text-muji-primary">{t('settings.profile')}</h1>
+            <h1 className="text-3xl font-bold text-muji-primary">我的／設定</h1>
+            <Link to="/sell" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
+                <Camera aria-hidden className="h-6 w-6 text-blue-600" />
+                <span><span className="block font-semibold">刊登好物</span><span className="text-sm text-gray-600">連續拍照或批次選照片，由 AI 建議商品資訊</span></span>
+            </Link>
+            <Link to="/my-listings" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
+                <span><span className="block font-semibold">我的商品 · 閱覽與管理</span><span className="text-sm text-gray-600">查看、編輯、保留、售出或延長刊登</span></span>
+            </Link>
+            <AccountSecurityPanel key={token} />
+            <AccountBenefits key={`benefits-${token}`} />
 
             {/* Language Section */}
             <Card>
@@ -277,6 +299,10 @@ export default function SettingsPage() {
                     {/* Avatar Image & Overlay */}
                     <div
                         className="relative group cursor-pointer w-24 h-24"
+                        role="button"
+                        tabIndex={0}
+                        aria-label="上傳大頭照"
+                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
                         onClick={() => fileInputRef.current?.click()}
                     >
                         <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
@@ -366,8 +392,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.realName')}</label>
+                                <label htmlFor="profile-real-name" className="text-sm font-medium">{t('settings.realName')}</label>
                                 <Input
+                                    id="profile-real-name"
                                     value={profile.realName || ""}
                                     onChange={(e) => setProfile({ ...profile, realName: e.target.value })}
                                     onBlur={(e) => handleUpdate({ realName: e.target.value })}
@@ -378,6 +405,8 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isRealNameVisible: !profile.isRealNameVisible })}
+                                aria-label={profile.isRealNameVisible ? '隱藏真實姓名' : '公開真實姓名'}
+                                aria-pressed={profile.isRealNameVisible}
                                 title={profile.isRealNameVisible ? t('settings.public') : t('settings.hidden')}
                             >
                                 {profile.isRealNameVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
@@ -399,8 +428,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.birthday')}</label>
+                                <label htmlFor="profile-birthday" className="text-sm font-medium">{t('settings.birthday')}</label>
                                 <Input
+                                    id="profile-birthday"
                                     type="date"
                                     value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
                                     onChange={(e) => setProfile({ ...profile, birthday: e.target.value })}
@@ -411,6 +441,8 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
+                                aria-label={profile.isBirthdayVisible ? '隱藏生日' : '公開生日'}
+                                aria-pressed={profile.isBirthdayVisible}
                                 title={profile.isBirthdayVisible ? t('settings.public') : t('settings.hidden')}
                             >
                                 {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
@@ -432,8 +464,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.address')}</label>
+                                <label htmlFor="profile-address" className="text-sm font-medium">{t('settings.address')}</label>
                                 <Input
+                                    id="profile-address"
                                     value={profile.address || ""}
                                     onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                                     onBlur={(e) => handleUpdate({ address: e.target.value })}
@@ -444,6 +477,8 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isAddressVisible: !profile.isAddressVisible })}
+                                aria-label={profile.isAddressVisible ? '隱藏寄送地址' : '公開寄送地址'}
+                                aria-pressed={profile.isAddressVisible}
                             >
                                 {profile.isAddressVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
@@ -464,8 +499,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.phone')}</label>
+                                <label htmlFor="profile-phone" className="text-sm font-medium">{t('settings.phone')}</label>
                                 <Input
+                                    id="profile-phone"
                                     value={profile.phoneNumber}
                                     disabled
                                     className="bg-gray-100 text-gray-500 cursor-not-allowed"
@@ -475,6 +511,8 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isPhoneVisible: !profile.isPhoneVisible })}
+                                aria-label={profile.isPhoneVisible ? '隱藏手機號碼' : '公開手機號碼'}
+                                aria-pressed={profile.isPhoneVisible}
                             >
                                 {profile.isPhoneVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
@@ -490,8 +528,9 @@ export default function SettingsPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-end justify-between gap-4">
                             <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.email')}</label>
+                                <label htmlFor="profile-email" className="text-sm font-medium">{t('settings.email')}</label>
                                 <Input
+                                    id="profile-email"
                                     value={profile.email || ""}
                                     disabled={!!profile.email}
                                     className={profile.email ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
@@ -504,6 +543,8 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleUpdate({ isEmailVisible: !profile.isEmailVisible })}
+                                aria-label={profile.isEmailVisible ? '隱藏電子信箱' : '公開電子信箱'}
+                                aria-pressed={profile.isEmailVisible}
                             >
                                 {profile.isEmailVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
                             </Button>
@@ -517,31 +558,6 @@ export default function SettingsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Birthday (Read Only) */}
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-end justify-between gap-4">
-                            <div className="flex-1 space-y-2">
-                                <label className="text-sm font-medium">{t('settings.birthday')}</label>
-                                <Input
-                                    value={profile.birthday ? new Date(profile.birthday).toLocaleDateString() : "Not set"}
-                                    disabled
-                                    className="bg-gray-100 text-gray-500 cursor-not-allowed"
-                                />
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleUpdate({ isBirthdayVisible: !profile.isBirthdayVisible })}
-                            >
-                                {profile.isBirthdayVisible ? <Eye className="text-green-600" /> : <EyeOff className="text-gray-400" />}
-                            </Button>
-                        </div>
-                        <p className="text-xs text-muji-secondary mt-2">
-                            {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHiddenBirthday')}
-                        </p>
-                    </CardContent>
-                </Card>
             </div>
 
 
@@ -649,7 +665,7 @@ export default function SettingsPage() {
                                         const response = await fetch(`${API_URL}/users/me/ai-prompt`, {
                                             method: 'POST',
                                             headers: {
-                                                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                                'Authorization': `Bearer ${token}`,
                                                 'Content-Type': 'application/json'
                                             }
                                         });
@@ -680,24 +696,9 @@ export default function SettingsPage() {
                 </Card>
             </div>
 
-            {/* Security Section */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.securityTitle')}</h2>
-                <Card>
-                    <CardContent className="pt-6 space-y-4">
-                        <p className="text-sm text-gray-500">{t('settings.securityDesc')}</p>
-                        <Link to="/change-password">
-                            <Button variant="outline" className="w-full">
-                                {t('settings.changePassword')}
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Monetization Section */}
             <div className="space-y-4 pb-12">
-                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.monetizationTitle')}</h2>
+                <h2 className="text-xl font-semibold mt-8 mb-4">既有願望清單權益</h2>
 
                 {/* AI Usage Card */}
                 <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
@@ -774,27 +775,6 @@ export default function SettingsPage() {
                     </Card>
                 </div>
 
-                {/* Danger Zone */}
-                <div className="mt-8">
-                    <h2 className="text-xl font-semibold mb-4 text-red-600 font-serif">Danger Zone</h2>
-                    <Card className="border-red-100 bg-red-50/30">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-medium text-lg text-red-900">{t('settings.deleteAccount')}</h3>
-                                    <p className="text-sm text-red-700 mt-1">{t('settings.deleteAccountDesc')}</p>
-                                </div>
-                                <Button
-                                    variant="destructive"
-                                    onClick={() => navigate('/account-deletion')}
-                                >
-                                    {t('settings.deleteAccount')}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
                 {/* Debug Tools Section - Admin Only */}
                 {profile.phoneNumber === '0935065876' && (
                     <div className="mt-8 pt-6 border-t border-gray-200">
@@ -844,18 +824,6 @@ export default function SettingsPage() {
                             {t('settings.viewHistory')}
                         </Button>
                     </Link>
-                </div>
-
-                {/* Logout Button (Mobile Access) */}
-                <div className="pt-6 border-t border-gray-200">
-                    <Button
-                        variant="outline"
-                        className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
-                        onClick={logout}
-                    >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        {t('nav.logout')}
-                    </Button>
                 </div>
 
             </div>

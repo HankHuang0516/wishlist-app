@@ -1,0 +1,58 @@
+# Wishlist.ai 網頁／APP 2.0.12 完整功能對齊驗收
+
+目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能；保留網頁原有功能。這不是 APP 發布成功或付款正式開通的聲明。
+
+基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
+
+## 功能對照與缺口
+
+| 功能 | APP 基準／後台 | 網頁狀態 | 必要驗收 |
+|---|---|---|---|
+| 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
+| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | sell 既有，新增設定入口；待完整比對 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
+| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | sell 既有；待比對 | 日期切月穩定、預設30天、未填欄定位高亮 |
+| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 本機實作；版本與未知回應測試通過，待隔離DB實測 | expectedVersion 衝突、失聯查核而非盲目重送 |
+| 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
+| 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、收合入口與拖放／鍵盤排序已實作；待完整queue恢復驗證 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作 |
+| 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 既有；待跨端實測 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
+| 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 缺失，待實作 | 每願望1張最匹配、全部願望分頁、多件可展開 |
+| 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 待實作 | 同願望漫畫正反例、單件自動聚焦 |
+| 地圖缩圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 待實作 | 同邊界／條件、位置拒絕可用、圖與列表一致 |
+| 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 待實作 | 回傳分数及來源不混淆、不把查詢錯誤顯示0件 |
+| 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 待實作 | 對象正確、重複點擊不重建對話 |
+| 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 缺失，待實作 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
+| 封鎖／解除／訊息檢舉／面交預約 | ChatScreen；chat/blocks、meetup | 待實作 | 雙方權限、提案／接受／取消、狀態衝突 |
+| 願望清單與商品建立／編輯／刪除／分類 | WishScreen；wish-management | 網頁 legacy wishlist 既有；待對照資料契約 | 同帳號新增願望兩端可見、命名與價格單位 |
+| 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 待比對／補齊 | 同照片正確識別、私密圖、價格說明不稱保證 |
+| 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
+| 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
+| 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 既有刪除；本機合併入口 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
+| 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
+| 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
+| 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 網頁既有；待完整比對 | 登入後回原功能、失效、切帳號清理 |
+| 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 保留既有；待回歸 | 連結與表單可用、沒有因對齊刪掉既有功能 |
+| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機去除重複生日與補標籤 | autosave真實回執、隱私切換、API不輸出憑證 |
+
+## 平台替代策略
+
+- 拍照使用瀏覽器相機／檔案輸入，批次上傳提供連續加入；不宣稱所有桌機具備相機。
+- 地圖位置使用瀏覽器定位，拒絕時保留手動區域搜尋。分享使用 Web Share API，無支援時複製商品連結。
+- 網頁不得呼叫 Apple／Google 原生付款。当前 APP 付款與驗單未開放，三端均如實顯示暫停；會員旗標不等於已驗證付費行銷額度。
+- Web與APP共用相同後台資料，不導入另一份商品或願望資料庫。每個 private API 都綁定當下帳號並防止切帳號後舊回應污染。
+
+## 完成門檻
+
+1. 上表待實作／待比對全數完成，寫明具體測試及正式端證據；不可只以元件存在當作通過。
+2. 各功能覆蓋成功、拒絕、失敗、未知回執、恢復與切帳號；無破壞性測試針對 Hank 真實帳號執行。
+3. client／server／mobile 現有回歸與新增測試、build通過；CI全部必要檢查通過後才合併。
+4. 本機瀏覽器桌機／窄屏驗證，再部署現有 Railway；回讀相同正式站功能與資料確認。
+5. 審查所有入口、欄位標題、單位、空／錯誤狀態、鍵盤操作、照片隱私、付款措辭；完整交付結果與未達項目，不誤稱100%。
+
+## 2026-09-30 本機驗收紀錄（尚未部署）
+
+- 安全合併元件、舊 change-password 路徑復用、同後台永久額度、商品管理、版本化分享、草稿／刊登商品共用行銷助手，均已進入本工作分支。
+- 測試帳號以本機Vite頁面連接正式後台登入，確認真實尊榮會員狀態、永久餘額與月額度狀態，未執行付款、密碼更改、帳號／商品刪除或任何真實商品變更。
+- 「我的商品」正確讀取三件在售商品及實拍縮圖：來自北極的禮物、存回去賺更多、漫畫版三國演義；編輯框名稱、說明、NT$單位、額外選項／Beta入口可見。未按生成／儲存／狀態變更。
+- 390×844瀏覽器窄屏讀取：商品卡片無水平溢出（documentElement.scrollWidth未超過innerWidth）。這只證明本頁，不代表其他頁面已完成響應式驗收。
+- 已通過 client 全套24個測試檔／140項測試與production build（最新完整回歸）；包含同APP商品資料契約、owner隔離、安全未知回執、管理衝突、分享、行銷雙重送出與拖放／鍵盤排序。這不是100%分支或功能覆蓋率聲明。
+- 預留下一階段：行銷任務未知回執的可恢復識別、真正四圖queue／單次免費修改、商品完整DB狀態遷移、首頁匹配、探索地圖、聊天／面交、願望照片與資料共用、全部頁面的UX與正式部署驗收。

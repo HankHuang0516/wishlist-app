@@ -55,7 +55,7 @@ describe('Avatar Upload Interaction', () => {
         );
 
         // Wait for profile load (mocked fetch)
-        await screen.findByText('settings.profile');
+        await screen.findByRole('heading', { name: '我的／設定' });
 
         // Verify avatar container exists
         // We find it by looking for the camera icon container or structure

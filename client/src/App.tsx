@@ -26,6 +26,7 @@ import ChangelogPage from "./pages/ChangelogPage";
 import ListingBatchPage from "./pages/ListingBatchPage";
 import PublicListingPage from "./pages/PublicListingPage";
 import AccountDeletionPage from "./pages/AccountDeletionPage";
+import MyListingsPage from './pages/MyListingsPage';
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -68,6 +69,7 @@ function App() {
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="sell" element={<ListingBatchPage />} />
+            <Route path="my-listings" element={<MyListingsPage />} />
             <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

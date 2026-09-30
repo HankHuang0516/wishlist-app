@@ -10,6 +10,10 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('safe return from web account-deletion login', () => {
   for (const [query, expected] of [
     ['?next=%2Faccount-deletion', '/account-deletion'],
+    ['?next=%2Fmy-listings', '/my-listings'],
+    ['?next=%2Fsell', '/sell'],
+    ['?next=%2Fsettings', '/settings'],
+    ['?next=%2F%2Fevil.example', '/dashboard'],
     ['?next=https%3A%2F%2Fevil.example%2F', '/dashboard'],
   ] as const) {
     it(`uses only a whitelisted return path for ${query}`, async () => {

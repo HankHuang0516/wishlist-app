@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../compone
 import { t } from "../utils/localization";
 import { Analytics } from "../utils/analytics";
 import { Eye, EyeOff } from "lucide-react";
+import { SECURITY_NOTICES, type SecurityNotice } from '../lib/accountSecurityWeb';
+import { authReturnTo } from '../lib/authReturnTo';
 
 export default function Login() {
     const [identifier, setIdentifier] = useState(""); // phone or email
@@ -22,7 +24,9 @@ export default function Login() {
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const returnTo: '/dashboard' | '/account-deletion' = searchParams.get('next') === '/account-deletion' ? '/account-deletion' : '/dashboard';
+    const securityCode = searchParams.get('security');
+    const securityNotice = securityCode && Object.hasOwn(SECURITY_NOTICES, securityCode) ? SECURITY_NOTICES[securityCode as SecurityNotice] : null;
+    const returnTo = authReturnTo(searchParams.get('next'));
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -110,6 +114,7 @@ export default function Login() {
                 </CardHeader>
                 <form onSubmit={handleSubmit} className={error ? "animate-shake" : ""}>
                     <CardContent className="space-y-4">
+                        {securityNotice && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{securityNotice}</p>}
                         {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded">{error}</div>}
                         {resendSuccess && <div className="text-green-600 text-sm text-center font-medium bg-green-50 p-2 rounded">{resendSuccess}</div>}
                         {showResendOption && (

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_URL } from '../config';
 import { useNavigate } from 'react-router-dom';
+import type { AuthReturnTo } from '../lib/authReturnTo';
 
 interface User {
     id: number;
@@ -12,7 +13,7 @@ interface User {
 interface AuthContextType {
     user: User | null;
     token: string | null;
-    login: (token: string, user: User, returnTo?: '/dashboard' | '/account-deletion') => void;
+    login: (token: string, user: User, returnTo?: AuthReturnTo) => void;
     logout: () => void;
     refreshUser: () => Promise<void>;
     isAuthenticated: boolean;
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const navigate = useNavigate();
 
-    const login = (newToken: string, newUser: User, returnTo: '/dashboard' | '/account-deletion' = '/dashboard') => {
+    const login = (newToken: string, newUser: User, returnTo: AuthReturnTo = '/dashboard') => {
         setToken(newToken);
         setUser(newUser);
         localStorage.setItem('token', newToken);

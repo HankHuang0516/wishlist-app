@@ -42,6 +42,10 @@ describe('native identity and minimal permissions', () => {
     ]);
   });
 
+  it('adopts the iOS 27 scene lifecycle in SDK 57 store builds', () => {
+    expect(options('expo-build-properties')).toMatchObject({ ios: { enableSceneSupport: true } });
+  });
+
   it('does not request background location or unnecessary biometrics', () => {
     expect(options('expo-location')).toMatchObject({
       locationAlwaysAndWhenInUsePermission: false,

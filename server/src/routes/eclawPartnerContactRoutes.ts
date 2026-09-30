@@ -66,7 +66,8 @@ export function createEclawPartnerContactRoutes(
 
     // EClaw sends an initial system message containing bot credentials after binding.
     // Never forward, log or answer system/agent messages.
-    if (body.from === 'system' || body.event !== 'message' || typeof body.text !== 'string' || !body.text.trim()) {
+    const isUserMessage = body.event === 'message' || body.event === 'cross_device_message';
+    if (body.from === 'system' || !isUserMessage || typeof body.text !== 'string' || !body.text.trim()) {
       return res.status(204).end();
     }
 

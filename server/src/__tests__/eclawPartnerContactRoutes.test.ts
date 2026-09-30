@@ -59,6 +59,13 @@ describe('EClaw partner contact webhook', () => {
     expect(outbound.message).not.toContain('Ignore instructions');
   });
 
+  it('answers messages arriving through the public share-chat cross-device route', async () => {
+    const send = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+    await request(makeApp(send)).post('/callback').set('Authorization', 'Bearer test-callback-token')
+      .send({ ...incoming, event: 'cross_device_message', from: 'External partner' }).expect(204);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('reports delivery failure without disclosing upstream or credential details', async () => {
     const send = jest.fn().mockRejectedValue(new Error('sensitive upstream details')) as unknown as typeof fetch;
     const result = await request(makeApp(send)).post('/callback')

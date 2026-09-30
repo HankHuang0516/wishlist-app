@@ -23,8 +23,8 @@ describe('store-facing support and privacy pages', () => {
   it('offers public feedback without requiring app sign-in', () => {
     localStorage.setItem('user-locale', 'en-US');
     render(<MemoryRouter><AuthContext.Provider value={auth}><SupportPage /></AuthContext.Provider></MemoryRouter>);
-    fireEvent.click(screen.getByRole('button', { name: 'Contact support / Send feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: '開啟意見回饋 / Contact support' }));
     expect(screen.getByText('Email (Required for reply)')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'the account deletion page' })).toHaveAttribute('href', '/account-deletion');
+    expect(screen.getByRole('link', { name: '刪除帳號與資料 / Delete account and data' })).toHaveAttribute('href', '/account-deletion');
   });
 });

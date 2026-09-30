@@ -7,10 +7,10 @@ export class PartnerInquiryInputError extends Error {
     constructor(readonly field: string) { super('合作資料格式不正確'); }
 }
 
-function text(raw: unknown, field: string, min: number, max: number) {
+function text(raw: unknown, field: string, min: number, max: number, multiline = false) {
     if (typeof raw !== 'string') throw new PartnerInquiryInputError(field);
     const value = raw.trim();
-    if (value.length < min || value.length > max || /[\u0000-\u001f\u007f]/u.test(value))
+    if (value.length < min || value.length > max || (multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u : /[\u0000-\u001f\u007f]/u).test(value))
         throw new PartnerInquiryInputError(field);
     return value;
 }
@@ -58,7 +58,7 @@ export function parsePartnerInquiry(raw: unknown) {
         estimatedActiveItems: body.estimatedActiveItems == null ? null : Number(body.estimatedActiveItems),
         updateMethod: body.updateMethod as string,
         sampleUrls: parsedUrls,
-        message: body.message ? text(body.message, 'message', 1, 1000) : null,
+        message: body.message ? text(body.message, 'message', 1, 1000, true) : null,
     };
     return { ...result, isHoneypot: typeof body.companyFax === 'string' && body.companyFax.trim() !== '' };
 }

@@ -53,6 +53,8 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
             throw new PhotoInputError('請選擇照片並提供有效的上傳識別碼與用途');
         const ownerUserId = req.user.id;
         if (!await prisma.user.findUnique({ where: { id: ownerUserId }, select: { id: true } })) return res.status(401).json({ error: '帳號已失效' });
+        if (await prisma.wishPhotoRemovalReceipt.findUnique({ where: { userId_clientUploadId: { userId: ownerUserId, clientUploadId: clientUploadId.toLowerCase() } } }))
+            throw new PhotoInputError('此照片已移除；不會重建原上傳', 409);
         const provider = uploadProvider(ownerUserId);
         if (provider === 'flickr') await flickrStorage.ready();
         else if (provider === 'local') await storage.ready();
@@ -71,10 +73,18 @@ export async function uploadListingMedia(req: AuthRequest, res: Response) {
         persisted = true;
         const base = `${getApiUrl().trim().replace(/\/$/, '')}/listing-media/${id}`;
         try {
-            const record = await prisma.listingMedia.create({ data: { id, ownerUserId, clientUploadId, contentHash: photo.contentHash,
-                capturePurpose: capturePurpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM',
-                width: photo.width, height: photo.height, byteSize: photo.byteSize, imageUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`,
-                flickrPhotoId, flickrImageUrl: remote?.imageSource, flickrThumbnailUrl: remote?.thumbnailSource }, select });
+            const record = await prisma.$transaction(async tx => {
+                const owners = await tx.$queryRaw<Array<{ id: number }>>(Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${ownerUserId} FOR NO KEY UPDATE`);
+                if (!owners.length) throw new PhotoInputError('帳號已失效', 401);
+                // Re-check under the same removal/erasure gate AFTER provider
+                // upload. A racing removal cannot resurrect this upload ID.
+                if (await tx.wishPhotoRemovalReceipt.findUnique({ where: { userId_clientUploadId: { userId: ownerUserId, clientUploadId: clientUploadId.toLowerCase() } } }))
+                    throw new PhotoInputError('此照片已移除；不會重建原上傳', 409);
+                return tx.listingMedia.create({ data: { id, ownerUserId, clientUploadId, contentHash: photo.contentHash,
+                    capturePurpose: capturePurpose as 'LEGACY_UNKNOWN' | 'MANUAL_PHOTO' | 'BATCH_ITEM',
+                    width: photo.width, height: photo.height, byteSize: photo.byteSize, imageUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`,
+                    flickrPhotoId, flickrImageUrl: remote?.imageSource, flickrThumbnailUrl: remote?.thumbnailSource }, select });
+            });
             return res.status(201).json(record);
         } catch (error) {
             await rollbackUpload(id, flickrPhotoId).catch(() => console.error('Photo rollback cleanup needs retry; details withheld'));

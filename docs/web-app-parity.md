@@ -23,7 +23,7 @@
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
 | 願望清單與商品建立／編輯／刪除／分類 | WishScreen；wish-management | 本機新增 `/wishes` 共用原生資料契約，保留 legacy 分享／送禮／標籤入口；隔離HTTP／DB通過，瀏覽器與分類回歸待補 | 同帳號新增願望兩端可見、命名與價格單位 |
-| 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀已在隔離後台驗證；MiniMax實際識別、照片移除失聯恢復及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
+| 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
 | 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 既有刪除；本機合併入口 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
@@ -136,3 +136,17 @@
 - DEV-only本機圖片轉接只允許當前loopback API精確UUID `/image` 路徑，拒絕外站／其他埠／帳密／query／hash／thumbnail；production仍沿用native HTTPS-only驗證。此安排讓真實本機照片驗收可進行，不放寬正式端安全規則。
 - 最新client51個測試檔／781項全套與production build通過；新增舊清單12項、DEV圖片契約及既有所有願望／照片／聊天／auth回歸。server build與隔離smoke防呆通過；本批CI尚待提交後回讀，測試件數不是覆蓋率百分比。
 - 全目標仍未達：實際MiniMax照片識別、照片移除失聯回執、分類／舊detail與私密連結回歸、完整sell與行銷4圖／免費修改／未知回執、owner真實狀態遷移、profile保存回執、註冊驗證重設、社交通知政策、PWA舊快取、全站響應式／效能，以及最後CI／合併／Railway部署與正式回讀。不得以本批通過代替全功能100%。
+
+## 2026-10-01 第八批：未使用願望照片的持久移除回執（仍未部署）
+
+- 專用 `/native-wishes/photo-removals/:clientUploadId` 以原上傳ID作為移除識別碼；GET只查核、POST明確移除，綁定當下owner與精確media ID。持久墓碑不依附已刪除的照片資料列；未知404不等於移除成功。回執只投影ID、移除時間與實體檔案是否待清理，no-store，不輸出Flickr/provider憑證。
+- User gate、照片鎖、刪除資料列、清理outbox與回執在同一交易中。12個並行重試只有1份原回執與1個清理任務。不同media ID、別人照片、已附願望、批次草稿、seller edits、AI任務與行銷來源／輸出照片不得以此入口移除；使用者刪除時回執cascade，身份無關的清理任務保留。
+- 上傳在provider寫入前及資料庫commit前檢查墓碑。大小寫UUID變體及已進入provider寫入的晚到上傳，均不可重建原照片；晚到新檔案回滾只清理其獨有UUID目錄。回執寫入失敗會完整回滾照片移除與outbox，不留下假成功。
+- 網頁先保存加密、API／帳號隔離的原移除journal，再POST。移除有二次確認及取消；重開只GET，新上傳／建立凍結至取得有效原回執。已確認但本機標記清理失敗只重試清理；另一分頁的新照片journal不被舊回執丟棄。移除待確認時不顯示已失效的照片預覽，也不沿用上一個操作的成功提示。
+- 合成帳號227的Chrome實際選照上傳1次。為避免UI永久刪資料的確認限制，瀏覽器的移除請求由隔離工具在進入handler前固定503拒絕，後台照片仍存在；二次確認／取消、原journal保存、重开未知回執與停用新建立均實際驗證。不是一次成功刪除的UI證據。
+- 然後以獨立測試API對同一合成原照片真正提交移除，刻意在commit後回502；Chrome重開只GET，清理原journal並恢復新增與相機／相簿入口。後台回讀：photo POST共1次，removal POST共2次（第1次無寫入拒絕，第2次真實commit後丟失ACK），只有1份原回執、0份照片資料列，沒有自動重送。
+- 回執實體清理當時為pending，網頁如實顯示；之後用ListingMediaStorage精確移除該合成UUID的image／thumbnail並清理其outbox，原路徑不存在，authenticated GET同一回執為cleanupPending=false。這是隔離本機儲存驗收，非Flickr實體刪除或正式worker運行證據。其他使用者照片未改動。
+- 窄屏390×844：待確認清單documentWidth375 <=390；恢復後新增願望dialog documentWidth390 =390，相機與相簿enabled且無舊照片。保存 `wishlist-web-parity-photo-removal-pending-20261001.jpg`、`wishlist-web-parity-photo-removal-recovered-20261001.jpg`、`wishlist-web-parity-photo-removal-ready-20261001.jpg`，viewport已還原、tab與隔離HTTP／Vite已關閉。
+- 前端最新本機52個測試檔／797項及production build通過；後台49個單元檔／854項、build通過。新增照片移除17項真實HTTP／DB／本機檔案整合；包含整體願望與媒體／帳號刪除的70項回歸通過。
+- 全套整合第一次在保留瀏覽器fixture的舊隔離DB因4件既存合成商品而失敗10項；未清掉保留資料或修改測試預期。另建明確loopback全新UTF8測試DB，完整30份migration後，18個檔案／284項HTTP／DB整合全通過。最新小幅前端整理與CI仍需重新完整回讀，不沿用前批CI成功；PR保持draft，未合併／部署。
+- 全目標仍保留：真正MiniMax照片識別／跨端、分類／舊detail／隱私分享與刪除回歸、完整sell／失效日期／批次恢復、行銷4圖／免費修改／未知回執、owner狀態實際網頁操作、profile保存、註冊驗證重設、社交通知政策、PWA舊快取、全站響應式／效能、最後CI／合併／Railway正式回讀。不以本批回執恢復代替所有功能對齊。

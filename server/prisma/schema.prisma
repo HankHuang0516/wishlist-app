@@ -59,6 +59,7 @@ model User {
   purchases       Purchase[]
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
+  wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   listings        Listing[]
   listingReports  ListingReport[]
   listingReportOperations ListingReportOperation[]
@@ -654,6 +655,20 @@ model WishCreateReceipt {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientRequestId])
+}
+
+// The original upload ID is the stable removal operation identity. This is not
+// a relation to media: its owner-scoped tombstone survives logical/physical
+// photo erasure and prevents a delayed original upload from resurrecting it.
+model WishPhotoRemovalReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientUploadId String   @db.Uuid
+  mediaId        String   @db.Uuid
+  removedAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientUploadId])
 }
 
 model Wishlist {

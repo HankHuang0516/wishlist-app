@@ -78,3 +78,96 @@ describe('native-parity wish web workflows',()=>{
     mount(1);await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});fireEvent.click(screen.getByRole('button',{name:'新增願望 · 拍照／上傳／手動'}));expect(screen.getByText('快捷選用 · 照片交給 AI')).toBeInTheDocument();expect(screen.getByRole('button',{name:'拍攝願望照片'})).toBeInTheDocument();expect(screen.getByLabelText('最高預算（選填） · TWD')).toBeInTheDocument();expect(screen.getByLabelText('拍攝願望照片檔案')).toHaveAttribute('capture','environment');expect(api.mock.calls.some(c=>c[1].includes('/ai/analyze-image'))).toBe(false);
   });
 });
+
+describe('wish photo removal recovery UI', () => {
+  const mediaId = 'fab22941-2df0-4ca4-90c2-70c504527243';
+  const photoBody = JSON.stringify({ version: 1, clientUploadId: clientRequestId, digest: 'a'.repeat(64) });
+  const removalBody = JSON.stringify({ version: 1, mediaId, photoBody });
+  const receipt = { clientUploadId: clientRequestId, mediaId, removed: true, removedAt: '2026-10-01T01:00:00.000Z', cleanupPending: true };
+  const photo = { id: mediaId, imageUrl: `${getFullApiUrl()}/listing-media/${mediaId}/image`, thumbnailUrl: `${getFullApiUrl()}/listing-media/${mediaId}/thumbnail`, width: 100, height: 100, byteSize: 100, listingId: null, wishItemId: null };
+  function fixtureRemoval() { data.set('42.wish-photo', photoBody); data.set('42.wish-photo-remove', removalBody); }
+  function routes(removal: () => unknown) {
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (...args) => {
+      if (args[1].includes('/photo-removals/')) return removal();
+      if (args[1].startsWith('/listing-media/by-upload-id/')) return photo;
+      return base(...args);
+    });
+  }
+  it('recovers a committed removal with GET only, clears exact journals and honestly labels physical cleanup pending', async () => {
+    fixtureRemoval(); routes(() => receipt); mount();
+    await screen.findByText('後台已移除照片引用，實體檔案仍待清理；不會重建原照片。');
+    await waitFor(() => expect(data.has('42.wish-photo-remove')).toBe(false));
+    expect(data.has('42.wish-photo')).toBe(false); expect(posts()).toHaveLength(0);
+    expect(api.mock.calls.some(call => call[2]?.method === 'DELETE')).toBe(false);
+    expect(api.mock.calls.some(call => call[1].startsWith('/listing-media/by-upload-id/'))).toBe(false);
+  });
+  it('preserves missing-receipt and missing-photo operations, freezing new creates instead of claiming deletion', async () => {
+    fixtureRemoval(); routes(() => { throw new Error('404'); });
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (...args) => { if (args[1].startsWith('/listing-media/by-upload-id/')) throw new Error('404'); return base(...args); });
+    mount(); await screen.findByRole('button', { name: '明確重試原照片移除' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '只查核原照片移除回執' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: '建立願望清單' })).toBeDisabled();
+    expect(screen.getByText(/原照片移除仍待確認；查不到照片不等於已移除/)).toBeInTheDocument();
+    expect(data.get('42.wish-photo-remove')).toBe(removalBody); expect(posts()).toHaveLength(0);
+  });
+  it('keeps a known removal when local cleanup fails, then retries local cleanup without another HTTP mutation', async () => {
+    fixtureRemoval(); routes(() => receipt); store.clear.mockRejectedValueOnce(new Error('quota'));
+    mount(); await screen.findByRole('button', { name: '只重試照片本機清理' });
+    expect(screen.queryByRole('button', { name: '明確重試原照片移除' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '只重試照片本機清理' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '只重試照片本機清理' }));
+    await waitFor(() => expect(data.has('42.wish-photo-remove')).toBe(false));
+    expect(api.mock.calls.filter(call => call[1].includes('/photo-removals/'))).toHaveLength(1);
+    expect(posts()).toHaveLength(0);
+  });
+  it('explicitly retries exactly the original removal, and double-clicking sends only one POST', async () => {
+    fixtureRemoval(); routes(() => { throw new Error('unknown'); });
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (...args) => args[1].includes('/photo-removals/') && args[2]?.method === 'POST' ? receipt : base(...args));
+    mount(); await waitFor(() => expect(screen.getByRole('button', { name: '明確重試原照片移除' })).toBeEnabled());
+    const retry = screen.getByRole('button', { name: '明確重試原照片移除' }); fireEvent.click(retry); fireEvent.click(retry);
+    await waitFor(() => expect(data.has('42.wish-photo-remove')).toBe(false));
+    expect(posts()).toHaveLength(1); expect(posts()[0][1]).toBe('/native-wishes/photo-removals/' + clientRequestId);
+    expect(posts()[0][2].body).toBe(JSON.stringify({ mediaId }));
+  });
+  it('never discards a different photo journal saved by another tab', async () => {
+    fixtureRemoval(); const newer = JSON.stringify({ version: 1, clientUploadId: mediaId, digest: 'b'.repeat(64) });
+    routes(() => { data.set('42.wish-photo', newer); return receipt; }); mount(1);
+    await waitFor(() => expect(data.has('42.wish-photo-remove')).toBe(false));
+    expect(data.get('42.wish-photo')).toBe(newer);
+    expect(store.clear.mock.calls.some(call => call[0] === '42.wish-photo')).toBe(false);
+    expect(api.mock.calls.some(call => call[1] === '/listing-media/by-upload-id/' + mediaId)).toBe(true);
+    expect(posts()).toHaveLength(0);
+  });
+  it('rejects corrupted removal journals before any private HTTP or mutation', async () => {
+    data.set('42.wish-photo-remove', 'bad'); mount(); await screen.findByRole('alert');
+    expect(api).not.toHaveBeenCalled(); expect(screen.getByRole('button', { name: '建立願望清單' })).toBeDisabled();
+    expect(data.get('42.wish-photo-remove')).toBe('bad');
+  });
+  it('does not clear late receipts after leaving the account', async () => {
+    fixtureRemoval(); let finish!: (value: unknown) => void;
+    routes(() => new Promise(resolve => { finish = resolve; })); const view = mount();
+    await waitFor(() => expect(finish).toBeDefined()); view.unmount(); await act(async () => finish(receipt));
+    expect(store.clear).not.toHaveBeenCalled(); expect(posts()).toHaveLength(0); expect(data.get('42.wish-photo-remove')).toBe(removalBody);
+  });
+  it('labels completed physical cleanup only when the durable receipt says no cleanup remains', async () => {
+    fixtureRemoval(); routes(() => ({ ...receipt, cleanupPending: false })); mount();
+    await screen.findByText('後台已確認照片移除與實體檔案清理。'); expect(posts()).toHaveLength(0);
+  });
+  it('requires explicit photo confirmation, permits cancellation, and persists before only one removal', async () => {
+    data.set('42.wish-photo', photoBody); routes(() => receipt); mount(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: '新增願望 · 拍照／上傳／手動' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '新增願望 · 拍照／上傳／手動' }));
+    fireEvent.click(screen.getByRole('button', { name: '移除未使用照片' }));
+    expect(posts()).toHaveLength(0); expect(screen.getByText(/確定移除這張未使用照片/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '保留這張照片' })); expect(posts()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: '移除未使用照片' }));
+    const confirm = screen.getByRole('button', { name: '確認移除未使用照片' }); fireEvent.click(confirm); fireEvent.click(confirm);
+    await waitFor(() => expect(data.has('42.wish-photo-remove')).toBe(false));
+    expect(posts()).toHaveLength(1);
+    expect(store.save.mock.invocationCallOrder[0]).toBeLessThan(api.mock.invocationCallOrder.find((_, i) => api.mock.calls[i][2]?.method === 'POST')!);
+    expect(screen.getByLabelText('AI 商品圖片網址（HTTPS）')).toBeEnabled();
+  });
+});

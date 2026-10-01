@@ -40,6 +40,16 @@ describe('browser encrypted pending operations', () => {
     expect(await store.clear(key, 'old')).toBe(false); expect(await store.get(key)).toBe('new');
     expect(await store.clear(key, 'new')).toBe(true); expect(await store.clear(key, 'new')).toBe(false); expect(await store.get(other)).toBe('other');
   });
+  it('encrypts and fences photo removal journals separately from newer uploads and other owners', async () => {
+    const { store } = fixture(), removal = scope + '.wish-photo-remove', photo = scope + '.wish-photo';
+    const other = scope.replace('.42', '.43') + '.wish-photo-remove';
+    await store.save(removal, 'original-removal'); await store.save(photo, 'new-photo'); await store.save(other, 'other-removal');
+    expect(await store.clear(removal, 'different')).toBe(false);
+    expect(await store.clear(removal, 'original-removal')).toBe(true);
+    expect(await store.get(photo)).toBe('new-photo'); expect(await store.get(other)).toBe('other-removal');
+    await store.eraseScope(scope); await expect(store.save(removal, 'late')).rejects.toThrow(PendingStoreError);
+    expect(await store.get(other)).toBe('other-removal');
+  });
   it('serializes two tabs racing to publish different journals, without overwrite', async () => {
     const { store, factory, name } = fixture(), other = createWebPendingStore(name, factory, crypt);
     const results = await Promise.allSettled([store.save(key, 'a'), other.save(key, 'b')]);

@@ -6,12 +6,15 @@ import { updateItem } from '../controllers/wishItemController';
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../middleware/auth';
 import { NativeWishError, wishId } from '../lib/nativeWishRules';
+import { getWishPhotoRemoval, removeUnusedWishPhoto } from '../controllers/nativeWishPhotoController';
 const router = express.Router();
 router.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
 router.use(authenticateToken);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 router.get('/lists', getNativeLists); router.post('/lists', createNativeList);
 router.get('/receipts/:clientRequestId', getNativeWishReceipt);
+router.get('/photo-removals/:clientUploadId', getWishPhotoRemoval);
+router.post('/photo-removals/:clientUploadId', removeUnusedWishPhoto);
 router.get('/lists/:id', getNativeList); router.put('/lists/:id', updateNativeList); router.delete('/lists/:id', deleteNativeList);
 router.post('/lists/:id/items', createNativeWish);
 router.put('/items/:id', async (req: AuthRequest, res, next) => {

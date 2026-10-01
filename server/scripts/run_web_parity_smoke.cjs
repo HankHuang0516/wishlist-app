@@ -34,19 +34,24 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, dropped = { message: 0, meetup: 0, photo: 0, wish: 0 }, attempts = { message: 0, meetup: 0, photo: 0, wish: 0, messageReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, dropped = { message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['message', 'meetup', 'photo', 'wish'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (!['message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
+// Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
+// The later commit/recovery check is performed separately with the real API.
+app.post('/__test/reject-next-photo-removal', (_req, res) => { rejectRemoval = true; res.json({ syntheticOnly: true, armed: true }); });
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
-    req.method === 'POST' && /^\/api\/native-wishes\/lists\/[^/]+\/items$/.test(req.path) ? 'wish' : null;
+    req.method === 'POST' && /^\/api\/native-wishes\/lists\/[^/]+\/items$/.test(req.path) ? 'wish' :
+    req.method === 'POST' && /^\/api\/native-wishes\/photo-removals\/[^/]+$/.test(req.path) ? 'photoRemoval' : null;
   if (req.method === 'GET' && /\/messages\/by-client-id\//.test(req.path)) attempts.messageReceipt++;
   if (kind) {
     attempts[kind]++;
+    if (kind === 'photoRemoval' && rejectRemoval) { rejectRemoval = false; return res.status(503).json({ error: 'Synthetic failure BEFORE mutation; no photo removed', errorCode: 'TEST_BEFORE_MUTATION' }); }
     const json = res.json.bind(res);
     // Returning a deterministic upstream-style error AFTER commit also avoids
     // Chrome's transport retry of a connection that closed before any headers.
@@ -80,6 +85,7 @@ app.get('/__test/state', async (_req, res) => {
     messageCount: await prisma.message.count({ where: { conversationId: { in: rooms.map(room => room.id) } } }),
     wishes: await prisma.item.findMany({ where: { wishlist: { userId: { in: users.map(user => user.id) } } }, select: { id: true, wishlistId: true, aiStatus: true, imageUrl: true } }),
     photos: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, clientUploadId: { not: null } }, select: { id: true, clientUploadId: true, wishItemId: true, byteSize: true, width: true, height: true } }),
+    photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });
 app.use((_req, res) => res.status(404).json({ error: 'This isolated smoke server does not expose that workflow' }));

@@ -27,9 +27,9 @@ const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userControl
 const { getProfileOperation, submitProfileOperation, abandonProfileOperation } = require('../dist/controllers/profileUpdateController');
 const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
 const { marketingAvailability } = require('../dist/controllers/marketingController');
-const { searchListings, createListing, myListings, getListingCreation, abandonListingCreation } = require('../dist/controllers/listingController');
+const { searchListings, createListing, myListings, getListingCreation, abandonListingCreation, editListing, changeListingStatus, extendListingExpiry, publishListing } = require('../dist/controllers/listingController');
 const { getMatchWishes, matchWishListings } = require('../dist/controllers/wishlistMatchController');
-const { authenticateToken } = require('../dist/middleware/auth');
+const { authenticateToken, optionalAuthenticateToken } = require('../dist/middleware/auth');
 const { getListing } = require('../dist/controllers/listingController');
 const chatRoutes = require('../dist/routes/chatRoutes').default;
 const nativeWishRoutes = require('../dist/routes/nativeWishRoutes').default;
@@ -40,8 +40,9 @@ app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish']) { dropped[kind]=0; attempts[kind]=0; }
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval', 'draft', 'marketingApprove', 'marketingQueue'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (typeof req.body?.kind !== 'string' || !Object.hasOwn(dropped, req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
@@ -58,6 +59,10 @@ app.post('/__test/marketing/availability', (req,res) => {
 });
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    req.method === 'PATCH' && /^\/api\/listings\/[^/]+$/.test(req.path) ? 'listingEdit' :
+    req.method === 'POST' && /^\/api\/listings\/[^/]+\/status$/.test(req.path) ? 'listingStatus' :
+    req.method === 'POST' && /^\/api\/listings\/[^/]+\/extend$/.test(req.path) ? 'listingExtend' :
+    req.method === 'POST' && /^\/api\/listings\/[^/]+\/publish$/.test(req.path) ? 'listingPublish' :
     req.method === 'POST' && /^\/api\/marketing\/requests\/[^/]+$/.test(req.path) ? 'marketingQueue' :
     req.method === 'POST' && /^\/api\/listing-media\/[^/]+\/seller-draft-operations\/[^/]+$/.test(req.path) ? 'draft' :
     req.method === 'POST' && (/^\/api\/marketing\/jobs\/[^/]+\/approve$/.test(req.path)||/^\/api\/marketing\/approvals\/[^/]+$/.test(req.path)) ? 'marketingApprove' :
@@ -108,7 +113,11 @@ app.get('/api/listings/match-wishes', authenticateToken, getMatchWishes);
 app.get('/api/listings/matches', authenticateToken, matchWishListings);
 app.get('/api/listings/creation-receipts/:clientListingId', authenticateToken, getListingCreation);
 app.post('/api/listings/creation-receipts/:clientListingId/abandon', authenticateToken, abandonListingCreation);
-app.get('/api/listings/:id', getListing);
+app.get('/api/listings/:id', optionalAuthenticateToken, getListing);
+app.patch('/api/listings/:id', authenticateToken, editListing);
+app.post('/api/listings/:id/status', authenticateToken, changeListingStatus);
+app.post('/api/listings/:id/extend', authenticateToken, extendListingExpiry);
+app.post('/api/listings/:id/publish', authenticateToken, publishListing);
 // Legacy no-photo fixtures use a labelled placeholder. Marketing fixtures have
 // real local source bytes and must pass through the real media handler below.
 // Neither fixture mode tests Flickr transport.

@@ -23,8 +23,8 @@
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
 | 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；真AI、舊紀錄來源、照片移除、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
-| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；日曆切月仍待實測 | 日期切月穩定、預設30天、未填欄定位高亮 |
-| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 本機實作；版本與未知回應測試通過，待隔離DB實測 | expectedVersion 衝突、失聯查核而非盲目重送 |
+| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
+| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 隔離Chrome／真DB已驗證編輯、延長與保留commit後502僅查核恢復、恢復在售；售出／移除／衝突／跨reload原操作持久保存仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、原版／免費調整queue及不可變批准回執、加密原選圖／文案／版本紀錄已實作；實際批准commit後502→reload只GET恢復，child套用後root歷史證據不變且月次數1；能力關閉時仍可查看／批准既有結果，新生成及免費調整停用、明確只讀重查，Chrome暫停期間實測同樣成功恢復；上下文變更、舊紀錄及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
 | 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
@@ -387,3 +387,13 @@
 - 第二十批首輪精確HEAD `f1c77d772b5c30131d6716dadecc66656f4d78b5` 的[CI36851945720](https://github.com/HankHuang0516/wishlist-app/actions/runs/36851945720)已回讀completed/success，3/3。雲端網頁64檔1053項、後台899＋3skipped、真HTTP／DB26檔385項、38份migration／schema無差異、原生852項成功；橋接／feed安全測試亦通過。新增排序測試曾提前在父頁refresh開始後結束，雲端有React act提示，已補等待實際完成訊息再檢查原操作，focused31項通過；未變更任何產品行為或斷言門檻。後續精確提交須另回讀CI，不沿用首輪成功；舊LoginReturnTo等act提示、效能及依賴警告仍保留。
 
 - 第十九批首輪CI `36845724766`（HEAD `89b06be9a96aa82ee57515bd6d2b1615d6a3ed5c`）整體failure：後台899項（3 skipped）／37份migration／schema一致／HTTP DB362項及原生成功，但合併主分支後新增公開Wishlist consumer測試2項因數量文字硬寫繁中而失败，不能稱3/3。已將origin/main `a621277`四份既有聯絡／隱私修正以正常merge保留；不刪或弱化新契約測試。數量改走語系，補缺失的zh「個願望」／en「wishes」鍵與真正英文顯示回歸；整合後本機63檔1002項、TypeScript／Vite成功，主JS680.14KB／PWA5796.39KiB警告保留。合成35份DB證據仍為合併前歷史，最新正式資料preflight未做；新的完整提交CI另回讀，不沿用首輪成功的部分job。
+
+## 2026-10-01 第二十二批：商品管理部分實際操作驗收（仍未部署）
+
+- 最新目標仍是網頁首頁／設定各至少90/100人工視覺審查、完整可適用功能100%；沿用原網站風格，只有一個設定導航，不改APP。前批本機90/90不是正式網站已達標，也不是像素級比對。本批不重新計分、不刪既有缺口。
+- loopback隔離工具掛載真正編譯後的商品編輯／狀態／延長／發布controller，GET商品採與正式路由相同的optionalAuthentication。新增獨立操作计數及commit後502故障種類；不改正式API／權限或開放公開測試endpoint。仍先拒絕非localhost、非專用測試DB及不同DATABASE_URL／TEST_DATABASE_URL；4項防呆通過。
+- 獨立DB `wishlist_marketplace_test_management_20261001_1923`，38份migration成功、schema diff無差異。Chrome合成賣家2的商品`35205700-47d7-47f7-8170-143e5484a8a8`：延長v1→v2至2026-12-01，commit後502，頁面鎖定寫入、只GET原商品恢復；修改名稱／說明及NT$350→320成功v3；保留commit後502，原頁只查核恢復v4／已保留分頁，正常恢復在售v5。末次DB回讀ACTIVE、CUSTOM_DATE、到期`2026-12-01T15:59:59.999Z`、price320。extension POST1／drop1、edit PATCH1、status POST2（保留與恢復各1）／drop1，沒有把查核當重送。
+- Chrome原生日曆的AX回讀可見11月→12月→2027年1月→2026年12月，沒有回朔到最初11月。日格AX點擊與日期fill曾出現DOM值與React確認文案不同；兩次不符的確認均取消，最終只在確認文案明確為12月1日後送出。尚未證明實際滑鼠點日／刊登日曆的完整行為，不以AX切月或元件測試當全日曆通過，也不推定使用者問題根因。
+- 新增3項元件回歸：跨年受控日期／版號送出、空值與未延長日期先拒絕、延長失聯僅GET恢復不重送；管理頁13項、最新完整網頁64檔1067項與TypeScript／Vite build成功。日期fixture採2100／2101避免近日過期。後台build成功；沒有新增正式migration或APP變更。主JS688.00KB、map1088.99KB、worker507.81KB、PWA5804.06KiB警告仍保留，件數不是覆蓋率。
+- 390×844實際管理頁documentWidth375≤390、header設定1個、照片naturalWidth240／height320。保存並檢視 `wishlist-web-owner-management-mobile-20261001.jpg`，另保存 `wishlist-web-owner-status-unknown-20261001.jpg`，都在既有outputs目錄，不是AI概念圖。自有API／Vite／PG正常停止、viewport還原、QA tab關閉；合成商品／圖片／DB及證據保留，沒有正式資料、付款、郵件、商店或使用者檔案刪除。
+- 下一個明确管理缺口：`unconfirmed`目前只有頁內狀態，跨reload尚無持久原操作紀錄；只讀恢復會關閉編輯器，完整衝突比較／未送出修改保存亦待補。售出／移除／草稿發布／分頁的實際瀏覽器、其他完整功能矩陣、真MiniMax／Flickr／跨端、PWA與全站效能、正式migration preflight／最終CI／合併／Railway回讀全部保留。精確新提交CI須另回讀；PR82仍draft，整體目標active、未合併／部署，不把本批部分管理測試當全功能完成。

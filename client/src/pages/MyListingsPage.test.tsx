@@ -77,6 +77,53 @@ describe('native-equivalent owner management', () => {
     fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
     expect(screen.getByLabelText('新的失效日期（台灣時間）')).toHaveAttribute('type', 'date');
   });
+  it('retains a selected cross-year date and submits that date with the current version', async () => {
+    const current = { ...row, expiresAt: '2100-12-01T15:59:59Z' };
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST'
+      ? ok({ ...current, expiresAt: '2101-01-15T15:59:59Z', version: 2 }) : ok({ items: [current], nextCursor: null }));
+    vi.stubGlobal('fetch', fetch); render(view()); await screen.findByRole('heading', { name: row.title });
+    fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
+    const date = screen.getByLabelText('新的失效日期（台灣時間）');
+    expect(date).toHaveAttribute('min', '2100-12-02');
+    fireEvent.change(date, { target: { value: '2101-01-15' } });
+    expect(date).toHaveValue('2101-01-15');
+    fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
+    await screen.findByText('商品已延長至 2101-01-15。');
+    expect(window.confirm).toHaveBeenCalledWith('確認延長至 2101-01-15？');
+    const writes = fetch.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toContain(`/listings/${id}/extend`);
+    expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ expectedVersion: 1, expiryDate: '2101-01-15' });
+  });
+  it('rejects empty or non-extended dates before confirmation or a write', async () => {
+    const fetch = vi.fn(async () => ok({ items: [row], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    render(view()); await screen.findByRole('heading', { name: row.title });
+    fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
+    const date = screen.getByLabelText('新的失效日期（台灣時間）');
+    for (const value of ['', '2100-10-30']) {
+      fireEvent.change(date, { target: { value } }); fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('請選擇 2100-10-31 或之後的有效日期。');
+    }
+    expect(window.confirm).not.toHaveBeenCalled(); expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('recovers a lost extension reply through GET without repeating the extension', async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return { ok: false, status: 502, json: async () => ({ error: 'Synthetic reply lost after commit' }) };
+      if (url.endsWith(`/listings/${id}`)) return ok({ ...row, expiresAt: '2100-12-15T15:59:59Z', version: 2 });
+      return ok({ items: [row], nextCursor: null });
+    }); vi.stubGlobal('fetch', fetch); render(view()); await screen.findByRole('heading', { name: row.title });
+    fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
+    fireEvent.change(screen.getByLabelText('新的失效日期（台灣時間）'), { target: { value: '2100-12-15' } });
+    fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
+    await screen.findByRole('button', { name: '只查詢原商品最新狀態' });
+    expect(screen.getByRole('button', { name: '確認延長' })).toBeDisabled();
+    expect(screen.getByLabelText('新的失效日期（台灣時間）')).toHaveValue('2100-12-15');
+    fireEvent.click(screen.getByRole('button', { name: '只查詢原商品最新狀態' }));
+    await screen.findByText(/原操作未重送/);
+    expect(screen.getByText(/至 2100-12-15/)).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith(`/listings/${id}`))).toHaveLength(1);
+  });
   it('includes name, price and versioned product link in the share fallback', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined); Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     vi.stubGlobal('fetch', vi.fn(async () => ok({ items: [row], nextCursor: null })));

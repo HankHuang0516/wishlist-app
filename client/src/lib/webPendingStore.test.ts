@@ -13,6 +13,15 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('restores encrypted legacy list markers with unique local identity, CAS and account/API isolation', async () => {
+    const {factory,name,store}=fixture(),feature='legacy-list-operation';
+    const a=await pendingRequestKey('https://example.com/api',42,feature),b=await pendingRequestKey('https://example.com/api',43,feature),c=await pendingRequestKey('https://other.example/api',42,feature);
+    const original=JSON.stringify({version:1,id:7,kind:'PRIVACY',wanted:true,localOperationId:randomUUID()}),later=JSON.stringify({version:1,id:7,kind:'PRIVACY',wanted:true,localOperationId:randomUUID()});
+    await store.save(a,original);expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe(original);expect(await store.get(b)).toBeNull();expect(await store.get(c)).toBeNull();
+    expect(new TextDecoder().decode((await raw(factory,name,'pending',a) as {cipher:ArrayBuffer}).cipher)).not.toContain('localOperationId');
+    await expect(store.save(a,later)).rejects.toThrow();expect(await store.clear(a,original)).toBe(true);await store.save(a,later);expect(await store.clear(a,original)).toBe(false);expect(await store.get(a)).toBe(later);
+    await store.eraseScope(a.slice(0,-feature.length-1));await expect(store.save(a,original)).rejects.toThrow();expect(await store.get(a)).toBeNull();
+  });
   it('discovers only this account and API composer drafts and preserves immutable server journals',async()=>{
     const {store}=fixture(),id='11111111-1111-4111-8111-111111111111',compose=scope+'.listing-compose.'+id,details=scope+'.listing-compose-details',other=scope.replace('.42','.43')+'.listing-compose.'+id;
     await store.replaceDraft(compose,null,'private-unsent-text');await store.replaceDraft(details,null,'approximate-local-settings');await store.replaceDraft(other,null,'other-account');await store.save(scope+'.listing-draft','immutable-server-operation');

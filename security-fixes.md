@@ -4,6 +4,12 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Legacy wishlist operation follow-up
+
+The dashboard persists minimal encrypted account/API-scoped list mutation markers before sending and uses a synchronous gate across privacy/delete operations. Local operation IDs fence stale CAS cleanup without pretending to be server receipts. Privacy responses must match list, owner and requested visibility. Deletion adds `id`/`deleted` after the existing transaction, preserving the old message; own list read/update/delete responses are private/no-store. Unknown results survive reload and only offer current-state read plus explicit acknowledgment/cleanup, with the absence of historical receipts clearly stated. No automatic mutation replay or plaintext fallback was added.
+
+Capacity no longer defaults after profile read failure; fresh own identity and native creation bounds are checked. Wish edit/toggle responses must match requested fields. Late account replies cannot modify the replacement view or clear the original marker. Real storage/CAS/isolation and HTTP owner-denial/deletion-ACK regressions passed. DEV browser evidence includes commit-then-502 recovery and manual wish changes; permanent deletion was only cancelled in the browser, and production/PWA/native-device checks remain pending.
+
 ## 2026-10-02 Web account flow follow-up
 
 Web login now verifies the returned session identity against a fresh private profile before admission. Verification links require explicit confirmation and discard returned JWTs instead of replacing the active account. Registration discards unverified JWTs and validates expected-email delivery evidence. Reset validates the complete revocation acknowledgement; unknown outcomes cannot be replayed from that page. Password policy matches the existing server/APP and supports confirmation, without storing passwords or recovery tokens.

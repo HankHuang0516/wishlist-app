@@ -82,6 +82,12 @@ Coverage lives in `listingComposerDraft.test.ts`, `ListingBatchLocalDraft.test.t
 
 `DateField` keeps the native date input for manual entry and provides a named web calendar for batch expiry and owner extensions. Its month changes through navigation, independently of parent rerenders. Selecting or clearing invokes the original controlled-field handler; extension minimums and backend validation remain in force. Keyboard arrows move by day/week, Tab stays within the dialog, and Escape closes without applying a value. The component and page tests cover cross-year selection, leap days, minimums, focus, lock changes and publication confirmation resets.
 
+## Legacy list mutation checks
+
+The original dashboard keeps its card/search/sort and share/gift links. Privacy changes and list deletion persist a minimal encrypted marker in the `legacy-list-operation` account/API scope before dispatch. A unique local ID protects cleanup from a later identical intent; it is never sent to the legacy API and is not a historical receipt. Exact privacy identity/boolean and additive deletion identity/flag acknowledgments are required. Unknown replies retain the marker across reload with no automatic mutation; users read current lists and explicitly acknowledge before clearing it. Current state cannot establish historical success. Confirmed operations with failed local cleanup only retry cleanup. Storage failure blocks dispatch, and account departure prevents late UI updates/cleanup.
+
+Capacity is unknown until a matching fresh own profile is validated, then follows the native list creation bound. Wish edits also compare returned fields with submitted values and clear old success messages when a new editor opens. Browser evidence uses isolated DEV/real handlers, not production/PWA or native-device acceptance; permanent deletion was cancelled in the browser and remains pending final UI submission.
+
 ## Account confirmation and recovery
 
 Login confirms `/users/me` matches the login response before admitting the session. Registration requires APP-compatible name, Taiwan phone, email and confirmed 8–72-character password; the web birthday field remains optional. Registration acknowledgement must confirm the expected email and delivery status, and its unverified JWT is not saved as a login.

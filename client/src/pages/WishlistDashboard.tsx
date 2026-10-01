@@ -9,7 +9,8 @@ import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "../components/ui/Card";
 import { Plus, Search, X, Lock, Eye, EyeOff, Trash2, Gift, User, ExternalLink, Share2, Copy, Loader2 } from "lucide-react";
 import { t } from "../utils/localization";
-import DeleteConfirmModal from "../components/DeleteConfirmModal";
+import MarketplaceDialog from "../components/MarketplaceDialog";
+import { legacyDeleteAck, legacyListOperation, legacyListText, legacyPrivacyAck, type LegacyListOperation } from '../lib/legacyWishlistWeb';
 
 interface Wishlist {
     id: number;
@@ -65,6 +66,26 @@ export function WishlistDashboardSession() {
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isCreateExpanded, setIsCreateExpanded] = useState(false);
+    const [listReady, setListReady] = useState(false), [listBusy, setListBusy] = useState(false);
+    const [listPending, setListPending] = useState<string | null>(null), [listKnown, setListKnown] = useState(false), [listChecked, setListChecked] = useState(false);
+    const [listIssue, setListIssue] = useState(''), [listNotice, setListNotice] = useState('');
+    const listGate = useRef(false), listRaw = useRef<string | null>(null), listKey = useRef<string | null>(null), listReadyRef = useRef(false);
+    async function restoreListOperation() {
+        const generation = lifetime.current;
+        try {
+            if (!isOwner || !user || !token) return;
+            const key = await pendingRequestKey(getFullApiUrl(), user.id, 'legacy-list-operation');
+            const raw = await privatePendingStore.get(key);
+            if (raw) legacyListOperation(raw);
+            if (!alive.current || generation !== lifetime.current) return;
+            listKey.current = key; listRaw.current = raw; setListPending(raw); setListKnown(false); setListChecked(false);
+            listReadyRef.current = true; setListReady(true);
+            setListIssue(raw ? legacyListText('pending') : '');
+        } catch {
+            if (alive.current && generation === lifetime.current) { listReadyRef.current = false; setListReady(false); setListIssue(legacyListText('storage')); }
+        }
+    }
+    useEffect(() => { void restoreListOperation(); }, [isOwner, token, user?.id]);
     useEffect(() => {
         if (!isOwner || !token || !user) return;
         const generation = lifetime.current;
@@ -79,51 +100,86 @@ export function WishlistDashboardSession() {
     }, [isOwner, token, user?.id]);
 
     const handleDeleteClick = (id: number) => {
+        if (!listReadyRef.current || listRaw.current || listGate.current || creationGate.current || readError) return;
         setDeleteId(id);
         setDeleteModalOpen(true);
     };
 
     const confirmDelete = async () => {
-        if (!deleteId) return;
-        setIsDeleting(true);
-        try {
-            const url = API_URL + '/wishlists/' + deleteId;
-            const res = await fetch(url, {
-                method: 'DELETE',
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
-            if (res.ok) {
-                setWishlists(prev => prev.filter(w => w.id !== deleteId));
-                setDeleteModalOpen(false);
-            } else {
-                setFeedbackMessage(t('common.error'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-            }
-        } catch (error) { console.error(error); }
-        finally { setIsDeleting(false); }
+        if (deleteId) await mutateList({ version: 1, id: deleteId, kind: 'DELETE' });
     };
 
     const handleTogglePrivacy = async (id: number, currentStatus: boolean) => {
-        try {
-            const url = API_URL + '/wishlists/' + id;
-            const res = await fetch(url, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ isPublic: !currentStatus })
-            });
-
-            if (res.ok) {
-                // Optimistic update
-                setWishlists(prev => prev.map(w =>
-                    w.id === id ? { ...w, isPublic: !currentStatus } : w
-                ));
-                setFeedbackMessage(currentStatus ? t('common.private') : t('common.public'));
-                setTimeout(() => setFeedbackMessage(null), 2000);
-            }
-        } catch (err) { console.error(err); }
+        await mutateList({ version: 1, id, kind: 'PRIVACY', wanted: !currentStatus });
     };
 
-    const [maxCapacity, setMaxCapacity] = useState(100);
+    async function clearListMarker(raw: string) {
+        const stored = await privatePendingStore.get(listKey.current!);
+        if (!alive.current) return;
+        if (stored !== null && (stored !== raw || !await privatePendingStore.clear(listKey.current!, raw))) throw new Error('Marker changed');
+    }
+    async function mutateList(operation: LegacyListOperation) {
+        if (!alive.current || !isOwner || !token || !user || !listReadyRef.current || listRaw.current || listGate.current || creationGate.current || readError) return;
+        listGate.current = true; setListBusy(true); setIsDeleting(operation.kind === 'DELETE'); setListIssue(''); setListNotice('');
+        const generation = lifetime.current, current = () => alive.current && generation === lifetime.current;
+        // Local identity fences cleanup of a later identical intent; it is not a server receipt.
+        const raw = JSON.stringify({ ...operation, localOperationId: crypto.randomUUID() }); let staged = false, confirmed = false;
+        try {
+            legacyListOperation(raw); await privatePendingStore.save(listKey.current!, raw); staged = true;
+            if (!current()) return;
+            listRaw.current = raw; setListPending(raw); setListChecked(false); setListKnown(false);
+            // Invalidate reads already in flight before this mutation.
+            readSequence.current++;
+            const res = await fetch(API_URL + '/wishlists/' + operation.id, {
+                method: operation.kind === 'DELETE' ? 'DELETE' : 'PUT',
+                headers: { Authorization: 'Bearer ' + token, ...(operation.kind === 'PRIVACY' ? { 'Content-Type': 'application/json' } : {}) },
+                ...(operation.kind === 'PRIVACY' ? { body: JSON.stringify({ isPublic: operation.wanted }) } : {}),
+                cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(30000),
+            });
+            if (!current()) return;
+            if ([400, 401, 403, 404].includes(res.status)) {
+                await clearListMarker(raw); if (!current()) return;
+                listRaw.current = null; setListPending(null); setDeleteModalOpen(false); setListIssue(legacyListText('denied')); return;
+            }
+            if (!res.ok) throw new Error('Unconfirmed operation');
+            const ack: unknown = await res.json(); if (!current()) return;
+            if (operation.kind === 'DELETE') legacyDeleteAck(ack, operation);
+            else legacyPrivacyAck(ack, operation, user.id);
+            confirmed = true; setListKnown(true); setListNotice(legacyListText('confirmed')); setDeleteModalOpen(false);
+            setWishlists(old => operation.kind === 'DELETE' ? old.filter(row => row.id !== operation.id) : old.map(row => row.id === operation.id ? { ...row, isPublic: operation.wanted! } : row));
+            await clearListMarker(raw); if (!current()) return;
+            listRaw.current = null; setListPending(null); setListKnown(false);
+        } catch {
+            if (!current()) return;
+            setDeleteModalOpen(false);
+            if (!staged) { await restoreListOperation(); if (current()) setListIssue(legacyListText('storage')); }
+            else setListIssue(legacyListText(confirmed ? 'cleanup' : 'unknown'));
+        } finally { listGate.current = false; if (current()) { setListBusy(false); setIsDeleting(false); } }
+    }
+    async function readListOperation() {
+        if (!listRaw.current || listGate.current) return;
+        listGate.current = true; setListBusy(true); setListChecked(false);
+        const generation = lifetime.current;
+        try {
+            const rows = await fetchWishlists();
+            if (!alive.current || generation !== lifetime.current) return;
+            setListChecked(!!rows); setListIssue(rows ? '' : legacyListText('readFailure'));
+            if (rows) setListNotice(legacyListText('checked'));
+        } finally { listGate.current = false; if (alive.current && generation === lifetime.current) setListBusy(false); }
+    }
+    async function acknowledgeListOperation() {
+        if (!listRaw.current || listGate.current || !listKnown && !listChecked) return;
+        listGate.current = true; setListBusy(true);
+        const raw = listRaw.current, generation = lifetime.current;
+        try {
+            await clearListMarker(raw); if (!alive.current || generation !== lifetime.current) return;
+            listRaw.current = null; setListPending(null); setListKnown(false); setListChecked(false); setListIssue('');
+        } catch { if (alive.current && generation === lifetime.current) setListIssue(legacyListText('cleanup')); }
+        finally { listGate.current = false; if (alive.current && generation === lifetime.current) setListBusy(false); }
+    }
+
+    const [maxCapacity, setMaxCapacity] = useState<number | null>(null);
+    const capacitySequence = useRef(0);
 
     useEffect(() => {
         fetchWishlists();
@@ -135,8 +191,9 @@ export function WishlistDashboardSession() {
     }, [userId, token]);
 
     const fetchSelf = async () => {
-        const generation = lifetime.current;
+        const generation = lifetime.current, sequence = ++capacitySequence.current;
         if (!token) return;
+        setMaxCapacity(null);
         try {
             const url = API_URL + '/users/me';
             const res = await fetch(url, {
@@ -144,7 +201,8 @@ export function WishlistDashboardSession() {
             });
             if (res.ok) {
                 const data = await res.json();
-                if (alive.current && generation === lifetime.current && Number.isSafeInteger(data.maxWishlistItems) && data.maxWishlistItems > 0 && data.maxWishlistItems <= 10000) setMaxCapacity(data.maxWishlistItems);
+                // Dashboard creation uses nativeWishController's explicit 1–10000 bound.
+                if (alive.current && generation === lifetime.current && sequence === capacitySequence.current && data.id === user?.id && typeof data.isPremium === 'boolean' && Number.isSafeInteger(data.maxWishlistItems) && data.maxWishlistItems >= 0 && data.maxWishlistItems <= 10000) setMaxCapacity(data.isPremium ? 10000 : Math.max(1, data.maxWishlistItems));
             }
         } catch { /* A profile read failure cannot manufacture a new capacity. */ }
     };
@@ -185,7 +243,7 @@ export function WishlistDashboardSession() {
                 return { id: row.id, title: row.title, description: row.description ?? null, isPublic: row.isPublic, _count: { items: count } };
             });
             if (new Set(projected.map(row => row.id)).size !== projected.length) throw new Error('duplicate lists');
-            if (current()) setWishlists(projected);
+            if (current()) { setWishlists(projected); return projected; }
         } catch {
             if (current()) setReadError('清單讀取失敗，不代表沒有願望。請重新讀取；上次資料若仍顯示，尚未確認為最新。');
         } finally {
@@ -195,7 +253,7 @@ export function WishlistDashboardSession() {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!createReady || creationGate.current || !creationKey.current || !token) return;
+        if (!createReady || creationGate.current || !creationKey.current || !token || !listReadyRef.current || listRaw.current || listGate.current || readError) return;
         const generation = lifetime.current, key = creationKey.current;
         const current = () => alive.current && generation === lifetime.current;
         creationGate.current = true;
@@ -251,10 +309,21 @@ export function WishlistDashboardSession() {
 
     // Calculate Total Items
     const totalItems = wishlists.reduce((acc, list) => acc + (list._count?.items ?? list.items?.length ?? 0), 0);
+    const writesBlocked = !listReady || listBusy || listPending !== null || !!readError || creating;
 
     return (
         <div className="container mx-auto p-4 space-y-8">
             {readError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800"><p>{readError}</p><Button onClick={() => void fetchWishlists()}>重新讀取清單</Button></div>}
+            {listIssue && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{listIssue}</p>}
+            {listNotice && <p role="status" className="rounded-xl bg-green-50 p-4 text-green-800">{listNotice}</p>}
+            {isOwner && !listReady && <Button className="min-h-11" disabled={listBusy} onClick={() => void restoreListOperation()}>{legacyListText('recoveryTitle')}</Button>}
+            {listPending && <section aria-label={legacyListText('recoveryTitle')} className="space-y-3 rounded-xl border bg-white p-4">
+                <p>{legacyListText('pending')}</p>
+                <div className="flex flex-wrap gap-3">
+                    {!listKnown && <Button className="min-h-11" disabled={listBusy} onClick={() => void readListOperation()}>{legacyListText('read')}</Button>}
+                    {(listKnown || listChecked) && <Button className="min-h-11" variant="outline" disabled={listBusy} onClick={() => void acknowledgeListOperation()}>{legacyListText(listKnown ? 'clean' : 'resume')}</Button>}
+                </div>
+            </section>}
             {isOwner && <Link className="inline-block rounded-xl border border-dashed border-green-600 bg-green-50 px-4 py-3 text-green-900" to="/wishes">快捷選用 · 拍照／AI 願望與待確認操作恢復</Link>}
             {createRecovery && <p role="alert">原建立或本機恢復標記待確認；新建立暫停。<Link className="ml-2 underline" to="/wishes">查核原建立，不自動重送</Link></p>}
             {/* Header / Dashboard Stats */}
@@ -266,8 +335,9 @@ export function WishlistDashboardSession() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-muji-primary">
-                                {readError ? '尚未確認' : totalItems} <span className="text-sm text-gray-400 font-normal">({t('dashboard.perList')}上限 {user?.isPremium ? '10,000' : maxCapacity})</span>
+                                {readError ? legacyListText('capacity') : totalItems} <span className="text-sm text-gray-400 font-normal">({t('dashboard.perList')}上限 {maxCapacity === null ? legacyListText('capacity') : maxCapacity.toLocaleString()})</span>
                             </div>
+                            {maxCapacity === null && <Button className="min-h-11 mt-3" variant="outline" onClick={() => void fetchSelf()}>{legacyListText('capacityRetry')}</Button>}
                         </CardContent>
                     </Card>
                 </div>
@@ -318,7 +388,7 @@ export function WishlistDashboardSession() {
                 <div className="mb-8">
                     {!isCreateExpanded ? (
                         <Button
-                            disabled={!createReady}
+                            disabled={!createReady || writesBlocked}
                             onClick={() => setIsCreateExpanded(true)}
                             className="w-full md:w-auto border-dashed border-2 bg-transparent text-muji-primary hover:bg-gray-50 mb-4"
                             variant="outline"
@@ -344,6 +414,7 @@ export function WishlistDashboardSession() {
                                             maxLength={50}
                                             required
                                             autoFocus
+                                            disabled={writesBlocked}
                                         />
                                         <div className="text-right text-xs text-gray-400 mt-1">
                                             {newTitle.length}/50
@@ -355,12 +426,14 @@ export function WishlistDashboardSession() {
                                         value={newDescription}
                                         onChange={(e) => setNewDescription(e.target.value)}
                                         maxLength={200}
+                                        disabled={writesBlocked}
                                     />
 
                                     <div className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
                                             id="newIsPublic"
+                                            disabled={writesBlocked}
                                             checked={newIsPublic}
                                             onChange={(e) => setNewIsPublic(e.target.checked)}
                                             className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
@@ -374,7 +447,7 @@ export function WishlistDashboardSession() {
                                         <Button type="button" variant="ghost" onClick={() => setIsCreateExpanded(false)}>
                                             {t('common.cancel')}
                                         </Button>
-                                        <Button disabled={creating || !newTitle || !createReady}>
+                                        <Button disabled={writesBlocked || !newTitle || !createReady}>
                                             {creating ? t('common.processing') : t('dashboard.createBtn')}
                                         </Button>
                                     </div>
@@ -397,7 +470,7 @@ export function WishlistDashboardSession() {
                     <h3 className="text-lg font-medium text-gray-900 mb-1">{searchQuery ? '沒有符合的已載入清單' : t('dashboard.empty')}</h3>
                     <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? '請換個關鍵字' : t(isOwner ? 'dashboard.emptyOwner' : 'dashboard.emptyVisitor')}</p>
                     {!searchQuery && isOwner && (
-                        <Button disabled={!createReady} onClick={() => setIsCreateExpanded(true)}>
+                        <Button disabled={!createReady || writesBlocked} onClick={() => setIsCreateExpanded(true)}>
                             {t('dashboard.createNew')}
                         </Button>
                     )}
@@ -405,7 +478,7 @@ export function WishlistDashboardSession() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredWishlists.map((list) => (
-                        <div key={list.id} onClick={() => navigate('/wishlists/' + list.id)}>
+                        <div key={list.id} onClick={event => { if (!(event.target as HTMLElement).closest('button') && !listBusy && !listPending) navigate('/wishlists/' + list.id); }}>
                             <Card className="hover:shadow-lg transition-shadow cursor-pointer group relative">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="flex justify-between items-start">
@@ -430,7 +503,8 @@ export function WishlistDashboardSession() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                                className="min-h-11 min-w-11 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                                disabled={writesBlocked}
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
@@ -444,7 +518,8 @@ export function WishlistDashboardSession() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                className="min-h-11 min-w-11 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                disabled={writesBlocked}
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
@@ -465,20 +540,17 @@ export function WishlistDashboardSession() {
                 </div >
             )}
 
-            <DeleteConfirmModal
-                isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
-                onConfirm={confirmDelete}
-                title={t('dashboard.deleteConfirmTitle')}
-                message={t('dashboard.deleteConfirmMsg')}
-                isDeleting={isDeleting}
-            />
+            {deleteModalOpen && <MarketplaceDialog title={t('dashboard.deleteConfirmTitle') + ' · ' + (wishlists.find(row => row.id === deleteId)?.title ?? '')}
+                closeLabel={t('common.cancel')} closeDisabled={isDeleting} onClose={() => { if (!listGate.current) setDeleteModalOpen(false); }}>
+                <p className="mb-4">{t('dashboard.deleteConfirmMsg')}</p>
+                <Button className="min-h-11" variant="destructive" disabled={isDeleting} onClick={() => void confirmDelete()}>{isDeleting ? t('common.processing') : t('common.delete')}</Button>
+            </MarketplaceDialog>}
 
             {/* Mobile Create FAB */}
             {isOwner && !isCreateExpanded && (
                 <Button
                     aria-label="建立願望清單"
-                    disabled={!createReady}
+                    disabled={!createReady || writesBlocked}
                     className="md:hidden fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg z-40 bg-muji-primary hover:bg-muji-secondary transition-all active:scale-95"
                     onClick={() => {
                         setIsCreateExpanded(true);

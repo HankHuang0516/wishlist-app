@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十五批：既有清單操作查核與手動願望（仍未部署）
+
+- Dashboard公開切換／刪除加入同步gate及送出前的API／帳號隔離加密標記；只保存清單ID、動作／公開值與唯一localOperationId，不保存名稱／憑證。唯一ID只防止晚到清理刪掉後續相同意圖，不是後台回執。privacy ACK核對id／owner／目標boolean；delete增加id／deleted、保留舊message，交易完成才回覆。本人清單讀取／更新／刪除private,no-store，明確拒絕不当成功，未知／不完整回覆保留標記與鎖定，reload不重送。
+- 舊API沒有歷史回執，明示只能讀取目前清單；讀取成功也不能證明原操作成功。明確閱讀目前狀態後才可清理此份標記，已確認ACK的本機清理失敗只重試清理。切帳號晚到回覆不改新畫面／清理原標記；儲存失敗不送出。修正disabled按鈕點擊冒泡導航，標題Link與正常卡片入口保留。刪除dialog帶清單名稱、焦點／Escape，送出中不關閉、按鈕44px。上限不預設100或從本機premium猜10000，核對own profile後採nativeWishController的1–10000建立規則，失敗未知／可重讀，舊profile不覆蓋新讀取。
+- Chrome＋Vite DEV＋compiled真handlers／新UTF8 DB `wishlist_marketplace_test_legacy_browser_20261002_35`：公開PUT200，私人transaction完成後故意502；reload／切另一帳號／切回PUT總數仍2，原標記恢復，另一帳號清單0／無原標記。明確GET目前私人值再清理才恢復操作；刪除框僅取消，browser DELETE0。390×844，dialog document390／另一帳號375、設定1、dialog焦點及44px。實際手動建立私人清單與願望各1／201，名稱／備註／預算650.50→725.25→750.75、隱藏／恢復及完成／取消完成共6次PUT200。SQL核對TWD750.75／備註／名稱一致、未隱藏／未完成／AI SKIPPED；原網站同清單詳情讀取相同ID／名稱。沒有真照片provider、郵件或APP裝置證據。
+- 願望編輯補逐欄ACK核對，清單名稱／公開欄位、願望名稱／備註／連結／預算／幣別及隱藏／完成值不一致不假稱保存；新表單不沿用上一筆成功提示。新增Web20／HTTP DB3項：完整pre-push退出0，當時Web1283／Server56檔913＋3skipped／HTTP30檔447／Native42檔852／42migrations／schema一致；最終Web83檔1288及build再驗、最後focused3檔79。初次測試抓卡片點擊缺陷已修，兩個selector改明確刪除按鈕；首輪真browser新storage feature未列白名單，補精確scope及真IndexedDB隔離／CAS／erasure回歸，沒有繞過或明文fallback。首次browser舊成功提示促成ACK比對及4項回歸，真handler再編輯／toggle成功；失敗log保留，件數不是覆蓋率。
+- `outputs/wishlist-web-legacy-wishlist-evidence-20261002.json`及8張原始手機圖保留，主JS330.86KB／PWA91entries5912.08KiB／地圖警告保留；新提交CI另記入JSON／roadmap。永久刪除UI最終送出、原詳情未命名圖示／分享送禮標籤／獨立AI價格欄位整體回歸、管理分頁、全語系、憑證輸入、真provider／跨端、PWA與正式preflight／合併／Railway回讀仍待完成。APP及其他工作區改動保留，PR82 draft／未部署、目標active；首頁／設定各90%、功能100%不變。
+
 ## 2026-10-02 第三十四批：帳號明確確認與恢復（仍未部署）
 
 - 對照APP AuthScreen／authFlow：驗證信不再開頁即POST或使用回傳JWT切換帳號，載入後明確確認才送出；提供web／APP weesh連結及64位碼的手動入口，不跳到其他app。新增/resend-verification，保留忘記密碼、註冊、登入、政策入口。所有帳號頁有繁中／英文標籤、alert／status、44px操作；新密碼8–72字元、英數與允許符號／再次確認，註冊姓名改為顯示名稱、09開頭台灣手機，原web生日保留為選填且驗證日期。

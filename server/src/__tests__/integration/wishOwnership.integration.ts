@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { authenticateToken } from '../../middleware/auth';
 import { updateItem } from '../../controllers/wishItemController';
-import { createWishlist, getWishlist } from '../../controllers/wishlistController';
+import { createWishlist, getWishlist, getWishlists, updateWishlist, deleteWishlist } from '../../controllers/wishlistController';
 import { getItem, getPublicItems } from '../../controllers/wishItemReadController';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
@@ -15,6 +15,9 @@ const app = express(); app.use(express.json()); app.put('/api/items/:id', authen
 app.get('/api/items/public', getPublicItems);
 app.get('/api/items/:id', authenticateToken, getItem);
 app.get('/api/wishlists/:id', authenticateToken, getWishlist);
+app.get('/api/wishlists', authenticateToken, getWishlists);
+app.put('/api/wishlists/:id', authenticateToken, updateWishlist);
+app.delete('/api/wishlists/:id', authenticateToken, deleteWishlist);
 const server = createServer(app);
 let owner: number, first: number, second: number, listId: number, itemId: number;
 const auth = (id: number) => 'Bearer ' + jwt.sign({ id }, secret, { algorithm: 'HS256' });
@@ -35,6 +38,25 @@ afterAll(async () => {
     await prisma.$disconnect();
 });
 describe('wish privacy and fulfillment / actual PostgreSQL transactions', () => {
+    it('confirms legacy privacy for the same owner and list, preserving wishes and private no-store', async () => {
+        const r = await request(server).put('/api/wishlists/' + listId).set('Authorization', auth(owner)).send({ isPublic: true });
+        expect(r.status).toBe(200); expect(r.body).toMatchObject({ id: listId, userId: owner, isPublic: true }); expect(r.headers['cache-control']).toBe('private, no-store');
+        expect(await prisma.item.count({ where: { wishlistId: listId } })).toBe(1);
+        const lists = await request(server).get('/api/wishlists').set('Authorization', auth(owner)); expect(lists.status).toBe(200); expect(lists.headers['cache-control']).toBe('private, no-store'); expect(lists.body.map((row: { id: number }) => row.id)).toContain(listId);
+    });
+    it('denies outsider legacy privacy and deletion without changing the owner list', async () => {
+        for (const method of ['put', 'delete'] as const) {
+            const r = await request(server)[method]('/api/wishlists/' + listId).set('Authorization', auth(first)).send({ isPublic: true });
+            expect(r.status).toBe(403); expect(r.headers['cache-control']).toBe('private, no-store');
+        }
+        expect(await prisma.wishlist.findUnique({ where: { id: listId } })).toMatchObject({ userId: owner, isPublic: false });
+    });
+    it('returns an additive exact deletion acknowledgment only after the transaction and retains the old message', async () => {
+        const r = await request(server).delete('/api/wishlists/' + listId).set('Authorization', auth(owner));
+        expect(r.status).toBe(200); expect(r.body).toEqual({ id: listId, deleted: true, message: 'Wishlist deleted successfully' }); expect(r.headers['cache-control']).toBe('private, no-store');
+        expect(await prisma.wishlist.findUnique({ where: { id: listId } })).toBeNull(); expect(await prisma.item.findUnique({ where: { id: itemId } })).toBeNull();
+        expect((await request(server).delete('/api/wishlists/' + listId).set('Authorization', auth(owner))).status).toBe(404);
+    });
     it('requires authentication', async () => { expect((await request(server).put('/api/items/' + itemId).send({ isPurchased: true })).status).toBe(401); });
     it('defaults new wishlists to private, preserving an explicit public choice', async () => {
         const a = await request(server).post('/api/wishlists').set('Authorization', auth(owner)).send({ title: '新增合成願望' }); expect(a.status).toBe(201); expect(a.body.isPublic).toBe(false);

@@ -26,6 +26,23 @@ beforeEach(()=>{
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 const posts=()=>api.mock.calls.filter(c=>c[2]?.method==='POST');
 describe('native-parity wish web workflows',()=>{
+  it('confirms the edited values and clears an old success notice before opening another editor',async()=>{
+    items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{
+      if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){const result={...wish,...JSON.parse(args[2].body as string)};items=[result];return result;}
+      return base(...args);
+    });mount(1);await screen.findByText('合成願望');const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'已更新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    await screen.findByText('後台已確認願望資料修改。');expect(screen.getByText('已更新合成願望')).toBeInTheDocument();expect(screen.getByText('最高預算 TWD 725.25')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'編輯願望'}));expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（有照片可留空）')).toHaveValue('已更新合成願望');
+  });
+  it.each(['name','maxPrice','notes'])('does not claim a mismatched edited wish field was saved: %s',async field=>{
+    items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{
+      if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){const result={...wish,...JSON.parse(args[2].body as string)};return {...result,[field]:wish[field as keyof typeof wish]};}
+      return base(...args);
+    });mount(1);await screen.findByText('合成願望');const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'新合成備註'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    await screen.findByText('回覆與送出的願望欄位不一致，尚未確認更新');expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（有照片可留空）')).toBeDisabled();expect(api.mock.calls.filter(call=>call[2]?.method==='PUT')).toHaveLength(1);
+  });
   it('requires login with an exact validated list return intent before any private read',()=>{
     const auth={user:null,token:null,isAuthenticated:false,login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn()};render(<MemoryRouter initialEntries={['/wishes?list=1']}><AuthContext.Provider value={auth}><WishesPage/></AuthContext.Provider></MemoryRouter>);
     expect(screen.getByRole('link',{name:'登入'})).toHaveAttribute('href','/login?next='+encodeURIComponent('/wishes?list=1'));expect(api).not.toHaveBeenCalled();

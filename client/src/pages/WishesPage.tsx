@@ -12,6 +12,10 @@ import { lookupWishPhotoRemoval, parseWishPhotoRemovalJournal, submitWishPhotoRe
 const button = 'min-h-11 rounded-xl border bg-white px-4 py-2 disabled:opacity-50';
 const input = 'mt-2 min-h-11 w-full rounded-xl border bg-white p-3';
 type Editor = { kind: 'LIST'; list?: ManagedList } | { kind: 'ITEM'; wish?: ManagedWish };
+function confirmWishFields(result: object, body: object) {
+  const fields = result as Record<string, unknown>;
+  if (Object.entries(body).some(([key,value]) => fields[key] !== value)) throw new WishManagementError('回覆與送出的願望欄位不一致，尚未確認更新');
+}
 function WishImage({ wish }: { wish: ManagedWish }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [wish.imageUrl]);
@@ -138,7 +142,7 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   }, [selected?.id, wishes.map(item => `${item.id}:${item.aiStatus}`).join(','), editor]);
   function openEditor(value: Editor) {
     if (blocked) return;
-    setError(''); setEditor(value);
+    setError(''); setNotice(''); setEditor(value);
     if (value.kind === 'LIST') { setTitle(value.list?.title ?? ''); setDescription(value.list?.description ?? ''); setPublic(value.list?.isPublic ?? false); }
     else { const wish = value.wish; setDraft(wish ? { name: wish.name, notes: wish.notes ?? '', link: wish.link ?? '', imageUrl: wish.imageUrl ?? '', budget: wish.maxPrice === null ? '' : String(wish.maxPrice), currency: wish.priceCurrency ?? 'TWD' } : { ...emptyWishDraft }); }
   }
@@ -156,13 +160,13 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
     try {
       if (editor.kind === 'LIST') {
         const body = listDraftBody(title, description, isPublic);
-        if (editor.list) { mutationAttempted = true; const result = parseManagedList(await api(token, `${wishRoot}/lists/${editor.list.id}`, { method: 'PUT', body: JSON.stringify(body) })); if (result.id !== editor.list.id) throw new WishManagementError(); if (!active.current) return; setEditor(null); await readLists(); if (selection.current === result.id) await readDetail(result.id); }
+        if (editor.list) { mutationAttempted = true; const result = parseManagedList(await api(token, `${wishRoot}/lists/${editor.list.id}`, { method: 'PUT', body: JSON.stringify(body) })); if (result.id !== editor.list.id) throw new WishManagementError(); confirmWishFields(result,body); if (!active.current) return; setEditor(null); setNotice('後台已確認願望資料修改。'); await readLists(); if (selection.current === result.id) await readDetail(result.id); }
         else await create(JSON.stringify({ kind: 'LIST', listId: null, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) }));
       } else {
         if (!selected || photoRaw && !photo && !editor.wish) throw new WishManagementError('請先查核照片上傳，或完成照片移除標記清理');
         if (!editor.wish && photo && (photo.listingId !== null || photo.wishItemId !== null)) throw new WishManagementError('照片已用於另一筆商品或願望，請查核原資料，不會重複附加');
         const body = wishDraftBody(draft, editor.wish ? null : photo?.id ?? null);
-        if (editor.wish) { const { imageUrl: _imageUrl, ...patch } = body; mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); if (!active.current) return; setEditor(null); await readDetail(selected.id); await readLists(); }
+        if (editor.wish) { const { imageUrl: _imageUrl, ...patch } = body; mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); confirmWishFields(result,patch); if (!active.current) return; setEditor(null); setNotice('後台已確認願望資料修改。'); await readDetail(selected.id); await readLists(); }
         else await create(JSON.stringify({ kind: 'ITEM', listId: selected.id, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) }));
       }
     } catch (failure) { if (active.current) { if (mutationAttempted) setMutationUnknown(true); setError(failure instanceof WishManagementError || failure instanceof PendingStoreError ? failure.message : '尚未確認保存；請先查核原回執，不會自動另建。'); } }
@@ -218,6 +222,7 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
     try {
       const result = await api<{ id: unknown; deleted?: boolean }>(token, `${wishRoot}/${kind === 'LIST' ? 'lists' : 'items'}/${id}`, { method: body ? 'PUT' : 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) });
       if (result.id !== id || !body && result.deleted !== true) throw new WishManagementError();
+      if (body) confirmWishFields(result,body);
       if (!active.current) return;
       setConfirmDelete(null); setNotice('後台已確認更新。'); if (!body && kind === 'LIST') { selection.current = null; setSelected(null); setWishes([]); }
       await readLists(); if (selection.current) await readDetail(selection.current);

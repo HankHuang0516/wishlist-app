@@ -18,6 +18,7 @@ describe('store-facing support and privacy pages', () => {
     expect(screen.getByText(/照片與您提供的商品資訊可能交由 AI/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /刪除帳號/ })).toHaveAttribute('href', '/account-deletion');
     expect(screen.getByRole('link', { name: '支援頁面' })).toHaveAttribute('href', '/support');
+    expect(screen.getByText(/不傳送網址查詢參數、驗證碼/)).toBeInTheDocument();
   });
 
   it('offers public feedback without requiring app sign-in', () => {

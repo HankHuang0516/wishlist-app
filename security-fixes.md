@@ -4,6 +4,12 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Web analytics privacy follow-up
+
+The previous global analytics bootstrap and route tracker could expose URL queries through default metadata. The web now loads the SDK inside an opaque, script-only sandbox with no referrer, receives coarse allowlisted events through a private channel, and supplies generic titles, empty referrers and sanitized locations. DNT/GPC skips initialization. Unused global payment SDK loading was removed while its component remains available. Auth query contracts and native APP code remain unchanged.
+
+Regression tests exercise the real public bridge, malformed messages, privacy flags, provider failure and queue bounds. Synthetic browser QA verifies parent access raises `SecurityError` and verification tokens still reach only the original auth request. This is a local mitigation awaiting deployment, not evidence of historical disclosure or deletion, Google receipt, infrastructure-log sanitization, PWA-upgrade privacy or universal SDK compatibility.
+
 ## 1. High Risk - Production Database Data Loss
 *   **Risk Level:** **HIGH (Disaster Class)**
 *   **Threat Description:** The `package.json` start script contains `prisma db push --accept-data-loss`. In a production environment, if you modify the schema (even slightly) and restart the server, Prisma might decide to **wipe entire tables** to apply the changes without warning. This is a classic "Developer Convenience" setting that destroys production data.

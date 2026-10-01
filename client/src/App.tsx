@@ -4,6 +4,7 @@ import Layout from "./layouts/Layout";
 import { AuthProvider } from "./context/AuthContext";
 import OfflineBanner from "./components/OfflineBanner";
 import { createLazyPage } from "./components/LazyPage";
+import { Analytics } from "./utils/analytics";
 
 const Home = createLazyPage(() => import('./pages/Home'));
 const Login = createLazyPage(() => import('./pages/Login'));
@@ -42,13 +43,8 @@ function RouteTracker() {
   const location = useLocation();
 
   useEffect(() => {
-    if (typeof window.gtag === 'function') {
-      window.gtag('config', 'G-3E3LMNH9JR', {
-        page_path: location.pathname + location.search,
-      });
-      console.log(`[GA] Tracked page view: ${location.pathname}${location.search}`);
-    }
-  }, [location]);
+    Analytics.logPageView(location.pathname);
+  }, [location.pathname]);
 
   return null;
 }

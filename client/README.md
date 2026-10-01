@@ -82,6 +82,12 @@ Coverage lives in `listingComposerDraft.test.ts`, `ListingBatchLocalDraft.test.t
 
 `DateField` keeps the native date input for manual entry and provides a named web calendar for batch expiry and owner extensions. Its month changes through navigation, independently of parent rerenders. Selecting or clearing invokes the original controlled-field handler; extension minimums and backend validation remain in force. Keyboard arrows move by day/week, Tab stays within the dialog, and Escape closes without applying a value. The component and page tests cover cross-year selection, leap days, minimums, focus, lock changes and publication confirmation resets.
 
+## Analytics privacy boundary
+
+`Analytics` sends only allowlisted page categories, login methods and bounded item counts through a private `MessageChannel` to `/analytics-frame.html`. The hidden frame uses `sandbox="allow-scripts"` without same-origin access and `no-referrer`; the Google SDK is loaded only inside that frame. Query strings, fragments, account/listing/wishlist IDs, names, product URLs and arbitrary custom event parameters are excluded. DNT=1 or Global Privacy Control skips the frame. The parent document no longer loads Google or the unused payment SDK globally. Verification/reset query tokens remain available to their original account flows.
+
+Tests execute the actual public bridge, reject extra message fields and wrong sources, and cover provider failure, bounded queues and privacy flags. Browser QA uses an explicitly labeled synthetic SDK to check the real sandbox boundary; it does not prove receipt by Google. Browser/address history, infrastructure logs, existing third-party content, historical analytics, PWA upgrades and opaque-frame analytics compatibility require separate assessment.
+
 ## Page loading and recovery
 
 All page imports in `App.tsx` use `createLazyPage`. Router, authentication, navigation and the shared layout stay outside the page boundary. The lazy identity stays stable during healthy rerenders and query changes; only a retry or navigation from a failed page creates a new promise. Import errors and render errors have distinct localized messages, and raw exception details never appear in the fallback. Focus moves to its heading. No automatic reload is attached to `vite:preloadError`.

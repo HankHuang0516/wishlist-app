@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十三批：網址參數與分析隔離（仍未部署）
+
+- 原先index全域SDK及RouteTracker的pathname＋search可能讓query進入預設分析metadata；本批改為只送白名單頁面類別／登入方式／至多100項件數。商品／願望／帳號ID、願望名稱、商品URL、query／hash及任意custom參數不跨分析邊界，RouteTracker不再console輸出網址。驗證信／重設密碼仍保留原query供原auth流程使用，不把移除分析參數誤做破壞登入連結。
+- Google SDK只在hidden iframe執行，sandbox僅allow-scripts、不給allow-same-origin，固定同源frame URL與no-referrer；private MessageChannel僅送往該frame。實際public bridge嚴格驗證parent source／origin／握手／白名單欄位，空referrer、通用title、粗粒度page_location，停用預設pageview及廣告signals；DNT=1／GPC不初始化，主文件不再全域載入未使用TapPaySDK。iframe沒有主頁DOM／history／session存取權，不能只依賴send_page_view:false冒稱Enhanced Measurement已停用。官方依據：[GA頁面檢視](https://developers.google.com/analytics/devguides/collection/ga4/views)、[metadata設定](https://developers.google.com/analytics/devguides/collection/ga4/reference/config)。隱私政策繁中／英文與FAQ／README同步。
+- Chrome原設定DNT=1／GPC=false不修改，production建置原樣載入時frame0、主script僅self。明確黃色標示的本機fixture僅在測試document模擬DNT=0／合成SDK，驗證真sandbox讀parent.location產生SecurityError、referrer空字串，config／page_view僅/analytics與/reset-password／verify-email；query及hash仍保留在原主頁。合成verify token確實到原POST /api/auth/verify-email，fixture回400無效token、沒有DB／帳號修改，不冒稱信箱已驗證。合成SDK故障情境重設頁／隱私導覽仍能使用；queue與provider error停用由實際bridge VM測試補驗。SW只在此fresh transport fixture回503以免旧cache掩蓋，並非PWA升級驗收。
+- 手機390×844隱私document375≤390，DNT框架0、meta no-referrer；原始截圖 `web-parity-analytics-privacy-390-20261002.jpg`、`web-parity-analytics-isolation-desktop-20261002.jpg`、`web-parity-analytics-provider-failure-20261002.jpg`與`wishlist-web-analytics-privacy-evidence-20261002.json`留在原outputs。合成SDK證據不代表Google正式收件／所有環境相容，opaque frame可能影響cookie持久化；URL仍存在地址列／歷史，infra日誌與歷史分析未處理，不推定過去已外洩或已刪除。
+- 完整pre-push更正測試locale查詢後退出0：Web81檔1231／Server56檔913＋3skipped／HTTP DB30檔444／Native42檔852／42 migrations與schema一致。首輪App privacy test在繁中頁找英文heading失敗，改查實際「重設密碼」且原參數斷言保留；focused6檔19與完整重跑通過，初次logs保留。主JS330.68KB／PWA92 entries 5898.40KiB，地圖及預載警告保留。本批新提交CI另精確回讀，證據JSON及roadmap記錄；APP程式未改、其他工作區改動未納入。完整管理／舊願望／auth與全語系／真provider／跨端／PWA upgrade／正式preflight／合併／Railway回讀仍待完成，PR82 draft、目標active。
+
 ## 2026-10-02 第三十二批：各頁分開載入與資源故障恢復（仍未部署）
 
 - 所有頁面改由穩定的 `createLazyPage` 載入；Router／Auth／Layout及導覽仍在頁面boundary外。正常rerender／query改變不重建lazy身份、不清掉欄位；拒絕的lazy promise只在明確重試或失敗後的新navigation重建。載入與render錯誤分開提示，不向頁面暴露原例外，焦點移到錯誤標題，按鈕44px，繁中／英文都有文案；不加自動reload／重送API。

@@ -6,6 +6,28 @@ import type { PendingStore } from './webPendingStore';
 export const wishRoot = '/native-wishes';
 export const emptyWishDraft = { name: '', notes: '', link: '', imageUrl: '', budget: '', currency: 'TWD' };
 export const wishAiLabels = { PENDING: 'AI 排隊中', PROCESSING: 'AI 辨識中', COMPLETED: 'AI 辨識完成', FAILED: 'AI 辨識失敗，請核對圖片後重建', SKIPPED: '未啟用 AI 辨識' };
+// Production keeps the native HTTPS-only contract. In a DEV loopback smoke
+// only, permit this exact API's UUID image proxy, never arbitrary HTTP images.
+export function parseWebManagedWish(value: unknown, endpoint = getFullApiUrl(), development = import.meta.env.DEV): ManagedWish {
+  if (development && value && typeof value === 'object' && !Array.isArray(value)) {
+    const row = value as Record<string, unknown>;
+    if (typeof row.imageUrl === 'string') {
+      let base: URL, image: URL;
+      try { base = new URL(endpoint); image = new URL(row.imageUrl); } catch { return parseManagedWish(value); }
+      const prefix = base.pathname.replace(/\/$/, '') + '/listing-media/';
+      const segment = image.pathname.startsWith(prefix) ? image.pathname.slice(prefix.length) : '';
+      if (base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname) &&
+          !base.username && !base.password && !base.search && !base.hash && image.origin === base.origin &&
+          !image.username && !image.password && !image.search && !image.hash && segment.endsWith('/image') &&
+          isUuid(segment.slice(0, -6))) {
+        const secure = new URL(image.href); secure.protocol = 'https:';
+        const result = parseManagedWish({ ...row, imageUrl: secure.href });
+        return { ...result, imageUrl: image.href };
+      }
+    }
+  }
+  return parseManagedWish(value);
+}
 const requestId = (value: unknown): value is string => isUuid(value) && value[14] === '4';
 export function listDraftBody(title: string, description: string, isPublic: boolean) {
   if (!title.trim() || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title) || description.length > 1000 || description.includes('\u0000') || typeof isPublic !== 'boolean') throw new WishManagementError('清單名稱須為200字內，說明1000字內');
@@ -31,7 +53,7 @@ export function parseWishReceipt(value: unknown, raw: string): WishReceipt {
   if (!row || !requestId(row.clientRequestId) || row.clientRequestId.toLowerCase() !== body.clientRequestId.toLowerCase() || row.kind !== journal.kind || !validWishId(row.resourceId) || typeof row.deleted !== 'boolean') throw new WishManagementError('建立回執不吻合');
   if (row.deleted) { if (row.resource !== null) throw new WishManagementError(); return { kind: journal.kind, id: row.resourceId, resource: null, deleted: true }; }
   if (journal.kind === 'LIST') { const resource = parseManagedList(row.resource); if (resource.id !== row.resourceId) throw new WishManagementError(); return { kind: 'LIST', id: resource.id, resource, deleted: false }; }
-  const resource = parseManagedWish(row.resource); if (resource.id !== row.resourceId || resource.wishlistId !== journal.listId) throw new WishManagementError();
+  const resource = parseWebManagedWish(row.resource); if (resource.id !== row.resourceId || resource.wishlistId !== journal.listId) throw new WishManagementError();
   return { kind: 'ITEM', id: resource.id, resource, deleted: false };
 }
 export async function lookupWishCreate(token: string, raw: string): Promise<WishReceipt> {
@@ -45,7 +67,7 @@ export async function submitWishCreate(token: string, raw: string, store: Pendin
   const path = journal.kind === 'LIST' ? wishRoot + '/lists' : `${wishRoot}/lists/${journal.listId}/items`;
   const result = await api<{ resource: unknown; replayed: boolean }>(token, path, { method: 'POST', body: journal.body });
   if (!result || typeof result.replayed !== 'boolean') throw new WishManagementError();
-  const resource = journal.kind === 'LIST' ? parseManagedList(result.resource) : parseManagedWish(result.resource);
+  const resource = journal.kind === 'LIST' ? parseManagedList(result.resource) : parseWebManagedWish(result.resource);
   if (journal.kind === 'ITEM' && (resource as ManagedWish).wishlistId !== journal.listId) throw new WishManagementError();
   return { kind: journal.kind, id: resource.id, resource, deleted: false } as WishReceipt;
 }

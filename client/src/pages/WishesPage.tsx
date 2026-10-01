@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { getFullApiUrl } from '../config';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
-import { parseManagedList, parseManagedWish, parseManagementPage, validWishId, wishDraftBody, WishManagementError, type ManagedList, type ManagedWish, type WishDraft } from '../lib/wishManagement';
-import { emptyWishDraft, listDraftBody, lookupWishCreate, lookupWishPhoto, parseWebWishJournal, parseWishPhotoJournal, prepareWishUpload, submitWishCreate, submitWishPhoto, wishAiLabels, wishRoot, type WishPhotoRecord, type WishReceipt } from '../lib/wishWeb';
+import { parseManagedList, parseManagementPage, validWishId, wishDraftBody, WishManagementError, type ManagedList, type ManagedWish, type WishDraft } from '../lib/wishManagement';
+import { emptyWishDraft, listDraftBody, lookupWishCreate, lookupWishPhoto, parseWebManagedWish, parseWebWishJournal, parseWishPhotoJournal, prepareWishUpload, submitWishCreate, submitWishPhoto, wishAiLabels, wishRoot, type WishPhotoRecord, type WishReceipt } from '../lib/wishWeb';
 import MarketplaceDialog from '../components/MarketplaceDialog';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 const button = 'min-h-11 rounded-xl border bg-white px-4 py-2 disabled:opacity-50';
@@ -48,7 +48,7 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   async function readDetail(id: number, cursor: number | null = null) {
     if (!active.current) return;
     const result = await api<{ list: unknown; items: unknown[]; nextCursor: unknown }>(token, `${wishRoot}/lists/${id}` + (cursor ? '?cursor=' + cursor : ''));
-    const list = parseManagedList(result.list), page = parseManagementPage(result, parseManagedWish, 50);
+    const list = parseManagedList(result.list), page = parseManagementPage(result, value => parseWebManagedWish(value), 50);
     if (list.id !== id || page.items.some(item => item.wishlistId !== id || cursor !== null && item.id <= cursor)) throw new WishManagementError();
     if (!active.current || selection.current !== id) return;
     setSelected(list); setWishes(old => cursor ? [...old.filter(item => !page.items.some(row => row.id === item.id)), ...page.items] : page.items); setWishCursor(page.nextCursor); setDetailLoaded(true);
@@ -135,7 +135,7 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
         if (!selected || photoRaw && (!photo || deletedPhoto) && !editor.wish) throw new WishManagementError('請先查核照片上傳，或完成照片移除標記清理');
         if (!editor.wish && photo && (photo.listingId !== null || photo.wishItemId !== null)) throw new WishManagementError('照片已用於另一筆商品或願望，請查核原資料，不會重複附加');
         const body = wishDraftBody(draft, editor.wish ? null : photo?.id ?? null);
-        if (editor.wish) { const { imageUrl: _imageUrl, ...patch } = body; mutationAttempted = true; const result = parseManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); if (!active.current) return; setEditor(null); await readDetail(selected.id); await readLists(); }
+        if (editor.wish) { const { imageUrl: _imageUrl, ...patch } = body; mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); if (!active.current) return; setEditor(null); await readDetail(selected.id); await readLists(); }
         else await create(JSON.stringify({ kind: 'ITEM', listId: selected.id, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) }));
       }
     } catch (failure) { if (active.current) { if (mutationAttempted) setMutationUnknown(true); setError(failure instanceof WishManagementError || failure instanceof PendingStoreError ? failure.message : '尚未確認保存；請先查核原回執，不會自動另建。'); } }

@@ -2,7 +2,7 @@ import { webcrypto } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiFailure } from './marketplaceApi';
 import { getFullApiUrl } from '../config';
-import { listDraftBody, lookupWishCreate, lookupWishPhoto, parseWebWishJournal, parseWishPhoto, parseWishPhotoJournal, parseWishReceipt, prepareWishUpload, submitWishCreate, submitWishPhoto } from './wishWeb';
+import { listDraftBody, lookupWishCreate, lookupWishPhoto, parseWebManagedWish, parseWebWishJournal, parseWishPhoto, parseWishPhotoJournal, parseWishReceipt, prepareWishUpload, submitWishCreate, submitWishPhoto } from './wishWeb';
 const { api } = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock('./marketplaceApi', async original => ({ ...await original<typeof import('./marketplaceApi')>(), api }));
 const id = 'b5abf861-a66d-4072-876b-4f0ab3172dac', mediaId='fab22941-2df0-4ca4-90c2-70c504527243';
@@ -19,6 +19,13 @@ function imageFile(content = 'synthetic-image-bytes') {
 const uploadStore = () => ({get:vi.fn(),save:vi.fn(),clear:vi.fn()});
 async function photoJournal(file: File) { return JSON.stringify({version:1,clientUploadId:id,digest:(await prepareWishUpload(file)).digest}); }
 describe('web exact wish operations',()=>{
+  it('allows only the exact loopback image proxy in DEV and never loosens production HTTPS',()=>{
+    const base='http://127.0.0.1:5183/api', imageUrl=`${base}/listing-media/${mediaId}/image`;
+    expect(parseWebManagedWish({...wish,imageUrl},base,true).imageUrl).toBe(imageUrl);
+    expect(()=>parseWebManagedWish({...wish,imageUrl},base,false)).toThrow();
+    for(const imageUrl of [`http://evil.example/api/listing-media/${mediaId}/image`,`${base}/listing-media/${mediaId}/image?token=synthetic`,`${base}/listing-media/${mediaId}/image#other`,`${base}/listing-media/${mediaId}/thumbnail`,`${base}/listing-media/bad/image`,`http://user:pass@127.0.0.1:5183/api/listing-media/${mediaId}/image`,`http://127.0.0.1:5184/api/listing-media/${mediaId}/image`])expect(()=>parseWebManagedWish({...wish,imageUrl},base,true)).toThrow();
+    expect(()=>parseWebManagedWish({...wish,imageUrl:'http://example.com/photo.jpg'},'http://example.com/api',true)).toThrow();
+  });
   it('keeps original journal bytes, but validates every nullable/price/image field',()=>{
     expect(parseWebWishJournal(raw).body).toBe(JSON.parse(raw).body);
     for(const patch of [{notes:[]},{link:4},{imageUrl:[]},{maxPrice:'3'},{maxPrice:-1},{maxPrice:null,priceCurrency:'TWD'},{mediaId:'bad'},{clientRequestId:'b5abf861-a66d-5072-876b-4f0ab3172dac'}]) expect(()=>parseWebWishJournal(JSON.stringify({kind:'ITEM',listId:1,body:JSON.stringify({clientRequestId:id,name:'合成願望',...patch})}))).toThrow();

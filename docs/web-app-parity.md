@@ -23,7 +23,7 @@
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
 | 願望清單與商品建立／編輯／刪除／分類 | WishScreen；wish-management | 本機新增 `/wishes` 共用原生資料契約，保留 legacy 分享／送禮／標籤入口；隔離HTTP／DB通過，瀏覽器與分類回歸待補 | 同帳號新增願望兩端可見、命名與價格單位 |
-| 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 本機照片／相機、原識別碼恢復與AI狀態實作；自動化通過，實際照片端到端與移除失聯恢復待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
+| 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀已在隔離後台驗證；MiniMax實際識別、照片移除失聯恢復及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
 | 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 既有刪除；本機合併入口 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
@@ -121,4 +121,18 @@
 - 真實隔離PostgreSQL與實際native-wish路由22項HTTP／DB整合通過：回執所有權、無token／其他帳號拒絕、UUID大小寫、當前AI欄位、明確刪除墓碑、並行12次只建立1筆、容量限制、同識別码內容／父清單衝突、分頁及使用者刪除等。AI完成欄位由合成fixture更新，並非實際MiniMax識別準確度證據；圖片網址排隊測試也不等於模型已辨識照片。
 - 網頁照片／建立／頁面／登入返回／加密儲存測試包含失聯、同內容重試、損壞紀錄、原子清理、已確認不降級、離頁與無關照片保護；此次是自動化操作與模擬上傳ACK，尚未進行真實瀏覽器拍照到模型完成的驗收。測試件數不等於功能或分支覆蓋率。
 - 待解決：本機HTTP圖片與原生契約HTTPS要求的安全測試環境安排、照片移除失聯／重開的明確回執、真實瀏覽器相機／上傳／跨端資料回讀、舊願望頁錯誤及分類回歸。其餘刊登、行銷4圖／免費修改、商品管理真實寫入、profile保存、註冊／驗證／重設、社交／政策／PWA及正式部署缺口仍保留。
-- 先前doc commit `a445948` 的CI run `36793933926`已回讀三道檢查全成功；這不涵蓋本批變更。本次client50個檔案／768項完整回歸及production build成功，server49個檔案／854項單元回歸及build成功，原生願望HTTP／DB22項成功。本批CI仍需另行回讀，不把上一批CI當成此批完成證據。
+- 先前doc commit `a445948` 的CI run `36793933926`已回讀三道檢查全成功。本批code commit `a28180a` 的CI run `36796276817`已回讀成功；本機client50個檔案／768項完整回歸及production build成功，server49個檔案／854項單元回歸及build成功，原生願望HTTP／DB22項成功。後續改動需另行CI回讀，不沿用此批成功。
+
+## 2026-10-01 第七批：實際願望照片／失聯恢復與舊清單回歸（仍未部署）
+
+- 擴充既有隔離smoke工具，使用真正已編譯native-wish／listing-media／legacy清單路由及Prisma。啟動先拒絕不明／非測試DB，強制loopback API、本機私有照片臨時目錄，不使用正式volume、Flickr或啟動外部AI worker；防呆4項再次通過。測試不取用或寫入正式帳號。
+- Chrome實際選擇 `mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png` 上傳，後台Sharp編碼成1086×1448、64,974bytes的WebP與縮圖。故意於上傳提交成功後回傳502：網頁GET查回原照片、照片可顯示。重新載入再開表單仍為同一個upload ID；沒有自動重傳。
+- 同照片留空名稱、最高預算TWD100，保存願望後再故意提交成功回502。原建立凍結替代操作，重新開頁只GET回執，正確恢復照片與PENDING願望。測試後台回讀確認photo POST1次、wish POST1次、各1筆資料且wishItemId正確關聯；重開沒有新增POST或第二張照片。
+- 只為測試状态呈現，以隔離fixture將該原願望更新成COMPLETED，名稱與備註明確寫「非AI辨識結果」。可見頁面poll讀到完成、TWD59參考價格、原TWD100預算及相同照片；這不是MiniMax已辨識、判斷正確率或正式Flickr傳輸的證據。未聲稱模型驗收完成。
+- 在390×844瀏覽器驗證照片實際naturalWidth1086、documentWidth375 <= viewport390。保存 `wishlist-web-parity-wish-photo-recovered-20261001.jpg`。返回原清單頁仍見同清單1個願望；原建立表單實際建立另1份私人合成清單，使用native-wish原識別碼機制並有後台確認。
+- 修復 legacy `/dashboard` 讀取失敗誤報0／空清單、重複空畫面及未翻譯鍵；嚴格最小清單投影與件數、同帳號最新讀取序號、切帳號／StrictMode生命週期隔離、30秒超時與no-store。訪客空清單不顯示建立按鈕，欄位／排序／相片入口／隱私按鈕具清楚標籤，清單名稱能鍵盤導航，隱私按鈕不觸發整張卡片導航。
+- 舊建立表單也預設私人，使用與 `/wishes` 相同加密journal與native POST。連點只送一次，帳號離開後保存完成不再POST；原建立或損壞／不可讀標記阻止替代新建立並提供原回執查核入口。保存及清理失敗不虛構成功或靜默丟棄原識別碼。舊隱私／刪除操作的完整失聯驗收仍待補，不把建立回歸當作所有legacy操作完成。
+- 在測試後台已明確停止後，Chrome真正重新載入舊清單：顯示「清單讀取失敗，不代表沒有願望」與件數「尚未確認」，沒有「還沒有願望清單」。保存 `wishlist-web-parity-wishlist-read-error-20261001.jpg`；已還原viewport、關閉驗收tab並停止Vite／後台／隔離DB。保留小量合成資料與臨時照片，未刪除使用者照片。
+- DEV-only本機圖片轉接只允許當前loopback API精確UUID `/image` 路徑，拒絕外站／其他埠／帳密／query／hash／thumbnail；production仍沿用native HTTPS-only驗證。此安排讓真實本機照片驗收可進行，不放寬正式端安全規則。
+- 最新client51個測試檔／781項全套與production build通過；新增舊清單12項、DEV圖片契約及既有所有願望／照片／聊天／auth回歸。server build與隔離smoke防呆通過；本批CI尚待提交後回讀，測試件數不是覆蓋率百分比。
+- 全目標仍未達：實際MiniMax照片識別、照片移除失聯回執、分類／舊detail與私密連結回歸、完整sell與行銷4圖／免費修改／未知回執、owner真實狀態遷移、profile保存回執、註冊驗證重設、社交通知政策、PWA舊快取、全站響應式／效能，以及最後CI／合併／Railway部署與正式回讀。不得以本批通過代替全功能100%。

@@ -6,6 +6,7 @@ import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
 import { generateApiKey } from '../lib/apiKey';
 import { ownProfileSelect } from '../lib/ownProfile';
+import { updateLegacyProfile } from './profileUpdateController';
 
 import { APP_CONSTANTS, getApiUrl } from '../config/constants';
 // import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
@@ -37,98 +38,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 };
 
 // Update current user's profile
-export const updateMe = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const {
-            name,
-            avatarUrl,
-            realName,
-            address,
-            nicknames,
-            email, // Allow setting email only if currently NULL
-            isAvatarVisible,
-            isPhoneVisible,
-            isRealNameVisible,
-            isAddressVisible,
-            isEmailVisible, // New: email visibility toggle
-            isBirthdayVisible,
-            birthday // Added for validation
-        } = req.body;
-
-        // Validation for name (Max 50)
-        if (name && name.length > 50) {
-            return res.status(400).json({ error: 'Name too long (Max 50)', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        // Validation for nicknames (Max 5)
-        let processedNicknames = nicknames;
-        if (nicknames !== undefined) {
-            if (Array.isArray(nicknames)) {
-                if (nicknames.length > 5) {
-                    return res.status(400).json({ error: 'Maximum 5 nicknames allowed', errorCode: API_ERROR_CODES.INVALID_INPUT });
-                }
-                processedNicknames = nicknames.join(',');
-            } else if (typeof nicknames !== 'string' && nicknames !== null) {
-                return res.status(400).json({ error: 'Nicknames must be an array or string', errorCode: API_ERROR_CODES.INVALID_INPUT });
-            }
-        }
-
-        // Birthday validation
-        let validatedBirthday = undefined;
-        if (birthday) {
-            const date = new Date(birthday);
-            if (isNaN(date.getTime())) {
-                return res.status(400).json({ error: 'Invalid birthday format', errorCode: API_ERROR_CODES.INVALID_INPUT });
-            }
-            validatedBirthday = date;
-        }
-
-        // Email update logic: only allow if current email is NULL
-        let emailUpdate = undefined;
-        if (email !== undefined) {
-            const currentUser = await prisma.user.findUnique({ where: { id: userId } });
-            if (currentUser && !currentUser.email) {
-                // Basic email format check
-                if (email && !email.includes('@')) {
-                    return res.status(400).json({ error: 'Invalid email format', errorCode: API_ERROR_CODES.INVALID_INPUT });
-                }
-                emailUpdate = email;
-            }
-        }
-
-        const data: any = {
-            name,
-            avatarUrl,
-            realName,
-            address,
-            nicknames: processedNicknames,
-            isAvatarVisible,
-            isPhoneVisible,
-            isRealNameVisible,
-            isAddressVisible,
-            isEmailVisible,
-            isBirthdayVisible,
-            birthday: validatedBirthday
-        };
-
-        // Remove undefined values
-        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
-
-        if (emailUpdate !== undefined) data.email = emailUpdate;
-
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data, select: ownProfileSelect
-        });
-
-        res.setHeader('Cache-Control', 'private, no-store');
-        res.json(updatedUser);
-    } catch (error) {
-        console.error('Profile update unavailable; request and database details withheld');
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export const updateMe = updateLegacyProfile;
 
 // Get another user's public profile (Respecting privacy)
 export const getUserProfile = async (req: Request, res: Response) => {

@@ -11,26 +11,7 @@ import { t, getUserLocale } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
 import AccountBenefits from '../components/AccountBenefits';
 import './SettingsPage.css';
-
-interface UserProfile {
-    id: number;
-    name: string; // Used as display name if RealName hidden? Or separate?
-    phoneNumber: string;
-    email?: string; // User's email
-    realName?: string;
-    address?: string;
-    nicknames: string; // Stored as comma separated string
-    avatarUrl?: string;
-    isAvatarVisible: boolean;
-    isPhoneVisible: boolean;
-    isRealNameVisible: boolean;
-    isAddressVisible: boolean;
-    isEmailVisible: boolean; // Email visibility toggle
-    birthday?: string; // New
-    isBirthdayVisible: boolean; // New
-    isPremium: boolean; // New
-    apiKey?: string; // New
-}
+import { useSettingsProfile } from '../lib/useSettingsProfile';
 
 export default function SettingsPage() {
     const { token, user } = useAuth();
@@ -38,10 +19,10 @@ export default function SettingsPage() {
 }
 
 function SettingsSession() {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const navigate = useNavigate();
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const settings = useSettingsProfile(token, user?.id);
+    const { profile, loading, savedField, update: handleUpdate } = settings;
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,89 +30,21 @@ function SettingsSession() {
     useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
     useEffect(() => {
-        if (token) {
-            fetchProfile();
-            fetchAiUsage();
-        } else {
-            setLoading(false);
-            // Use navigate to avoid full reload, but window.location is safer for clean state if needed. 
-            // Sticking to navigate for SPA feel unless auth context requires reload.
-            navigate('/login');
-        }
-    }, [token]);
-
-    const fetchProfile = async () => {
-        try {
-            if (!token || !active.current) return;
-
-            const res = await fetch(`${API_URL}/users/me`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
+        let current = true;
+        const controller = new AbortController();
+        if (!token) navigate('/login?next=%2Fsettings');
+        else void (async () => {
+            try {
+                const res = await fetch(`${API_URL}/users/me/ai-usage`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
+                if (!res.ok) return;
                 const data = await res.json();
-                if (!active.current) return;
-                setProfile(data);
-            } else {
-                console.error("Failed to fetch profile:", res.status);
-                if (active.current && (res.status === 401 || res.status === 403)) {
-                    navigate('/login?next=%2Fsettings');
-                }
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            if (active.current) setLoading(false);
-        }
-    };
+                if (current && Number.isSafeInteger(data.used) && data.used >= 0 && Number.isSafeInteger(data.limit) && data.limit >= 0 && typeof data.isUnlimited === 'boolean') setAiUsage(data);
+            } catch { /* unavailable is not zero */ }
+        })();
+        return () => { current = false; controller.abort(); };
+    }, [token, navigate]);
 
-    const fetchAiUsage = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/me/ai-usage`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (active.current) setAiUsage(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch AI usage:', error);
-        }
-    };
-
-
-    const [savedField, setSavedField] = useState<string | null>(null);
     const [changingLang, setChangingLang] = useState(false);
-
-    const handleUpdate = async (updates: any) => {
-        if (!token || !active.current) return;
-        try {
-            const res = await fetch(`${API_URL}/users/me`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(updates)
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (!active.current) return;
-                setProfile(data);
-                // Trigger saved feedback logic
-                const key = Object.keys(updates)[0];
-                if (['nicknames', 'realName', 'address'].includes(key)) {
-                    setSavedField(key);
-                    setTimeout(() => setSavedField(null), 2000);
-                }
-            } else {
-                if (!active.current) return;
-                setFeedback({ message: "更新失敗", type: 'error' });
-                setTimeout(() => setFeedback(null), 3000);
-            }
-        } catch {
-            if (active.current) setFeedback({ message: '尚未確認儲存結果；請勿以畫面內容當作已儲存，重新載入核對後再操作。', type: 'error' });
-        }
-    };
 
     const [isUploading, setIsUploading] = useState(false);
 
@@ -157,6 +70,7 @@ function SettingsSession() {
     };
 
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (settings.locked || isUploading) return;
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const formData = new FormData();
@@ -171,7 +85,8 @@ function SettingsSession() {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setProfile(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
+                    if (!active.current) return;
+                    settings.patchDisplay({ avatarUrl: data.avatarUrl });
                     setFeedback({ message: t('settings.uploaded') || 'Avatar updated successfully!', type: 'success' });
                     setTimeout(() => setFeedback(null), 3000);
                 } else {
@@ -198,7 +113,8 @@ function SettingsSession() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setProfile(prev => prev ? { ...prev, apiKey: data.apiKey } : null);
+                if (!active.current) return;
+                settings.patchDisplay({ apiKey: data.apiKey });
                 setFeedback({ message: 'API Key Generated!', type: 'success' });
                 setTimeout(() => setFeedback(null), 3000);
             }
@@ -209,7 +125,7 @@ function SettingsSession() {
     };
 
     if (loading) return <div className="p-8 text-center">{t('common.loading')}</div>;
-    if (!profile) return <div className="p-8 text-center">{t('common.error')} <Link to="/login" className="text-blue-500 underline">{t('nav.login')}</Link></div>;
+    if (!profile) return <div className="p-8 text-center"><p role="alert">{settings.notice || t('common.error')}</p><Button onClick={settings.retryRead}>重試讀取設定</Button> <Link to="/login?next=%2Fsettings" className="text-blue-500 underline">{t('nav.login')}</Link></div>;
 
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
@@ -221,6 +137,14 @@ function SettingsSession() {
                 </div>
             )}
             <div><h1 className="text-3xl font-bold text-muji-primary">個人資料</h1><p className="mt-1 text-sm text-gray-500">管理你的帳號與偏好設定</p></div>
+            {settings.notice && <section aria-label="個人資料儲存狀態" className="rounded-md border bg-white p-3 text-sm"><p role="status">{settings.notice}</p>
+                {settings.pending && <div className="mt-2 flex flex-wrap gap-2">
+                    <Button disabled={settings.busy} onClick={() => settings.recover('read')}>查核原儲存結果</Button>
+                    {settings.cleanupOnly ? <Button disabled={settings.busy} onClick={() => settings.recover('cleanup')}>重試清理恢復標記</Button> : <><Button disabled={settings.busy} onClick={() => settings.recover('retry')}>重試同一儲存操作</Button><Button variant="outline" disabled={settings.busy} onClick={() => settings.setDiscardConfirm(true)}>安全取消原操作</Button></>}
+                </div>}
+                {settings.discardConfirm && <div className="mt-2 rounded-md bg-amber-50 p-3"><p>尚未套用的原操作將永久停止；若後台已儲存，不會撤回資料。是否繼續？</p><Button disabled={settings.busy} onClick={() => settings.recover('abandon')}>確認停止原操作</Button><Button disabled={settings.busy} variant="outline" onClick={() => settings.setDiscardConfirm(false)}>保留原操作</Button></div>}
+                {settings.storageError && <Button onClick={settings.retryRead}>重試安全讀取</Button>}
+            </section>}
 
             {/* Language Section */}
             <Card className="settings-language">
@@ -270,7 +194,7 @@ function SettingsSession() {
                         { to: '/sell', label: '刊登好物', description: '連拍或批次上傳', icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
                 </div>
             </section>
-            <Card className="settings-avatar">
+            <fieldset disabled={settings.locked || isUploading} className="min-w-0 space-y-4 border-0 p-0"><legend className="sr-only">個人資料與隱私設定</legend><Card className="settings-avatar">
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                         <span>大頭照與暱稱</span>
@@ -293,14 +217,15 @@ function SettingsSession() {
                     <div
                         className="relative group cursor-pointer w-16 h-16 shrink-0"
                         role="button"
-                        tabIndex={0}
+                        tabIndex={settings.locked || isUploading ? -1 : 0}
+                        aria-disabled={settings.locked || isUploading}
                         aria-label="上傳大頭照"
-                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
-                        onClick={() => fileInputRef.current?.click()}
+                        onKeyDown={event => { if (!settings.locked && !isUploading && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInputRef.current?.click(); } }}
+                        onClick={() => { if (!settings.locked && !isUploading) fileInputRef.current?.click(); }}
                     >
                         <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
                             {profile.avatarUrl ? (
-                                <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />
+                                <img src={profile.avatarUrl.startsWith('/') ? `${API_BASE_URL}${profile.avatarUrl}` : profile.avatarUrl} referrerPolicy="no-referrer" alt="大頭照" className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-400">
                                     <UserIcon className="w-12 h-12" />
@@ -331,7 +256,7 @@ function SettingsSession() {
                             <Input
                                 id="nickname"
                                 value={profile.nicknames || ""}
-                                onChange={(e) => setProfile({ ...profile, nicknames: e.target.value })}
+                                    onChange={(e) => settings.edit('nicknames', e.target.value)}
                                 onBlur={(e) => handleUpdate({ nicknames: e.target.value })}
                                 placeholder={t('settings.nicknamesPlaceholder')}
                             />
@@ -351,7 +276,7 @@ function SettingsSession() {
                         )}
                     </div>
                 </CardContent>
-            </Card>
+            </Card></fieldset>
 
             {/* Notification Settings */}
             <Link to="/settings/notifications" className="block">
@@ -371,6 +296,7 @@ function SettingsSession() {
 
             {/* Private Info Section */}
             <AccountSecurityPanel key={token} />
+            <fieldset disabled={settings.locked || isUploading} className="min-w-0 border-0 p-0"><legend className="sr-only">私人資料與公開權限</legend>
             <div className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-semibold">{t('settings.privacyTitle')}</h2>
 
@@ -383,7 +309,7 @@ function SettingsSession() {
                                 <Input
                                     id="profile-real-name"
                                     value={profile.realName || ""}
-                                    onChange={(e) => setProfile({ ...profile, realName: e.target.value })}
+                                    onChange={(e) => settings.edit('realName', e.target.value)}
                                     onBlur={(e) => handleUpdate({ realName: e.target.value })}
                                     placeholder={t('settings.realName')}
                                 />
@@ -419,8 +345,8 @@ function SettingsSession() {
                                 <Input
                                     id="profile-birthday"
                                     type="date"
-                                    value={profile.birthday ? new Date(profile.birthday).toISOString().split('T')[0] : ""}
-                                    onChange={(e) => setProfile({ ...profile, birthday: e.target.value })}
+                                    value={profile.birthday || ""}
+                                    onChange={(e) => settings.edit('birthday', e.target.value)}
                                     onBlur={(e) => handleUpdate({ birthday: e.target.value })}
                                 />
                             </div>
@@ -455,7 +381,7 @@ function SettingsSession() {
                                 <Input
                                     id="profile-address"
                                     value={profile.address || ""}
-                                    onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                                    onChange={(e) => settings.edit('address', e.target.value)}
                                     onBlur={(e) => handleUpdate({ address: e.target.value })}
                                     placeholder={t('settings.address')}
                                 />
@@ -519,11 +445,11 @@ function SettingsSession() {
                                 <Input
                                     id="profile-email"
                                     value={profile.email || ""}
-                                    disabled={!!profile.email}
-                                    className={profile.email ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
+                                    disabled={settings.emailReadOnly}
+                                    className={settings.emailReadOnly ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
                                     placeholder={t('settings.emailPlaceholder')}
-                                    onChange={(e) => !profile.email && setProfile({ ...profile, email: e.target.value })}
-                                    onBlur={(e) => !profile.email && e.target.value && handleUpdate({ email: e.target.value })}
+                                    onChange={(e) => !settings.emailReadOnly && settings.edit('email', e.target.value)}
+                                    onBlur={(e) => !settings.emailReadOnly && e.target.value && handleUpdate({ email: e.target.value })}
                                 />
                             </div>
                             <Button
@@ -539,17 +465,13 @@ function SettingsSession() {
                         <p className="text-xs text-muji-secondary mt-2">
                             {profile.isEmailVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                         </p>
-                        {profile.email && (
+                        {settings.emailReadOnly && (
                             <p className="text-xs text-gray-400 mt-1">{t('settings.emailReadOnly')}</p>
                         )}
                     </CardContent>
                 </Card>
 
-            </div>
-
-
-
-
+            </div></fieldset>
             <AccountBenefits key={`benefits-${token}`} />
             <details className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center gap-3"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block font-semibold">進階功能</span><span className="text-xs text-gray-500">AI 整合・交易紀錄・安裝網頁 App・好友與送禮</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>

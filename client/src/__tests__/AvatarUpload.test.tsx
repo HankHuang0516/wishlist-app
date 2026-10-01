@@ -4,6 +4,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import SettingsPage from '../pages/SettingsPage';
 import { AuthContext } from '../context/AuthContext';
+// This test covers only the accessible avatar input, not IndexedDB recovery.
+vi.mock('../lib/webPendingStore',async importOriginal => ({...await importOriginal<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:async()=>null}}));
 
 // Mock Auth Context
 const mockAuth = {
@@ -36,10 +38,13 @@ global.fetch = vi.fn(() =>
         ok: true,
         json: () => Promise.resolve({
             id: 1,
+            profileVersion: 0,
             name: 'Test User',
             phoneNumber: '0912345678',
             nicknames: 'Tester',
-            isAvatarVisible: true
+            isAvatarVisible: true, isPremium: false,
+            isPhoneVisible: false, isRealNameVisible: false, isAddressVisible: false,
+            isEmailVisible: false, isBirthdayVisible: false
         })
     })
 ) as any;

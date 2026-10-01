@@ -1,5 +1,5 @@
 /* Settings-only layout: retain the original neutral web tokens, not native UI. */
-.settings-hub > .rounded-lg h3 { font-size: 1rem; line-height: 1.5; }
+.settings-hub > .rounded-lg h3, .settings-hub > fieldset .rounded-lg h3 { font-size: 1rem; line-height: 1.5; }
 .settings-language { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem; }
 .settings-language > div { padding: 0; }
 .settings-language > div:first-child p { display: none; }

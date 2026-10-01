@@ -12,6 +12,7 @@ model User {
   phoneNumber       String    @unique
   password          String
   authVersion       Int       @default(0)
+  profileVersion    Int       @default(0)
   apiKey            String?   @unique
   name              String?
   nicknames         String?
@@ -60,6 +61,7 @@ model User {
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
+  profileUpdateReceipts ProfileUpdateReceipt[]
   listings        Listing[]
   listingReports  ListingReport[]
   listingReportOperations ListingReportOperation[]
@@ -669,6 +671,21 @@ model WishPhotoRemovalReceipt {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientUploadId])
+}
+
+// Hash-only profile operation journal; no personal values or credentials.
+// Terminal abandoned/conflict receipts prevent delayed retries overwriting data.
+model ProfileUpdateReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientActionId String   @db.Uuid
+  requestHash    String   @db.VarChar(64)
+  state          String   @db.VarChar(12)
+  appliedVersion Int?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
 }
 
 model Wishlist {

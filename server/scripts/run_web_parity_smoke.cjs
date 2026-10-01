@@ -24,6 +24,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../dist/lib/prisma').default;
 const { login } = require('../dist/controllers/authController');
 const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userController');
+const { getProfileOperation, submitProfileOperation, abandonProfileOperation } = require('../dist/controllers/profileUpdateController');
 const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
 const { marketingAvailability } = require('../dist/controllers/marketingController');
 const { searchListings } = require('../dist/controllers/listingController');
@@ -38,9 +39,9 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, dropped = { message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, dropped = { profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (!['profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
@@ -51,7 +52,9 @@ app.use((req, res, next) => {
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
     req.method === 'POST' && /^\/api\/native-wishes\/lists\/[^/]+\/items$/.test(req.path) ? 'wish' :
-    req.method === 'POST' && /^\/api\/native-wishes\/photo-removals\/[^/]+$/.test(req.path) ? 'photoRemoval' : null;
+    req.method === 'POST' && /^\/api\/native-wishes\/photo-removals\/[^/]+$/.test(req.path) ? 'photoRemoval' :
+    req.method === 'POST' && /^\/api\/users\/me\/profile-operations\/[^/]+$/.test(req.path) ? 'profile' : null;
+  if (req.method === 'GET' && /\/profile-operations\//.test(req.path)) attempts.profileReceipt++;
   if (req.method === 'GET' && /\/messages\/by-client-id\//.test(req.path)) attempts.messageReceipt++;
   if (kind) {
     attempts[kind]++;
@@ -66,6 +69,9 @@ app.use((req, res, next) => {
 app.post('/api/auth/login', login);
 app.get('/api/users/me', authenticateToken, getMe);
 app.put('/api/users/me', authenticateToken, updateMe);
+app.get('/api/users/me/profile-operations/:clientActionId', authenticateToken, getProfileOperation);
+app.post('/api/users/me/profile-operations/:clientActionId', authenticateToken, submitProfileOperation);
+app.post('/api/users/me/profile-operations/:clientActionId/abandon', authenticateToken, abandonProfileOperation);
 app.get('/api/users/me/ai-usage', authenticateToken, getAiUsage);
 app.get('/api/users/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
 app.get('/api/marketing/availability', authenticateToken, marketingAvailability);

@@ -8,6 +8,7 @@ import multer from 'multer';
 import path from 'path';
 import { revokeSessions } from '../controllers/accountSecurityController';
 import { securityLimiter } from '../middleware/rateLimiter';
+import { getProfileOperation, submitProfileOperation, abandonProfileOperation } from '../controllers/profileUpdateController';
 import { getAccountDeletionImpact, authenticateErasureSession, deleteMyAccount, getMyErasureReceipt, abandonMyErasure } from '../controllers/accountDeletionController';
 
 const router = Router();
@@ -31,6 +32,9 @@ router.delete('/me', authenticateErasureSession, securityLimiter, deleteMyAccoun
 router.get('/me/deletion-operations/:clientActionId', authenticateErasureSession, erasureRecoveryLimiter, getMyErasureReceipt);
 router.post('/me/deletion-operations/:clientActionId/abandon', authenticateErasureSession, erasureRecoveryLimiter, abandonMyErasure);
 router.put('/me', authenticateToken, updateMe);
+router.get('/me/profile-operations/:clientActionId', authenticateToken, getProfileOperation);
+router.post('/me/profile-operations/:clientActionId', authenticateToken, submitProfileOperation);
+router.post('/me/profile-operations/:clientActionId/abandon', authenticateToken, abandonProfileOperation);
 router.put('/me/password', authenticateToken, securityLimiter, updatePassword);
 router.post('/me/sessions/revoke', authenticateToken, securityLimiter, revokeSessions);
 router.get('/me/purchases', authenticateToken, getPurchasedItems);

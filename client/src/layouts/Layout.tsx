@@ -49,7 +49,7 @@ export default function Layout() {
 
                         {isAuthenticated && (
                             <>
-                                <Link to="/dashboard">
+                                <Link to="/wishes" aria-label="我的願望與照片辨識">
                                     <Button variant="ghost" size="icon" title={t('nav.dashboard')} className="shrink-0 flex items-center justify-center">
                                         <Gift className="h-6 w-6" />
                                     </Button>

@@ -25,6 +25,43 @@ afterAll(async () => {
     if (owner) await prisma.user.deleteMany({ where: { id: { in: [owner, outsider] } } }); await prisma.$disconnect();
 });
 describe('native wish ownership and durable create receipts / PostgreSQL and real router', () => {
+    it('reads a create receipt without replaying a POST or creating another resource', async () => {
+        const created = await list();
+        const before = await prisma.wishlist.count({ where: { userId: owner } });
+        const receipt = await request(server).get(`${root}/receipts/${created.payload.clientRequestId}`).set('Authorization', auth());
+        expect(receipt.status).toBe(200); expect(receipt.headers['cache-control']).toBe('private, no-store');
+        expect(receipt.body).toMatchObject({ clientRequestId: created.payload.clientRequestId, kind: 'LIST', resourceId: created.id, deleted: false, resource: { id: created.id, isPublic: false } });
+        expect(receipt.body.resource).not.toHaveProperty('userId'); expect(await prisma.wishlist.count({ where: { userId: owner } })).toBe(before);
+    });
+    it('scopes a read-only receipt to its owner and validates the exact request ID', async () => {
+        const created = await list(), path = `${root}/receipts/${created.payload.clientRequestId}`;
+        expect((await request(server).get(path)).status).toBe(401);
+        expect((await request(server).get(path).set('Authorization', auth(outsider))).status).toBe(404);
+        expect((await request(server).get(`${root}/receipts/${randomUUID()}`).set('Authorization', auth())).status).toBe(404);
+        expect((await request(server).get(path+'?other=1').set('Authorization', auth())).status).toBe(400);
+        expect((await request(server).get(root+'/receipts/bad-id').set('Authorization', auth())).status).toBe(400);
+    });
+    it('canonicalizes an uppercase receipt identifier to the original create identity', async () => {
+        const created = await list();
+        const receipt = await request(server).get(`${root}/receipts/${created.payload.clientRequestId.toUpperCase()}`).set('Authorization', auth());
+        expect(receipt.status).toBe(200);
+        expect(receipt.body).toMatchObject({ clientRequestId: created.payload.clientRequestId, resourceId: created.id });
+        expect(await prisma.wishlist.count({ where: { userId: owner } })).toBe(1);
+    });
+    it('returns current AI fields in the original item receipt without queuing recognition again', async () => {
+        const parent = await list(), payload = { clientRequestId: randomUUID(), name: '合成商品' };
+        const created = await post(`/lists/${parent.id}/items`, payload), id = created.body.resource.id;
+        await prisma.item.update({ where: { id }, data: { name: '合成辨識完成', aiStatus: 'COMPLETED', price: '59', currency: 'TWD' } });
+        const receipt = await request(server).get(`${root}/receipts/${payload.clientRequestId}`).set('Authorization', auth());
+        expect(receipt.body).toMatchObject({ kind: 'ITEM', resourceId: id, deleted: false, resource: { id, wishlistId: parent.id, name: '合成辨識完成', aiStatus: 'COMPLETED', price: '59' } });
+        expect(await prisma.item.count({ where: { wishlistId: parent.id } })).toBe(1);
+    });
+    it('distinguishes a committed-deleted receipt from a never-found request', async () => {
+        const created = await list(); await prisma.wishlist.delete({ where: { id: created.id } });
+        const receipt = await request(server).get(`${root}/receipts/${created.payload.clientRequestId}`).set('Authorization', auth());
+        expect(receipt.status).toBe(200); expect(receipt.body).toMatchObject({ resourceId: created.id, deleted: true, resource: null });
+        expect((await post('/lists', created.payload)).status).toBe(410); expect(await prisma.wishlist.count({ where: { userId: owner } })).toBe(0);
+    });
     it('requires authentication', async () => { expect((await request(server).get(root + '/lists')).status).toBe(401); });
     it('serializes parallel list retries, preserving private defaults and exactly one resource', async () => {
         const body = { clientRequestId: randomUUID(), title: 'Camera' }; const results = await Promise.all(Array.from({ length: 12 }, () => post('/lists', body)));

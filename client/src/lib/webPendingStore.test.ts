@@ -25,6 +25,15 @@ describe('browser encrypted pending operations', () => {
     const { store } = fixture(); await store.save(key, 'original'); await store.save(key, 'original');
     await expect(store.save(key, 'replacement')).rejects.toThrow(PendingStoreError); expect(await store.get(key)).toBe('original');
   });
+  it('separates an encrypted wish photo journal from its wish create operation and honors explicit scope erasure', async () => {
+    const { store } = fixture(), photo = scope + '.wish-photo', create = scope + '.wish-create';
+    await store.save(photo, 'upload-identity-and-digest'); await store.save(create, 'exact-create-body');
+    expect(await store.get(photo)).toBe('upload-identity-and-digest');
+    expect(await store.clear(create, 'exact-create-body')).toBe(true);
+    expect(await store.get(photo)).toBe('upload-identity-and-digest');
+    await store.eraseScope(scope); expect(await store.get(photo)).toBeNull();
+    await expect(store.save(photo, 'late-upload')).rejects.toThrow(PendingStoreError);
+  });
   it('only clears the exact acknowledged body and never another resource/account', async () => {
     const { store } = fixture(), other = scope.replace('.42', '.43') + '.listing-report';
     await store.save(key, 'new'); await store.save(other, 'other');

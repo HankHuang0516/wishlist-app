@@ -218,6 +218,7 @@ function SettingsSession() {
                 </div>
             )}
             <h1 className="text-3xl font-bold text-muji-primary">我的／設定</h1>
+            <Link to="/wishes" className="block rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">我的願望 · 拍照與 AI 辨識</span><span className="text-sm text-gray-600">與 APP 共用清單、照片、辨識狀態與最高預算</span></Link>
             <Link to="/sell" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
                 <Camera aria-hidden className="h-6 w-6 text-blue-600" />
                 <span><span className="block font-semibold">刊登好物</span><span className="text-sm text-gray-600">連續拍照或批次選照片，由 AI 建議商品資訊</span></span>

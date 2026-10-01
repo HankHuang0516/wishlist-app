@@ -30,6 +30,7 @@ import MyListingsPage from './pages/MyListingsPage';
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 const ListingReportsPage = lazy(() => import('./pages/ListingReportsPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
+const WishesPage = lazy(() => import('./pages/WishesPage'));
 import { AuthProvider } from "./context/AuthContext";
 
 import NotFound from "./pages/NotFound";
@@ -71,6 +72,7 @@ function App() {
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
+            <Route path="wishes" element={<Suspense fallback={<p role="status">正在載入我的願望…</p>}><WishesPage /></Suspense>} />
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
             <Route path="explore" element={<Suspense fallback={<p role="status">正在載入探索地圖…</p>}><ExplorePage /></Suspense>} />

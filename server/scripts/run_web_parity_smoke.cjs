@@ -39,7 +39,7 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
   if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
@@ -47,6 +47,7 @@ app.post('/__test/drop-next-ack', (req, res) => {
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
 // The later commit/recovery check is performed separately with the real API.
 app.post('/__test/reject-next-photo-removal', (_req, res) => { rejectRemoval = true; res.json({ syntheticOnly: true, armed: true }); });
+app.post('/__test/reject-next-photo-receipt', (_req, res) => { rejectPhotoReceipt = true; res.json({ syntheticOnly: true, armed: true }); });
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
@@ -59,6 +60,11 @@ app.use((req, res, next) => {
   if (req.method === 'GET' && /\/messages\/by-client-id\//.test(req.path)) attempts.messageReceipt++;
   if (req.method === 'GET' && /\/listings\/creation-receipts\//.test(req.path)) attempts.listingReceipt++;
   if (req.method === 'POST' && /\/listings\/creation-receipts\/[^/]+\/abandon$/.test(req.path)) attempts.listingAbandon++;
+  if (req.method === 'POST' && /\/listing-media\/upload-receipts\/[^/]+\/abandon$/.test(req.path)) attempts.photoAbandon++;
+  if (req.method === 'GET' && /\/listing-media\/upload-receipts\//.test(req.path)) {
+    attempts.photoReceipt++;
+    if (rejectPhotoReceipt) { rejectPhotoReceipt = false; return res.status(503).json({ error: 'Synthetic read failure before receipt lookup', errorCode: 'TEST_RECEIPT_UNAVAILABLE' }); }
+  }
   if (kind) {
     attempts[kind]++;
     if (kind === 'photoRemoval' && rejectRemoval) { rejectRemoval = false; return res.status(503).json({ error: 'Synthetic failure BEFORE mutation; no photo removed', errorCode: 'TEST_BEFORE_MUTATION' }); }
@@ -112,6 +118,7 @@ app.get('/__test/state', async (_req, res) => {
     createdListings: await prisma.listing.findMany({ where: { ownerUserId: users[0].id }, select: { id: true, title: true, status: true, clientListingId: true, expiryMode: true, expiresAt: true, media: { select: { id: true } } } }),
     listingCreationReceipts: await prisma.listingCreateReceipt.findMany({ where: { userId: users[0].id }, select: { clientListingId: true, state: true, listingId: true } }),
     photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
+    photoUploadReceipts: await prisma.photoUploadReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, state: true } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });
 app.use((_req, res) => res.status(404).json({ error: 'This isolated smoke server does not expose that workflow' }));

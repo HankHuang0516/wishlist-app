@@ -8,10 +8,11 @@ import MarketingAssistantWeb from '../components/MarketingAssistantWeb';
 import { useAuth } from '../context/AuthContext';
 import { buildPublishedListing, emptyListingDraft, firstListingPublishIssue, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile, sameSellerContent } from '../lib/listingBatch';
 import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingPublishField, ListingTouched, PublishDetails } from '../lib/listingBatch';
-import { forgetPendingUploads, loadPrivateMediaPages, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
+import { loadPrivateMediaPages } from '../lib/listingUploadJournal';
 import { API_URL } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { abandonListingCreation, listingCreationJournal, parseListingCreationJournal, readListingCreation, sendListingCreation, type ListingCreationResult } from '../lib/listingCreationWeb';
+import { abandonPhotoUpload, parsePhotoUploadJournal, photoUploadJournal, readPhotoUpload, sendPhotoUpload, type PhotoUploadResult } from '../lib/listingPhotoUploadWeb';
 
 type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
@@ -63,12 +64,17 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const [readTick, setReadTick] = useState(0);
   const [cleanupOnly, setCleanupOnly] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [photoPending, setPhotoPending] = useState('');
+  const [photoLegacy, setPhotoLegacy] = useState(false);
+  const [photoCleanup, setPhotoCleanup] = useState(false);
+  const [photoCancel, setPhotoCancel] = useState(false);
+  const photoJournalKey = useRef('');
+  const photoConfirmed = useRef<PhotoUploadResult | null>(null);
   const journalKey = useRef('');
   const confirmedResult = useRef<ListingCreationResult | null>(null);
   const pendingRef = useRef(pending);
-  pendingRef.current = pending || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
+  pendingRef.current = pending || photoPending || (photoLegacy ? 'legacy-photo' : '') || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
-  const [unresolvedUploads, setUnresolvedUploads] = useState<string[]>([]);
   const [invalid, setInvalid] = useState<{ cardId: string; field: ListingPublishField | 'review' } | null>(null);
   const fieldNodes = useRef(new Map<string, HTMLElement>());
   const busyRef = useRef(false);
@@ -79,7 +85,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   cardsRef.current = cards;
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
   const confirmedCards = cards.filter(card => card.confirmed && !card.published);
-  const locked = busy || !!pending || !!legacy && !legacyVerified || storageError || !ready;
+  const locked = busy || !!pending || !!photoPending || photoLegacy || !!legacy && !legacyVerified || storageError || !ready;
 
   useEffect(() => {
     lifetime.current++;
@@ -92,13 +98,10 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
     const [items, availability] = await Promise.all([loadBatch(),
       api<{ available: boolean }>(token, '/listing-media/ai-availability').catch(() => null)]);
-    const checked = await reconcilePendingUploads(userId, items,
-      id => api<unknown>(token, `/listing-media/by-upload-id/${id}`),
-      loadBatch);
     // Private uploads can span multiple 30-item pages. The 12-item limit
     // applies only to new captures, never to owner recovery.
-    const recovered = checked.items.slice().reverse().map(fromMedia);
-    if (epoch !== lifetime.current) return;
+    const recovered = items.slice().reverse().map(fromMedia);
+    if (epoch !== lifetime.current) return [];
     setCards(old => [...recovered.map(card => {
       const previous = old.find(item => item.id === card.id);
       if (previous?.dirty || previous?.published) return previous;
@@ -106,26 +109,31 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         JSON.stringify(previous.draft) === JSON.stringify(card.draft) ? { ...card, confirmed: previous.confirmed } : card;
     }),
       ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);
-    setUnresolvedUploads(checked.unresolved);
     setAiAvailable(typeof availability?.available === 'boolean' ? availability.available : null);
-    if (checked.unresolved.length) setMessage(`${checked.unresolved.length} 張照片的上傳結果仍待確認；請先重新確認，勿重傳同張照片。`);
-    else setMessage('');
+    setMessage('');
     setReady(true);
+    return recovered;
   }, [token, userId]);
 
   useEffect(() => {
-    setReady(false); if (readTick === 0) setCards([]); setMessage(''); setUnresolvedUploads([]); setAiAvailable(null);
+    setReady(false); if (readTick === 0) setCards([]); setMessage(''); setAiAvailable(null);
     const epoch = lifetime.current;
     let active = true;
     void (async () => {
-      let stored: string | null, previous: string;
+      let stored: string | null, previous: string, storedPhoto: string | null;
       try {
         const key = await pendingRequestKey(API_URL, userId, 'listing');
         stored = await privatePendingStore.get(key);
+        const photoKey = await pendingRequestKey(API_URL, userId, 'listing-photo');
+        storedPhoto = await privatePendingStore.get(photoKey);
+        if (storedPhoto) await parsePhotoUploadJournal(storedPhoto);
         previous = localStorage.getItem(pendingKey(userId)) ?? '';
         if (stored) await parseListingCreationJournal(stored);
         if (!active || epoch !== lifetime.current) return;
         journalKey.current = key; setPending(stored ?? ''); setLegacy(previous); setLegacyVerified(false);
+        photoJournalKey.current = photoKey; setPhotoPending(storedPhoto ?? '');
+        setPhotoLegacy(!!localStorage.getItem(`wishlist:listing-upload-pending:${userId}`));
+        setPhotoCleanup(false); setPhotoCancel(false); photoConfirmed.current = null;
         setStorageError(false); setCleanupOnly(false); confirmedResult.current = null;
       } catch {
         if (active && epoch === lifetime.current) { setStorageError(true); setMessage('此瀏覽器無法讀取安全刊登紀錄；為避免重複刊登，已暫停新增照片與發布。請允許網站儲存空間後重試恢復。'); }
@@ -141,6 +149,10 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           if (active && epoch === lifetime.current) await finishCreation(stored, result, epoch);
         }
         if (previous && active && epoch === lifetime.current) await checkLegacy(previous, epoch);
+        if (storedPhoto && active && epoch === lifetime.current) {
+          const result = await readPhotoUpload(token, storedPhoto, userId);
+          if (active && epoch === lifetime.current) await finishPhotoUpload(storedPhoto, result, epoch);
+        }
       } catch (error) {
         if (active && epoch === lifetime.current) setMessage(`恢復仍待確認：${(error as Error).message}。不會自動重新刊登。`);
       }
@@ -168,12 +180,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!busy && !pending && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
+      if (!busy && !pending && !photoPending && !photoLegacy && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
       event.preventDefault(); event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [busy, pending, legacy, legacyVerified, storageError, cards]);
+  }, [busy, pending, photoPending, photoLegacy, legacy, legacyVerified, storageError, cards]);
 
   const replace = (id: string, change: (card: Card) => Card) => setCards(old => old.map(card => card.id === id ? change(card) : card));
   function updateField(id: string, field: ListingField, value: string) {
@@ -230,7 +242,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || locked || busyRef.current || unresolvedUploads.length) return;
+    if (!files || locked || busyRef.current) return;
     if (cards.filter(card => !card.published).length + files.length > 12) { setMessage('一次最多處理 12 件商品。'); return; }
     busyRef.current = true; setBusy(true); setMessage('');
     const epoch = lifetime.current;
@@ -242,42 +254,22 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         try { prepared = await prepareListingUploadFile(file); }
         catch (error) { setMessage(`第 ${index + 1} 張照片無法處理：${(error as Error).message}；後續照片尚未上傳。`); break; }
         if (epoch !== lifetime.current) break;
-        const uploadId = crypto.randomUUID();
-        const body = new FormData(); body.append('clientUploadId', uploadId); body.append('capturePurpose', 'BATCH_ITEM'); body.append('image', prepared);
-        try { rememberPendingUpload(userId!, uploadId); }
-        catch { setMessage('無法在此瀏覽器安全記錄上傳進度；照片尚未送出，請確認瀏覽器儲存空間後重試。'); break; }
-        let confirmedPrivate = false;
+        let raw: string;
+        try { raw = await photoUploadJournal(prepared); await privatePendingStore.save(photoJournalKey.current, raw); }
+        catch { if (epoch === lifetime.current) { setStorageError(true); setMessage('無法在此瀏覽器安全記錄上傳進度；照片尚未送出，請確認瀏覽器儲存空間後重試。'); } break; }
+        if (epoch !== lifetime.current) break;
+        setPhotoPending(raw); setPhotoCleanup(false); photoConfirmed.current = null;
         try {
-          let raw: unknown;
-          try { raw = await api<unknown>(token!, '/listing-media', { method: 'POST', body }); }
-          catch (failure) {
-            // A response can be lost after the private upload commits. Resolve
-            // the same idempotency key before inviting a duplicate upload.
-            raw = await api<unknown>(token!, `/listing-media/by-upload-id/${uploadId}`).catch(() => { throw failure; });
-            const linked = raw as { listingId?: unknown; wishItemId?: unknown };
-            if (linked.listingId !== null || linked.wishItemId !== null) throw new Error('照片已被其他操作使用，請重新載入確認');
-          }
-          const record = raw as { id?: unknown };
-          if (!isUuid(record?.id)) throw new Error('照片上傳結果未確認');
-          confirmedPrivate = true;
-          if (epoch !== lifetime.current) break; // Preserve the upload journal for owner recovery.
-          const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
-            version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '', confirmed: false };
-          setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
-          if (aiCanQueue) aiCanQueue = await requestAi(record.id);
-          forgetPendingUploads(userId!, [uploadId]);
+          const result = await sendPhotoUpload(token, raw, userId, prepared, privatePendingStore, photoJournalKey.current, () => epoch === lifetime.current);
+          if (epoch !== lifetime.current || !await finishPhotoUpload(raw, result, epoch)) break;
+          if (result.state !== 'STORED' || !result.media || result.media.listingId !== null || result.media.wishItemId !== null) break;
+          if (aiCanQueue) aiCanQueue = await requestAi(result.media.id);
         } catch (error) {
-          let pendingIds: string[] = [];
-          try { pendingIds = readPendingUploads(userId!).map(entry => entry.clientUploadId); }
-          catch { /* The known upload ID still blocks a duplicate in this session. */ }
-          setUnresolvedUploads(pendingIds.length ? pendingIds : [uploadId]);
-          setMessage(confirmedPrivate
-            ? `第 ${index + 1} 張照片已由後台確認私密保存，但瀏覽器無法更新恢復紀錄。請先按「重新確認上傳」，不要重傳同張照片。`
-            : `第 ${index + 1} 張照片尚未確認已私密保存：${(error as Error).message}。請先按「重新確認上傳」，不要重傳同張照片。`);
+          if (epoch === lifetime.current) setMessage(`第 ${index + 1} 張照片的原上傳仍待確認：${(error as Error).message}。請先查核，後續照片尚未上傳。`);
           break;
         }
       }
-    } finally { busyRef.current = false; setBusy(false); }
+    } finally { if (epoch === lifetime.current) { busyRef.current = false; setBusy(false); } }
   }
 
   async function save(card: Card): Promise<boolean> {
@@ -385,7 +377,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function publishReviewed(selected: Card[]) {
-    if (busyRef.current || locked || unresolvedUploads.length || !selected.length ||
+    if (busyRef.current || locked || !selected.length ||
       selected.some(card => card.published || card.publishing || card.saving || savingIds.current.has(card.id))) return;
     // Validate and freeze the entire reviewed set before showing confirmation.
     // Publication is sequential: a failed or unknown item stops the next item.
@@ -440,13 +432,40 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     finally { busyRef.current = false; setBusy(false); }
   }
 
-  function abandonUploadCheck() {
-    if (!userId || !unresolvedUploads.length || !window.confirm('僅放棄查詢紀錄，不會刪除後台照片。若上傳稍後完成，重選同張照片可能產生另一份私人草稿；確定繼續？')) return;
+  async function finishPhotoUpload(raw: string, result: PhotoUploadResult, epoch: number) {
+    if (epoch !== lifetime.current) return false;
+    photoConfirmed.current = result; setPhotoCleanup(true); setPhotoCancel(false);
+    if (result.state === 'STORED' && result.media && result.media.listingId === null && result.media.wishItemId === null) {
+      const recovered = await reload();
+      if (epoch !== lifetime.current) return false;
+      if (!recovered.some(card => card.id === result.media!.id)) { setMessage('照片原上傳已確認，但私人清單尚未同步。請再查核，不會重新上傳。'); return false; }
+    }
+    let cleared = false;
+    try { cleared = await privatePendingStore.clear(photoJournalKey.current, raw); } catch { /* Keep confirmed result, never resend for cleanup. */ }
+    if (epoch !== lifetime.current) return false;
+    if (!cleared) { setMessage('照片原結果已確認，但瀏覽器紀錄未能安全清理。請重試清理或重新讀取，不會重新上傳。'); return false; }
+    setPhotoPending(''); setPhotoCleanup(false); photoConfirmed.current = null;
+    setMessage(result.state === 'ABANDONED' ? '原上傳已安全取消；延遲請求不會重建照片。可重新選擇要上傳的商品。'
+      : !result.media ? '原上傳已確認；照片後來已移除，不會重新建立。'
+      : result.media.listingId !== null || result.media.wishItemId !== null ? '原上傳已確認；照片已被商品或願望使用，請到對應清單管理。'
+      : '原照片上傳已確認並恢復私人草稿；尚未公開刊登。');
+    return true;
+  }
+
+  async function reconcilePhoto(mode: 'read' | 'abandon' | 'cleanup', file?: File) {
+    if (!photoPending || busyRef.current || photoCleanup && (mode !== 'cleanup' || file)) return;
+    busyRef.current = true; setBusy(true);
+    const epoch = lifetime.current, raw = photoPending;
     try {
-      forgetPendingUploads(userId, unresolvedUploads);
-      setUnresolvedUploads([]);
-      setMessage('已放棄這次上傳查詢。後台若稍後完成，重新開啟頁面仍可能看到原私人照片；請檢查後再重傳。');
-    } catch { setMessage('無法安全清除上傳查詢紀錄，請稍後重試。'); }
+      const result = file ? await sendPhotoUpload(token, raw, userId, await prepareListingUploadFile(file), privatePendingStore, photoJournalKey.current, () => epoch === lifetime.current)
+        : mode === 'cleanup' ? photoConfirmed.current! : mode === 'abandon' ? await abandonPhotoUpload(token, raw, userId, () => epoch === lifetime.current)
+        : await readPhotoUpload(token, raw, userId);
+      if (epoch === lifetime.current) await finishPhotoUpload(raw, result, epoch);
+    } catch (error) {
+      if (epoch === lifetime.current) setMessage(error instanceof ApiFailure && error.status === 404
+        ? '後台尚無原上傳回執，不能推定照片未保存。可再查核、選回完全相同照片重試，或安全取消。'
+        : `照片原操作仍待確認：${(error as Error).message}。沒有自動重傳。`);
+    } finally { if (epoch === lifetime.current) { busyRef.current = false; setBusy(false); } }
   }
 
   function locate() {
@@ -468,9 +487,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       {aiAvailable === false && <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">此帳號的 AI 辨識尚未開放。照片仍可私密上傳、手動填寫並刊登；不會進入 AI 隊列。</p>}
       <div className="mt-5 flex flex-wrap gap-3">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
-          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={locked || !!unresolvedUploads.length || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={locked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold"><ImagePlus size={18} />批次選照片
-          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={locked || !!unresolvedUploads.length || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={locked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
       </div>
       <p className="mt-3 text-xs text-stone-500">可重複拍照；單次最多 12 件。大張照片會先在瀏覽器縮放至 5MB 以下；支援的相片格式依瀏覽器而定。上傳後仍保持私人狀態。</p>
       {cards.filter(card => !card.published).length >= 12 && <p role="status" className="mt-2 text-sm text-amber-800">目前有 {cards.filter(card => !card.published).length} 件私人草稿；請先確認刊登或移除部分照片，再新增商品。</p>}
@@ -482,11 +501,10 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       <div className="mt-3 flex flex-wrap gap-3">{cleanupOnly ? <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcile('cleanup')}>重試安全清理紀錄</button><button className="min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setReadTick(value => value + 1)}>重新讀取目前紀錄</button></> : <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcile('read')}>查核原刊登結果</button><button className="min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => void reconcile('retry')}>重試同一刊登</button><button className="min-h-11 rounded-xl border border-red-300 px-4 py-2 text-red-800" disabled={busy} onClick={() => setCancelConfirm(true)}>安全取消原操作</button></>}</div>
       {cancelConfirm && !cleanupOnly && <div className="mt-4 rounded-xl border border-red-200 bg-white p-3"><p>只取消尚未完成的原操作；若後台已刊登，會回報原商品，不會下架。照片不會刪除。確定取消？</p><button className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcile('abandon')}>確認安全取消</button><button className="ml-3 min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setCancelConfirm(false)}>返回查核</button></div>}
     </div>}
-    {!!unresolvedUploads.length && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm">
-      <p className="font-semibold">有 {unresolvedUploads.length} 張照片的上傳結果待確認</p>
-      <p className="mt-1">照片可能已私密存入後台；在確認前已暫停新上傳，避免同張照片重複建立。</p>
-      <button className="mt-3 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reload().catch(() => setMessage('暫時無法確認上傳結果，請稍後重試。'))}>重新確認上傳</button>
-      <button className="ml-3 mt-3 rounded-xl border border-amber-900 px-4 py-2 text-amber-900" disabled={busy} onClick={abandonUploadCheck}>放棄查詢並繼續</button>
+    {photoLegacy && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm"><p className="font-semibold">舊版照片上傳紀錄需要確認來源</p><p className="mt-1">舊紀錄沒有後台網站與原照片摘要，無法安全認定歸屬。已保留原紀錄，不匯入、不重送、不取消或刪除；請先查看原私人照片與我的商品，聯絡客服協助核對。</p><Link to="/my-listings" className="inline-block py-3 text-blue-700 underline">查看我的商品</Link></div>}
+    {photoPending && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm"><p className="font-semibold">{photoCleanup ? '照片結果已確認，紀錄待清理' : '原照片上傳結果待確認'}</p><p className="mt-1">先只讀查核原照片，不會重新上傳。重試須選回同一張照片並核對內容摘要，不能用另一張照片取代。</p><div className="mt-3 flex flex-wrap gap-3">
+      {photoCleanup ? <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('cleanup')}>重試照片安全清理</button><button className="min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setReadTick(value => value + 1)}>重新讀取目前照片紀錄</button></> : <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('read')}>查核原照片上傳</button><label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border px-4 py-2">選回同一張照片重試<input aria-label="重試原照片上傳" className="sr-only" type="file" accept="image/*" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if(file)void reconcilePhoto('read', file); event.target.value = ''; }} /></label><button className="min-h-11 rounded-xl border border-red-300 px-4 py-2 text-red-800" disabled={busy} onClick={() => setPhotoCancel(true)}>安全取消原上傳</button></>}
+      </div>{photoCancel && !photoCleanup && <div className="mt-4 rounded-xl border border-red-200 bg-white p-3"><p>只阻止尚未完成的原上傳。若已保存，會回報原照片，不會刪除它。確定取消？</p><button className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('abandon')}>確認安全取消上傳</button><button className="ml-3 min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setPhotoCancel(false)}>返回照片查核</button></div>}
     </div>}
     {message && <div role="status" className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">{message}</div>}
     {!ready && !message && <p className="text-sm text-stone-500">正在恢復私人草稿…</p>}
@@ -550,13 +568,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           <div className="mt-6 flex flex-wrap gap-3">
             {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={locked} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
             <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={locked || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={locked || !!unresolvedUploads.length || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={locked || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
             <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={locked} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
           </div>
         </>}
       </article>)}
     </section>
-    {cards.some(card => !card.published) && <div className="rounded-2xl border border-stone-200 bg-white p-5"><p className="mb-3 text-sm text-stone-600">僅送出已逐件核對的商品；任何一件失敗或結果待確認時，後續商品會停止送出。</p><button className="min-h-11 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white" disabled={locked || !!unresolvedUploads.length || !confirmedCards.length || confirmedCards.some(card => card.saving)} onClick={() => void publishReviewed(confirmedCards)}>刊登已逐件確認的商品（{confirmedCards.length}）</button></div>}
+    {cards.some(card => !card.published) && <div className="rounded-2xl border border-stone-200 bg-white p-5"><p className="mb-3 text-sm text-stone-600">僅送出已逐件核對的商品；任何一件失敗或結果待確認時，後續商品會停止送出。</p><button className="min-h-11 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white" disabled={locked || !confirmedCards.length || confirmedCards.some(card => card.saving)} onClick={() => void publishReviewed(confirmedCards)}>刊登已逐件確認的商品（{confirmedCards.length}）</button></div>}
     <Link to="/my-listings" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-5 py-3 text-sm text-blue-700">前往我的商品查看與管理</Link>
   </div>;
 }

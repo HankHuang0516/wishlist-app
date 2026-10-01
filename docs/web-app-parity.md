@@ -21,7 +21,7 @@
 | 功能 | APP 基準／後台 | 網頁狀態 | 必要驗收 |
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
-| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機補齊逐件核對與批次發布；刊登新增持久回執、加密隔離紀錄及重開只讀查核；2次實際commit後502→重開恢復→我的商品驗證無重建；真AI、照片上傳及私人草稿完整恢復仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
+| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登及照片上傳均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502／首次查核503→重開恢復原照片，POST仍1；真AI、舊紀錄來源、照片移除及私人草稿完整恢復仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；日曆切月仍待實測 | 日期切月穩定、預設30天、未填欄定位高亮 |
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 本機實作；版本與未知回應測試通過，待隔離DB實測 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
@@ -303,3 +303,18 @@
 - 截圖：原輸出目錄 `wishlist-web-create-unknown-ack-20261001.jpg`（第一次待查核）、`wishlist-web-create-recovered-v2-20261001.png`（第二次真可見原生Chrome恢復提示，包含桌面上下文）、`wishlist-web-create-mine-v2-20261001.png`、`wishlist-web-create-mine-mobile-20261001.jpg`（390×844純網頁）。較早 `wishlist-web-create-recovered-20261001.jpg` 被HMR後畫面覆蓋，沒有恢復提示，不用作該訊息證據。瀏覽器擴充曾保留已接受confirm的舊狀態；新tab唯讀回讀同一帳號，沒有再次刊登。
 - 最新網頁57檔901項、後台51檔876項單元、原生42檔852項及各TypeScript／build通過。新正規Prisma測試DB32份migration與schema agreement無差異。測試數不是分支／功能覆蓋率；main646.21KB、map1088.99KB、worker507.81KB、PWA precache5763.26KiB的效能警告仍保留。最新提交CI需另回讀，不借用7780590的綠燈。
 - 本批僅loopback合成環境，沒有正式資料修改、真MiniMax／Flickr／付款／郵件或使用者檔案刪除。照片上傳舊journal的scope/hash/CAS／移除、私人seller draft未知回執、日曆切月、真provider／跨端、四圖／免費修改／queue恢復、owner狀態、舊功能、註冊／社交／政策／通知、PWA升級與全站效能、正式migration preflight及最終CI／合併／Railway回讀全部仍待驗收。目標active，PR draft，未部署。
+
+## 2026-10-01 第十六批：照片內容核對、持久上傳回執與只讀重開（仍未部署）
+
+- 網頁首頁／設定各至少90/100的核准基準不變；本批修改刊登上傳恢復，不重算視覺分數、不改APP介面與商店素材。完整功能矩陣仍未全部通過。
+- 新增 `PhotoUploadReceipt`，保存owner＋正規化原UUID、原始上傳位元組與用途的SHA-256、STORED／ABANDONED及原media ID。照片綁到願望／商品、改用途或被實體刪除，都不釋放原上傳鍵；既有照片沒有原始位元組，migration不偽造回填hash。第33份migration拒絕壞UUID及同owner大小寫碰撞，整筆rollback；後續正式資料preflight仍必須另做。
+- 上傳與安全取消在User交易鎖內再次核對登入／API key；provider寫入後commit前再核對。取消或撤銷登入競態阻止晚到建立，僅回滾該請求獨有照片目錄／provider物件。新上傳不更動原生POST的7欄回應；舊APP省略用途的重試只接受原始圖片內容摘要相符，不接受換照片。合法舊照片明確重試需編碼內容及用途相符才能建立回執，無provider重傳。
+- 新GET只讀本人原回執＋當前照片的14欄最小投影，private/no-store，不輸出Flickr資訊、seller草稿或聯絡資料。找不到不代表未成功；hash-only兩步取消只阻止尚未完成的原上傳，已保存則回報同一照片，不刪除。移除後回報STORED／media=null而不復活照片。
+- 網頁以API／帳號／功能隔離AES-GCM journal保存準備後圖片SHA-256、用途與原UUID，不另存照片位元組或檔名。POST前先原子保存，儲存不可用／紀錄損壞則凍結，沒有明文降級。成功ACK也需GET核對owner／hash／用途／圖片URL；失聯不自動第二次POST。明確重試要重新選回完全同內容照片；選錯照片不送HTTP。
+- 已確認回執但草稿列表尚未包含該原照片、或本機相符值清理失败，保持「已確認，紀錄待清理」，只重讀／重試清理，不重傳。原紀錄未解決就停止後續照片及公開刊登；切帳號／離頁後的晚到結果不得清除另一scope。舊無API／內容hash的明文紀錄只隔離保留，不能猜測採用或刪除；完整可用舊紀錄恢復仍待補。
+- 新照片helper22項（含真IndexedDB加密／scope／CAS）及批次頁35項通過，後者含5個新增恢復／錯照片／取消／舊來源／损壞案例。淘汰不安全的舊ID-only恢復helper及其舊測試，保留且擴強2項所有私密照片分頁驗證；測試數不是功能／分支覆蓋率。
+- 後台新增10項真HTTP／PostgreSQL／Sharp／本機儲存整合，加原媒體19項共29項通過；3項新增真migration隔離schema案例通過。舊願望移除race測試原本故意利用大小寫迫使重複provider寫入，新的正規化回執不再走該路徑；改驗同鍵大小寫重試＋移除競態無provider重寫、無照片復活。另有真正未知上傳暫停provider後安全取消的競態測試，不增加逾時或放寬正式限制。
+- 合成買家505在Chrome實際選擇自有橘燈fixture。真正commit照片後故意回502，首次回執GET先拒503；頁面凍結並明示待查核。重新開頁自動只GET，恢复同一私人照片，顯示「尚未公開刊登」。後台回讀：photo POST1／receipt GET2／abandon0、1份STORED回執、1份照片、公開新商品0；無額外POST。AI在此隔離帳號未開放，畫面如實說明；這不是MiniMax辨識或Flickr傳輸驗收。
+- 390×844實際網頁documentWidth375≤390，原照片縮圖naturalWidth／Height320。登出改登入合成賣家506，再進 `/sell` 為無私人照片，沒有買家照片或待確認UI。桌面／窄屏與失聯畫面保留於原輸出目錄：`wishlist-web-photo-upload-unknown-20261001.jpg`、`wishlist-web-photo-upload-recovered-20261001.jpg`、`wishlist-web-photo-upload-mobile-20261001.jpg`；實際圖片已檢視，非AI概念圖。
+- 最新client58檔923項、server51檔876項單元、mobile42檔852項、各build／TypeScript通過。全新UTF8測試DB33份migration及schema agreement無差異，完整22檔331項真HTTP／DB通過。中途誤用繼承SQL_ASCII的隔離DB造成中文匹配失敗，改建明確UTF8測試DB重驗，未改正式匹配行為或刪保留資料；更早external intake一次404重驗通過但尚無確證原因，不宣稱已消除全部測試不穩定。最新HEAD CI需另回讀。
+- 主JS651.02KB、地圖1088.99KB、worker507.81KB及PWA precache5767.85KiB效能警告仍保留。批次私人照片移除未知回執、seller草稿PUT失聯／版本衝突、日曆切月、真MiniMax／Flickr／跨端、行銷四圖／免費重修／queue、舊功能與註冊／通知／社交／政策、舊PWA快取、全站響應式／效能、正式資料migration preflight、最終CI／合併／Railway回讀全部仍待驗收。PR仍draft，不部署、不把本批當全目標完成。

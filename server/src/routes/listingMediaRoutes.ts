@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
 import { adoptLegacyBatchPhoto, deleteUnusedListingMedia, getListingAiAvailability, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
+import { abandonPhotoUpload, getPhotoUploadReceipt } from '../controllers/photoUploadReceiptController';
 
 const router = Router();
 const slots = new PhotoUploadSlots(1);
@@ -37,6 +38,8 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
         return mediaError(res, error);
     } finally { release(); }
 });
+router.get('/upload-receipts/:clientUploadId', authenticateToken, getPhotoUploadReceipt);
+router.post('/upload-receipts/:clientUploadId/abandon', authenticateToken, uploads, abandonPhotoUpload);
 router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadId);
 router.get('/unused', authenticateToken, myUnusedListingMedia);
 router.get('/ai-availability', authenticateToken, getListingAiAvailability);

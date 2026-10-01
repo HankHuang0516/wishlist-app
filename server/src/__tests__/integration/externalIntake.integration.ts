@@ -558,6 +558,7 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/sources/${reviewSourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
                 confirmRights: true })).status).toBe(200);
             const staged = await admin(`/sources/${reviewSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.body).toMatchObject({ items: expect.any(Array) });
             expect(staged.status).toBe(202);
             const { id } = staged.body.items[0];
             const first = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });

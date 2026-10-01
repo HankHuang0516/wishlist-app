@@ -151,20 +151,15 @@ describe('unused wish photo removal / real HTTP, PostgreSQL and local photo stor
         expect(await prisma.item.count({ where: { wishlistId: parent.id } })).toBe(attached.status === 201 ? 1 : 0);
         expect(await prisma.listingMedia.count({ where: { id: p.mediaId } })).toBe(attached.status === 201 ? 1 : 0);
     });
-    it('rejects an already-started upload when removal commits during provider write, without orphaning the new files', async () => {
-        const p = await photo(), originalWrite = ListingMediaStorage.prototype.write;
-        let arrived!: () => void, proceed!: () => void;
-        const ready = new Promise<void>(resolve => { arrived = resolve; }), release = new Promise<void>(resolve => { proceed = resolve; });
-        jest.spyOn(ListingMediaStorage.prototype, 'write').mockImplementation(async function(this: ListingMediaStorage, id, image, thumbnail) {
-            await originalWrite.call(this, id, image, thumbnail); arrived(); await release;
-        });
-        // Legacy upload namespaces were case-sensitive. This variant proceeds
-        // past lookup, but the canonical receipt must still fence its commit.
-        const late = upload(p.uploadId.toUpperCase());
-        await ready;
-        let removed;
-        try { removed = await remove(p.uploadId, p.mediaId); } finally { proceed(); }
-        expect(removed.status).toBe(200); expect((await late).res.status).toBe(409);
+    it('canonicalizes case-variant retries before provider work and fences later wish removal without duplicate files', async () => {
+        const p = await photo(), write = jest.spyOn(ListingMediaStorage.prototype, 'write');
+        // A case variant now resolves the SAME durable receipt before provider
+        // work. Never wait for the obsolete duplicate-write path to occur.
+        const [late, removed] = await Promise.all([upload(p.uploadId.toUpperCase()), remove(p.uploadId, p.mediaId)]);
+        expect(removed.status).toBe(200); expect([200,409]).toContain(late.res.status);
+        if(late.res.status===200)expect(late.mediaId).toBe(p.mediaId);
+        expect(write).not.toHaveBeenCalled();
+        expect((await upload(p.uploadId.toUpperCase())).res.status).toBe(409);
         expect(await prisma.listingMedia.count({ where: { ownerUserId: owner } })).toBe(0);
         expect(await fs.readdir(folder)).toEqual([p.mediaId]);
     });

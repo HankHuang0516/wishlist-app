@@ -63,6 +63,7 @@ model User {
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   profileUpdateReceipts ProfileUpdateReceipt[]
   listingCreateReceipts ListingCreateReceipt[]
+  photoUploadReceipts PhotoUploadReceipt[]
   listings        Listing[]
   listingReports  ListingReport[]
   listingReportOperations ListingReportOperation[]
@@ -162,6 +163,18 @@ model MarketingJob {
 }
 
 // No FK to Listing: physical erasure must not free its creation identity.
+model PhotoUploadReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientUploadId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  mediaId String? @db.Uuid
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientUploadId])
+}
+
 model ListingCreateReceipt {
   id              String   @id @default(uuid())
   userId          Int

@@ -6,6 +6,7 @@ import ListingBatchPage from './ListingBatchPage';
 import { API_URL } from '../config';
 import { listingCreationJournal, parseListingCreationJournal } from '../lib/listingCreationWeb';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
+import { photoUploadJournal, parsePhotoUploadJournal } from '../lib/listingPhotoUploadWeb';
 const pending = vi.hoisted(() => new Map<string, string>());
 vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
   get: vi.fn(async (key: string) => pending.get(key) ?? null),
@@ -42,6 +43,7 @@ describe('web private batch listing flow', () => {
   let holdPublicationAck = false;
   let releasePublicationAck: (() => void) | undefined;
   const receipts = new Map<string, { receipt: Record<string, unknown>; listing: Record<string, unknown> | null }>();
+  const photoReceipts = new Map<string, { receipt: Record<string, unknown>; media: Record<string, unknown> | null }>();
   beforeEach(() => {
     calls.length = 0;
     loseFirstPublicationResponse = false;
@@ -64,7 +66,7 @@ describe('web private batch listing flow', () => {
     releaseOldAccountList = undefined;
     holdPublicationAck = false; releasePublicationAck = undefined;
     localStorage.clear();
-    pending.clear(); receipts.clear();
+    pending.clear(); receipts.clear(); photoReceipts.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
     URL.revokeObjectURL = vi.fn();
@@ -103,15 +105,22 @@ describe('web private batch listing flow', () => {
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
       if (path.endsWith('/listing-media') && method === 'POST') {
         currentUploadId = String((init?.body as FormData).get('clientUploadId'));
+        const journal = await parsePhotoUploadJournal(await photoUploadJournal((init?.body as FormData).get('image') as File, currentUploadId));
+        const base = API_URL.replace(/\/api\/?$/, ''), createdAt = new Date().toISOString();
+        const media = { id: mediaId, ownerUserId: 19, clientUploadId: currentUploadId, capturePurpose: 'BATCH_ITEM', contentHash: 'b'.repeat(64), listingId: null, wishItemId: null,
+          imageUrl: `${base}/api/listing-media/${mediaId}/image`, thumbnailUrl: `${base}/api/listing-media/${mediaId}/thumbnail`, width: 320, height: 240, byteSize: 1000, createdAt };
+        photoReceipts.set(currentUploadId, { receipt: { clientUploadId: currentUploadId, requestHash: journal.requestHash, state: 'STORED', mediaId, createdAt }, media });
         if (holdUploadAck) await new Promise<void>(resolve => { releaseUploadAck = resolve; });
         if (loseUploadResponse) throw new Error('upload ACK lost');
         showUploadedPrivatePhoto = true;
-        return { ok: true, status: 201, json: async () => ({ id: mediaId }) };
+        return { ok: true, status: 201, json: async () => ({ id: mediaId, imageUrl: media.imageUrl, thumbnailUrl: media.thumbnailUrl, width: media.width, height: media.height, byteSize: media.byteSize, createdAt }) };
       }
-      if (path.includes('/listing-media/by-upload-id/')) {
+      if (path.includes('/listing-media/upload-receipts/')) {
+        const id = path.split('/upload-receipts/')[1].split('/')[0];
+        if (method === 'POST' && path.endsWith('/abandon') && !photoReceipts.has(id)) photoReceipts.set(id, { receipt: { clientUploadId: id, requestHash: JSON.parse(String(init?.body)).requestHash, state: 'ABANDONED', mediaId: null, createdAt: new Date().toISOString() }, media: null });
         uploadLookups++;
-        if (uploadLookups === 1) return { ok: false, status: 404, json: async () => ({ error: 'not yet visible' }) };
-        return { ok: true, status: 200, json: async () => ({ id: mediaId, listingId: null, wishItemId: null }) };
+        if (loseUploadResponse && uploadLookups === 1 || !photoReceipts.has(id)) return { ok: false, status: 404, json: async () => ({ error: 'not yet visible' }) };
+        return { ok: true, status: 200, json: async () => photoReceipts.get(id) };
       }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: aiGetStatus, draft: aiGetStatus === 'COMPLETED' ? ai : null }) };
@@ -306,7 +315,9 @@ describe('web private batch listing flow', () => {
     await act(async () => releaseUploadAck!());
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(calls.some(call => call.path.endsWith('/ai-draft') && call.method === 'POST')).toBe(false);
-    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toContain(currentUploadId);
+    expect(pending.get(await pendingRequestKey(API_URL, 19, 'listing-photo'))).toContain(currentUploadId);
+    expect(pending.has(await pendingRequestKey(API_URL, 20, 'listing-photo'))).toBe(false);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
     expect(localStorage.getItem('wishlist:listing-upload-pending:20')).toBeNull();
     expect(screen.queryByDisplayValue('二手檯燈')).toBeNull();
   });
@@ -603,15 +614,20 @@ describe('web private batch listing flow', () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
     const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
-    await screen.findByText(/有 1 張照片的上傳結果待確認/);
+    await screen.findByText('原照片上傳結果待確認');
+    await screen.findByText(/第 1 張照片的原上傳仍待確認/);
     expect(input).toBeDisabled();
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
-    fireEvent.click(screen.getByText('重新確認上傳'));
-    await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
+    fireEvent.click(screen.getByText('查核原照片上傳'));
+    await screen.findByText('照片結果已確認，紀錄待清理');
+    expect(input).toBeDisabled();
+    fireEvent.click(screen.getByText('重試照片安全清理'));
+    await waitFor(() => expect(screen.queryByText('照片結果已確認，紀錄待清理')).toBeNull());
     expect(await screen.findByText('等待辨識或手動填寫')).toBeInTheDocument();
     expect(input).not.toBeDisabled();
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
+    expect(pending.has(await pendingRequestKey(API_URL, 19, 'listing-photo'))).toBe(false);
   });
 
   it('keeps a confirmed private photo visible and stops the batch when clearing its browser journal fails', async () => {
@@ -619,38 +635,79 @@ describe('web private batch listing flow', () => {
     const input = await uploadInput();
     await waitFor(() => expect(input).not.toBeDisabled());
     showUploadedPrivatePhoto = true;
-    const realRemoveItem = localStorage.removeItem.bind(localStorage);
-    const realGetItem = localStorage.getItem.bind(localStorage);
-    let denyJournalRead = false;
-    vi.spyOn(localStorage, 'getItem').mockImplementation(key => {
-      if (key === 'wishlist:listing-upload-pending:19' && denyJournalRead)
-        throw new DOMException('Storage unavailable', 'SecurityError');
-      return realGetItem(key);
-    });
-    vi.spyOn(localStorage, 'removeItem').mockImplementation(key => {
-      if (key === 'wishlist:listing-upload-pending:19') {
-        denyJournalRead = true;
-        throw new DOMException('Storage unavailable', 'SecurityError');
-      }
-      return realRemoveItem(key);
-    });
+    vi.mocked(privatePendingStore.clear).mockRejectedValueOnce(new Error('Storage unavailable'));
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' }),
       new File(['second'], 'cup.jpg', { type: 'image/jpeg' })] } });
     await screen.findByDisplayValue('二手檯燈');
-    expect(await screen.findByText(/已由後台確認私密保存/)).toBeInTheDocument();
-    expect(screen.getByText(/有 1 張照片的上傳結果待確認/)).toBeInTheDocument();
+    expect(await screen.findByText(/照片原結果已確認，但瀏覽器紀錄未能安全清理/)).toBeInTheDocument();
+    expect(screen.getByText('照片結果已確認，紀錄待清理')).toBeInTheDocument();
+    expect(screen.queryByLabelText('重試原照片上傳')).toBeNull();
     expect(input).toBeDisabled();
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
-    vi.mocked(localStorage.removeItem).mockRestore();
-    vi.mocked(localStorage.getItem).mockRestore();
-    fireEvent.click(screen.getByText('重新確認上傳'));
-    await waitFor(() => expect(screen.queryByText(/上傳結果待確認/)).toBeNull());
+    fireEvent.click(screen.getByText('重試照片安全清理'));
+    await waitFor(() => expect(screen.queryByText('照片結果已確認，紀錄待清理')).toBeNull());
     expect(input).not.toBeDisabled();
     expect(screen.getByDisplayValue('二手檯燈')).toBeInTheDocument();
-    expect(calls.filter(call => call.path.endsWith(`/listing-media/${mediaId}/ai-draft`) && call.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(call => call.path.endsWith(`/listing-media/${mediaId}/ai-draft`) && call.method === 'POST')).toHaveLength(0);
     expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
     expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toBeNull();
+  });
+
+  it('reopens a committed unknown photo with GET only and keeps the original upload key', async () => {
+    loseUploadResponse = true;
+    const first = render(view()), input = await uploadInput();
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText(/第 1 張照片的原上傳仍待確認/);
+    const key = await pendingRequestKey(API_URL, 19, 'listing-photo'), original = pending.get(key)!;
+    expect((await parsePhotoUploadJournal(original)).clientUploadId).toBe(currentUploadId);
+    first.unmount(); render(view());
+    await screen.findByText(/原照片上傳已確認並恢復私人草稿/);
+    expect(pending.has(key)).toBe(false);
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(call => call.path.includes('/upload-receipts/') && call.method === 'GET')).toHaveLength(2);
+    expect(calls.some(call => call.path.includes('/by-upload-id/'))).toBe(false);
+  });
+
+  it('rejects a different photo before retry HTTP and explicitly resends the same bytes and ID', async () => {
+    const original = new File(['original-source'], 'lamp.jpg', { type: 'image/jpeg' });
+    const raw = await photoUploadJournal(original, '44444444-4444-4444-8444-444444444444');
+    pending.set(await pendingRequestKey(API_URL, 19, 'listing-photo'), raw); render(view());
+    await screen.findByText(/恢復仍待確認/);
+    fireEvent.change(screen.getByLabelText('重試原照片上傳'), { target: { files: [new File(['different-source'], 'cup.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText(/照片原操作仍待確認/);
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('重試原照片上傳'), { target: { files: [original] } });
+    await screen.findByText(/原照片上傳已確認並恢復私人草稿/);
+    expect(currentUploadId).toBe('44444444-4444-4444-8444-444444444444');
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(pending.size).toBe(0);
+  });
+
+  it('requires two-step hash-only cancellation and never deletes or uploads a photo', async () => {
+    const raw = await photoUploadJournal(new File(['original-source'], 'lamp.jpg', { type: 'image/jpeg' }));
+    pending.set(await pendingRequestKey(API_URL, 19, 'listing-photo'), raw); render(view());
+    await screen.findByText(/恢復仍待確認/); fireEvent.click(screen.getByText('安全取消原上傳'));
+    expect(calls.some(call => call.method === 'POST')).toBe(false);
+    fireEvent.click(screen.getByText('確認安全取消上傳'));
+    await screen.findByText(/原上傳已安全取消/); await waitFor(() => expect(screen.getByLabelText('拍一件商品')).toBeEnabled());
+    const posts = calls.filter(call => call.method === 'POST'); expect(posts).toHaveLength(1);
+    expect(posts[0].body).toBe(JSON.stringify({ requestHash: (await parsePhotoUploadJournal(raw)).requestHash }));
+    expect(calls.some(call => call.method === 'DELETE')).toBe(false); expect(pending.size).toBe(0);
+  });
+
+  it('quarantines unscoped legacy photo identifiers without deleting, adopting or retransmitting', async () => {
+    const key = 'wishlist:listing-upload-pending:19', raw = JSON.stringify([{ clientUploadId: '44444444-4444-4444-8444-444444444444', createdAt: Date.now() }]);
+    localStorage.setItem(key, raw); render(view()); await screen.findByText('舊版照片上傳紀錄需要確認來源');
+    expect(screen.getByLabelText('拍一件商品')).toBeDisabled(); expect(localStorage.getItem(key)).toBe(raw);
+    expect(calls.some(call => call.path.includes('/by-upload-id/') || call.method !== 'GET')).toBe(false);
+    expect(screen.queryByText('放棄查詢並繼續')).toBeNull(); expect(pending.size).toBe(0);
+  });
+
+  it('refuses unreadable encrypted photo proof before inventory or upload HTTP', async () => {
+    pending.set(await pendingRequestKey(API_URL, 19, 'listing-photo'), '{bad'); render(view());
+    await screen.findByText(/此瀏覽器無法讀取安全刊登紀錄/);
+    expect(screen.getByLabelText('拍一件商品')).toBeDisabled(); expect(calls).toHaveLength(0); expect(pending.size).toBe(1);
   });
 
   it('does not display a late old-account private draft after switching accounts', async () => {

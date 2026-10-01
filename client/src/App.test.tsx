@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import App from './App';
 import { Analytics } from './utils/analytics';
@@ -12,7 +12,7 @@ describe('App', () => {
         fireEvent.click(screen.getByRole('link', { name: '登入' }));
         await screen.findByRole('heading', { name: '歡迎回來' });
         expect(screen.getByRole('link', { name: 'Wishlist.ai' })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: '隱私權政策' })).toHaveAttribute('href', '/privacy');
+        expect(within(screen.getByRole('contentinfo')).getByRole('link', { name: '隱私權政策' })).toHaveAttribute('href', '/privacy');
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
     it('preserves reset-link parameters for the form while tracking only its route category', async () => {
@@ -23,7 +23,7 @@ describe('App', () => {
         expect(track.mock.calls).toEqual([['/reset-password']]);
         expect(window.location.search).toBe('?token=synthetic-privacy-only');
         expect(window.location.hash).toBe('#synthetic-fragment');
-        fireEvent.click(screen.getByRole('link',{name:'隱私權政策'}));
+        fireEvent.click(within(screen.getByRole('contentinfo')).getByRole('link',{name:'隱私權政策'}));
         await screen.findByRole('heading',{name:'隱私權政策'});
         expect(track.mock.calls).toEqual([['/reset-password'],['/privacy']]);
     });

@@ -1,5 +1,5 @@
 import express from 'express';
-import request from 'supertest';
+import { createLoopbackRequest } from './loopbackHttp';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
@@ -13,6 +13,7 @@ const previousSecret = process.env.JWT_SECRET;
 const secret = 'payment-availability-isolated-test-only';
 process.env.JWT_SECRET = secret;
 const app = express(); app.set('trust proxy', 1); app.use(express.json());
+const isolatedHttp=createLoopbackRequest(app);
 app.use('/api/users', userRoutes); app.use('/api/payment', paymentRoutes);
 let freeId: number, legacyPremiumId: number;
 const token = (id: number) => jwt.sign({ id, authVersion: 0 }, secret);
@@ -39,12 +40,12 @@ afterAll(async () => {
 
 describe('legacy payment controls are closed until provider verification exists', () => {
     it.each(paths)('requires authentication for %s', async path => {
-        expect((await request(app).post(path).send({ type: 'premium', purchaseType: 'PREMIUM', details: { amount: 90 } })).status).toBe(401);
+        expect((await isolatedHttp.post(path).send({ type: 'premium', purchaseType: 'PREMIUM', details: { amount: 90 } })).status).toBe(401);
     });
 
     it.each(paths)('refuses %s without changing free account or purchase history', async path => {
         const before = await prisma.purchase.count({ where: { userId: freeId } });
-        const result = await request(app).post(path).set('Authorization', 'Bearer ' + token(freeId))
+        const result = await isolatedHttp.post(path).set('Authorization', 'Bearer ' + token(freeId))
             .send({ type: 'premium', purchaseType: 'PREMIUM', prime: 'synthetic-prime', details: { amount: 90 } });
         expect(result.status).toBe(503);
         expect(result.body.errorCode).toBe('PAYMENT_VERIFICATION_REQUIRED');
@@ -55,7 +56,7 @@ describe('legacy payment controls are closed until provider verification exists'
 
     it.each(paths)('preserves existing Premium rights through %s', async path => {
         const before = await prisma.purchase.count({ where: { userId: legacyPremiumId } });
-        const response = await request(app).post(path).set('Authorization', 'Bearer ' + token(legacyPremiumId))
+        const response = await isolatedHttp.post(path).set('Authorization', 'Bearer ' + token(legacyPremiumId))
             .send({ purchaseType: 'limit', details: { amount: 30 }, prime: 'synthetic-prime' });
         expect(response.status).toBe(503);
         expect(await prisma.user.findUniqueOrThrow({ where: { id: legacyPremiumId }, select: { isPremium: true } })).toEqual({ isPremium: true });

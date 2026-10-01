@@ -1,5 +1,5 @@
 import express from 'express';
-import request from 'supertest';
+import { createLoopbackRequest } from './loopbackHttp';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
@@ -9,8 +9,9 @@ require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(proce
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
 const secret = 'wish-match-integration-only-not-production'; process.env.JWT_SECRET = secret;
 const app = express(); app.use(express.json()); app.use('/api/listings', listingRoutes);
+const isolatedHttp=createLoopbackRequest(app);
 let buyer: number, seller: number, third: number, wishlistId: number, wishId: number;
-const call = (path: string, userId = buyer) => request(app).get('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: userId }, secret, { algorithm: 'HS256' }));
+const call = (path: string, userId = buyer) => isolatedHttp.get('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: userId }, secret, { algorithm: 'HS256' }));
 const match = (query: Record<string, string> = {}, userId = buyer) => call('/matches', userId).query({ wishItemId: String(wishId), ...query });
 async function seed(title = 'Sony 相機 A7', overrides: Record<string, unknown> = {}, location = { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 }) {
     const mediaId = randomUUID(); const row = await prisma.listing.create({ data: { ownerUserId: seller, clientListingId: randomUUID(), requestHash: 'synthetic-only', title, description: '合成測試實拍相機', brand: 'Sony', category: 'electronics', price: 4000, currency: 'TWD', status: 'ACTIVE', publishedAt: new Date(), lastVerifiedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), deliveryMethods: ['MEETUP'], ...overrides, location: { create: location }, media: { create: { id: mediaId, ownerUserId: seller, imageUrl: getApiUrl() + '/listing-media/' + mediaId + '/image', thumbnailUrl: getApiUrl() + '/listing-media/' + mediaId + '/thumbnail', contentHash: 'synthetic-no-file' } } } }); return row.id;
@@ -23,7 +24,7 @@ beforeEach(async () => {
 afterAll(async () => { if (buyer) { await prisma.listingMedia.deleteMany({ where: { ownerUserId: seller } }); await prisma.user.deleteMany({ where: { id: { in: [buyer, seller, third] } } }); } await prisma.$disconnect(); });
 describe('private explainable matching / PostgreSQL', () => {
     it('requires JWT and authentic ownership, even when the wishlist is public', async () => {
-        expect((await request(app).get('/api/listings/matches').query({ wishItemId: String(wishId) })).status).toBe(401); expect((await match({}, third)).status).toBe(404);
+        expect((await isolatedHttp.get('/api/listings/matches').query({ wishItemId: String(wishId) })).status).toBe(401); expect((await match({}, third)).status).toBe(404);
         await prisma.wishlist.update({ where: { id: wishlistId }, data: { isPublic: true } }); expect((await match({}, third)).status).toBe(404); expect((await call('/match-wishes', third)).body.items).toEqual([]);
     });
     it('returns matching public listings with reasons, budget, no private contacts or meetup data', async () => {

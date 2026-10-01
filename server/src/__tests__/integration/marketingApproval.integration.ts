@@ -1,5 +1,5 @@
 import express from 'express';
-import request from 'supertest';
+import { createLoopbackRequest } from './loopbackHttp';
 import jwt from 'jsonwebtoken';
 import {randomUUID} from 'crypto';
 import prisma from '../../lib/prisma';
@@ -11,9 +11,10 @@ if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Equal i
 const saved={JWT_SECRET:process.env.JWT_SECRET,MARKETING_ASSISTANT_ENABLED:process.env.MARKETING_ASSISTANT_ENABLED,WISHLIST_MINIMAX_CALLBACK_TOKEN:process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN};
 const secret='marketing-approval-isolated-only';process.env.JWT_SECRET=secret;process.env.MARKETING_ASSISTANT_ENABLED='1';process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN='synthetic-worker-not-called-no-external-provider';
 const app=express();app.set('trust proxy',1);app.use(express.json());app.use('/api/marketing',routes);
+const isolatedHttp=createLoopbackRequest(app);
 let users:number[]=[],sourceMediaId:string,listingId:string,jobId:string,ids:string[]=[],ip=0;
 const copy='合成橘色二手檯燈，售價 NT$350。僅供隔離驗收，非真實商品。';
-const http=(method:'get'|'post',path:string,user=users[0])=>request(app)[method]('/api/marketing'+path).set('Authorization','Bearer '+jwt.sign({id:user,authVersion:0},secret)).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
+const http=(method:'get'|'post',path:string,user=users[0])=>isolatedHttp[method]('/api/marketing'+path).set('Authorization','Bearer '+jwt.sign({id:user,authVersion:0},secret)).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
 const body=():ReturnType<typeof marketingApprovalBody>=>({kind:'APPROVE',jobId,sourceMediaId,listingId,expectedVersion:1,selectedMediaIds:ids,copy});
 const send=(id:string,payload:ReturnType<typeof marketingApprovalBody>=body(),user=users[0])=>http('post','/approvals/'+id,user).send(payload);
 const read=(id:string,user=users[0])=>http('get','/approvals/'+id,user);

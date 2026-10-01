@@ -18,6 +18,7 @@ const FriendProfilePage = createLazyPage(() => import('./pages/FriendProfilePage
 const ChangePasswordPage = createLazyPage(() => import('./pages/ChangePasswordPage'));
 const PurchaseHistoryPage = createLazyPage(() => import('./pages/PurchaseHistoryPage'));
 const ForgotPasswordPage = createLazyPage(() => import('./pages/ForgotPasswordPage'));
+const ResendVerification = createLazyPage(() => import('./pages/ResendVerification'));
 const EmailVerification = createLazyPage(() => import('./pages/EmailVerification'));
 const ResetPassword = createLazyPage(() => import('./pages/ResetPassword'));
 const TermsOfUse = createLazyPage(() => import('./pages/TermsOfUse'));
@@ -67,6 +68,7 @@ function App() {
             <Route path="partners" element={<PartnerPage />} />
             <Route path="account-deletion" element={<AccountDeletionPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="resend-verification" element={<ResendVerification />} />
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />

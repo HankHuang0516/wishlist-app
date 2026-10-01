@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十四批：帳號明確確認與恢復（仍未部署）
+
+- 對照APP AuthScreen／authFlow：驗證信不再開頁即POST或使用回傳JWT切換帳號，載入後明確確認才送出；提供web／APP weesh連結及64位碼的手動入口，不跳到其他app。新增/resend-verification，保留忘記密碼、註冊、登入、政策入口。所有帳號頁有繁中／英文標籤、alert／status、44px操作；新密碼8–72字元、英數與允許符號／再次確認，註冊姓名改為顯示名稱、09開頭台灣手機，原web生日保留為選填且驗證日期。
+- 登入先GET /api/users/me確認回傳user ID一致，再允許原子session保存／安全next返回。註冊嚴格核對user及expected email／required／sent，不保存未驗證JWT；未寄成信仍顯示已建立且提供重新寄信，不誘導重複建立。忘記／resend採中性「已收到請求／符合條件才嘗試寄送」，不依raw server文字透露帳號存在或假稱送達。
+- 同步dispatch gate涵蓋登入與profile兩階段、所有表單輸入busy鎖定；同頁多次點擊只送一次。離頁／query token變更會取消並忽略晚到回覆，已切帳號頁不被改寫；no-store／redirect:error／期限保留。只有完整verification／password revocation ACK才成功，5xx／斷線／不完整回覆顯示未知；註冊／驗證／重設此頁未知時不再提供原操作重送。沒有redirect timer、沒有password／link本機草稿；未知鎖是頁面內狀態，reload仍需明確操作，原auth API沒有歷史回執，不能把使用過的token400當成原操作成功證据。確認reset只重查現有session，不直接登出不相關帳號。
+- Chrome production建置＋compiled真auth／user handlers＋新UTF8 DB wishlist_marketplace_test_auth_20261002_34。QA明確標示合成帳號、emailService失敗stub、正式寄信0；CLI register2／201且sent=false。原合成帳號1登入後，另一帳號2驗證開頁POST0、點確認POST1／200，資料庫isEmailVerified=true；Chrome /api/users/me最小讀回仍id1／原名稱，不序列化raw JWT／完整profile作證據。帳號3verify真transaction完成後故意502，UI未知／submit0，reload不增加POST；DB true但UI不假稱成功。resend429保留輸入、明確重按才200中性請求；最終建置另實際貼weesh合成失效碼、明確POST400並顯示申請新信。手機390×844 document375，登入時header設定1個、password欄44px／min8且保持空白。最後文案／weesh支援改動後依要求reload核對註冊及失效碼；正常／失聯驗證核心未變。HTTP production pending scope仍安全拒絕Settings讀取／修改，不把此頁當設定成功。
+- 新增37項契約／實際React頁面案例；focused4檔48、最新Web83檔1268及TypeScript／Vite build通過，完整pre-push退出0（Server56檔913＋3skipped／HTTP DB30檔444／Native42檔852／42 migrations／schema一致）。首輪marketingRequest原200／409 mismatch、第二輪externalIntake15s逾時／Jest不退出、第三輪marketingAssistant socket hang up均保留；停止的是自有失敗Jest。原transport ephemeral listener改九suite的owned IPv4 listener，setup原queued200／hash亦明確assert；25 focused與完整444通過。沒有變更production後台、原斷言／15s期限，沒有假稱已証實生產HTTP根因。最後前端重跑發現舊marketing controlled finish尚未初始化的測試競態，兩項晚到／pending測試先等待實際mock dispatch，原斷言保留後全1268重驗。初次erasableSyntaxOnly constructor語法及重複privacy link查詢改明確class欄位／原footer範圍，沒有放寬驗收。
+- 原outputs保存 `wishlist-web-auth-flow-evidence-20261002.json`及verified／verification-unconfirmed／email-request／reset-fields／register-fields手機原圖。本批主JS330.87KB／PWA91entries5905.23KiB／地圖警告保留；新提交CI另精確回讀記入JSON／roadmap。原生程式未改、其他工作區改動不纳入；實際瀏覽器沒有輸入新密碼或提交註冊／重設，真mail收取、完整憑證輸入／跨端／正式端仍待驗收。完整管理／舊願望／全語系／真provider／PWA／正式preflight／合併／Railway回讀繼續，目標active／PR82 draft／未部署；首頁與設定各90%、功能100%、原站風格／單一設定及APP不改均保留。
+
 ## 2026-10-02 第三十三批：網址參數與分析隔離（仍未部署）
 
 - 原先index全域SDK及RouteTracker的pathname＋search可能讓query進入預設分析metadata；本批改為只送白名單頁面類別／登入方式／至多100項件數。商品／願望／帳號ID、願望名稱、商品URL、query／hash及任意custom參數不跨分析邊界，RouteTracker不再console輸出網址。驗證信／重設密碼仍保留原query供原auth流程使用，不把移除分析參數誤做破壞登入連結。
@@ -166,7 +175,7 @@
 | 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 既有刪除；本機合併入口 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
-| 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機補齊原子session、損壞恢復、跨帳號／分頁隔離與登入返回；註冊／驗證／忘記密碼仍待完整回歸 | 登入後回原功能、失效、切帳號清理 |
+| 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。政策客服、完整英文／其他社交流程與正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 

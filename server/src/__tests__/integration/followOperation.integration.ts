@@ -1,5 +1,5 @@
 import express from 'express';
-import request from 'supertest';
+import { createLoopbackRequest } from './loopbackHttp';
 import jwt from 'jsonwebtoken';
 import {randomUUID} from 'crypto';
 import prisma from '../../lib/prisma';
@@ -9,10 +9,11 @@ require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(proce
 if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Explicit isolated database required');
 const previous=process.env.JWT_SECRET,secret='follow-operations-isolated-only';process.env.JWT_SECRET=secret;
 const app=express();app.use(express.json());app.use('/api/users',socialRoutes);
+const isolatedHttp=createLoopbackRequest(app);
 let owner:number,other:number,target:number,second:number,token:string,otherToken:string;
 const route='/api/users/me/follow-operations/';
-const post=(key:string,body:object,auth=token)=>request(app).post(route+key).set('Authorization','Bearer '+auth).send(body);
-const read=(key:string,auth=token)=>request(app).get(route+key).set('Authorization','Bearer '+auth);
+const post=(key:string,body:object,auth=token)=>isolatedHttp.post(route+key).set('Authorization','Bearer '+auth).send(body);
+const read=(key:string,auth=token)=>isolatedHttp.get(route+key).set('Authorization','Bearer '+auth);
 const body=(wanted=true,expectedVersion=0,id=target)=>({targetUserId:id,wanted,expectedVersion});
 beforeAll(async()=>{const users=await Promise.all(['owner','other','target','second'].map(role=>prisma.user.create({data:{phoneNumber:role+'-'+randomUUID(),password:'fixture'}})));[owner,other,target,second]=users.map(u=>u.id);token=jwt.sign({id:owner,authVersion:0},secret);otherToken=jwt.sign({id:other,authVersion:0},secret);});
 beforeEach(async()=>{await prisma.follow.deleteMany({where:{followerId:{in:[owner,other]}}});await prisma.followOperationReceipt.deleteMany({where:{userId:{in:[owner,other]}}});await prisma.user.update({where:{id:owner},data:{followingVersion:0,maxFollowing:1,isPremium:false,authVersion:0}});});
@@ -31,31 +32,31 @@ describe('durable follow receipts, compatibility and atomic capacity',()=>{
     });
     it('legacy mutations advance the same revision; old receipt never rewrites later state',async()=>{
         const key=randomUUID();expect((await post(key,body())).body.receipt.state).toBe('APPLIED');
-        const legacy=await request(app).delete('/api/users/'+target+'/follow').set('Authorization','Bearer '+token);expect(legacy.status).toBe(200);
+        const legacy=await isolatedHttp.delete('/api/users/'+target+'/follow').set('Authorization','Bearer '+token);expect(legacy.status).toBe(200);
         const old=await read(key);expect(old.body).toMatchObject({receipt:{state:'APPLIED',appliedVersion:1},current:{followingVersion:2,isFollowing:false}});
         await post(key,body());expect(await prisma.follow.count({where:{followerId:owner}})).toBe(0);
         const conflict=await post(randomUUID(),body(true,1));expect(conflict.body.receipt.state).toBe('CONFLICT');
-        expect((await request(app).delete('/api/users/'+target+'/follow').set('Authorization','Bearer '+token)).status).toBe(200);
+        expect((await isolatedHttp.delete('/api/users/'+target+'/follow').set('Authorization','Bearer '+token)).status).toBe(200);
         expect((await prisma.user.findUniqueOrThrow({where:{id:owner}})).followingVersion).toBe(2);
     });
     it('hash-only abandonment prevents a late submit without disclosing target content',async()=>{
-        const key=randomUUID(),hash=followHash(body());const abandoned=await request(app).post(route+key+'/abandon').set('Authorization','Bearer '+token).send({requestHash:hash});
+        const key=randomUUID(),hash=followHash(body());const abandoned=await isolatedHttp.post(route+key+'/abandon').set('Authorization','Bearer '+token).send({requestHash:hash});
         expect(abandoned.body.receipt).toMatchObject({state:'ABANDONED',targetUserId:null,wanted:null,expectedVersion:null});
         expect((await post(key,body())).body.receipt.state).toBe('ABANDONED');expect(await prisma.follow.count({where:{followerId:owner}})).toBe(0);
-        const appliedKey=randomUUID();await post(appliedKey,body());expect((await request(app).post(route+appliedKey+'/abandon').set('Authorization','Bearer '+token).send({requestHash:hash})).body.receipt.state).toBe('APPLIED');
+        const appliedKey=randomUUID();await post(appliedKey,body());expect((await isolatedHttp.post(route+appliedKey+'/abandon').set('Authorization','Bearer '+token).send({requestHash:hash})).body.receipt.state).toBe('APPLIED');
     });
     it('retains strict auth and missing-target terminal outcomes without relational writes',async()=>{
         const key=randomUUID();expect((await post(key,body(true,0,2147483647))).body.receipt.state).toBe('UNAVAILABLE');
         for(const value of [body(true,0,owner),{...body(),wanted:'true'},{...body(),extra:1}])expect((await post(randomUUID(),value)).status).toBe(400);
-        expect((await request(app).post(route+randomUUID()).send(body())).status).toBe(401);
-        for(const id of ['1junk','01','2147483648'])expect((await request(app).post('/api/users/'+id+'/follow').set('Authorization','Bearer '+token)).status).toBe(400);
+        expect((await isolatedHttp.post(route+randomUUID()).send(body())).status).toBe(401);
+        for(const id of ['1junk','01','2147483648'])expect((await isolatedHttp.post('/api/users/'+id+'/follow').set('Authorization','Bearer '+token)).status).toBe(400);
         await prisma.user.update({where:{id:owner},data:{authVersion:1}});expect((await post(randomUUID(),body())).status).toBe(401);
         expect(await prisma.follow.count({where:{followerId:owner}})).toBe(0);
     });
     it('permits genuine zero capacity and a premium override, with no fake paid entitlement',async()=>{
         await prisma.user.update({where:{id:owner},data:{maxFollowing:0}});expect((await post(randomUUID(),body())).body.receipt.state).toBe('LIMIT');
         await prisma.user.update({where:{id:owner},data:{isPremium:true}});expect((await post(randomUUID(),body())).body.receipt.state).toBe('APPLIED');
-        const state=await request(app).get('/api/users/me/follow-state/'+target).set('Authorization','Bearer '+token);expect(state.headers['cache-control']).toBe('private, no-store');expect(state.body).toMatchObject({maxFollowing:0,isPremium:true,followingCount:1});
+        const state=await isolatedHttp.get('/api/users/me/follow-state/'+target).set('Authorization','Bearer '+token);expect(state.headers['cache-control']).toBe('private, no-store');expect(state.body).toMatchObject({maxFollowing:0,isPremium:true,followingCount:1});
         expect(state.body).not.toHaveProperty('password');expect(state.body).not.toHaveProperty('apiKey');
     });
 });

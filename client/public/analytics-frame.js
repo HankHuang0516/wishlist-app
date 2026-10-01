@@ -4,6 +4,7 @@
   'use strict';
   const id = 'G-3E3LMNH9JR';
   const paths = new Set(['/', '/login', '/register', '/terms', '/privacy', '/support', '/partners/inquiry', '/partners', '/account-deletion', '/forgot-password', '/verify-email', '/reset-password', '/dashboard', '/wishes', '/sell', '/my-listings', '/explore', '/reports', '/chat', '/social', '/settings', '/api-docs', '/api-showcase', '/changelog', '/settings/notifications', '/change-password', '/purchase-history', '/listings/item', '/wishlists/list', '/users/user/profile', '/users/user/wishlists', '/not-found']);
+  paths.add('/resend-verification');
   let connected = false, stopped = false, loaded = false;
   let currentPath = '/analytics';
   const disabled = () => navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true;

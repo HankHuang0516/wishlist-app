@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketingAssistantWeb from './MarketingAssistantWeb';
 import { webcrypto } from 'node:crypto';
@@ -338,11 +338,11 @@ describe('shared web marketing entry for drafts and published products', () => {
   it('ignores a late approval receipt after account replacement without clearing original private content',async()=>{
     const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValueOnce(raw).mockResolvedValue(null);let finish!:(value:unknown)=>void;
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/approvals/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:null});throw Error('unexpected');}));
-    const view=render(<MarketingAssistantWeb {...props}/>);await screen.findByRole('region',{name:'原行銷確認操作待查核'});view.rerender(<MarketingAssistantWeb {...props} userId={43} token="other-synthetic"/>);await screen.findByRole('button',{name:'開啟行銷小助手 Beta'});await act(async()=>finish(ok(await proof(j.clientActionId))));expect(queueStore.clear).not.toHaveBeenCalled();expect(props.onApproved).not.toHaveBeenCalled();expect(props.beforeApprove).not.toHaveBeenCalled();expect(screen.queryByText('原文案：'+job.copy)).not.toBeInTheDocument();
+    const view=render(<MarketingAssistantWeb {...props}/>);await screen.findByRole('region',{name:'原行銷確認操作待查核'});await waitFor(()=>expect(finish).toBeTypeOf('function'));view.rerender(<MarketingAssistantWeb {...props} userId={43} token="other-synthetic"/>);await screen.findByRole('button',{name:'開啟行銷小助手 Beta'});await act(async()=>finish(ok(await proof(j.clientActionId))));expect(queueStore.clear).not.toHaveBeenCalled();expect(props.onApproved).not.toHaveBeenCalled();expect(props.beforeApprove).not.toHaveBeenCalled();expect(screen.queryByText('原文案：'+job.copy)).not.toBeInTheDocument();
   });
   it('disables recovery actions while reload read and host guard are pending',async()=>{
     const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);let finish!:(value:unknown)=>void;
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.includes('/approvals/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
-    render(<MarketingAssistantWeb {...props}/>);const retry=await screen.findByRole('button',{name:'以相同識別碼重試原確認'});expect(retry).toBeDisabled();fireEvent.click(retry);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);await act(async()=>finish(ok(await proof(j.clientActionId))));await screen.findByText(successNotice);expect(props.beforeApprove).toHaveBeenCalledOnce();
+    render(<MarketingAssistantWeb {...props}/>);const retry=await screen.findByRole('button',{name:'以相同識別碼重試原確認'});await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(retry).toBeDisabled();fireEvent.click(retry);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);await act(async()=>finish(ok(await proof(j.clientActionId))));await screen.findByText(successNotice);expect(props.beforeApprove).toHaveBeenCalledOnce();
   });
 });

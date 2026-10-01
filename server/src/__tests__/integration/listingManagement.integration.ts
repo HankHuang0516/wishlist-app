@@ -1,5 +1,5 @@
 import express from 'express';
-import request from 'supertest';
+import { createLoopbackRequest } from './loopbackHttp';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
 import prisma from '../../lib/prisma';
@@ -9,8 +9,9 @@ require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(proce
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw Error('Equal isolated DB URLs required');
 const originalSecret = process.env.JWT_SECRET, secret = 'listing-management-isolated-only'; process.env.JWT_SECRET = secret;
 const app = express(); app.set('trust proxy', 1); app.use(express.json()); app.use('/api/listings', routes);
+const isolatedHttp=createLoopbackRequest(app);
 let users: number[] = [], listingId: string, ip = 0;
-const http = (method: 'get' | 'post' | 'patch', path: string, user = users[0]) => request(app)[method]('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: user, authVersion: 0 }, secret)).set('X-Forwarded-For', `198.51.100.${++ip % 250 + 1}`);
+const http = (method: 'get' | 'post' | 'patch', path: string, user = users[0]) => isolatedHttp[method]('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: user, authVersion: 0 }, secret)).set('X-Forwarded-For', `198.51.100.${++ip % 250 + 1}`);
 const edit = () => managementBody({ kind: 'EDIT', listingId, expectedVersion: 1, changes: { title: '合成橘色二手檯燈', description: '隔離驗收，改為台幣320，不是真實商品。', price: 320 } });
 const send = (id: string, body = edit(), user = users[0]) => http('post', '/management-operations/' + id, user).send(body);
 const read = (id: string, user = users[0]) => http('get', '/management-operations/' + id, user);
@@ -97,7 +98,7 @@ describe('durable owner management receipts', () => {
     const transaction=prisma.$transaction.bind(prisma);let once=true;
     jest.spyOn(prisma,'$transaction').mockImplementation(((fn:any,options:any)=>{if(once){once=false;return prisma.user.update({where:{id:users[0]},data:{apiKey:null}}).then(()=>transaction(fn,options));}return transaction(fn,options);}) as any);
     const id=randomUUID(),body=edit(),path='/api/listings/management-operations/'+id+(mode==='cancel'?'/abandon':'');
-    const req=request(app)[mode==='read'?'get':'post'](path).set('X-API-Key',key).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
+    const req=isolatedHttp[mode==='read'?'get':'post'](path).set('X-API-Key',key).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
     const result=mode==='read'?await req:await req.send(mode==='cancel'?{kind:body.kind,listingId:body.listingId,expectedVersion:body.expectedVersion,requestHash:managementHash(body)}:body);
     expect(result.status).toBe(401);expect(await prisma.listingManagementReceipt.count({where:{userId:users[0]}})).toBe(0);expect((await prisma.listing.findUniqueOrThrow({where:{id:listingId}})).version).toBe(1);
   });
@@ -109,7 +110,7 @@ describe('durable owner management receipts', () => {
   it('rejects malformed requests before writing any receipt or item', async () => {
     for (const body of [{ ...edit(), token: 'synthetic' }, { ...edit(), expectedVersion: 0 }, { ...edit(), changes: { title: '\ud800' } }, { ...edit(), changes: { title: '合成', price: 0.001 } }]) expect((await http('post', '/management-operations/' + randomUUID()).send(body)).status).toBe(400);
     expect((await send('bad')).status).toBe(400); expect((await http('get', '/management-operations/' + randomUUID() + '?token=synthetic')).status).toBe(400);
-    expect((await request(app).get('/api/listings/management-operations/' + randomUUID())).status).toBe(401); expect(await prisma.listingManagementReceipt.count({ where: { userId: users[0] } })).toBe(0);
+    expect((await isolatedHttp.get('/api/listings/management-operations/' + randomUUID())).status).toBe(401); expect(await prisma.listingManagementReceipt.count({ where: { userId: users[0] } })).toBe(0);
   });
   it('database rejects unknown/NULL-incomplete terminal evidence and incorrect versions', async () => {
     const base = { userId: users[0], listingId, kind: 'EDIT', expectedVersion: 1, requestHash: 'a'.repeat(64), state: 'APPLIED', appliedVersion: 2 };

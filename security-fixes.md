@@ -4,6 +4,12 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Web account flow follow-up
+
+Web login now verifies the returned session identity against a fresh private profile before admission. Verification links require explicit confirmation and discard returned JWTs instead of replacing the active account. Registration discards unverified JWTs and validates expected-email delivery evidence. Reset validates the complete revocation acknowledgement; unknown outcomes cannot be replayed from that page. Password policy matches the existing server/APP and supports confirmation, without storing passwords or recovery tokens.
+
+Public auth requests reject redirects, avoid caches, hold duplicate-dispatch gates and ignore replies after departure or link changes. Known error codes map to local copy instead of displaying arbitrary provider/credential text. Historical auth receipts and real browser password-entry/real email delivery remain outside this batch's proof. Nine existing HTTP suites now use owned IPv4 listeners after intermittent local transport failures, with original assertions/deadlines preserved and marketing request setup additionally verified. No production server or native APP behavior was changed by the listener fixes.
+
 ## 2026-10-02 Web analytics privacy follow-up
 
 The previous global analytics bootstrap and route tracker could expose URL queries through default metadata. The web now loads the SDK inside an opaque, script-only sandbox with no referrer, receives coarse allowlisted events through a private channel, and supplies generic titles, empty referrers and sanitized locations. DNT/GPC skips initialization. Unused global payment SDK loading was removed while its component remains available. Auth query contracts and native APP code remain unchanged.

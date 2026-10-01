@@ -1,96 +1,33 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { API_URL } from "../config";
-import { useAuth } from "../context/AuthContext";
-import { Button } from "../components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useEffect,useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Card,CardContent,CardHeader,CardTitle,CardFooter } from '../components/ui/Card';
+import { AuthRecoveryLinks } from '../components/AuthRecovery';
+import { AuthFlowError,authIssue,authText,recoveryToken,verificationAck } from '../lib/authFlowWeb';
+import { useAuthRequest } from '../lib/useAuthRequest';
 
 export default function EmailVerification() {
-    const [searchParams] = useSearchParams();
-    const token = searchParams.get("token");
-    const navigate = useNavigate();
-    const { login } = useAuth();
-
-    const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
-    const [message, setMessage] = useState("Verifying your email...");
-
-    useEffect(() => {
-        if (!token) {
-            setStatus("error");
-            setMessage("Invalid verification link.");
-            return;
-        }
-
-        const verify = async () => {
-            try {
-                const res = await fetch(`${API_URL}/auth/verify-email`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token })
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                    setStatus("success");
-                    setMessage("Email verified successfully!");
-                    // Auto login
-                    if (data.token && data.user) {
-                        login(data.token, data.user);
-                        setTimeout(() => {
-                            navigate("/dashboard");
-                        }, 2000);
-                    }
-                } else {
-                    setStatus("error");
-                    setMessage(data.error || "Verification failed.");
-                }
-            } catch (error) {
-                console.error(error);
-                setStatus("error");
-                setMessage("An internal error occurred.");
-            }
-        };
-
-        verify();
-    }, [token, login, navigate]);
-
-    return (
-        <div className="flex items-center justify-center min-h-[60vh] p-4">
-            <Card className="w-full max-w-md text-center">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Email Verification</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center gap-4 py-8">
-                    {status === "verifying" && (
-                        <>
-                            <Loader2 className="w-12 h-12 text-muji-primary animate-spin" />
-                            <p className="text-lg text-muji-secondary">{message}</p>
-                        </>
-                    )}
-                    {status === "success" && (
-                        <>
-                            <CheckCircle className="w-16 h-16 text-green-500" />
-                            <p className="text-lg font-medium">{message}</p>
-                            <p className="text-sm text-gray-400">Redirecting to dashboard...</p>
-                        </>
-                    )}
-                    {status === "error" && (
-                        <>
-                            <XCircle className="w-16 h-16 text-red-500" />
-                            <p className="text-lg font-medium text-red-500">{message}</p>
-                        </>
-                    )}
-                </CardContent>
-                <CardFooter className="justify-center">
-                    {status === "error" && (
-                        <Button onClick={() => navigate("/login")}>
-                            Back to Login
-                        </Button>
-                    )}
-                </CardFooter>
-            </Card>
-        </div>
-    );
+  const [params]=useSearchParams(),scope=params.toString();
+  const [link,setLink]=useState(params.getAll('token').length===1?params.get('token')??'':''),[issue,setIssue]=useState(''),[confirmed,setConfirmed]=useState(false),[uncertain,setUncertain]=useState(false);
+  const {busy,run}=useAuthRequest(scope);
+  useEffect(()=>{setLink(params.getAll('token').length===1?params.get('token')??'':'');setIssue('');setConfirmed(false);setUncertain(false);},[scope]);
+  async function submit(event:React.FormEvent) {
+    event.preventDefault(); if(busy||confirmed||uncertain) return;
+    setIssue('');
+    try { const token=recoveryToken(link,'verify'); const ack=await run('/verify-email',{token}); if(!ack)return; verificationAck(ack);setLink('');setConfirmed(true); }
+    catch(error){setIssue(authIssue(error));setUncertain(error instanceof AuthFlowError&&error.uncertain);}
+  }
+  return <div className="flex items-center justify-center min-h-[60vh] p-4"><Card className="w-full max-w-md">
+    <CardHeader><CardTitle className="text-2xl text-center">{authText('verifyTitle')}</CardTitle></CardHeader>
+    <CardContent className="space-y-4">
+      <p className="text-sm text-muji-secondary">{authText('linkNote')}</p>
+      {issue&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{issue}</p>}
+      {confirmed?<p role="status" className="rounded-lg bg-green-50 p-3 text-green-800">{authText('verifySuccess')}</p>:!uncertain&&<form onSubmit={submit} className="space-y-4">
+        <label htmlFor="verification-link" className="text-sm font-medium">{authText('verifyInput')}</label>
+        <Input id="verification-link" autoComplete="off" spellCheck={false} maxLength={2048} required value={link} onChange={event=>setLink(event.target.value)} disabled={busy} className="min-h-[44px]"/>
+        <Button type="submit" disabled={busy} className="w-full min-h-[44px]">{authText(busy?'processing':'verifyTitle')}</Button>
+      </form>}
+    </CardContent><CardFooter className="block"><AuthRecoveryLinks/></CardFooter>
+  </Card></div>;
 }

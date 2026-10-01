@@ -1,4 +1,5 @@
 import express from 'express';
+import { createServer } from 'http';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
@@ -11,21 +12,22 @@ if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Equal i
 const saved={secret:process.env.JWT_SECRET,enabled:process.env.MARKETING_ASSISTANT_ENABLED,worker:process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN};
 const secret='marketing-request-isolated-only';process.env.JWT_SECRET=secret;process.env.MARKETING_ASSISTANT_ENABLED='1';process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN='synthetic-local-worker-not-called';
 const app=express();app.set('trust proxy',1);app.use(express.json());app.use('/api/marketing',routes);
+const server=createServer(app);
 let users:number[]=[],photo:string,listingId:string,ip=0;
 const token=(id=users[0])=>jwt.sign({id,authVersion:0},secret);
-const http=(method:'get'|'post',path:string,user=users[0])=>request(app)[method]('/api/marketing'+path).set('Authorization','Bearer '+token(user)).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
+const http=(method:'get'|'post',path:string,user=users[0])=>request(server)[method]('/api/marketing'+path).set('Authorization','Bearer '+token(user)).set('X-Forwarded-For',`198.51.100.${++ip%250+1}`);
 const body=()=>({kind:'CREATE',sourceMediaId:photo,listingId,expectedVersion:1});
 const send=(id:string,payload=body(),user=users[0])=>http('post','/requests/'+id,user).send(payload);
 const read=(id:string,user=users[0])=>http('get','/requests/'+id,user);
 const cancel=(id:string,payload=body(),user=users[0])=>http('post','/requests/'+id+'/abandon',user).send({sourceMediaId:payload.sourceMediaId,requestHash:marketingSnapshotHash(marketingRequestBody(payload))});
-beforeAll(async()=>{const run=randomUUID();users=(await Promise.all(['owner','other'].map(role=>prisma.user.create({data:{phoneNumber:run+role,password:'synthetic-unused'},select:{id:true}})))).map(u=>u.id);});
+beforeAll(async()=>{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});const run=randomUUID();users=(await Promise.all(['owner','other'].map(role=>prisma.user.create({data:{phoneNumber:run+role,password:'synthetic-unused'},select:{id:true}})))).map(u=>u.id);});
 beforeEach(async()=>{
   await prisma.marketingRequestReceipt.deleteMany({where:{userId:{in:users}}});await prisma.marketingJob.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listingMedia.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listing.deleteMany({where:{ownerUserId:{in:users}}});await prisma.user.updateMany({where:{id:{in:users}},data:{authVersion:0}});
   process.env.MARKETING_ASSISTANT_ENABLED='1';photo=randomUUID();listingId=randomUUID();
   await prisma.listing.create({data:{id:listingId,ownerUserId:users[0],clientListingId:randomUUID(),requestHash:randomUUID(),title:'合成橘色二手檯燈',description:'僅供隔離資料驗收，不是真實商品。',price:350,currency:'TWD',category:'home',status:'ACTIVE',version:1,publishedAt:new Date(),expiresAt:new Date(Date.now()+30*86400000),media:{create:{id:photo,ownerUserId:users[0],imageUrl:'https://example.invalid/image',thumbnailUrl:'https://example.invalid/thumb',contentHash:'synthetic-photo'}}}});
 });
 afterEach(()=>jest.restoreAllMocks());
-afterAll(async()=>{try{if(users.length)await prisma.user.deleteMany({where:{id:{in:users}}});}finally{await prisma.$disconnect();for(const [key,value] of Object.entries({JWT_SECRET:saved.secret,MARKETING_ASSISTANT_ENABLED:saved.enabled,WISHLIST_MINIMAX_CALLBACK_TOKEN:saved.worker})){if(value===undefined)delete process.env[key];else process.env[key]=value;}}});
+afterAll(async()=>{try{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));if(users.length)await prisma.user.deleteMany({where:{id:{in:users}}});}finally{await prisma.$disconnect();for(const [key,value] of Object.entries({JWT_SECRET:saved.secret,MARKETING_ASSISTANT_ENABLED:saved.enabled,WISHLIST_MINIMAX_CALLBACK_TOKEN:saved.worker})){if(value===undefined)delete process.env[key];else process.env[key]=value;}}});
 describe('durable marketing create/revision requests',()=>{
   it('database fences invalid terminal states and duplicate owner request keys',async()=>{
     const id=randomUUID(),base={userId:users[0],clientRequestId:id,sourceMediaId:photo,requestHash:'a'.repeat(64)};
@@ -52,7 +54,7 @@ describe('durable marketing create/revision requests',()=>{
   });
   it('missing reads do not create receipts; other-owner mutations and changed hashes are refused',async()=>{
     const id=randomUUID();expect((await read(id)).status).toBe(404);expect(await prisma.marketingRequestReceipt.count({where:{userId:users[0]}})).toBe(0);
-    expect((await send(id,body(),users[1])).status).toBe(404);expect((await cancel(id,body(),users[1])).status).toBe(404);await send(id);
+    expect((await send(id,body(),users[1])).status).toBe(404);expect((await cancel(id,body(),users[1])).status).toBe(404);const queued=await send(id);expect(queued.status).toBe(200);expect(queued.body.receipt.requestHash).toBe(marketingSnapshotHash(marketingRequestBody(body())));
     expect((await send(id,{...body(),expectedVersion:2})).status).toBe(409);expect((await cancel(id,{...body(),expectedVersion:2})).status).toBe(409);
   });
   it('cancellation first fences modern and legacy late posts and survives photo erasure',async()=>{

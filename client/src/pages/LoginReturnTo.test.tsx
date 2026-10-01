@@ -20,8 +20,8 @@ describe('safe return from web account-deletion login', () => {
   ] as const) {
     it(`uses only a whitelisted return path for ${query}`, async () => {
       const login = vi.fn();
-      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, headers: { get: () => 'application/json' },
-        json: async () => ({ token: 'session', user: { id: 19, phoneNumber: 'test' } }) })));
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, headers: { get: () => 'application/json' },
+        json: async () => url.endsWith('/users/me') ? { id: 19, phoneNumber: 'test' } : { token: 'session', user: { id: 19, phoneNumber: 'test' } } })));
       render(<MemoryRouter initialEntries={[`/login${query}`]}><AuthContext.Provider value={{ user: null, token: null,
         login, logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: false }}><Login /></AuthContext.Provider></MemoryRouter>);
       fireEvent.change(screen.getByLabelText(t('login.phoneOrEmail')), { target: { value: 'test@example.com' } });

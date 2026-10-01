@@ -1,5 +1,7 @@
 const routes = new Set(['/', '/login', '/register', '/terms', '/privacy', '/support', '/partners/inquiry', '/partners', '/account-deletion', '/forgot-password', '/verify-email', '/reset-password', '/dashboard', '/wishes', '/sell', '/my-listings', '/explore', '/reports', '/chat', '/social', '/settings', '/api-docs', '/api-showcase', '/changelog', '/settings/notifications', '/change-password', '/purchase-history']);
 
+routes.add('/resend-verification');
+
 /** Only route categories cross the analytics boundary. Never query/hash or IDs. */
 export function analyticsPath(pathname: string) {
   if (routes.has(pathname)) return pathname;

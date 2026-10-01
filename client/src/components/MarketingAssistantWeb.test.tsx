@@ -20,12 +20,12 @@ const open = async () => fireEvent.click(await screen.findByRole('button', { nam
 const approvalBody=()=>({kind:'APPROVE' as const,jobId,sourceMediaId:source,listingId,expectedVersion:1,selectedMediaIds:media.map(m=>m.id),copy:job.copy});
 async function proof(clientActionId:string,body=approvalBody()) {return {receipt:{clientActionId,jobId:body.jobId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,requestHash:await sha256(JSON.stringify(body)),state:'APPLIED',reason:null,appliedVersion:body.expectedVersion+1,selectedMediaIds:body.selectedMediaIds,copy:body.copy,createdAt:new Date().toISOString()}};}
 const successNotice='已核對原確認回執（當時版本 2）；沒有再次套用。商品目前內容可能已有後續更新。';
-function install(latest: unknown = { job: { id: jobId } }) {
+function install(latest: unknown = { job: { id: jobId } },available=true,view:Omit<typeof job,'copy'|'deliveredAt'>&{copy:string|null;deliveredAt:string|null}=job) {
   let applied:ReturnType<typeof approvalBody>|null=null;
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/availability')) return ok({ available: true });
+    if (url.endsWith('/availability')) return ok({ available });
     if (url.includes('?sourceMediaId')) return ok(latest);
-    if (url.endsWith(`/jobs/${jobId}`)) return ok(applied?{...job,status:'COMPLETED',copy:applied.copy,selectedMediaIds:applied.selectedMediaIds}:job);
+    if (url.endsWith(`/jobs/${jobId}`)) return ok(applied?{...view,status:'COMPLETED',copy:applied.copy,selectedMediaIds:applied.selectedMediaIds}:view);
     if (init?.method==='POST'&&url.includes('/approvals/')){applied=JSON.parse(String(init.body));return ok(await proof(url.split('/').at(-1)!,applied!));}
     if (init?.method === 'POST'&&url.includes('/requests/')){const body=JSON.parse(String(init.body)),clientRequestId=url.split('/').at(-1);return ok({receipt:{clientRequestId,sourceMediaId:source,requestHash:await sha256(JSON.stringify(body)),state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});}
     if (init?.method === 'POST') return ok({ id: jobId, status: 'PENDING' });
@@ -33,6 +33,100 @@ function install(latest: unknown = { job: { id: jobId } }) {
   }); vi.stubGlobal('fetch', fetch); return fetch;
 }
 describe('shared web marketing entry for drafts and published products', () => {
+  it('shows a paused entry without enabling new generation when there is no history',async()=>{
+    const fetch=install({job:null},false);render(<MarketingAssistantWeb {...props}/>);
+    await screen.findByText('新增生成暫停；仍可查看與確認既有結果');await open();
+    const create=screen.getByRole('button',{name:'生成四張行銷圖'});expect(create).toBeDisabled();fireEvent.click(create);
+    expect(screen.getByText(/新增生成與免費調整暫停/)).toBeInTheDocument();expect(props.beforeStart).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('keeps delivered images and approval usable while generation and free revision are paused',async()=>{
+    const fetch=install(undefined,false);render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
+    expect(screen.getAllByRole('checkbox',{name:/選用圖/})).toHaveLength(4);
+    expect(screen.getByRole('button',{name:'免費調整一次'})).toBeDisabled();expect(screen.getByRole('textbox',{name:'描述要調整的地方'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText(successNotice);
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+    expect(fetch.mock.calls.some(([url,init])=>url.includes('/requests/')&&init?.method==='POST')).toBe(false);
+    expect(props.onApproved).toHaveBeenCalledOnce();
+  });
+  it('retains completed historical copy and order with paused free revision',async()=>{
+    const fetch=install(undefined,false,{...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});
+    render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
+    expect(screen.getByText('此工作確認時的順序（第一張為封面）')).toBeInTheDocument();
+    expect(screen.getByRole('textbox',{name:'編輯行銷文案'})).toBeDisabled();expect(screen.getByRole('button',{name:'免費調整一次'})).toBeDisabled();
+    expect(screen.queryByRole('button',{name:'確認照片與文案'})).not.toBeInTheDocument();expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('does not offer a usable regeneration for failed history when generation is paused',async()=>{
+    const fetch=install(undefined,false,{...job,status:'FAILED',copy:null,generatedMedia:[],deliveredAt:null});
+    render(<MarketingAssistantWeb {...props}/>);await open();expect(screen.getByRole('button',{name:'重新排隊生成四圖'})).toBeDisabled();
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('fails closed on malformed capability but still reads delivered work and can recheck capability',async()=>{
+    let malformed=true;const fetch=install();const original=fetch.getMockImplementation()!;
+    fetch.mockImplementation(async(url,init)=>url.endsWith('/availability')?ok({available:malformed?'yes':true}):original(url,init));
+    render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
+    expect(screen.getByText(/暫時無法確認生成服務/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'免費調整一次'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'確認照片與文案'})).toBeEnabled();
+    malformed=false;fireEvent.click(screen.getByRole('button',{name:'重新查核行銷工作'}));
+    await vi.waitFor(()=>expect(screen.getByRole('button',{name:'免費調整一次'})).toBeEnabled());
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/availability'))).toHaveLength(2);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('keeps generation disabled after availability read failure until an explicit successful recheck',async()=>{
+    let readFails=true;const fetch=install({job:null});const original=fetch.getMockImplementation()!;
+    fetch.mockImplementation(async(url,init)=>{if(url.endsWith('/availability')&&readFails)throw Error('offline');return original(url,init);});
+    render(<MarketingAssistantWeb {...props}/>);await open();expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();
+    readFails=false;fireEvent.click(screen.getByRole('button',{name:'重新查核行銷工作'}));
+    await vi.waitFor(()=>expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeEnabled());
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(props.beforeStart).not.toHaveBeenCalled();
+  });
+  it('cancels a pending original action while paused without re-enabling new generation',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),j=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/availability'))return ok({available:false});
+      if(url.endsWith('/abandon'))return ok({receipt:{clientRequestId:j.clientRequestId,sourceMediaId:source,requestHash:j.requestHash,state:'ABANDONED',jobId:null,createdAt:new Date().toISOString()},job:null});
+      throw Error('missing original receipt');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);
+    await screen.findByText('原行銷排隊結果仍待查核；不會自動重送。');fireEvent.click(screen.getByRole('button',{name:'取消未建立的原排隊'}));fireEvent.click(screen.getByRole('button',{name:'確認取消未建立工作'}));
+    await screen.findByText('原排隊操作已取消；未建立新工作。');expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(queueStore.clear).toHaveBeenCalledWith(expect.any(String),raw);
+  });
+  it('recovers an applied original receipt while paused with only reads and no revision enabled',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method==='POST')throw Error('write forbidden');if(url.endsWith('/availability'))return ok({available:false});
+      if(url.includes('/approvals/'))return ok(await proof(j.clientActionId,j.body));
+      if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:j.body.selectedMediaIds});throw Error('photo mock unavailable');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);await screen.findByText(successNotice);
+    expect(screen.getByRole('button',{name:'免費調整一次'})).toBeDisabled();expect(await screen.findByDisplayValue(job.copy)).toBeDisabled();
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(queueStore.clear).toHaveBeenCalledWith(expect.any(String),raw);
+  });
+  it('does not let a late previous-account capability response enable generation for a paused account',async()=>{
+    let finish!:(value:unknown)=>void;
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/availability'))return String((init?.headers as Record<string,string>)?.Authorization).includes('fixture-session')?new Promise(resolve=>{finish=resolve;}):ok({available:false});
+      if(url.includes('?sourceMediaId'))return ok({job:null});throw Error('unexpected');
+    });vi.stubGlobal('fetch',fetch);const view=render(<MarketingAssistantWeb {...props}/>);
+    await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    view.rerender(<MarketingAssistantWeb {...props} userId={43} token="other-fixture"/>);await open();
+    await act(async()=>finish(ok({available:true})));expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();
+    expect(screen.getByText(/新增生成與免費調整暫停/)).toBeInTheDocument();expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('recognizes server-side pause after capability was read, preserving the original operation instead of another generation',async()=>{
+    const fetch=install({job:null}),original=fetch.getMockImplementation()!;
+    fetch.mockImplementation(async(url,init)=>url.includes('/requests/')&&init?.method==='POST'?{ok:false,status:503,json:async()=>({error:'暫停',errorCode:'MARKETING_DISABLED'})}:original(url,init));
+    render(<MarketingAssistantWeb {...props}/>);await open();fireEvent.click(screen.getByRole('button',{name:'生成四張行銷圖'}));
+    await screen.findByText(/新增生成與免費調整暫停/);expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();
+    expect(screen.getByRole('region',{name:'原行銷排隊操作待確認'})).toBeInTheDocument();expect(queueStore.clear).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(queueStore.save).toHaveBeenCalled();
+  });
+  it('can approve delivered results when only capability lookup is unavailable, without treating generation as available',async()=>{
+    const fetch=install(),original=fetch.getMockImplementation()!;
+    fetch.mockImplementation(async(url,init)=>{if(url.endsWith('/availability'))throw Error('capability read unavailable');return original(url,init);});
+    render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
+    expect(screen.getByRole('button',{name:'免費調整一次'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));
+    await screen.findByText(successNotice);expect(screen.getByText(/暫時無法確認生成服務/)).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(props.onApproved).toHaveBeenCalledOnce();
+  });
   it('waits for each pending poll before scheduling another and aborts on leaving',async()=>{
     let finish!:(value:unknown)=>void,jobReads=0;
     const scheduled:Array<()=>void>=[],realTimeout=window.setTimeout.bind(window);

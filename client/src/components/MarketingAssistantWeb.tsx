@@ -10,6 +10,7 @@ type Props={token:string;userId:number;sourceMediaId:string;listingId?:string;ge
 export default function MarketingAssistantWeb(props:Props){return <MarketingAssistantSession key={`${props.userId}:${props.token}:${props.sourceMediaId}:${props.listingId??''}`} {...props} />;}
 function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, getExpectedVersion, beforeStart, beforeApprove, onApproved }:Props) {
   const [enabled, setEnabled] = useState(false), [job, setJob] = useState<MarketingJob | null>(null);
+  const [generationAccess,setGenerationAccess]=useState<'unknown'|'available'|'paused'>('unknown');
   const [copy, setCopy] = useState(''), [selected, setSelected] = useState<string[]>([]);
   const [adjustment, setAdjustment] = useState(''), [slots, setSlots] = useState<number[]>([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -30,9 +31,18 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     let alive = true;
     const epoch=lifetime.current,isActive=()=>alive&&epoch===lifetime.current;
     setQueueReady(false);
+    setGenerationAccess('unknown');
     void (async()=>{
       const key=await pendingRequestKey(API_URL,userId,'marketing.'+sourceMediaId),raw=await privatePendingStore.get(key);
       if(!isActive())return;queueKey.current=key;
+      // Generation can be paused without hiding delivered work or original
+      // receipts. Failure to read capability never enables a new generation.
+      const accessRead=(async()=>{
+        try{const access=await api<{available:boolean}>(token,'/marketing/availability');
+          if(!access||typeof access.available!=='boolean')throw new Error('MARKETING_READ_INVALID');
+          if(isActive())setGenerationAccess(access.available?'available':'paused');
+        }catch{if(isActive())setGenerationAccess('unknown');}
+      })();
       if(raw&&JSON.parse(raw)?.body?.kind==='APPROVE'){
         const journal=await parseMarketingApprovalJournal(raw);if(journal.body.sourceMediaId!==sourceMediaId||journal.body.listingId!==(listingId??null))throw new Error('MARKETING_CONTEXT_CHANGED');
         if(!isActive())return;approvalOriginal.current=raw;setApprovalDetails(journal.body);setRefreshNeeded(true);setExpanded(true);setEnabled(true);running.current=true;setBusy(true);
@@ -45,11 +55,11 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
         try{await settleQueue(await readMarketingQueue(token,raw),raw,isActive);}catch{if(isActive())setError('原行銷排隊結果仍待查核；不會自動重送。');}
         if(isActive())setQueueReady(true);return;
       }
-      const [access,latest]=await Promise.all([api<{available:boolean}>(token,'/marketing/availability'),api<{job:{id:string;status:string}|null}>(token,`/marketing/jobs?sourceMediaId=${sourceMediaId}`)]);
+      const [,latest]=await Promise.all([accessRead,api<{job:{id:string;status:string}|null}>(token,`/marketing/jobs?sourceMediaId=${sourceMediaId}`)]);
       if(!isActive())return;
-      if(typeof access.available!=='boolean'||!latest||!Object.hasOwn(latest,'job'))throw new Error('MARKETING_READ_INVALID');
+      if(!latest||!Object.hasOwn(latest,'job'))throw new Error('MARKETING_READ_INVALID');
       if(latest.job){const value=await api<unknown>(token,`/marketing/jobs/${latest.job.id}`);if(!isActive())return;setJob(parseMarketingJob(value,sourceMediaId,listingId??null,latest.job.id));}
-      setEnabled(access.available);setQueueReady(true);setError('');
+      setEnabled(true);setQueueReady(true);setError('');
     })().catch(()=>{if(isActive()){setEnabled(true);setError('無法安全讀取行銷工作或本機紀錄；請重新查核，不會建立新工作。');}});
     return () => { alive = false; };
   }, [token, userId, sourceMediaId,listingId,readTick]);
@@ -74,6 +84,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
   const remaining = Math.max(0, deadline - now);
   const mayAdjust = !!job && !job.parentJobId && ['REVIEW', 'COMPLETED'].includes(job.status) && remaining > 0;
   const selectionLocked = busy || refreshNeeded || !!queuePending || !queueReady || job?.status === 'COMPLETED';
+  const generationLocked = generationAccess!=='available'||busy||refreshNeeded||!!queuePending||!queueReady;
   async function settleQueue(result:MarketingQueueResult,raw:string,isActive:()=>boolean){
     if(!isActive())return;queueConfirmed.current=result;
     if(result.job){const value=await api<unknown>(token,`/marketing/jobs/${result.job.id}`);if(!isActive())return;const restored=parseMarketingJob(value,sourceMediaId,listingId??null,result.job.id);
@@ -105,7 +116,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     await settleQueue(await sendMarketingQueue(token,raw,privatePendingStore,queueKey.current,isActive),raw,isActive);
   }
   async function start() {
-    if (running.current || !active.current || !queueReady || queueOriginal.current || refreshNeeded) return;
+    if (running.current || !active.current || generationAccess!=='available' || !queueReady || queueOriginal.current || refreshNeeded) return;
     running.current = true;
     setBusy(true); setError('');
     const epoch=lifetime.current,isActive=()=>epoch===lifetime.current;let release:(()=>void)|null=null;
@@ -114,9 +125,9 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
       if (!active.current) return;
       release=await beforeApprove();if(!release)throw new Error('HOST_EDIT_PENDING');if(!isActive())return;
       await queue({kind:'CREATE',sourceMediaId,listingId:listingId??null,expectedVersion:getExpectedVersion()},isActive); }
-    catch (failure) { if (isActive()) setError(failure instanceof ApiFailure && failure.code === 'MONTHLY_LIMIT'
+    catch (failure) { if (isActive()) {if(failure instanceof ApiFailure&&failure.code==='MARKETING_DISABLED')setGenerationAccess('paused');setError(failure instanceof ApiFailure && failure.code === 'MONTHLY_LIMIT'
       ? '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。'
-      : queueOriginal.current?'排隊回覆尚未確認，不代表失敗；請查核原工作，不要重新生成。':'無法安全保存排隊操作；請先儲存商品並重試，不會在未記錄時送出。'); }
+      : queueOriginal.current?'排隊回覆尚未確認，不代表失敗；請查核原工作，不要重新生成。':'無法安全保存排隊操作；請先儲存商品並重試，不會在未記錄時送出。');} }
     finally { release?.();running.current = false; if (isActive()) setBusy(false); }
   }
   async function settleApproval(result:MarketingApprovalResult,raw:string,isActive:()=>boolean,held=false,accept=false){
@@ -166,14 +177,14 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     finally{release?.();running.current=false;if(isActive())setBusy(false);}
   }
   async function revise() {
-    if (running.current || !active.current || refreshNeeded || queueOriginal.current || !queueReady) return;
+    if (running.current || !active.current || generationAccess!=='available' || refreshNeeded || queueOriginal.current || !queueReady) return;
     if (!job || !slots.length || adjustment.trim().length < 3) { setError('請勾選照片並描述要調整的地方。'); return; }
     running.current = true; setBusy(true); setError('');
     const epoch=lifetime.current,isActive=()=>epoch===lifetime.current;let release:(()=>void)|null=null;
     try {release=await beforeApprove();if(!release)throw new Error('HOST_EDIT_PENDING');if(!isActive())return;
       await queue({kind:'REVISION',sourceMediaId,listingId:listingId??null,parentJobId:job.id,prompt:adjustment,slots},isActive);
       if(isActive()&&!queueOriginal.current)setNotice('免費調整已排隊；未勾選的照片保留。'); }
-    catch { if (isActive()) setError(queueOriginal.current?'免費調整回覆尚未確認，不代表失敗；請查核原調整工作。':'無法安全保存免費調整操作；不會在未記錄時送出。'); }
+    catch (failure) { if (isActive()) {if(failure instanceof ApiFailure&&failure.code==='MARKETING_DISABLED')setGenerationAccess('paused');setError(queueOriginal.current?'免費調整回覆尚未確認，不代表失敗；請查核原調整工作。':'無法安全保存免費調整操作；不會在未記錄時送出。');} }
     finally { release?.();running.current = false; if (isActive()) setBusy(false); }
   }
   const choices = [...(job?.generatedMedia ?? []), ...(job?.previousMedia ?? [])];
@@ -191,12 +202,13 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
   }); }
   if (!expanded) return <button type="button" aria-expanded={false} aria-label="開啟行銷小助手 Beta"
     className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-left" onClick={() => setExpanded(true)}>
-    <span className="rounded-xl bg-orange-600 p-3 text-white" aria-hidden>✦</span><span><span className="block font-semibold">行銷小助手 · Beta</span><span className="text-sm text-stone-600">生成商品圖與文案，提升曝光</span></span><span aria-hidden className="ml-auto">›</span>
+    <span className="rounded-xl bg-orange-600 p-3 text-white" aria-hidden>✦</span><span><span className="block font-semibold">行銷小助手 · Beta</span><span className="text-sm text-stone-600">{generationAccess==='available'?'生成商品圖與文案，提升曝光':generationAccess==='paused'?'新增生成暫停；仍可查看與確認既有結果':'生成服務待查核；仍可查看既有工作'}</span></span><span aria-hidden className="ml-auto">›</span>
   </button>;
   return <section aria-label="行銷小助手 Beta" className="mt-5 rounded-2xl bg-orange-50 p-4 text-sm">
     <button type="button" aria-expanded={true} aria-label="收合行銷小助手 Beta" onClick={() => setExpanded(false)} className="flex w-full justify-between min-h-11 font-semibold">行銷小助手 · Beta<span aria-hidden>⌃</span></button>
     <p className="mt-1 text-stone-600">原始實拍照保留；AI 圖僅為行銷示意，確認前不公開。</p>
-    {!queueReady&&<button type="button" disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4" onClick={()=>setReadTick(n=>n+1)}>重新查核行銷工作</button>}
+    {generationAccess!=='available'&&<p role="status" className="mt-3 rounded-xl border border-orange-200 bg-white p-3">{generationAccess==='paused'?'新增生成與免費調整暫停；既有工作、原操作查核及已交付結果的確認仍可使用。免費調整期限仍依原交付時間計算。':'暫時無法確認生成服務；不會新增生成或免費調整。仍可查核原操作及確認已交付結果。'}</p>}
+    {(!queueReady||generationAccess!=='available')&&<button type="button" disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4" onClick={()=>setReadTick(n=>n+1)}>重新查核行銷工作</button>}
     {queuePending&&<div role="region" aria-label="原行銷排隊操作待確認" className="mt-3 rounded-xl border border-orange-300 p-3">
       <p>保留原操作；重新開頁只查核，不會自動重送或再次扣次數。</p>
       {queueDetails&&<p className="mt-2 whitespace-pre-wrap break-words">{queueDetails.kind==='CREATE'?`原操作：生成四圖；商品版本 ${queueDetails.expectedVersion}`:`原免費調整：圖 ${queueDetails.slots.join('、')}\n${queueDetails.prompt}`}</p>}
@@ -206,7 +218,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
         {!cancelConfirm?<button type="button" disabled={busy} onClick={()=>setCancelConfirm(true)}>取消未建立的原排隊</button>:<><p>若工作已建立，只回讀原結果；不會撤銷已建立工作或刪除照片。</p><button type="button" disabled={busy} onClick={()=>void recoverQueue('cancel')}>確認取消未建立工作</button><button type="button" disabled={busy} onClick={()=>setCancelConfirm(false)}>返回查核</button></>}
       </>}
     </div>}
-    {!job || job.status === 'FAILED' ? <button type="button" disabled={busy||!queueReady||!!queuePending||refreshNeeded} onClick={() => void start()}
+    {!job || job.status === 'FAILED' ? <button type="button" disabled={generationLocked} onClick={() => void start()}
       className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{job ? '重新排隊生成四圖' : '生成四張行銷圖'}</button>
       : ['PENDING', 'PROCESSING'].includes(job.status) ? <p role="status" className="mt-3 text-orange-900">
         {job.status === 'PENDING' ? '已排隊，稍後自動更新' : '正在生成四張圖片與文案'}</p>
@@ -245,9 +257,9 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
             onClick={() => void approve()} className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">確認照片與文案</button>}
           {mayAdjust && <div className="mt-4 border-t pt-3"><p className="font-semibold text-red-700">免費調整剩餘 {Math.floor(remaining / 86_400_000)}天 {Math.floor(remaining % 86_400_000 / 3_600_000)}時 {Math.floor(remaining % 3_600_000 / 60_000)}分</p>
             <p className="mt-2">勾選要重新生成的圖片（最多一次）</p><div className="mt-2 flex gap-3">{[1, 2, 3, 4].map(slot => <label key={slot}>
-              <input type="checkbox" disabled={busy || refreshNeeded || !!queuePending || !queueReady} checked={slots.includes(slot)} onChange={event => setSlots(old => event.target.checked ? [...old, slot] : old.filter(value => value !== slot))} /> 圖 {slot}</label>)}</div>
-            <input aria-label="描述要調整的地方" disabled={busy || refreshNeeded || !!queuePending || !queueReady} className="mt-3 w-full rounded-xl border p-3" maxLength={500} placeholder="例如：改成更明亮的背景" value={adjustment} onChange={event => setAdjustment(event.target.value)} />
-            <button type="button" disabled={busy || refreshNeeded || !!queuePending || !queueReady} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">免費調整一次</button>
+              <input type="checkbox" disabled={generationLocked} checked={slots.includes(slot)} onChange={event => setSlots(old => event.target.checked ? [...old, slot] : old.filter(value => value !== slot))} /> 圖 {slot}</label>)}</div>
+            <input aria-label="描述要調整的地方" disabled={generationLocked} className="mt-3 w-full rounded-xl border p-3" maxLength={500} placeholder="例如：改成更明亮的背景" value={adjustment} onChange={event => setAdjustment(event.target.value)} />
+            <button type="button" disabled={generationLocked} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">免費調整一次</button>
           </div>}
         </>}
     {refreshNeeded&&approvalDetails&&<div role="region" aria-label="原行銷確認操作待查核" className="mt-3 rounded-xl border border-orange-300 p-3">

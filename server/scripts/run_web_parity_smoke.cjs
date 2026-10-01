@@ -48,6 +48,14 @@ app.post('/__test/drop-next-ack', (req, res) => {
 // The later commit/recovery check is performed separately with the real API.
 app.post('/__test/reject-next-photo-removal', (_req, res) => { rejectRemoval = true; res.json({ syntheticOnly: true, armed: true }); });
 app.post('/__test/reject-next-photo-receipt', (_req, res) => { rejectPhotoReceipt = true; res.json({ syntheticOnly: true, armed: true }); });
+// Runtime capability changes affect only this loopback synthetic listener.
+// They do not alter providers, production accounts, receipts or job data.
+app.post('/__test/marketing/availability', (req,res) => {
+  if(process.env.WEB_PARITY_MARKETING_FIXTURES!=='1'||!users)return res.sendStatus(404);
+  if(!req.body||Object.keys(req.body).join(',')!=='available'||typeof req.body.available!=='boolean')return res.sendStatus(400);
+  process.env.MARKETING_ASSISTANT_ENABLED=req.body.available?'1':'0';
+  return res.json({syntheticOnly:true,available:req.body.available});
+});
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method === 'POST' && /^\/api\/marketing\/requests\/[^/]+$/.test(req.path) ? 'marketingQueue' :

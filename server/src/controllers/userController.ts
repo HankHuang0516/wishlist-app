@@ -42,6 +42,7 @@ export const updateMe = updateLegacyProfile;
 
 // Get another user's public profile (Respecting privacy)
 export const getUserProfile = async (req: Request, res: Response) => {
+    res.set('Cache-Control', 'private, no-store');
     try {
         const { id } = req.params;
 

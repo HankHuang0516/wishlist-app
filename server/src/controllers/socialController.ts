@@ -3,78 +3,44 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 import { API_ERROR_CODES } from '../lib/errorCodes';
+import { socialCard, socialCardSelect, socialSearchQuery, socialSearchWhere } from '../lib/socialPrivacy';
 
 // Search users by name or phone (excluding self)
 export const searchUsers = async (req: Request, res: Response) => {
-    const { query } = req.query;
+    res.set('Cache-Control', 'private, no-store');
+    const query = socialSearchQuery(req.query.query);
     const currentUserId = (req as any).user.id;
 
-    if (!query || typeof query !== 'string') {
+    if (!query || Object.keys(req.query).some(key => key !== 'query')) {
         return res.status(400).json({ error: 'Search query is required' });
     }
 
     try {
-        // Check if query looks like an email (contains @)
-        const isEmailQuery = query.includes('@');
-
         const users = await prisma.user.findMany({
-            where: {
-                AND: [
-                    { id: { not: currentUserId } }, // Exclude self
-                    {
-                        OR: [
-                            { name: { contains: query, mode: 'insensitive' } },
-                            { phoneNumber: { contains: query } },
-                            { nicknames: { contains: query, mode: 'insensitive' } },
-                            { realName: { contains: query, mode: 'insensitive' } },
-                            // Email search: exact match only for security (prevent email harvesting)
-                            ...(isEmailQuery ? [{ email: { equals: query, mode: 'insensitive' as const } }] : [])
-                        ]
-                    }
-                ]
-            },
+            where: socialSearchWhere(query, currentUserId),
             select: {
-                id: true,
-                name: true,
-                phoneNumber: true,
-                avatarUrl: true,
-                nicknames: true,
-                birthday: true, // Select details to check privacy
-                isBirthdayVisible: true,
+                ...socialCardSelect,
                 followedBy: {
                     where: { followerId: currentUserId }, // Check if currently followed by me
                     select: { followerId: true }
                 }
             },
-            take: 20
+            take: 20,
+            orderBy: { id: 'asc' },
         });
 
         // Format response to indicate if following
         const results = users.map(user => ({
-            id: user.id,
-            name: user.name,
-            phoneNumber: user.phoneNumber,
-            nicknames: user.nicknames,
-            avatarUrl: user.avatarUrl,
-            birthday: user.isBirthdayVisible ? user.birthday : null, // Privacy Check
+            ...socialCard(user),
             isFollowing: user.followedBy.length > 0
         }));
 
         res.json(results);
     } catch (error) {
-        console.error('Search error:', error);
+        console.error('Social search unavailable; query and database details withheld');
         res.status(500).json({ error: 'Failed to search users', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
-
-// ... followUser and unfollowUser remain unchanged (omitted for brevity in this replace block if not touched, but since replace_file works on chunks, I need to be careful not to delete them if I'm replacing a huge chunk.
-// I will split the replace to just target searchUsers and getFollowing separately to be safe.)
-// Wait, I can only update one block relative to file content.
-// Since searchUsers is at top and getFollowing is further down, I should do searchUsers first.
-
-// Actually, I can replace searchUsers first.
-
-// Wait, I'll do searchUsers now.
 
 // Follow a user
 export const followUser = async (req: Request, res: Response) => {
@@ -171,8 +137,8 @@ export const unfollowUser = async (req: Request, res: Response) => {
 };
 
 // Get list of people I follow
-// Get list of people I follow
 export const getFollowing = async (req: Request, res: Response) => {
+    res.set('Cache-Control', 'private, no-store');
     const currentUserId = (req as any).user.id;
 
     try {
@@ -181,12 +147,7 @@ export const getFollowing = async (req: Request, res: Response) => {
             include: {
                 following: {
                     select: {
-                        id: true,
-                        name: true,
-                        avatarUrl: true,
-                        nicknames: true,
-                        birthday: true,
-                        isBirthdayVisible: true,
+                        ...socialCardSelect,
                         following: {
                             where: { followingId: currentUserId },
                             select: { followerId: true }
@@ -197,28 +158,25 @@ export const getFollowing = async (req: Request, res: Response) => {
         });
 
         const results = follows.map(f => ({
-            id: f.following.id,
-            name: f.following.name,
-            avatarUrl: f.following.avatarUrl,
-            nicknames: f.following.nicknames,
-            birthday: f.following.isBirthdayVisible ? f.following.birthday : null,
+            ...socialCard(f.following),
             isMutual: f.following.following.length > 0
         }));
 
         res.json(results);
     } catch (error) {
-        console.error('Get following error:', error);
+        console.error('Following unavailable; personal and database details withheld');
         res.status(500).json({ error: 'Failed to get following list', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };
 
 export const getUpcomingBirthdays = async (req: Request, res: Response) => {
+    res.set('Cache-Control', 'private, no-store');
     const currentUserId = (req as any).user.id;
 
     try {
         const follows = await prisma.follow.findMany({
             where: { followerId: currentUserId },
-            include: { following: true }
+            select: { following: { select: socialCardSelect } }
         });
 
         const today = new Date();
@@ -249,14 +207,14 @@ export const getUpcomingBirthdays = async (req: Request, res: Response) => {
                 id: f.id,
                 name: f.name,
                 nicknames: f.nicknames,
-                avatarUrl: f.avatarUrl,
+                avatarUrl: f.isAvatarVisible ? f.avatarUrl : null,
                 birthday: f.birthday,
                 nextBirthday: f.nextBday
             }));
 
         res.json(upcoming);
     } catch (error) {
-        console.error('Birthdays error:', error);
+        console.error('Birthdays unavailable; personal and database details withheld');
         res.status(500).json({ error: 'Failed to fetch birthdays', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

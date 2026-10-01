@@ -1,0 +1,114 @@
+import { act,fireEvent,render,screen } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
+import SocialPage from './SocialPage';
+const auth={user:{id:19,phoneNumber:'synthetic'},token:'social-fixture',login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn(),isAuthenticated:true};
+const friend={id:20,name:'合成朋友',nicknames:null,phoneNumber:null,avatarUrl:null,birthday:null,isFollowing:false,isMutual:false};
+const self={id:19,maxFollowing:0,isPremium:false};
+const ok=(value:unknown)=>({ok:true,status:200,json:async()=>value});
+const view=(identity=auth)=><MemoryRouter><AuthContext.Provider value={identity}><SocialPage /></AuthContext.Provider></MemoryRouter>;
+const input=()=>screen.getByRole('textbox',{name:'姓名、手機號碼或電子信箱'});
+const submit=(query='合成')=>{fireEvent.change(input(),{target:{value:query}});fireEvent.click(screen.getByRole('button',{name:'搜尋使用者'}));};
+beforeEach(()=>localStorage.setItem('user-locale','zh-TW'));
+afterEach(()=>{localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+describe('actual friends page, safe reads and uncertain mutations',()=>{
+    it('successful cards retain hidden contacts and non-nested labelled profile/wish links',async()=>{
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[friend])));render(view());submit();
+        await screen.findByText('合成朋友');expect(screen.getByText('聯絡資料未公開')).toBeInTheDocument();
+        const link=screen.getByRole('link',{name:'查看公開資料 · 合成朋友'});expect(link).toHaveAttribute('href','/users/20/profile');expect(link.querySelector('button')).toBeNull();
+        expect(screen.getByRole('link',{name:'查看公開願望 · 合成朋友'})).toHaveAttribute('href','/users/20/wishlists');
+        expect(screen.getByRole('button',{name:'追蹤 · 合成朋友'})).toHaveClass('min-h-11');
+    });
+    it('query encoding preserves &,+ and Chinese instead of adding extra API parameters',async()=>{
+        const fetcher=vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[]));vi.stubGlobal('fetch',fetcher);render(view());submit('A&B+中文');
+        await screen.findByText('找不到使用者');const url=new URL(fetcher.mock.calls.find(call=>call[0].includes('/search?'))![0]);
+        expect([...url.searchParams.keys()]).toEqual(['query']);expect(url.searchParams.get('query')).toBe('A&B+中文');
+    });
+    it('failed search is unknown, not empty, and retry can produce a confirmed empty result',async()=>{
+        let fail=true;vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/me'))return ok(self);if(fail)throw Error('offline');return ok([]);}));
+        render(view());submit();await screen.findByRole('alert');expect(screen.queryByText('找不到使用者')).not.toBeInTheDocument();
+        fail=false;fireEvent.click(screen.getByRole('button',{name:'重試搜尋'}));await screen.findByText('找不到使用者');expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+    it('malformed social data is not accepted as friends or a no-results response',async()=>{
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[{...friend,isFollowing:'false'}])));render(view());submit();await screen.findByRole('alert');
+        expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();expect(screen.queryByText('找不到使用者')).not.toBeInTheDocument();
+    });
+    it('editing or clearing query cancels old results even if the old fetch ignores abort',async()=>{
+        let resolve!:(value:unknown)=>void;
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/me')?ok(self):new Promise(r=>{resolve=r;})));
+        render(view());submit();await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
+        fireEvent.change(input(),{target:{value:'其他'}});await act(async()=>resolve(ok([friend])));
+        expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();expect(screen.queryByText('找不到使用者')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button',{name:'清除搜尋'}));expect(input()).toHaveValue('');
+    });
+    it('late previous-account search cannot leak private result into the new account',async()=>{
+        let resolve!:(value:unknown)=>void;
+        vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>url.endsWith('/me')?ok((init?.headers as Record<string,string>).Authorization==='Bearer social-fixture'?self:{...self,id:21}):new Promise(r=>{resolve=r;})));
+        const mounted=render(view());submit();await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
+        mounted.rerender(view({...auth,user:{id:21,phoneNumber:'other'},token:'other-social'}));await act(async()=>resolve(ok([friend])));
+        expect(input()).toHaveValue('');expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();
+    });
+    it('following load failure is not an empty list or zero, and preserves a real zero quota',async()=>{
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/me'))return ok(self);throw Error('offline');}));render(view());
+        fireEvent.click(screen.getByRole('button',{name:'追蹤中'}));await screen.findByRole('alert');
+        expect(screen.queryByText('尚未追蹤任何人')).not.toBeInTheDocument();expect(screen.getByText('— / 0')).toBeInTheDocument();
+        expect(screen.getByRole('button',{name:'重試讀取追蹤清單'})).toBeInTheDocument();
+    });
+    it('unknown quota remains unknown rather than the old hardcoded 100',async()=>{
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/me'))throw Error('offline');return ok([]);}));render(view());
+        fireEvent.click(screen.getByRole('button',{name:'追蹤中'}));await screen.findByText('尚未取得追蹤上限；不以預設數字代替。');
+        await screen.findByText('尚未追蹤任何人');expect(screen.getByText('0 / —')).toBeInTheDocument();
+    });
+    it('HTTPS photo stays a remote URL instead of being prefixed with the API host',async()=>{
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[{...friend,avatarUrl:'https://live.staticflickr.com/synthetic/photo.jpg'}])));render(view());submit();
+        const image=await screen.findByRole('img',{name:'合成朋友'});expect(image).toHaveAttribute('src','https://live.staticflickr.com/synthetic/photo.jpg');expect(image).toHaveAttribute('referrerpolicy','no-referrer');
+    });
+    it('quota read retry validates the account and restores a genuine zero without follow mutations',async()=>{
+        let quota:unknown={...self,id:99};
+        const fetcher=vi.fn(async(url:string)=>ok(url.endsWith('/me')?quota:[]));vi.stubGlobal('fetch',fetcher);render(view());
+        fireEvent.click(screen.getByRole('button',{name:'追蹤中'}));await screen.findByText('尚未取得追蹤上限；不以預設數字代替。');
+        expect(screen.getByText('0 / —')).toBeInTheDocument();quota=self;
+        fireEvent.click(screen.getByRole('button',{name:'重試讀取追蹤上限'}));await screen.findByText('0 / 0');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/me'))).toHaveLength(2);
+        expect(fetcher.mock.calls.some(([url])=>url.endsWith('/follow'))).toBe(false);
+    });
+    it('unfollow confirmation clearly distinguishes a relationship change from account/listing deletion',async()=>{
+        const fetcher=vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[friend]));vi.stubGlobal('fetch',fetcher);render(view());
+        fireEvent.click(screen.getByRole('button',{name:'追蹤中'}));await screen.findByText('合成朋友');
+        expect(screen.getByText('單向追蹤')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'取消追蹤 · 合成朋友'}));
+        expect(screen.getByText('確定要取消追蹤 合成朋友 嗎？不會刪除對方的帳號或商品。')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button',{name:'取消',exact:true}));
+        expect(screen.queryByRole('heading',{name:'取消追蹤'})).not.toBeInTheDocument();expect(screen.getByText('合成朋友')).toBeInTheDocument();
+        expect(fetcher.mock.calls.some(([url])=>url.endsWith('/follow'))).toBe(false);
+    });
+    it('unknown follow ACK offers only current-state GET, never auto-retries or claims historical success',async()=>{
+        const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+            if(init?.method==='POST')throw Error('lost ACK');
+            if(url.endsWith('/me'))return ok(self);if(url.endsWith('/users/20'))return ok({id:20,isFollowing:true});return ok([friend]);
+        });vi.stubGlobal('fetch',fetcher);render(view());submit();await screen.findByText('合成朋友');
+        fireEvent.click(screen.getByRole('button',{name:'追蹤 · 合成朋友'}));await screen.findByText(/尚未確認追蹤變更結果/);
+        expect(screen.getByRole('button',{name:'追蹤 · 合成朋友'})).toBeDisabled();expect(screen.queryByText('後台已確認追蹤變更。')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button',{name:'查核目前追蹤狀態'}));await screen.findByText(/目前後台顯示已追蹤/);
+        expect(screen.getByRole('button',{name:'取消追蹤 · 合成朋友'})).not.toBeDisabled();
+        expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+        const read=fetcher.mock.calls.find(call=>call[0].endsWith('/users/20'))!;expect(read[1]).not.toHaveProperty('method');
+    });
+    it('fast duplicate follow is gated; late ACK does not update a replacement account',async()=>{
+        let ack!:(value:unknown)=>void;
+        const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+            if(init?.method==='POST')return new Promise(r=>{ack=r;});
+            if(url.endsWith('/me'))return ok((init?.headers as Record<string,string>).Authorization==='Bearer social-fixture'?self:{...self,id:21});return ok([friend]);
+        });vi.stubGlobal('fetch',fetcher);const mounted=render(view());submit();await screen.findByText('合成朋友');
+        const button=screen.getByRole('button',{name:'追蹤 · 合成朋友'});fireEvent.click(button);fireEvent.click(button);
+        await vi.waitFor(()=>expect(ack).toBeTypeOf('function'));expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+        mounted.rerender(view({...auth,user:{id:21,phoneNumber:'other'},token:'other-social'}));await act(async()=>ack(ok({message:'Followed successfully'})));
+        expect(screen.queryByText('後台已確認追蹤變更。')).not.toBeInTheDocument();expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();
+    });
+    it('English keeps readable privacy and failure instructions',async()=>{
+        localStorage.setItem('user-locale','en-US');vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/me'))return ok(self);throw Error('offline');}));render(view());
+        fireEvent.change(screen.getByRole('textbox',{name:'Name, phone number, or email'}),{target:{value:'test'}});fireEvent.click(screen.getByRole('button',{name:'Search Users'}));
+        await screen.findByText('The request failed; results are unknown, not empty. Please retry.');expect(screen.getByText(/Search public display names/)).toBeInTheDocument();
+    });
+});

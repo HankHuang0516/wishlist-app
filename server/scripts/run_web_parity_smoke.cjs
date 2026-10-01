@@ -26,6 +26,8 @@ const { login } = require('../dist/controllers/authController');
 const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userController');
 const { getProfileOperation, submitProfileOperation, abandonProfileOperation } = require('../dist/controllers/profileUpdateController');
 const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
+const socialRoutes = require('../dist/routes/socialRoutes').default;
+const { getUserProfile } = require('../dist/controllers/userController');
 const { marketingAvailability } = require('../dist/controllers/marketingController');
 const { searchListings, createListing, myListings, getListingCreation, abandonListingCreation, editListing, changeListingStatus, extendListingExpiry, publishListing } = require('../dist/controllers/listingController');
 const { getMatchWishes, matchWishListings } = require('../dist/controllers/wishlistMatchController');
@@ -41,7 +43,13 @@ app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
-for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement']) { dropped[kind]=0; attempts[kind]=0; }
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow']) { dropped[kind]=0; attempts[kind]=0; }
+let rejectSocialRead = null;
+for (const kind of ['socialSearch','socialFollowing','socialProfile']) attempts[kind]=0;
+app.post('/__test/reject-next-social-read', (req,res) => {
+  if (!['search','following','profile'].includes(req.body?.kind)) return res.sendStatus(400);
+  rejectSocialRead=req.body.kind;res.json({syntheticOnly:true,armed:rejectSocialRead});
+});
 attempts.listingManagementRead=0; attempts.listingManagementAbandon=0;
 app.post('/__test/drop-next-ack', (req, res) => {
   if (typeof req.body?.kind !== 'string' || !Object.hasOwn(dropped, req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
@@ -60,7 +68,13 @@ app.post('/__test/marketing/availability', (req,res) => {
   return res.json({syntheticOnly:true,available:req.body.available});
 });
 app.use((req, res, next) => {
+  const socialRead = req.method === 'GET' ? req.path === '/api/users/search' ? 'search' : req.path === '/api/users/following' ? 'following' : /^\/api\/users\/[1-9]\d*$/.test(req.path) ? 'profile' : null : null;
+  if (socialRead) {
+    attempts['social'+socialRead[0].toUpperCase()+socialRead.slice(1)]++;
+    if (rejectSocialRead === socialRead) { rejectSocialRead=null;return res.status(503).json({errorCode:'TEST_SOCIAL_READ_UNAVAILABLE'}); }
+  }
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    ['POST','DELETE'].includes(req.method) && /^\/api\/users\/[1-9]\d*\/follow$/.test(req.path) ? 'socialFollow' :
     req.method === 'POST' && /^\/api\/listings\/management-operations\/[^/]+$/.test(req.path) ? 'listingManagement' :
     req.method === 'PATCH' && /^\/api\/listings\/[^/]+$/.test(req.path) ? 'listingEdit' :
     req.method === 'POST' && /^\/api\/listings\/[^/]+\/status$/.test(req.path) ? 'listingStatus' :
@@ -109,6 +123,8 @@ app.post('/api/users/me/profile-operations/:clientActionId', authenticateToken, 
 app.post('/api/users/me/profile-operations/:clientActionId/abandon', authenticateToken, abandonProfileOperation);
 app.get('/api/users/me/ai-usage', authenticateToken, getAiUsage);
 app.get('/api/users/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
+app.use('/api/users', socialRoutes);
+app.get('/api/users/:id', authenticateToken, getUserProfile);
 app.get('/api/marketing/availability', authenticateToken, marketingAvailability);
 app.use('/api/marketing', require('../dist/routes/marketingRoutes').default);
 app.get('/api/listings', searchListings);
@@ -186,6 +202,9 @@ app.use((_req, res) => res.status(404).json({ error: 'This isolated smoke server
 async function main() {
   const run = randomUUID(), password = await bcrypt.hash('WebParityOnly!2026', 10);
   users = await Promise.all(['buyer', 'seller'].map(role => prisma.user.create({ data: { phoneNumber: `web-parity-${run}-${role}`, email: `${role}.${run}@example.invalid`, password, isEmailVerified: true, name: role === 'buyer' ? '合成測試買家' : '合成測試賣家' }, select: { id: true, email: true, name: true } })));
+  if(process.env.WEB_PARITY_SOCIAL_FIXTURES==='1') {
+    await prisma.user.update({where:{id:users[1].id},data:{realName:'隱藏實名合成賣家',avatarUrl:'https://example.invalid/hidden-only.jpg',isAvatarVisible:false,isPhoneVisible:false,isEmailVisible:false,isRealNameVisible:false}});
+  }
   listing = await prisma.listing.create({ data: { ownerUserId: users[1].id, clientListingId: randomUUID(), requestHash: 'synthetic-web-parity-only', title: '合成測試漫畫（不可購買）', description: '僅供隔離驗收，不是真實刊登；圖片為合成測試替代圖。', category: 'books', price: 59, condition: 'USED', deliveryMethods: ['MEETUP'], status: 'ACTIVE', publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), location: { create: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 } } } });
   photoId = randomUUID();
   await prisma.listingMedia.create({ data: { id: photoId, ownerUserId: users[1].id, listingId: listing.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/thumbnail`, contentHash: 'synthetic-placeholder-not-flickr', capturePurpose: 'MANUAL_PHOTO' } });

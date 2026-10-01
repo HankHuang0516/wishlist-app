@@ -416,6 +416,7 @@ describe('admin-only attributed external supply staging', () => {
             expect(row).toMatchObject({ aiInputHash: row.contentHash, aiDraft: null, aiJobId: null, aiAttempts: 0 });
             const repeated = await aiAdmin(`/sources/${aiSourceId}/candidates`)
                 .send({ items: [candidate()] });
+            expect({ status: repeated.status, error: repeated.body.error, errorCode: repeated.body.errorCode }).toMatchObject({ status: 202 });
             expect(repeated.body.items[0]).toMatchObject({ changed: false, aiStatus: 'PENDING' });
             const changed = await aiAdmin(`/sources/${aiSourceId}/candidates`)
                 .send({ items: [{ ...candidate(), title: '二手橘色檯燈合成測試' }] });

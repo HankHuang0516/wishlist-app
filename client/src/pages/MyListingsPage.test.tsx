@@ -195,8 +195,8 @@ describe('native-equivalent owner management', () => {
       if (url.includes('/marketing/jobs?')) return ok({ job: null });
       return ok({ items: [{ ...row, media: [{ id: photo, thumbnailUrl: `${marketplaceOrigin()}/api/listing-media/${photo}/thumbnail`, capturePurpose: 'SELLER' }] }], nextCursor: null });
     }); vi.stubGlobal('fetch', fetch);
-    render(view()); await screen.findByRole('heading', { name: row.title }); fireEvent.click(screen.getByRole('button', { name: '編輯資訊' }));
-    const editor = screen.getByText('額外選項').parentElement!;
+    render(view()); await screen.findByRole('heading', { name: row.title }); await ready(); fireEvent.click(screen.getByRole('button', { name: '編輯資訊' }));
+    const editor = (await screen.findByText('額外選項')).parentElement!;
     expect(await within(editor).findByRole('button', { name: '開啟行銷小助手 Beta' })).toBeInTheDocument();
     expect(fetch.mock.calls.some(([url]) => url.includes(`sourceMediaId=${photo}`))).toBe(true);
   });

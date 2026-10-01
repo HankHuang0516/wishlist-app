@@ -25,7 +25,7 @@
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；日曆切月仍待實測 | 日期切月穩定、預設30天、未填欄定位高亮 |
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 本機實作；版本與未知回應測試通過，待隔離DB實測 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
-| 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、收合入口與拖放／鍵盤排序已實作；待完整queue恢復驗證 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作 |
+| 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件及持久原版／免費調整queue回執已實作；實際失聯重掛／重開只讀恢復、原版與child各一次且月次數1；批准跨reload持久原快照、上下文變更、能力關閉UI及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
 | 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
 | 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 本機實作；真實帳號6個願望、漫畫3件第三方匹配已唯讀核對 | 全願望／匹配分頁、最多3個並行、跨頁排序、失敗明示、不混入自己商品 |
 | 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 本機實作；單件zoom13、窄屏與漫畫詳情已驗證 | 同願望漫畫正反例、单件深連結最新狀態核對、鍵盤願望選擇 |
@@ -343,3 +343,20 @@
 - 再調整槽2／4產生一個child，保留舊圖2、選新版圖4，鍵盤重排為2→1→4→3，明確批准後v3。回讀root／child各1個且COMPLETED，批准POST總2（原版與調整各一次），公開4張選用圖＋原實拍1張，舊圖2保留、新圖4替换、文案只一段。沒有再次免費調整入口；本批實際排序驗證是鍵盤，不宣稱實際滑鼠／觸控拖放已驗收。
 - 390×844實際網頁documentWidth375≤390，候選／原圖縮圖7張全部complete且naturalWidth240。原輸出目錄保存 `wishlist-web-marketing-approve-unknown-20261001.jpg`、`wishlist-web-marketing-revision-mobile-20261001.jpg`、`wishlist-web-marketing-approved-mobile-20261001.png`，最終截圖已檢視。已還原viewport、關閉自有QA tab、停止自有API／Vite／PG；合成資料、圖片、證據保留，沒有刪使用者檔案。
 - 仍待補：行銷建立／調整的持久原操作與恢復、批准原選圖快照跨reload持久化、嚴格工作投影與錯誤載入、非重疊polling／權限重新核對、真正MiniMax／Flickr四圖品質與跨端；私人新編輯autosave、照片移除未知回覆、日曆切月及其他完整矩陣、PWA升級、全站響應式／效能、正式migration preflight／最終CI／合併／Railway回讀。主JS664.75KB、地圖1088.99KB、worker507.81KB、PWA5781.26KiB警告保留，不調高門檻。PR82仍draft、整體目標active、未合併／部署。
+
+
+## 2026-10-01 第十九批：持久行銷排隊／免費調整回執與正式網址恢復修復（仍未部署）
+
+- 網頁首頁／設定各自至少90/100、原站風格及單一設定入口的核准基準不變；APP介面與商店素材未改。完整功能、權限、錯誤恢復及正式站門檻保留，本批不重新計視覺分數。
+- 第35份migration新增 `MarketingRequestReceipt`，保存owner＋正規化UUID、原來源／內容SHA-256與QUEUED／ABANDONED終態；刪除工作或照片不釋放原鍵，刪帳號cascade。同owner交易鎖下再次核對JWT／API key，來源／商品版號鎖內取得；工作與回執同交易建立，回執失敗整筆rollback。舊APP路由與ACK保留，但不能用同UUID绕過新版取消記錄。
+- 專用GET只讀本人原6欄回執及5欄工作投影，private/no-store。原版明確帶expectedVersion，免費調整保存原parent、prompt及排序過的slots，並只建立一個child、不重扣月次數；精確重試可在商品改版或功能關閉後查回原工作，沒有原記錄的新工作仍受權限／配額／版號控制。hash-only兩步取消不撤銷已排隊工作或刪照片，先取消可擋晚到POST。
+- 網頁送出前以API＋帳號＋來源照片隔離的AES-GCM journal保存完整原內容、hash與UUID；儲存失敗或損壞就不送出，重開只GET。只有明確按重試才送同鍵同內容，查核／兩步取消／已確認僅清理分開。晚到舊帳號結果不清新帳號；嚴格完整工作投影核對來源／商品／四圖／槽位／選圖／狀態，錯誤讀取不再被吞掉或誤當沒有工作。
+- 修正正式環境特有缺陷：PROD的API_URL為固定 `/api`，原pendingScope只接受完整URL，會讓正式站恢復失效。現在只允許將應用程式自己的 `/api` 按當前網站origin解析；其他相對網址仍拒絕，不跨網站或帳號。production-origin隔離單元測試與Vite正式建置通過，尚不是正式站部署證據。
+- 輪詢由interval改為單次timeout：上一GET結束才排下一次，離頁取消請求及後續排程。新增元件測試核對in-flight期間無第二個排程／無3秒interval，完成後才排下一個、卸載Abort與清timer。測試初版錯把所有API預設timeout signal當成poll signal，導致初始化被故意卡住；已修正測試識別為第一次工作讀取與後續poll，不放寬正式邏輯或逾時。
+- 行銷契約19項、元件21項（原13＋新增8）、production scope／feature儲存與父頁回歸通過。後台新增13項真HTTP／PostgreSQL，涵蓋12並行重試只一工作、配額、取消競態、owner隔離、原生相容、撤銷、hash／版號、原照片／工作消失、CHECK／unique與真rollback。最新全新UTF8隔離DB35份migration及schema agreement無差異；完整HTTP／DB本機356項加新增constraint focused13項通過，完整357項待精確HEAD CI回讀，不能把較早全套當最新全套。後台單元876項及build通過。
+- 最新完整網頁61檔997項通過，TypeScript／Vite正式建置通過；件數不是分支／功能覆蓋率。前一全套失敗只在上述新增poll測試fixture識別，修正後重新跑完整61檔，不把focused通過當全套通過。
+- Chrome合成賣家159實際root提交成功commit後502，頁面明示未知；明確reload只GET恢復同一PENDING工作，POST仍1。四張合成候選交付後對槽2／4提出免費調整，再commit後502；HMR引起元件重掛時自動GET恢復原child，其後明確reload讀到同一child沒有POST，不能把後者說成journal仍待確認時才恢復。選舊圖2、用新版圖4，一次明確批准成公開v2，4張選用图＋原來源1份，文案只一段、無第二次免費調整入口。
+- 隔離state最終為root1／child1、QUEUED回執2、queue POST2／drop2／receipt GET2、approve POST1；另外合成登入的availability實際回讀freeUsedThisMonth=1，永久0、付費未開放。390×844 documentWidth375≤390，候選圖都讀取成功。這是受控commit後502與本機合成素材，不是實際斷網、MiniMax創意四圖品質、Flickr或APP跨端驗收。
+- 證據於原輸出目錄：`wishlist-web-marketing-queue-unknown-20261001.png`、`wishlist-web-marketing-queue-recovered-20261001.png`、`wishlist-web-marketing-revision-queue-recovered-20261001.png`、`wishlist-web-marketing-queue-approved-mobile-20261001.png`。審圖發現harness主來源縮圖被舊logo fixture路由攔截，所以早期照片complete／240px不作「實拍來源正確」證據；四張候選是本機橘燈編碼。修復opt-in路由後另建合成賣家162，真媒體handler的原檯燈縮圖240×320、名稱／NT$350／額外Beta入口重新讀取，沒有再排隊；補圖 `wishlist-web-marketing-real-source-fixture-20261001.png`（fullpage固定header合成位置不可作版面評分）與 `wishlist-web-marketing-real-source-viewport-20261001.png`。不是把原run當重跑成功。
+- 邊界仍待補：批准原選圖／文案跨reload的持久記錄與不可變回執、所有私人GET鎖內重新核權、草稿照片後來綁公開商品／商品實體刪除的queue上下文轉換、已取消／失敗恢復後能力關閉的UI、真AI／Flickr品質與跨端／觸控拖放；私人未送出新編輯autosave、批次照片移除未知回覆、舊紀錄來源隔離可用恢復、混合紀錄、日曆切月、owner狀態／舊功能／註冊／社交／通知／政策、PWA舊快取、全站響應式與效能、正式migration preflight、最終CI／合併／Railway回讀。主JS674.84KB、map1088.99KB、worker507.81KB及PWA5791.22KiB警告保留，不調高門檻。
+- 自有API／Vite／隔離PG已正常停止，QA分頁關閉、viewport已還原；合成資料／照片與截圖保留，沒有刪使用者檔案、正式provider／商品／付款／郵件變更。PR82仍draft、完整目標active，未合併／部署；本批精確提交CI須另回讀。

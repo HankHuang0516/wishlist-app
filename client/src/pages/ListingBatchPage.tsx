@@ -635,7 +635,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           <label className="text-sm sm:col-span-2">商品說明<textarea {...fieldProps(card.id, 'description')} className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={locked} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
         </div>
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
-          {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} sourceMediaId={card.id}
+          {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={card.id} getExpectedVersion={()=>cardsRef.current.find(item=>item.id===card.id)?.version??-1}
             beforeStart={async () => !busyRef.current && !actionsLocked && !draftOperation.current && !savingIds.current.size && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
               !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
             beforeApprove={async () => {

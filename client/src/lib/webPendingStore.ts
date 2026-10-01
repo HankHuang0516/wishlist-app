@@ -9,15 +9,19 @@ export type PendingStore = {
   clear(key: string, expectedBody: string): Promise<boolean>;
 };
 type Entry = { revision: string; iv: Uint8Array<ArrayBuffer>; cipher: ArrayBuffer };
-const resource = /^(profile|listing|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup)\.[0-9a-f-]{36})$/i;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|listing|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup)\.[0-9a-f-]{36})$/;
+const resource = /^(profile|listing|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing)\.[0-9a-f-]{36})$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|listing|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing)\.[0-9a-f-]{36})$/;
 export async function sha256(value: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');
 }
 export async function pendingScope(apiUrl: string, userId: number) {
   if (!Number.isSafeInteger(userId) || userId < 1 || userId > 2147483647) throw new PendingStoreError();
-  return `wishlist.pending.v1.${await sha256(validateApiUrl(apiUrl, import.meta.env.DEV))}.${userId}`;
+  // Production fetch uses the fixed same-origin '/api'. Resolve only that
+  // application-owned value; arbitrary relative/server URLs stay forbidden.
+  const absolute = apiUrl === '/api' && typeof window !== 'undefined'
+    ? new URL('/api', window.location.origin).href : apiUrl;
+  return `wishlist.pending.v1.${await sha256(validateApiUrl(absolute, import.meta.env.DEV))}.${userId}`;
 }
 export async function pendingRequestKey(apiUrl: string, userId: number, feature: string) {
   if (!resource.test(feature)) throw new PendingStoreError();

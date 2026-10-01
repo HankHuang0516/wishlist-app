@@ -7,6 +7,7 @@ import { parseListingSellerDraft } from '../lib/listingSellerDraft';
 import { freeMarketingWindow, MARKETING_FREE_MONTHLY_LIMIT, mayRequestFreeRevision } from '../lib/marketingAssistantRules';
 import { MarketingInputError, marketingEnabledFor, marketingRequestId, marketingRevisionPrompt, marketingSnapshotHash } from '../lib/marketingAssistantAccess';
 import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
+import { listingCreationGate, ListingCreationError } from '../lib/listingCreation';
 
 const MARKETING_HEADING = '\n\n【行銷小助手文案】\n';
 function descriptionWithCopy(original: string, copy: string) {
@@ -40,6 +41,7 @@ async function effectiveMedia(job: { id: string; parentJobId: string | null }) {
 }
 
 function fail(res: Response, error: unknown) {
+    if(error instanceof ListingCreationError) return res.status(error.status).json({error:'登入或原操作仍需查核',errorCode:error.code});
     if (error instanceof MarketingInputError) return res.status(error.status).json({ error: error.message, errorCode: error.code });
     if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code))
         return res.status(409).json({ error: '行銷工作已變動，請重新載入', errorCode: 'MARKETING_CONFLICT' });
@@ -61,13 +63,13 @@ export async function marketingAvailability(req: AuthRequest, res: Response) {
     } catch (error) { return fail(res, error); }
 }
 
-async function snapshot(ownerUserId: number, sourceMediaId: string, listingId?: string) {
-    const source = await prisma.listingMedia.findFirst({ where: { id: sourceMediaId, ownerUserId,
+export async function marketingSnapshot(ownerUserId: number, sourceMediaId: string, listingId?: string, db: Prisma.TransactionClient = prisma) {
+    const source = await db.listingMedia.findFirst({ where: { id: sourceMediaId, ownerUserId,
         capturePurpose: { not: 'AI_MARKETING' } }, select: { id: true, listingId: true, wishItemId: true,
         contentHash: true, sellerDraft: true, sellerDraftVersion: true, aiDraftStatus: true } });
     if (!source || source.wishItemId !== null) throw new MarketingInputError('SOURCE_NOT_FOUND', 404, '商品實拍照不存在');
     if (listingId) {
-        const listing = await prisma.listing.findFirst({ where: { id: listingId, ownerUserId,
+        const listing = await db.listing.findFirst({ where: { id: listingId, ownerUserId,
             status: { in: ['ACTIVE', 'RESERVED'] } }, select: { id: true, version: true, title: true,
             description: true, price: true, currency: true, condition: true, category: true, brand: true } });
         if (!listing || source.listingId !== listing.id) throw new MarketingInputError('LISTING_NOT_FOUND', 404, '商品不存在或照片不屬於此商品');
@@ -107,11 +109,12 @@ export async function createMarketingJob(req: AuthRequest, res: Response) {
         const clientRequestId = marketingRequestId(body.clientRequestId);
         const listingId = body.listingId as string | undefined;
         const sourceMediaId = body.sourceMediaId as string;
-        const details = await snapshot(req.user.id, sourceMediaId, listingId);
+        const details = await marketingSnapshot(req.user.id, sourceMediaId, listingId);
         const requestHash = marketingSnapshotHash(details);
         const period = freeMarketingWindow(new Date());
         const result = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${req.user!.id} FOR UPDATE`;
+            await listingCreationGate(tx,req,req.user!.id);
+            if(await tx.marketingRequestReceipt.findUnique({where:{userId_clientRequestId:{userId:req.user!.id,clientRequestId}},select:{id:true}})) throw new MarketingInputError('REQUEST_CONFLICT',409);
             const existing = await tx.marketingJob.findUnique({ where: { ownerUserId_clientRequestId: {
                 ownerUserId: req.user!.id, clientRequestId } }, select: { id: true, status: true, requestHash: true } });
             if (existing) {
@@ -199,7 +202,8 @@ export async function createMarketingRevision(req: AuthRequest, res: Response) {
         slots.sort((a: number, b: number) => a - b);
         const requestHash = marketingSnapshotHash({ parent: parentId, prompt, slots });
         const result = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${req.user!.id} FOR UPDATE`;
+            await listingCreationGate(tx,req,req.user!.id);
+            if(await tx.marketingRequestReceipt.findUnique({where:{userId_clientRequestId:{userId:req.user!.id,clientRequestId}},select:{id:true}})) throw new MarketingInputError('REQUEST_CONFLICT',409);
             const previous = await tx.marketingJob.findUnique({ where: { ownerUserId_clientRequestId: {
                 ownerUserId: req.user!.id, clientRequestId } } });
             if (previous) {
@@ -253,7 +257,7 @@ export async function approveMarketingJob(req: AuthRequest, res: Response) {
             return res.json({ listingId: job.listingId, selectedMediaIds: ids });
         if (job.status === 'COMPLETED') throw new MarketingInputError('ALREADY_APPROVED', 409, '已確認的行銷圖無法重複套用；請重新載入');
         const result = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${req.user!.id} FOR UPDATE`;
+            await listingCreationGate(tx,req,req.user!.id);
             const currentJob = await tx.marketingJob.findFirst({ where: { id: job.id, ownerUserId: req.user!.id },
                 select: { status: true } });
             if (currentJob?.status !== 'REVIEW')

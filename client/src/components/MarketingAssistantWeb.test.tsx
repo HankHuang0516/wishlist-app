@@ -1,26 +1,100 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketingAssistantWeb from './MarketingAssistantWeb';
+import { webcrypto } from 'node:crypto';
+import { sha256 } from '../lib/webPendingStore';
+import { marketingQueueJournal,parseMarketingQueueJournal } from '../lib/marketingQueueWeb';
+const queueStore=vi.hoisted(()=>({get:vi.fn(async()=>null as string|null),save:vi.fn(async()=>{}),clear:vi.fn(async()=>true)}));
+vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),privatePendingStore:queueStore}));
 const source = '11111111-1111-4111-8111-111111111111', listingId = '22222222-2222-4222-8222-222222222222';
 const jobId = '33333333-3333-4333-8333-333333333333';
 const media = [1, 2, 3, 4].map(slot => ({ id: `44444444-4444-4444-8444-44444444444${slot}`, marketingSlot: slot, marketingSelected: false }));
-const job = { id: jobId, status: 'REVIEW', parentJobId: null, deliveredAt: new Date().toISOString(), copy: '測試行銷文案', generatedMedia: media };
+const job = { id: jobId, sourceMediaId:source,listingId,status: 'REVIEW', parentJobId: null, deliveredAt: new Date().toISOString(), copy: '測試行銷文案', generatedMedia: media,previousMedia:[],selectedMediaIds:[] };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const releaseApproval = vi.fn();
-const props = { token: 'fixture-session', sourceMediaId: source, listingId, beforeStart: vi.fn(async () => true), beforeApprove: vi.fn(async () => releaseApproval), onApproved: vi.fn(async () => undefined) };
-beforeEach(() => { props.beforeStart.mockClear(); props.beforeApprove.mockClear(); props.onApproved.mockClear(); releaseApproval.mockClear(); });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+const props = { token: 'fixture-session',userId:42,getExpectedVersion:()=>1, sourceMediaId: source, listingId, beforeStart: vi.fn(async () => true), beforeApprove: vi.fn(async () => releaseApproval), onApproved: vi.fn(async () => undefined) };
+beforeEach(() => {vi.stubGlobal('crypto',webcrypto);queueStore.get.mockReset().mockResolvedValue(null);queueStore.save.mockReset().mockResolvedValue(undefined);queueStore.clear.mockReset().mockResolvedValue(true); props.beforeStart.mockClear(); props.beforeApprove.mockClear(); props.onApproved.mockClear(); releaseApproval.mockClear(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const open = async () => fireEvent.click(await screen.findByRole('button', { name: '開啟行銷小助手 Beta' }));
 function install(latest: unknown = { job: { id: jobId } }) {
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/availability')) return ok({ available: true });
     if (url.includes('?sourceMediaId')) return ok(latest);
     if (url.endsWith(`/jobs/${jobId}`)) return ok(job);
+    if (init?.method === 'POST'&&url.includes('/requests/')){const body=JSON.parse(String(init.body)),clientRequestId=url.split('/').at(-1);return ok({receipt:{clientRequestId,sourceMediaId:source,requestHash:await sha256(JSON.stringify(body)),state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});}
     if (init?.method === 'POST') return ok({ id: jobId, status: 'PENDING' });
     throw new Error('photo mock unavailable');
   }); vi.stubGlobal('fetch', fetch); return fetch;
 }
 describe('shared web marketing entry for drafts and published products', () => {
+  it('waits for each pending poll before scheduling another and aborts on leaving',async()=>{
+    let finish!:(value:unknown)=>void,jobReads=0;
+    const scheduled:Array<()=>void>=[],realTimeout=window.setTimeout.bind(window);
+    vi.spyOn(window,'setTimeout').mockImplementation((handler,delay,...args)=>{
+      if(delay===3000){scheduled.push(()=>{if(typeof handler==='function')handler(...args);});return 9000+scheduled.length;}
+      return realTimeout(handler,delay,...args);
+    });
+    const intervals=vi.spyOn(window,'setInterval'),clear=vi.spyOn(window,'clearTimeout');
+    const pending={...job,status:'PENDING',copy:null,deliveredAt:null,generatedMedia:[]};
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/availability'))return ok({available:true});
+      if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});
+      if(url.endsWith('/jobs/'+jobId)){
+        if(++jobReads===1)return ok(pending);
+        return new Promise(resolve=>{finish=resolve;});
+      }
+      throw Error('unexpected');
+    });vi.stubGlobal('fetch',fetch);
+    const view=render(<MarketingAssistantWeb {...props}/>);
+    await open();expect(scheduled).toHaveLength(1);
+    await act(async()=>scheduled[0]());
+    const polls=()=>fetch.mock.calls.filter(([url])=>url.endsWith('/jobs/'+jobId)).slice(1);
+    expect(polls()).toHaveLength(1);
+    expect(scheduled).toHaveLength(1);
+    expect(intervals.mock.calls.some(([,delay])=>delay===3000)).toBe(false);
+    await act(async()=>finish(ok(pending)));
+    expect(scheduled).toHaveLength(2);expect(polls()).toHaveLength(1);
+    await act(async()=>scheduled[1]());expect(polls()).toHaveLength(2);
+    const signal=polls()[1][1]?.signal;expect(signal?.aborted).toBe(false);
+    view.unmount();expect(signal?.aborted).toBe(true);expect(clear).toHaveBeenCalledWith(9002);
+    await act(async()=>finish(ok(pending)));
+    expect(scheduled).toHaveLength(2);expect(polls()).toHaveLength(2);
+  });
+  it('restores committed creation after reload with GET only, retaining exactly one request',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==='POST')throw Error('write forbidden');if(url.includes('/requests/'))return ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:journal.requestHash,state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});if(url.endsWith('/jobs/'+jobId))return ok(job);throw Error('private photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('已核對原行銷工作；沒有另建工作或再扣次數。');expect(queueStore.clear).toHaveBeenCalledWith(expect.stringContaining('marketing.'+source),raw);expect(fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);expect(fetch.mock.calls.filter(([url])=>url.includes('/requests/'))).toHaveLength(1);expect(props.beforeStart).not.toHaveBeenCalled();
+  });
+  it('keeps unknown request frozen and explicitly retries the same ID and original body',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.includes('/requests/')&&init?.method==='POST')return ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:journal.requestHash,state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});if(url.includes('/requests/'))throw Error('read unavailable');if(url.endsWith('/jobs/'+jobId))return ok(job);throw Error('unexpected');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原行銷排隊結果仍待查核；不會自動重送。');expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();
+    const retry=screen.getByRole('button',{name:'以相同識別碼重試原排隊'});fireEvent.click(retry);fireEvent.click(retry);await screen.findByText('已核對原行銷工作；沒有另建工作或再扣次數。');
+    const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(writes[0][0]).toContain(journal.clientRequestId);expect(JSON.parse(String(writes[0][1]?.body))).toEqual(journal.body);
+  });
+  it('does not generate when encrypted storage is unavailable, and exposes retryable read error',async()=>{
+    queueStore.get.mockRejectedValue(Error('storage'));const fetch=install({job:null});render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByText('無法安全讀取行銷工作或本機紀錄；請重新查核，不會建立新工作。');expect(screen.getByRole('button',{name:'生成四張行銷圖'})).toBeDisabled();expect(fetch).not.toHaveBeenCalled();
+  });
+  it('known result with local cleanup failure offers cleanup only, no new request',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);queueStore.clear.mockRejectedValueOnce(Error('clear')).mockResolvedValue(true);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method)throw Error('write forbidden');if(url.includes('/requests/'))return ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:journal.requestHash,state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});if(url.endsWith('/jobs/'+jobId))return ok(job);throw Error('unexpected');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原結果已確認，但本機紀錄尚未清理；只重試清理，不會重送。');expect(screen.queryByRole('button',{name:'以相同識別碼重試原排隊'})).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'只重試清理原行銷紀錄'}));await screen.findByText('已核對原行銷工作；沒有另建工作或再扣次數。');expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('does not clear or accept a mismatched original receipt',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);vi.stubGlobal('fetch',vi.fn(async()=>ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:'f'.repeat(64),state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}})));
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原行銷排隊結果仍待查核；不會自動重送。');expect(queueStore.clear).not.toHaveBeenCalled();expect(screen.queryByRole('textbox',{name:'編輯行銷文案'})).not.toBeInTheDocument();
+  });
+  it('requires second confirmation to fence an uncreated original request',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.endsWith('/abandon'))return ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:journal.requestHash,state:'ABANDONED',jobId:null,createdAt:new Date().toISOString()},job:null});throw Error('no receipt yet');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原行銷排隊結果仍待查核；不會自動重送。');fireEvent.click(screen.getByRole('button',{name:'取消未建立的原排隊'}));expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'確認取消未建立工作'}));await screen.findByText('原排隊操作已取消；未建立新工作。');expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+  });
+  it('ignores late original receipt after account replacement and never clears the old journal',async()=>{
+    const raw=await marketingQueueJournal({kind:'CREATE',sourceMediaId:source,listingId,expectedVersion:1}),journal=await parseMarketingQueueJournal(raw);queueStore.get.mockResolvedValueOnce(raw).mockResolvedValue(null);let finish!:(value:unknown)=>void;
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/requests/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:null});throw Error('unexpected');}));
+    const view=render(<MarketingAssistantWeb {...props}/>);await screen.findByRole('region',{name:'原行銷排隊操作待確認'});view.rerender(<MarketingAssistantWeb {...props} userId={43} token="other-fixture"/>);await screen.findByRole('button',{name:'開啟行銷小助手 Beta'});
+    await act(async()=>finish(ok({receipt:{clientRequestId:journal.clientRequestId,sourceMediaId:source,requestHash:journal.requestHash,state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}})));expect(queueStore.clear).not.toHaveBeenCalled();expect(screen.queryByText(job.copy)).not.toBeInTheDocument();
+  });
   it('offers a collapsed Beta entry and four selectable images after expanding', async () => {
     install(); render(<MarketingAssistantWeb {...props} />); await open();
     expect(await screen.findByRole('textbox', { name: '編輯行銷文案' })).toHaveValue('測試行銷文案');
@@ -56,7 +130,8 @@ describe('shared web marketing entry for drafts and published products', () => {
     const button = screen.getByRole('button', { name: '生成四張行銷圖' }); fireEvent.click(button); fireEvent.click(button);
     expect(beforeStart).toHaveBeenCalledTimes(1);
     await act(async () => finish(true));
-    const create = fetch.mock.calls.filter(([url, init]) => url.endsWith('/marketing/jobs') && init?.method === 'POST');
+    await vi.waitFor(()=>expect(fetch.mock.calls.filter(([url,init])=>url.includes('/marketing/requests/')&&init?.method==='POST')).toHaveLength(1));
+    const create = fetch.mock.calls.filter(([url, init]) => url.includes('/marketing/requests/') && init?.method === 'POST');
     expect(create).toHaveLength(1);
     expect(JSON.parse(String(create[0][1]?.body))).toMatchObject({ sourceMediaId: source, listingId });
   });

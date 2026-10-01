@@ -70,6 +70,7 @@ model User {
   listingReportOperations ListingReportOperation[]
   listingMedia    ListingMedia[]
   marketingJobs   MarketingJob[]
+  marketingRequestReceipts MarketingRequestReceipt[]
   buyerConversations Conversation[] @relation("ConversationBuyer")
   sellerConversations Conversation[] @relation("ConversationSeller")
   conversationParticipants ConversationParticipant[]
@@ -124,6 +125,22 @@ enum MarketingJobStatus {
   REVIEW
   COMPLETED
   FAILED
+}
+
+// Immutable request identity survives physical source/job erasure; only the
+// owning account relation cascades. Terminal state constraints live in SQL.
+model MarketingRequestReceipt {
+  id              String @id @default(uuid())
+  userId          Int
+  clientRequestId String
+  sourceMediaId   String
+  requestHash     String
+  state           String
+  jobId           String?
+  createdAt       DateTime @default(now())
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientRequestId])
 }
 
 // A delivered job contains four privately stored images and seller-editable

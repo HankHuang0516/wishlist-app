@@ -131,7 +131,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
           <div className="space-y-2"><label htmlFor={`price-${item.id}`}>售價（NT$，0 代表免費贈送）</label><Input id={`price-${item.id}`} inputMode="decimal" disabled={blocked} value={price} onChange={event => setPrice(event.target.value)} /></div>
           <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>取消編輯</Button><Button disabled={blocked} onClick={() => save(item)}>儲存修改</Button></div>
           <h3 className="font-semibold">額外選項</h3>
-          {source && ['ACTIVE', 'RESERVED'].includes(item.status) && !unconfirmed && <MarketingAssistantWeb token={token} sourceMediaId={source.id} listingId={item.id}
+          {source && ['ACTIVE', 'RESERVED'].includes(item.status) && !unconfirmed && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={source.id} listingId={item.id} getExpectedVersion={()=>item.version}
             beforeStart={async () => { if (busy || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) { setIssue('請先儲存商品資訊，再使用行銷小助手。'); return false; } return true; }}
             beforeApprove={async () => {
               if (!active.current || running.current || unconfirmed || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) return null;

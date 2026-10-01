@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { webcrypto, randomUUID } from 'node:crypto';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWebPendingStore, pendingRequestKey, PendingStoreError } from './webPendingStore';
 const scope = `wishlist.pending.v1.${'a'.repeat(64)}.42`, key = scope + '.listing-report';
 const crypt = webcrypto as unknown as Crypto;
@@ -11,7 +11,20 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
   return new Promise<unknown>((resolve, reject) => { const r = db.transaction(table).objectStore(table).get(key); r.onsuccess = () => { resolve(r.result); db.close(); }; r.onerror = () => { reject(r.error); db.close(); }; });
 }
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
+afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('resolves the real production same-origin API without accepting arbitrary relative URLs',async()=>{
+    vi.stubGlobal('window',{location:{origin:'https://wishlist-app-production.up.railway.app'}});
+    expect(await pendingRequestKey('/api',42,'listing-draft')).toBe(await pendingRequestKey('https://wishlist-app-production.up.railway.app/api',42,'listing-draft'));
+    const a=await pendingRequestKey('/api',42,'marketing.11111111-1111-4111-8111-111111111111');
+    vi.stubGlobal('window',{location:{origin:'https://other.example.com'}});expect(a).not.toBe(await pendingRequestKey('/api',42,'marketing.11111111-1111-4111-8111-111111111111'));
+    await expect(pendingRequestKey('//evil.example/api',42,'listing-draft')).rejects.toThrow();await expect(pendingRequestKey('../api',42,'listing-draft')).rejects.toThrow();
+  });
+  it('isolates marketing queue proof by source, API and account, preserving ciphertext across reload',async()=>{
+    const {factory,name,store}=fixture(),source='11111111-1111-4111-8111-111111111111',a=await pendingRequestKey('https://example.com/api',42,'marketing.'+source),b=await pendingRequestKey('https://example.com/api',43,'marketing.'+source),c=await pendingRequestKey('https://other.example.com/api',42,'marketing.'+source);
+    await store.save(a,'private-revision-prompt');expect(await store.get(b)).toBeNull();expect(await store.get(c)).toBeNull();expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe('private-revision-prompt');
+    expect(new TextDecoder().decode((await raw(factory,name,'pending',a)as{cipher:ArrayBuffer}).cipher)).not.toContain('private-revision-prompt');
+  });
   it('persists encrypted evidence and a non-extractable key, restoring after reload', async () => {
     const { factory, name, store } = fixture(), body = JSON.stringify({ privateEvidence: '合成私密證據🦉' });
     await store.save(key, body); expect(await store.get(key)).toBe(body);

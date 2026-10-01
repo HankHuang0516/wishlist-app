@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import MyListingsPage from './MyListingsPage';
 import { marketplaceOrigin } from '../lib/managedListingWeb';
+import { webcrypto } from 'node:crypto';
+vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),privatePendingStore:{get:async()=>null,save:vi.fn(),clear:vi.fn()}}));
 const id = '11111111-1111-4111-8111-111111111111', second = '22222222-2222-4222-8222-222222222222';
 const photo = '33333333-3333-4333-8333-333333333333';
 const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture-session', login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
@@ -11,7 +13,7 @@ const row = { id, ownerUserId: 19, owner: { id: 19 }, version: 1, title: '三國
   status: 'ACTIVE', condition: 'USED', category: 'books', price: '250', currency: 'TWD', createdAt: '2026-09-29T00:00:00Z', publishedAt: '2026-09-29T00:00:00Z', expiresAt: '2100-10-30T15:59:59Z', location: { county: '臺北市', district: '中山區' }, media: [] };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><MyListingsPage /></AuthContext.Provider></MemoryRouter>;
-beforeEach(() => vi.spyOn(window, 'confirm').mockReturnValue(true));
+beforeEach(() => {vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('native-equivalent owner management', () => {
   it('provides a login return path without requesting private data before login', () => {

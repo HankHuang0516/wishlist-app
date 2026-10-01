@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiFailure } from '../lib/marketplaceApi';
-import { earliestExtensionDate, listingEditBody, managementTab, MANAGEMENT_TABS, marketplaceOrigin,
+import { earliestExtensionDate, managementTab, MANAGEMENT_TABS, marketplaceOrigin,
   ManagedListingError, parseManagedListing, parseManagedListingPage } from '../lib/managedListingWeb';
 import type { ManagedListing, ManagementTab } from '../lib/managedListingWeb';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
-import MarketingAssistantWeb from '../components/MarketingAssistantWeb';
+import ListingEditForm from '../components/ListingEditForm';
+import { parseListingEditDraft } from '../lib/listingEditDraft';
+import type { ListingEditFields } from '../lib/listingEditDraft';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { getFullApiUrl } from '../config';
@@ -26,7 +28,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   const [tab, setTab] = useState<ManagementTab>('在售'), [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState(''), [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<string | null>(null), [detailId, setDetailId] = useState<string | null>(null);
-  const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [price, setPrice] = useState('');
+  const [editSeed, setEditSeed] = useState<ListingEditFields | undefined>();
   const [expiryId, setExpiryId] = useState<string | null>(null), [date, setDate] = useState('');
   const [pendingRaw, setPendingRaw] = useState<string | null>(null), [journal, setJournal] = useState<ManagementJournal | null>(null);
   const [outcome, setOutcome] = useState<ManagementResult | null>(null), [latest, setLatest] = useState<ManagedListing | null>(null);
@@ -83,6 +85,20 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
       if (!active.current) return;
       setRows(old => old.some(row => row.id === current.id) ? old.map(row => row.id === current.id ? current : row) : [...old, current]);
       setLatest(current); setEditing(null); setExpiryId(null);
+      if (result.state === 'APPLIED' && saved.body.kind === 'EDIT') {
+        try {
+          const key = await pendingRequestKey(getFullApiUrl(), userId, 'listing-edit.' + current.id);
+          const rawDraft = await privatePendingStore.get(key);
+          if (!active.current) return;
+          if (rawDraft) {
+            const draft = parseListingEditDraft(rawDraft, current.id), changes = saved.body.changes;
+            if (draft.baseVersion === saved.body.expectedVersion && draft.fields.title.trim() === changes.title &&
+              draft.fields.description.trim() === (changes.description ?? '') &&
+              (draft.fields.price.trim() ? Number(draft.fields.price) : null) === (changes.price ?? null))
+              await privatePendingStore.clear(key, rawDraft);
+          }
+        } catch { if (active.current) setIssue('原商品操作已完成，但本機編輯草稿尚未清理；草稿仍保留，請重開編輯比較。'); }
+      }
     } catch { if (active.current) setIssue('原操作回執已確認，但目前商品資料仍無法安全核對；紀錄已保留，請只查詢最新狀態。'); }
   }
   async function recover() {
@@ -96,24 +112,26 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     finally { running.current = false; if (active.current) setBusy(false); }
   }
   async function mutate(item: ManagedListing, kind: ManagementBody['kind'], changes: Record<string, unknown>) {
-    if (!active.current || running.current || unconfirmed || !pendingLoaded) return;
+    if (!active.current || running.current || unconfirmed || !pendingLoaded) return false;
     running.current = true; setBusy(true); setIssue(''); setNotice('');
     let saved = false;
     try {
       const raw = await managementJournal({ kind, listingId: item.id, expectedVersion: item.version, changes }, item);
-      if (!active.current) return;
+      if (!active.current) return false;
       await privatePendingStore.save(pendingKey.current, raw);
       saved = true;
-      if (!active.current) return;
+      if (!active.current) return false;
       setPendingRaw(raw); setJournal(await parseManagementJournal(raw)); setOutcome(null); setLatest(null);
       const result = await sendManagement(token, raw, privatePendingStore, pendingKey.current, () => active.current);
       if (active.current) await showResult(raw, result);
+      return result.state === 'APPLIED';
     } catch (failure) {
-      if (!active.current) return;
+      if (!active.current) return false;
       setIssue(!saved ? '無法安全保存原操作；未送出。請重新載入恢復後再試。' : failure instanceof ApiFailure && failure.status === 409 ? '原操作內容衝突；請先查核回執，勿重送或覆蓋。' : '操作結果尚未確認；紀錄已保留，請先查核回執，勿連續重送。');
       // A failed CAS can mean another tab owns a different pending operation.
       // Re-read storage before permitting any new mutation.
       await restore();
+      return false;
     } finally { running.current = false; if (active.current) setBusy(false); }
   }
   async function pendingAction(action: 'retry' | 'abandon') {
@@ -133,7 +151,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
       if (!active.current) return;
       if (keepEdit && latest && journal.body.kind === 'EDIT') {
         const changes = journal.body.changes;
-        setEditing(latest.id); setTitle(String(changes.title)); setDescription(typeof changes.description === 'string' ? changes.description : latest.description ?? ''); setPrice(typeof changes.price === 'number' ? String(changes.price) : latest.price === null ? '' : String(latest.price));
+        setEditSeed({ title: String(changes.title), description: typeof changes.description === 'string' ? changes.description : latest.description ?? '', price: typeof changes.price === 'number' ? String(changes.price) : latest.price === null ? '' : String(latest.price) }); setEditing(latest.id);
         setTab(managementTab(latest));
       } else { setEditing(null); setExpiryId(null); }
       setPendingRaw(null); setJournal(null); setOutcome(null); setLatest(null); setCancelRequested(false);
@@ -144,10 +162,6 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   function statusAction(item: ManagedListing, action: 'reserve' | 'release' | 'sold' | 'remove', _next: ManagedListing['status'], label: string) {
     if (!window.confirm(`確認${label}「${item.title}」？${action === 'remove' ? '移除後不會出現在探索地圖，無法從此頁恢復。' : ''}`)) return;
     void mutate(item, 'STATUS', { action });
-  }
-  function save(item: ManagedListing) {
-    try { const { expectedVersion: _version, ...changes } = listingEditBody(item, title, description, price); void mutate(item, 'EDIT', changes); }
-    catch (error) { setIssue(error instanceof Error ? error.message : '請確認商品欄位。'); }
   }
   function extend(item: ManagedListing) {
     const minimum = earliestExtensionDate(item.expiresAt);
@@ -196,7 +210,6 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     {visible.map(item => {
       const expired = managementTab(item, now) === '已失效';
       const editable = ['DRAFT', 'ACTIVE', 'RESERVED'].includes(item.status) && !expired;
-      const source = item.media.find(media => media.capturePurpose !== 'AI_MARKETING');
       return <article key={item.id} aria-label={item.title} className="rounded-2xl bg-white border shadow-sm p-5 space-y-4">
         <div className="flex gap-4"><div className="w-28 shrink-0">{item.media[0] ? <PrivatePhoto id={item.media[0].id} token={token} label={`${item.title}商品縮圖`} /> : <p className="rounded-xl bg-gray-100 p-4">無照片</p>}</div>
           <div className="min-w-0 space-y-1"><h2 className="text-lg font-semibold break-words">{item.title}</h2><p className="font-semibold text-blue-700">{item.price === null ? '售價未填' : item.price === 0 ? '免費贈送' : `NT$ ${item.price.toLocaleString('zh-TW')}`}</p>
@@ -204,7 +217,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         {detailId === item.id && <div className="space-y-2"><p className="whitespace-pre-wrap">{item.description || '尚未填寫說明'}</p><p className="text-xs text-gray-600 break-all">分類：{item.category ?? '未分類'} · 建立：{item.createdAt.slice(0, 10)} · 商品編號：{item.id}</p></div>}
         <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? '收合詳情' : '查看詳情'}</Button>
           {item.publishedAt && <><Button variant="outline" onClick={() => void share(item)}>分享連結</Button><Link className="p-2 text-blue-700 underline" to={`/listings/${item.id}?v=${item.version}`}>商品網址</Link></>}
-          {editable && <Button variant="outline" disabled={blocked} onClick={() => { setEditing(item.id); setTitle(item.title); setDescription(item.description ?? ''); setPrice(item.price === null ? '' : String(item.price)); }}>編輯資訊</Button>}
+          {editable && <Button variant="outline" disabled={blocked} onClick={() => { setEditSeed(undefined); setEditing(item.id); }}>編輯資訊</Button>}
           {item.status === 'ACTIVE' && !expired && detailId === item.id && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', '標記保留')}>標記保留</Button>}
           {item.status === 'RESERVED' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', '恢復在售')}>恢復在售</Button>}
           {['ACTIVE', 'RESERVED'].includes(item.status) && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'sold', 'SOLD', '標記售出')}>標記售出</Button>}
@@ -213,27 +226,19 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         </div>
         {expired && <p className="text-sm text-gray-600">此商品已失效；請先延長期限，再編輯或繼續刊登。</p>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <p className="text-sm text-gray-600">分享連結仍可複製，但其他人只會看到「已停止刊登」。</p>}
-        {editing === item.id && <div className="rounded-xl bg-gray-50 p-4 space-y-4"><h3 className="font-semibold">編輯商品資訊</h3>
-          <div className="space-y-2"><label htmlFor={`title-${item.id}`}>商品名稱</label><Input id={`title-${item.id}`} disabled={blocked} value={title} onChange={event => setTitle(event.target.value)} maxLength={100} /></div>
-          <div className="space-y-2"><label htmlFor={`description-${item.id}`}>商品說明</label><textarea id={`description-${item.id}`} disabled={blocked} className="w-full min-h-32 rounded-xl border p-3" value={description} onChange={event => setDescription(event.target.value)} maxLength={3000} /></div>
-          <div className="space-y-2"><label htmlFor={`price-${item.id}`}>售價（NT$，0 代表免費贈送）</label><Input id={`price-${item.id}`} inputMode="decimal" disabled={blocked} value={price} onChange={event => setPrice(event.target.value)} /></div>
-          <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>取消編輯</Button><Button disabled={blocked} onClick={() => save(item)}>儲存修改</Button></div>
-          <h3 className="font-semibold">額外選項</h3>
-          {source && ['ACTIVE', 'RESERVED'].includes(item.status) && !unconfirmed && pendingLoaded && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={source.id} listingId={item.id} getExpectedVersion={()=>item.version}
-            beforeStart={async () => { if (busy || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) { setIssue('請先儲存商品資訊，再使用行銷小助手。'); return false; } return true; }}
-            beforeApprove={async () => {
-              if (!active.current || running.current || unconfirmed || !pendingLoaded || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) return null;
-              running.current = true; setBusy(true);
-              return () => { if (active.current) { running.current = false; setBusy(false); } };
-            }}
-            onApproved={async () => {
-              const latest = parse(await api<unknown>(token, `/listings/${item.id}`));
-              if (!active.current) return;
-              if (latest.id !== item.id) throw new ManagedListingError();
-              setRows(old => old.map(row => row.id === item.id ? latest : row));
-              setTitle(latest.title); setDescription(latest.description ?? ''); setPrice(latest.price === null ? '' : String(latest.price));
-            }} />}
-        </div>}
+        {editing === item.id && <ListingEditForm key={item.id} item={item} token={token} userId={userId} locked={blocked} seed={editSeed}
+          onClose={() => setEditing(null)} onSave={changes => mutate(item, 'EDIT', changes)}
+          beforeApprove={async () => {
+            if (!active.current || running.current || unconfirmed || !pendingLoaded) return null;
+            running.current = true; setBusy(true);
+            return () => { if (active.current) { running.current = false; setBusy(false); } };
+          }}
+          onApproved={async () => {
+            const current = parse(await api<unknown>(token, `/listings/${item.id}`));
+            if (!active.current || current.id !== item.id) throw new ManagedListingError();
+            setRows(old => old.map(row => row.id === item.id ? current : row));
+            return current;
+          }} />}
         {expiryId === item.id && <div className="rounded-xl bg-gray-50 p-4 space-y-3"><label htmlFor={`expiry-${item.id}`}>新的失效日期（台灣時間）</label>
           <Input id={`expiry-${item.id}`} type="date" min={earliestExtensionDate(item.expiresAt)} value={date} disabled={blocked} onChange={event => setDate(event.target.value)} />
           <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => setExpiryId(null)}>取消延長</Button><Button disabled={blocked} onClick={() => extend(item)}>確認延長</Button></div></div>}

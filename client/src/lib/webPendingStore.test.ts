@@ -19,6 +19,25 @@ describe('browser encrypted pending operations', () => {
     expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe('private-original-edit');expect(await store.get(b)).toBeNull();expect(await store.get(c)).toBeNull();
     await expect(store.save(a,'other-edit')).rejects.toThrow();expect(await store.clear(a,'other-edit')).toBe(false);expect(await store.clear(a,'private-original-edit')).toBe(true);expect(await store.get(scope+'.listing')).toBe('unrelated-create');
   });
+  it('replaces only the exact mutable edit draft, encrypted and scoped to a listing', async () => {
+    const { factory, name, store } = fixture(), draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
+    await store.replaceDraft(draftKey, null, 'unsent-one');
+    await store.replaceDraft(draftKey, 'unsent-one', 'unsent-two');
+    await expect(store.replaceDraft(draftKey, 'unsent-one', 'stale-overwrite')).rejects.toThrow(PendingStoreError);
+    await expect(store.replaceDraft(key, null, 'mutable-receipt')).rejects.toThrow(PendingStoreError);
+    expect(await createWebPendingStore(name, factory, crypt).get(draftKey)).toBe('unsent-two');
+    expect(new TextDecoder().decode((await raw(factory,name,'pending',draftKey) as {cipher:ArrayBuffer}).cipher)).not.toContain('unsent-two');
+    await store.eraseScope(scope);
+    await expect(store.replaceDraft(draftKey, null, 'late')).rejects.toThrow(PendingStoreError);
+  });
+  it('allows only one tab to replace a draft read from the same revision', async () => {
+    const { factory, name, store } = fixture(), other = createWebPendingStore(name, factory, crypt), draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
+    await store.replaceDraft(draftKey, null, 'original');
+    const results = await Promise.allSettled([store.replaceDraft(draftKey, 'original', 'a'), other.replaceDraft(draftKey, 'original', 'b')]);
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await store.get(draftKey)).toMatch(/^[ab]$/);
+    expect(await store.clear(draftKey, 'original')).toBe(false);
+  });
   it('resolves the real production same-origin API without accepting arbitrary relative URLs',async()=>{
     vi.stubGlobal('window',{location:{origin:'https://wishlist-app-production.up.railway.app'}});
     expect(await pendingRequestKey('/api',42,'listing-draft')).toBe(await pendingRequestKey('https://wishlist-app-production.up.railway.app/api',42,'listing-draft'));

@@ -12,7 +12,17 @@ process.env.JWT_SECRET = randomBytes(48).toString('hex');
 // These settings precede all app imports: no inherited production storage or
 // worker credentials may turn this isolated test into an external operation.
 process.env.NODE_ENV = 'test';
-process.env.API_URL = 'http://127.0.0.1:5183/api';
+// Each QA run can use a fresh browser/API origin so persistent encrypted
+// records from an older synthetic DB cannot alias recycled fixture user IDs.
+function localPort(value, fallback) {
+  const port = value === undefined ? fallback : /^\d{4,5}$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Explicit loopback QA port required');
+  return port;
+}
+const apiPort = localPort(process.env.WEB_PARITY_API_PORT, 5183);
+const browserPort = localPort(process.env.WEB_PARITY_BROWSER_PORT, 5182);
+const apiOrigin = `http://127.0.0.1:${apiPort}`;
+process.env.API_URL = apiOrigin + '/api';
 process.env.LISTING_MEDIA_STORAGE_PROVIDER = 'local';
 const fs = require('node:fs');
 const os = require('node:os');
@@ -39,7 +49,7 @@ const nativeWishRoutes = require('../dist/routes/nativeWishRoutes').default;
 const listingMediaRoutes = require('../dist/routes/listingMediaRoutes').default;
 const { getWishlists } = require('../dist/controllers/wishlistController');
 const app = express();
-app.use(cors({ origin: 'http://127.0.0.1:5182' }));
+app.use(cors({ origin: `http://127.0.0.1:${browserPort}` }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
@@ -199,7 +209,7 @@ app.post('/__test/marketing/deliver', async (req, res) => {
     const image = await sharp(input).resize({ width: (job.parentJobId ? 640 : 800) + slot * 32 }).webp({ quality: 80 }).toBuffer();
     const thumb = await sharp(image).resize({ width: 320, height: 320, fit: 'inside' }).webp({ quality: 75 }).toBuffer();
     await storage.write(id, image, thumb);
-    await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, marketingJobId: job.id, marketingSlot: slot, capturePurpose: 'AI_MARKETING', imageUrl: `http://127.0.0.1:5183/api/listing-media/${id}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex') } });
+    await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, marketingJobId: job.id, marketingSlot: slot, capturePurpose: 'AI_MARKETING', imageUrl: `${apiOrigin}/api/listing-media/${id}/image`, thumbnailUrl: `${apiOrigin}/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex') } });
   }
   await prisma.marketingJob.update({ where: { id: job.id }, data: { status: 'REVIEW', deliveredAt: new Date(), copy: '合成橘色二手檯燈，售價 NT$350。僅供隔離流程驗收，不是 AI 行銷成果或可購買商品。' } });
   return res.json({ syntheticOnly: true, jobId: job.id, deliveredSlots: slots, modelCalled: false });
@@ -213,7 +223,7 @@ async function main() {
   }
   listing = await prisma.listing.create({ data: { ownerUserId: users[1].id, clientListingId: randomUUID(), requestHash: 'synthetic-web-parity-only', title: '合成測試漫畫（不可購買）', description: '僅供隔離驗收，不是真實刊登；圖片為合成測試替代圖。', category: 'books', price: 59, condition: 'USED', deliveryMethods: ['MEETUP'], status: 'ACTIVE', publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), location: { create: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 } } } });
   photoId = randomUUID();
-  await prisma.listingMedia.create({ data: { id: photoId, ownerUserId: users[1].id, listingId: listing.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/thumbnail`, contentHash: 'synthetic-placeholder-not-flickr', capturePurpose: 'MANUAL_PHOTO' } });
+  await prisma.listingMedia.create({ data: { id: photoId, ownerUserId: users[1].id, listingId: listing.id, imageUrl: `${apiOrigin}/api/listing-media/${photoId}/image`, thumbnailUrl: `${apiOrigin}/api/listing-media/${photoId}/thumbnail`, contentHash: 'synthetic-placeholder-not-flickr', capturePurpose: 'MANUAL_PHOTO' } });
   if (process.env.WEB_PARITY_MARKETING_FIXTURES === '1') {
     process.env.MARKETING_ASSISTANT_ENABLED = '1';
     process.env.MARKETING_ASSISTANT_PILOT_USER_ID = String(users[1].id);
@@ -246,11 +256,11 @@ async function main() {
       const image = await sharp(input).rotate().webp({ quality: 80 }).toBuffer();
       const thumb = await sharp(image).resize({ width: 320, height: 320, fit: 'inside' }).webp({ quality: 75 }).toBuffer();
       await store.write(id, image, thumb);
-      await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, listingId: item.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${id}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex'), capturePurpose: 'MANUAL_PHOTO' } });
+      await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, listingId: item.id, imageUrl: `${apiOrigin}/api/listing-media/${id}/image`, thumbnailUrl: `${apiOrigin}/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex'), capturePurpose: 'MANUAL_PHOTO' } });
     }
   }
-  await new Promise((resolve, reject) => { server = app.listen(5183, '127.0.0.1', resolve); server.once('error', reject); });
-  console.log(JSON.stringify({ syntheticOnly: true, origin: 'http://127.0.0.1:5183', storageRoot: process.env.LISTING_MEDIA_STORAGE_ROOT, users, listingId: listing.id }));
+  await new Promise((resolve, reject) => { server = app.listen(apiPort, '127.0.0.1', resolve); server.once('error', reject); });
+  console.log(JSON.stringify({ syntheticOnly: true, origin: apiOrigin, storageRoot: process.env.LISTING_MEDIA_STORAGE_ROOT, users, listingId: listing.id }));
 }
 async function stop() { if (server) await new Promise(resolve => server.close(resolve)); await prisma.$disconnect(); process.exit(0); }
 process.once('SIGINT', stop); process.once('SIGTERM', stop);

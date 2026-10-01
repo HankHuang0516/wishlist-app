@@ -27,6 +27,19 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第二十七批：尚未送出的商品編輯草稿（仍未部署）
+
+- 商品管理編輯現在逐次保存名稱／說明／價格到API、帳號與商品範圍的加密IndexedDB草稿；空名稱與未完成價格如`1.`仍可恢復，送出時才依既有商品規則驗證。畫面明示本機草稿與後台保存的差別；關閉／切狀態／重開保留草稿，儲存中離開有提示。這不是跨裝置同步或硬體Keychain／XSS防護。
+- 新`replaceDraft`只允許尚未送出的`listing-edit.UUID`，加密且以原文字與revision在單一交易內CAS；既有待確認操作的`save`仍不可覆寫。多分頁競態時保留較新草稿，舊分頁文字轉成可選取的唯讀，保存失敗不送後台。捨棄需確認且只清理同一草稿，不更改商品；帳號刪除的scope墓碑仍阻擋晚到寫入。
+- 後台版本變更後重開會並排顯示草稿與最新商品；未明確保留草稿並採用最新基準前不能送出。送出先等本機保存、再次核對另一分頁，再用原管理回執協定。APPLIED回執核對後只清理與該次原內容／版號一致的草稿；未知回覆重開仍只GET，不能自動POST。行銷批准等待期間維持元件掛載、鎖住欄位，實際回讀後才更新文案；未保存編輯仍阻止批准。
+- Chrome連隔離真handlers與PostgreSQL：未送出的名稱／兩行說明／`1.`在reload後恢復，POST0；兩分頁讀同一草稿後第一分頁更新，第二分頁修改被CAS拒絕，原文字留在畫面且不覆寫。改成有效NT$320後，一次管理EDIT後台提交即回502，reload恢復APPLIED v2；兩分頁分別GET確認，POST總數1／原回執GET2／lost ACK1，legacy PATCH0。SQL回讀單一商品ACTIVE／320／v2及單份EDIT APPLIED原版1→2，沒有重送。
+- 手機分頁實際`innerWidth390`、`scrollWidth375`、設定導航1個；原尺寸CDP截圖390×844已檢視。Browser viewport只套用當下作用分頁，早期第一分頁仍為1873px，沒有將該截圖當成手機證據；改用真正390px分頁与原尺寸截圖。證據在原outputs：`wishlist-web-edit-draft-conflict-20261002.png`、`wishlist-web-edit-draft-receipt-recovered-20261002.png`、`wishlist-web-edit-draft-recovered-mobile-20261002.png`與`wishlist-web-edit-draft-evidence-20261002.json`。此fixture縮圖是明示替代圖，並非商品照片來源、Flickr或AI正確率證據。
+- 帳號隔離首輪因重用QA API5183及已重設DB的user ID而讀到前批合成journal，未把它當成隔離通過。harness新增嚴格loopback測試port參數（預設相容），另用全新瀏覽器5184／API5185及UTF8 DB`wishlist_marketplace_test_edit_fresh_browser_20261002_27`重驗：seller1保存私人文字後登出，buyer2商品0且無賣家草稿／回執；切回seller1原草稿與提示恢復，管理POST0／回執0。手機390×844、documentWidth390，正確截圖`wishlist-web-edit-draft-account-isolation-20261002.png`及`wishlist-web-edit-draft-seller-restored-20261002.png`已檢視；先前錯誤捲動座標截圖已由正確原尺寸截圖覆寫，不列為證據。
+- 本機新增17項回歸，最新網頁72檔1157項通過，TypeScript與Vite建置通過。首輪原有兩項管理測試需等待編輯草稿讀取完成，未刪斷言；全套發現行銷元件在busy時被卸載，已修正掛載條件與重驗真父頁6項。一輪既有面交測試未等資料讀取失敗，focused19項及下一輪完整1157通過，未假稱已修根因。完整pre-push已成功；精確新提交CI仍須另回讀後追加證據。
+- 完整pre-push初次隔離PG因預設SQL_ASCII，NFKC配對查詢失敗，與正式或本批前端變更無關；改另建UTF8測試DB，保留原DB及失敗紀錄。新完整validation退出0：後台56檔913通過＋3skipped、41份migration／schema一致、真HTTP／DB29檔423項、網頁1157項及build、原生42檔852項／typecheck／Expo，原生QA／清理／iOS輸入白名單均通過。未把初次行銷取消單項未重現推定為已修正式缺陷。
+- 正式health回讀ok／2.1.0，唯一爬蟲紀錄是2026-02-24的Gemini暫時503，屬歷史記錄，保留未清除。本機隔離DB`wishlist_marketplace_test_edit_browser_20261002_27`與全套驗證DB`wishlist_marketplace_test_edit_20261002_27_utf8`使用55441／parity；正式資料與APP未改，其他人的刪檔／.gitignore不納入此提交。
+- 主JS729.24KB、地圖1088.99KB／worker507.81KB與PWA5843.30KiB警告保留。頭像未知回應、刊登頁未送出私人草稿、批次照片移除、真MiniMax／Flickr／跨端、完整舊願望／註冊／政策客服／全站英文及PWA效能等其餘矩陣缺口仍待完成；首頁／設定各90%、100%功能與正式部署驗收條件不變。PR82仍draft，未合併／部署，完整目標active。
+
 ## 2026-10-01 第二十六批：持久追蹤回執與公開個人頁恢復（仍未部署）
 
 - 新增第41份migration及同帳號追蹤版本／不可變原操作回執。新協定採原ID、內容雜湊、expectedVersion；關係與回執在同一交易完成。新舊追蹤端點共用排序鎖與原子額度檢查，原回執重播不覆寫後續取消結果；ABANDONED只保存雜湊墓碑，不送原對象內容、不撤銷已完成的關係變更。JWT／API key在交易內再次核對；公開頁只讀最小資料，private/no-store與公開旗標繼續適用。

@@ -9,8 +9,8 @@ export type PendingStore = {
   clear(key: string, expectedBody: string): Promise<boolean>;
 };
 type Entry = { revision: string; iv: Uint8Array<ArrayBuffer>; cipher: ArrayBuffer };
-const resource = /^(profile|social-follow|listing|listing-management|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing)\.[0-9a-f-]{36})$/i;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|social-follow|listing|listing-management|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing)\.[0-9a-f-]{36})$/;
+const resource = /^(profile|social-follow|listing|listing-management|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit)\.[0-9a-f-]{36})$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|social-follow|listing|listing-management|listing-photo|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit)\.[0-9a-f-]{36})$/;
 export async function sha256(value: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -110,7 +110,23 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
       if (matched) table.delete(key); await done; return matched;
     }),
   };
-  return { ...store, eraseScope: (scope: string) => wrap(async () => {
+  return { ...store,
+    // Mutable unsent form drafts only. Pending server-operation evidence remains
+    // immutable through save(); replacing a draft is one encrypted CAS transaction.
+    replaceDraft: (key: string, expectedBody: string | null, body: string) => wrap(async () => {
+      if (!/\.listing-edit\.[0-9a-f-]{36}$/.test(key)) throw new PendingStoreError();
+      validBody(body); if (expectedBody !== null) validBody(expectedBody);
+      const scope = scopeOf(key), before = await read(key);
+      if (before.erased || (before.entry ? await decode(key, before.entry, before.secret) : null) !== expectedBody) throw new PendingStoreError();
+      const secret = before.secret ?? await secretFor(scope), iv = crypt.getRandomValues(new Uint8Array(12));
+      const cipher = await crypt.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(key) }, secret, new TextEncoder().encode(body));
+      const db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readwrite', { durability: 'strict' }), done = completed(tx);
+      const table = tx.objectStore('pending');
+      const [current, erased, storedSecret] = await Promise.all([request<Entry | undefined>(table.get(key)), request(tx.objectStore('erased').get(scope)), request(tx.objectStore('keys').get(scope))]);
+      if (erased || !storedSecret || current?.revision !== before.entry?.revision) { tx.abort(); await done; throw new PendingStoreError(); }
+      table.put({ revision: crypt.randomUUID(), iv, cipher } satisfies Entry, key); await done;
+    }),
+    eraseScope: (scope: string) => wrap(async () => {
     // Only invoke after the server's authoritative ERASED receipt, never logout.
     scopeOf(scope + '.listing');
     const db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readwrite', { durability: 'strict' }), done = completed(tx);

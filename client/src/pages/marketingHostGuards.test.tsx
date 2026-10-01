@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
@@ -7,7 +7,9 @@ import ListingBatchPage from './ListingBatchPage';
 import MyListingsPage from './MyListingsPage';
 import { marketplaceOrigin } from '../lib/managedListingWeb';
 
-vi.mock('../lib/webPendingStore',async original=>({...await original<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:async()=>null}}));
+const drafts = vi.hoisted(() => new Map<string, string>());
+vi.mock('../lib/webPendingStore',async original=>({...await original<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:async(key:string)=>drafts.get(key)??null,replaceDraft:async(key:string,expected:string|null,raw:string)=>{if((drafts.get(key)??null)!==expected)throw Error('CAS');drafts.set(key,raw);}}}));
+beforeEach(() => drafts.clear());
 vi.mock('../components/PrivateMarketplacePhoto',()=>({default:()=> <span>合成私人照片</span>}));
 // This contract probe tests the real parent gate and refresh, independently of
 // the actual assistant component's own HTTP/drag/drop/recovery tests.
@@ -29,7 +31,7 @@ describe('marketing approval cannot replace unsaved parent edits',()=>{
   it.each(['draft','published'] as const)('rejects %s unsaved edits without an additional read or write',async kind=>{
     const fetch=vi.fn(async(url:string)=>ok(url.includes('/unused')?{items:[media],nextCursor:null}:url.endsWith('/ai-availability')?{available:true}:{items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);
     render(view(kind==='draft'?ListingBatchPage:MyListingsPage));await screen.findByText(form.title,{selector:kind==='draft'?'h3':'h2'});
-    if(kind==='published')fireEvent.click(screen.getByRole('button',{name:'編輯資訊'}));
+    if(kind==='published'){ await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'編輯資訊'})); await waitFor(()=>expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
     fireEvent.change(screen.getByLabelText('商品名稱'),{target:{value:'我尚未儲存的新名称'}});const calls=fetch.mock.calls.length;
     fireEvent.click(screen.getByText('測試行銷批准入口'));await screen.findByText('HOST_BLOCKED');expect(screen.getByLabelText('商品名稱')).toHaveValue('我尚未儲存的新名称');expect(fetch).toHaveBeenCalledTimes(calls);
   });
@@ -37,7 +39,7 @@ describe('marketing approval cannot replace unsaved parent edits',()=>{
     let finish!:(value:unknown)=>void;let reads=0;
     const fetch=vi.fn(async(url:string)=>{if(url.endsWith('/ai-availability'))return ok({available:true});if(++reads===1)return ok(kind==='draft'?{items:[media],nextCursor:null}:{items:[row],nextCursor:null});return await new Promise(resolve=>{finish=resolve;});});vi.stubGlobal('fetch',fetch);
     render(view(kind==='draft'?ListingBatchPage:MyListingsPage));await screen.findByText(form.title,{selector:kind==='draft'?'h3':'h2'});
-    if(kind==='published')fireEvent.click(screen.getByRole('button',{name:'編輯資訊'}));
+    if(kind==='published'){ await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'編輯資訊'})); await waitFor(()=>expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
     fireEvent.click(screen.getByText('測試行銷批准入口'));await waitFor(()=>expect(finish).toBeDefined());expect(screen.getByLabelText('商品說明')).toBeDisabled();
     const description=form.description+'【合成行銷文案】並非AI成果';
     await act(async()=>finish(ok(kind==='draft'?{items:[{...media,sellerDraftVersion:2,sellerDraft:{...draft,form:{...form,description}}}],nextCursor:null}:{...row,version:2,description})));
@@ -45,7 +47,7 @@ describe('marketing approval cannot replace unsaved parent edits',()=>{
   });
   it.each(['draft','published'] as const)('propagates %s refresh failure without clearing local content',async kind=>{
     let reads=0;vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/ai-availability'))return ok({available:true});if(++reads===1)return ok(kind==='draft'?{items:[media],nextCursor:null}:{items:[row],nextCursor:null});throw Error('network unavailable');}));
-    render(view(kind==='draft'?ListingBatchPage:MyListingsPage));await screen.findByText(form.title,{selector:kind==='draft'?'h3':'h2'});if(kind==='published')fireEvent.click(screen.getByRole('button',{name:'編輯資訊'}));
+    render(view(kind==='draft'?ListingBatchPage:MyListingsPage));await screen.findByText(form.title,{selector:kind==='draft'?'h3':'h2'});if(kind==='published'){ await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'編輯資訊'})); await waitFor(()=>expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
     fireEvent.click(screen.getByText('測試行銷批准入口'));await screen.findByText('HOST_READ_FAILED');expect(screen.getByLabelText('商品說明')).toHaveValue(form.description);expect(screen.getByLabelText('商品說明')).toBeEnabled();
   });
 });

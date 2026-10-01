@@ -560,6 +560,8 @@ describe('web private batch listing flow', () => {
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
     fireEvent.click(screen.getByText('查核原刊登結果'));
     await screen.findByText(/原刊登已確認；目前狀態：在售/);
+    // The receipt notice precedes awaited local draft rebasing and CAS cleanup.
+    await waitFor(() => expect(pending.size).toBe(0));
     const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
     expect(posts).toHaveLength(1);
     expect(calls.filter(call => call.path.includes('/creation-receipts/') && call.method === 'GET')).toHaveLength(1);

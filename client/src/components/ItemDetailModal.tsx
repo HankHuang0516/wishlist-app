@@ -291,7 +291,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                         ) : (
                             <span className="break-words pr-2 line-clamp-2 leading-tight">{currentItem.name}</span>
                         )}
-                        <div className={`text-xs px-2 py-1 rounded shrink-0 ${currentItem.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                        {currentItem.aiStatus !== 'UNAVAILABLE' && <div className={`text-xs px-2 py-1 rounded shrink-0 ${currentItem.aiStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
                             currentItem.aiStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
                                 currentItem.aiStatus === 'SKIPPED' ? 'bg-orange-100 text-orange-700' :
                                     'bg-red-100 text-red-700'
@@ -299,7 +299,7 @@ export default function ItemDetailModal({ isOpen, onClose, item, onUpdate, wishe
                             {currentItem.aiStatus === 'PENDING' ? 'AI 識別中...' :
                                 currentItem.aiStatus === 'COMPLETED' ? 'AI 識別完成' :
                                     currentItem.aiStatus === 'SKIPPED' ? '傳統模式' : '識別失敗'}
-                        </div>
+                        </div>}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 max-h-[60vh] overflow-y-auto overscroll-contain">

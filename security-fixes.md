@@ -4,6 +4,12 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Legacy detail operation follow-up
+
+Detail list edits preserve children when the legacy ACK omits them; gift/hide actions validate exact identity and requested booleans against the actual item endpoint. Account/API encrypted minimal markers, synchronous gates and scoped late-response guards prevent automatic mutation replay after unknown responses. Current-state reads are explicitly not historical receipts. Public DTOs do not invent private AI status or capacity. Share links omit query/fragment parameters, and cancelling native share no longer copies automatically. Source-blocked help retains only a sanitized 403 marker.
+
+Local page/store tests and real-handler browser evidence cover commit-then-502 reload recovery and third-party purchase conflicts. Remaining legacy modal edit/delete, URL/photo creation, clone, provider and production/PWA/device checks are not covered by this batch's claim; no native or server code changed.
+
 ## 2026-10-02 Legacy wishlist operation follow-up
 
 The dashboard persists minimal encrypted account/API-scoped list mutation markers before sending and uses a synchronous gate across privacy/delete operations. Local operation IDs fence stale CAS cleanup without pretending to be server receipts. Privacy responses must match list, owner and requested visibility. Deletion adds `id`/`deleted` after the existing transaction, preserving the old message; own list read/update/delete responses are private/no-store. Unknown results survive reload and only offer current-state read plus explicit acknowledgment/cleanup, with the absence of historical receipts clearly stated. No automatic mutation replay or plaintext fallback was added.

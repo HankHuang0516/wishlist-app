@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十六批：原願望詳情編輯與送禮契約（仍未部署）
+
+- 修正舊詳情清單編輯把無items的ACK當完整清單、造成render崩潰；核對id／owner／名稱／說明／公開值後合併已確認子項目。送禮改用真PUT /api/items/:id與isPurchased boolean、接受公開最小id／isPurchased ACK，不再把AI COMPLETED當送禮；隱藏核對id／isHidden。三種操作先保存API／帳號隔離最小加密標記，唯一local ID只防晚到CAS清理，不送後台、不冒充歷史回執；同步gate、no-store／拒絕redirect／30秒期限、未知ACK保留標記，reload不重送，只提供目前GET＋明確閱讀後清理。已確認但清理失敗只重試清理，儲存失敗不送出、切帳號晚到回覆不清原標記。
+- 詳情依ID／帳號／token重建session，嚴格讀取ID／children／公開DTO、序列阻止舊讀取覆蓋；403／404與讀取未知分開，失敗可重試、停止輪詢／新操作。私人AI狀態只有本人顯示，公開未提供AI不假稱傳統模式／失敗；原403截圖替代提示保留但不傳provider診斷。最高預算與AI價格分開，TWD750.75不四捨五入到751；未知public上限不猜100。手機卡片名稱完整換行、44px具名按鈕、編輯dialog焦點／忙碌Escape保護；分享使用無query／hash的清單路徑、使用者取消不自動複製。原網址／照片新增、複製、詳情／刪除等入口仍保留，其完整mutation／provider驗收續作。
+- 真Chrome＋Vite DEV＋compiled handlers／UTF8新DB42migrations：清單編輯PUT200且子項目1保留，隱藏／恢復PUT200；另一合成帳號認領200、取消交易完成後502；reload仍pending且purchase PUT總數2，GET目前false不當歷史回執，明確清理不重送。第三合成帳號真handler認領後，原帳號再次認領與撤銷各409、DB仍第三帳號／isPurchased true、AI COMPLETED／isHidden false／TWD750.75。共清單PUT1＋item PUT7，DELETE0。390×844、document375、設定1、本人可見按鈕均具名≥44px；公開無owner編輯／假AI文字。7張原始截圖及outputs/wishlist-web-legacy-detail-evidence-20261002.json保留，本機資料未刪。
+- 新增25項頁面案例＋1項真加密store隔離／CAS／erasure；最後完整pre-push退出0：Web84檔1313／Server56檔913＋3skipped／HTTP30檔447／Native42檔852／42migrations schema一致。末次保留403替代提示後Web84檔1314及build再次通過；entry／PWA數據保留於JSON，不解除既有地圖／預載警告。第一focused20項中預算精度1項失敗促成修正，未弱化斷言；首輪工具輸出及原始截圖保留。末次另抓既有刊登回執測試在notice顯示後、awaited本機草稿清理前即斷言pending=0；改waitFor真清理完成，原POST1／receipt GET1／pending0／無明文斷言均保留，失敗log存wishlist-detail36-client-cleanup-race-20261002.log，完整重跑通過。新提交精確CI另回讀更新JSON／roadmap。
+- 此批不提供舊API歷史回執，也不宣稱全站語系、舊照片／URL／複製／詳情編輯與標籤、管理全部分頁、真provider／跨端、PWA及正式驗收完成。APP未改，其他工作區改動未納入；PR82 draft／未部署、目標active，首頁／設定各90%與功能100%门檻不變。
+
 ## 2026-10-02 第三十五批：既有清單操作查核與手動願望（仍未部署）
 
 - Dashboard公開切換／刪除加入同步gate及送出前的API／帳號隔離加密標記；只保存清單ID、動作／公開值與唯一localOperationId，不保存名稱／憑證。唯一ID只防止晚到清理刪掉後續相同意圖，不是後台回執。privacy ACK核對id／owner／目標boolean；delete增加id／deleted、保留舊message，交易完成才回覆。本人清單讀取／更新／刪除private,no-store，明確拒絕不当成功，未知／不完整回覆保留標記與鎖定，reload不重送。

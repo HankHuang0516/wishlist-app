@@ -13,8 +13,8 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
-  it('restores encrypted legacy list markers with unique local identity, CAS and account/API isolation', async () => {
-    const {factory,name,store}=fixture(),feature='legacy-list-operation';
+  it.each(['legacy-list-operation','legacy-detail-operation'])('restores encrypted %s markers with unique local identity, CAS and account/API isolation', async feature => {
+    const {factory,name,store}=fixture();
     const a=await pendingRequestKey('https://example.com/api',42,feature),b=await pendingRequestKey('https://example.com/api',43,feature),c=await pendingRequestKey('https://other.example/api',42,feature);
     const original=JSON.stringify({version:1,id:7,kind:'PRIVACY',wanted:true,localOperationId:randomUUID()}),later=JSON.stringify({version:1,id:7,kind:'PRIVACY',wanted:true,localOperationId:randomUUID()});
     await store.save(a,original);expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe(original);expect(await store.get(b)).toBeNull();expect(await store.get(c)).toBeNull();

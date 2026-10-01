@@ -4,7 +4,10 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/Dialog";
+import MarketplaceDialog from "../components/MarketplaceDialog";
+import { legacyDetail, detailEditAck, detailItemAck, detailText, type LegacyDetailItem as Item, type LegacyDetailList as Wishlist } from '../lib/legacyDetailWeb';
+import { useLegacyDetailOperation } from '../lib/useLegacyDetailOperation';
+import { legacyListText } from '../lib/legacyWishlistWeb';
 import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon, Gift, AlertCircle, UserPlus, Check, Share2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ItemDetailModal from "../components/ItemDetailModal";
@@ -15,48 +18,23 @@ import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
 import { Analytics } from "../utils/analytics";
 
-interface Item {
-    id: number;
-    name: string;
-    price?: string;
-    currency?: string;
-    link?: string;
-    aiLink?: string;  // AI-generated shopping link
-    imageUrl?: string;
-    notes?: string;
-    uploadStatus: string; // PENDING, UPLOADING, COMPLETED, FAILED
-    aiStatus: string; // PREPARING, PENDING, PROCESSING, COMPLETED, FAILED, SKIPPED
-    status?: string; // PURCHASED, AVAILABLE
-    aiError?: string;
-    isHidden: boolean;
-    originalUser?: {
-        id: number;
-        name: string;
-        nicknames: string | null;
-    };
-}
-
-interface Wishlist {
-    id: number;
-    title: string;
-    description: string;
-    isPublic: boolean;
-    items: Item[];
-    userId: number;
-    user?: {
-        id: number;
-        name: string;
-        nicknames?: string;
-    };
-    maxItems?: number;
-}
-
 export default function WishlistDetail() {
+    const {id}=useParams(),{user,token}=useAuth();
+    if(!id || !/^[1-9]\d{0,9}$/.test(id) || Number(id)>2147483647) return <p role="alert">{detailText('invalid')}</p>;
+    return <WishlistDetailSession key={`${id}:${user?.id??'guest'}:${token??''}`} />;
+}
+
+export function WishlistDetailSession() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { token, user } = useAuth();
     const [wishlist, setWishlist] = useState<Wishlist | null>(null);
     const [loading, setLoading] = useState(true);
+    const [readError,setReadError]=useState('');
+    const active=useRef(true),readSequence=useRef(0),lifetime=useRef(0);
+    const operation=useLegacyDetailOperation(user?.id,token);
+    useEffect(()=>{active.current=true;return()=>{active.current=false;lifetime.current++;readSequence.current++;};},[]);
+    const canMutate=()=>active.current && !readError && operation.allowed();
     const [isEditing, setIsEditing] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editTitle, setEditTitle] = useState("");
@@ -69,7 +47,7 @@ export default function WishlistDetail() {
         const shareData = {
             title: `Wishlist: ${wishlist?.title || 'Check this out'}`,
             text: `Check out my wishlist on Wishlist App!`,
-            url: window.location.href
+            url: window.location.origin + window.location.pathname
         };
 
         // Try Native Share First (Mobile friendly)
@@ -79,14 +57,13 @@ export default function WishlistDetail() {
                 Analytics.logShare('wishlist', wishlist?.id.toString());
                 return; // Success, no need to copy
             } catch (err) {
-                console.log('Error sharing:', err);
-                // Fallback to clipboard if user cancelled or failed
+                if (err instanceof DOMException && err.name === 'AbortError') return;
             }
         }
 
         // Fallback to Clipboard
         try {
-            await navigator.clipboard.writeText(window.location.href);
+            await navigator.clipboard.writeText(shareData.url);
             Analytics.logShare('wishlist', wishlist?.id.toString());
             setCopied(true);
             setFeedbackMessage(t('detail.linkCopied'));
@@ -121,7 +98,7 @@ export default function WishlistDetail() {
 
     useEffect(() => {
         fetchWishlist();
-    }, [id]);
+    }, [id, token]);
 
     // Separate useEffect for polling upload & AI status
     useEffect(() => {
@@ -132,83 +109,49 @@ export default function WishlistDetail() {
             i.aiStatus === 'PENDING' ||
             i.aiStatus === 'PROCESSING'
         );
-        if (!hasPending) return;
+        if (!hasPending || operation.busy || operation.pending || isEditModalOpen || isDetailOpen || readError) return;
 
         // Polling for upload & AI status - only when there are pending items
         const interval = setInterval(() => {
-            fetchWishlist(true); // silent fetch
+            if(document.visibilityState==='visible' && navigator.onLine) void fetchWishlist(true);
         }, 3000); // 3 seconds for faster feedback during upload
 
         return () => clearInterval(interval);
-    }, [pendingItemSignature, id]);
+    }, [pendingItemSignature, id, operation.busy, operation.pending, isEditModalOpen, isDetailOpen, readError]);
 
-    const fetchWishlist = async (silent = false) => {
+    const fetchWishlist = async (silent = false):Promise<boolean> => {
+        const sequence=++readSequence.current,version=lifetime.current;
+        const current=()=>active.current && version===lifetime.current && sequence===readSequence.current;
         try {
             if (!silent) setLoading(true);
-            const headers: HeadersInit = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(`${API_URL}/wishlists/${id}`, { headers: token ? {Authorization:'Bearer '+token}:{}, cache:'no-store',redirect:'error',signal:AbortSignal.timeout(30000) });
+            if(!current())return false;
+            if(!res.ok) {
+                setReadError(detailText(res.status===404?'missing':[401,403].includes(res.status)?'denied':'readError'));
+                if([401,403,404].includes(res.status))setWishlist(null);
+                return false;
             }
-
-            const res = await fetch(`${API_URL}/wishlists/${id}`, { headers });
-
-            if (res.ok) {
-                const data = await res.json();
-                setWishlist(data);
-                if (!silent) {
-                    setEditTitle(data.title);
-                    setEditDesc(data.description || "");
-                    setEditIsPublic(data.isPublic);
-                    Analytics.logViewItemList(data.id.toString(), data.title);
-                }
-            } else {
-                if (!silent) {
-                    // Don'tredirect guests immediately, show error state instead
-                    // Only redirect if it's clearly a navigation error for a verified user
-                    console.error("Failed to fetch wishlist", res.status);
-                    if (res.status === 404) {
-                        setWishlist(null); // Will render empty/not found state
-                    }
-                }
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            if (!silent) setLoading(false);
-        }
+            const data=legacyDetail(await res.json(),Number(id));if(!current())return false;
+            setWishlist(data);setReadError('');
+            if(!silent){setEditTitle(data.title);setEditDesc(data.description);setEditIsPublic(data.isPublic);Analytics.logViewItemList(data.id.toString(),data.title);}
+            return true;
+        } catch {if(current())setReadError(detailText('readError'));return false;}
+        finally {if(current() && !silent)setLoading(false);}
     };
 
-
-
     const handleUpdateWishlist = async () => {
-        try {
-            const res = await fetch(`${API_URL}/wishlists/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    title: editTitle,
-                    description: editDesc,
-                    isPublic: editIsPublic
-                })
-            });
-
-            if (res.ok) {
-                const updated = await res.json();
-                setWishlist(updated);
-                setIsEditModalOpen(false);
-                setFeedbackMessage(t('common.saved'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-            }
-        } catch (error) {
-            console.error(error);
-        }
+        if(!canMutate() || !wishlist || user?.id!==wishlist.userId)return;
+        const body={title:editTitle.trim(),description:editDesc,isPublic:editIsPublic};
+        if(!body.title || body.title.length>200 || body.description.length>1000){setFeedbackMessage(detailText('editInvalid'));return;}
+        readSequence.current++;
+        await operation.run({id:wishlist.id,kind:'EDIT'},'/wishlists/'+wishlist.id,body,ack=>{
+            const updated=detailEditAck(ack,wishlist,user.id,body);setWishlist(updated);setIsEditModalOpen(false);setIsEditing(false);setFeedbackMessage(t('common.saved'));
+        });
     };
 
     // Item Actions
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if(!canMutate())return;
         setIsFabOpen(false);
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -234,7 +177,7 @@ export default function WishlistDetail() {
 
     const handleUrlSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isSubmittingUrl) return;
+        if (!canMutate() || isSubmittingUrl) return;
         setIsSubmittingUrl(true);
         try {
             const res = await fetch(`${API_URL}/wishlists/${id}/items/url`, {
@@ -256,38 +199,30 @@ export default function WishlistDetail() {
     };
 
     const handleDeleteWishlist = () => {
+        if(!canMutate())return;
         setDeleteTarget({ type: 'wishlist' });
         setDeleteModalOpen(true);
     };
 
     const handleDeleteItem = (itemId: number) => {
+        if(!canMutate())return;
         setDeleteTarget({ type: 'item', id: itemId });
         setDeleteModalOpen(true);
     };
 
     const handleToggleStatus = async (item: Item) => {
-        try {
-            // Optimistic update
-            const newStatus = item.status === 'PURCHASED' ? 'AVAILABLE' : 'PURCHASED';
-
-            // Assume success locally for UI speed? No, better wait for server or use optimistic.
-            // Let's just call API.
-            const res = await fetch(`${API_URL}/wishlists/${id}/items/${item.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ status: newStatus })
-            });
-
-            if (res.ok) {
-                fetchWishlist(true); // silent refresh
-                setFeedbackMessage(newStatus === 'PURCHASED' ? t('detail.markedPurchased') : t('detail.markedAvailable'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-            }
-        } catch (e) { console.error(e); }
+        if(!token){navigate('/login?redirect='+encodeURIComponent('/wishlists/'+id));return;}
+        if(!canMutate() || !wishlist)return;
+        const wanted=!item.isPurchased;readSequence.current++;
+        await operation.run({id:wishlist.id,kind:'PURCHASE',itemId:item.id,wanted},'/items/'+item.id,{isPurchased:wanted},ack=>{
+            detailItemAck(ack,item.id,'isPurchased',wanted);
+            setWishlist(old=>old?{...old,items:old.items.map(row=>row.id===item.id?{...row,isPurchased:wanted}:row)}:old);
+            setFeedbackMessage(detailText(wanted?'purchased':'unmarked'));
+        });
     };
 
     const executeDelete = async () => {
-        if (!deleteTarget) return;
+        if (!canMutate() || !deleteTarget) return;
         setIsDeleting(true);
         try {
             if (deleteTarget.type === 'wishlist') {
@@ -324,14 +259,12 @@ export default function WishlistDetail() {
     };
 
     const handleToggleHide = async (item: Item) => {
-        try {
-            const res = await fetch(`${API_URL}/items/${item.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ isHidden: !item.isHidden })
-            });
-            if (res.ok) fetchWishlist(true);
-        } catch (err) { console.error(err); }
+        if(!canMutate() || !wishlist || user?.id!==wishlist.userId)return;
+        const wanted=!item.isHidden;readSequence.current++;
+        await operation.run({id:wishlist.id,kind:'HIDE',itemId:item.id,wanted},'/items/'+item.id,{isHidden:wanted},ack=>{
+            detailItemAck(ack,item.id,'isHidden',wanted);
+            setWishlist(old=>old?{...old,items:old.items.map(row=>row.id===item.id?{...row,isHidden:wanted}:row)}:old);
+        });
     };
 
     // Clone Modal State
@@ -368,7 +301,7 @@ export default function WishlistDetail() {
     };
 
     const handleCloneConfirm = async () => {
-        if (!itemToClone || !selectedTargetWishlistId) return;
+        if (!canMutate() || !itemToClone || !selectedTargetWishlistId) return;
 
         try {
             const res = await fetch(`${API_URL}/items/${itemToClone.id}/clone`, {
@@ -393,19 +326,32 @@ export default function WishlistDetail() {
     };
 
     const openDetail = (item: Item) => {
+        if(operation.busy || operation.pending)return;
         setSelectedItem(item);
         setIsDetailOpen(true);
     };
 
+    const recovery=<section className="space-y-3" aria-label={legacyListText('recoveryTitle')}>
+        {readError && <p role="alert">{readError}</p>}
+        {operation.issue && <p role="alert">{operation.issue}</p>}
+        {operation.notice && <p role="status">{operation.notice}</p>}
+        {readError && <Button onClick={()=>void fetchWishlist()} disabled={operation.busy}>{detailText('retry')}</Button>}
+        {operation.pending && operation.pending.id!==Number(id) ? <Link to={'/wishlists/'+operation.pending.id}>{detailText('original')}</Link> : operation.pending && <>
+            <Button onClick={()=>void operation.check(()=>fetchWishlist())} disabled={operation.busy || operation.known}>{legacyListText('read')}</Button>
+            <Button onClick={()=>void operation.acknowledge()} disabled={operation.busy || !operation.checked && !operation.known}>{legacyListText(operation.known?'clean':'resume')}</Button>
+        </>}
+        {!operation.ready && token && <Button onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
+    </section>;
     if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
-    if (!wishlist) return <div className="p-4 text-center">Wishlist not found</div>;
+    if (!wishlist) return <div className="p-4 space-y-4">{recovery}{!token && <Link to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
 
     const isOwner = user?.id === wishlist.userId;
 
     return (
         <div className="container mx-auto p-4 space-y-6 pb-24 relative min-h-screen">
+            {recovery}
             {/* Header */}
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
                 <div className="space-y-2 flex-1">
                     {isEditing ? (
                         <div className="space-y-2 max-w-lg">
@@ -438,19 +384,19 @@ export default function WishlistDetail() {
                         </div>
                     ) : (
                         <>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <h1 className="text-3xl font-bold text-muji-primary">{wishlist.title}</h1>
                                 <div
                                     onClick={handleShare}
                                     title={t('wishlist.share')}
                                 >
-                                    <Button variant="outline" size="sm" className={`gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200 font-medium' : ''}`}>
+                                    <Button variant="outline" size="sm" className={`min-h-11 gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200 font-medium' : ''}`}>
                                         {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
                                         {copied ? t('detail.linkCopied') : t('wishlist.share')}
                                     </Button>
                                 </div>
                                 <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
-                                    {wishlist.items.length}/{wishlist.maxItems || 100}
+                                    {wishlist.items.length}/{wishlist.maxItems ?? legacyListText('capacity')}
                                 </span>
                             </div>
                             <p className="text-muji-secondary line-clamp-3">{wishlist.description}</p>
@@ -459,14 +405,14 @@ export default function WishlistDetail() {
                 </div>
 
                 {isOwner && !isEditing && (
-                    <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => setIsEditModalOpen(true)}>
+                    <div className="flex gap-2 self-end sm:self-start">
+                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={detailText('edit')} disabled={!canMutate()} onClick={() => {setEditTitle(wishlist.title);setEditDesc(wishlist.description);setEditIsPublic(wishlist.isPublic);setFeedbackMessage(null);setIsEditModalOpen(true);}}>
                             <Edit2 className="w-5 h-5 text-gray-600" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleShare()}>
+                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={t('wishlist.share')} onClick={() => handleShare()}>
                             {copied ? <Check className="w-5 h-5 text-green-600" /> : <Share2 className="w-5 h-5 text-gray-600" />}
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={handleDeleteWishlist}>
+                        <Button variant="destructive" size="icon" className="h-11 w-11" aria-label={detailText('removeList')} disabled={!canMutate()} onClick={handleDeleteWishlist}>
                             <Trash2 className="w-4 h-4" />
                         </Button>
                     </div>
@@ -476,16 +422,16 @@ export default function WishlistDetail() {
             {/* Item List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {wishlist.items.map(item => {
-                    const isProcessing = item.uploadStatus !== 'COMPLETED' || ['PREPARING', 'PENDING', 'PROCESSING'].includes(item.aiStatus);
-                    const borderColor = (item.uploadStatus === 'COMPLETED' && item.aiStatus === 'COMPLETED') ? 'border-l-green-500' :
+                    const isProcessing = isOwner && (item.uploadStatus !== 'COMPLETED' || ['PREPARING', 'PENDING', 'PROCESSING'].includes(item.aiStatus));
+                    const borderColor = !isOwner ? 'border-l-gray-200' : (item.uploadStatus === 'COMPLETED' && item.aiStatus === 'COMPLETED') ? 'border-l-green-500' :
                         item.aiStatus === 'SKIPPED' ? 'border-l-orange-500' :
                             isProcessing ? 'border-l-yellow-500' : 'border-l-red-500';
 
                     return (
                         <Card key={item.id} className={`overflow-hidden transition-opacity ${item.isHidden ? 'opacity-50' : 'opacity-100'} border-l-4 ${borderColor}`}>
-                            <CardContent className="p-4 flex gap-4 h-full">
+                            <CardContent className="p-4 grid grid-cols-[80px_minmax(0,1fr)] gap-3 h-full">
                                 {/* Image & Main Info */}
-                                <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
+                                <div className="w-20 h-20 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
                                     {item.imageUrl ? (
                                         <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
                                     ) : <span className="text-xs text-gray-400">No Img</span>}
@@ -500,12 +446,13 @@ export default function WishlistDetail() {
                                     )}
                                 </div>
 
-                                <div className="flex-1 flex flex-col justify-between">
+                                <div className="min-w-0 flex-1 flex flex-col justify-between">
                                     <div>
-                                        <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
+                                        <h3 className="font-semibold text-lg break-words">{item.name}</h3>
                                         <p className="text-red-500 font-medium">{item.price ? formatPriceWithConversion(item.price, item.currency || 'TWD') : '---'}</p>
+                                        {item.maxPrice!==undefined && <p className="text-sm text-muji-secondary">{detailText('budget')}: {item.maxPrice.toLocaleString(undefined,{maximumFractionDigits:2})} {item.priceCurrency || 'TWD'}</p>}
                                     </div>
-                                    <div className="text-xs text-gray-500">
+                                    {isOwner && <div className="text-xs text-gray-500">
                                         {item.uploadStatus === 'FAILED' ? (
                                             <span className="text-red-600">Upload Failed</span>
                                         ) : item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING' ? (
@@ -525,33 +472,33 @@ export default function WishlistDetail() {
                                         ) : (
                                             <span className="text-yellow-600">{t('ai.analyzing')}...</span>
                                         )}
-                                    </div>
+                                    </div>}
                                 </div>
 
                                 {/* Actions Column - More compact */}
-                                <div className="flex flex-col gap-1 justify-center border-l pl-2 ml-1">
+                                <div className="col-span-2 flex gap-1 items-center justify-end border-t pt-2">
                                     {isOwner ? (
                                         <>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)}>
+                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)}>
                                                 <Info className="w-5 h-5" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
+                                            <Button variant="ghost" size="icon" aria-label={detailText(item.isHidden?'show':'hide')+' '+item.name} disabled={!canMutate()} className="h-11 w-11 text-gray-500 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
                                                 {item.isHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
+                                            <Button variant="ghost" size="icon" aria-label={detailText('remove')+' '+item.name} disabled={!canMutate()} className="h-11 w-11 text-red-500 hover:bg-red-50" onClick={() => handleDeleteItem(item.id)}>
                                                 <Trash2 className="w-5 h-5" />
                                             </Button>
                                         </>
                                     ) : (
                                         <>
-                                            <div title={item.aiStatus} className={`w-3 h-3 rounded-full ${item.aiStatus === 'COMPLETED' ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                            <Button variant="ghost" size="icon" className={`h-8 w-8 ${item.aiStatus === 'COMPLETED' ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-green-600'}`} onClick={() => handleToggleStatus(item)} title={item.aiStatus === 'COMPLETED' ? "Mark as Available" : "Mark as Purchased"}>
+                                            <div title={detailText(item.isPurchased?'available':'purchase')} className={`w-3 h-3 rounded-full ${item.isPurchased ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            <Button variant="ghost" size="icon" disabled={!!token && !canMutate()} aria-label={detailText(item.isPurchased?'available':'purchase')+' '+item.name} className={`h-11 w-11 ${item.isPurchased ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-green-600'}`} onClick={() => handleToggleStatus(item)} title={detailText(item.isPurchased?'available':'purchase')}>
                                                 <Gift className="w-5 h-5 font-bold" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)} title="Add to My Wishlist">
+                                            <Button variant="ghost" size="icon" aria-label={detailText('clone')+' '+item.name} disabled={!!token && !canMutate()} className="h-11 w-11 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)}>
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
+                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
                                                 <Info className="w-5 h-5" />
                                             </Button>
                                         </>
@@ -581,6 +528,7 @@ export default function WishlistDetail() {
                                 <div className="flex items-center gap-2 justify-end">
                                     <span className="bg-white px-3 py-1.5 rounded-full shadow-md text-sm font-medium text-gray-700">{t('detail.addUrl')}</span>
                                     <Button
+                                        aria-label={t('detail.addUrl')}
                                         className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700 text-white p-0"
                                         onClick={() => { setIsFabOpen(false); setIsUrlModalOpen(true); }}
                                     >
@@ -590,6 +538,7 @@ export default function WishlistDetail() {
                                 <div className="flex items-center gap-2 justify-end">
                                     <span className="bg-white px-3 py-1.5 rounded-full shadow-md text-sm font-medium text-gray-700">{t('detail.uploadImg')}</span>
                                     <Button
+                                        aria-label={t('detail.uploadImg')}
                                         className="rounded-full w-12 h-12 shadow-lg bg-green-600 hover:bg-green-700 text-white p-0"
                                         onClick={() => fileInputRef.current?.click()}
                                     >
@@ -601,6 +550,8 @@ export default function WishlistDetail() {
 
                         {/* Main FAB */}
                         <Button
+                            aria-label={t('common.add')}
+                            disabled={!canMutate()}
                             className={`rounded-full w-14 h-14 shadow-xl text-white flex items-center justify-center p-0 transition-transform duration-200 ${isFabOpen ? 'bg-red-500 hover:bg-red-600 rotate-45' : 'bg-stone-800 hover:bg-stone-700'}`}
                             onClick={() => setIsFabOpen(!isFabOpen)}
                         >
@@ -670,7 +621,7 @@ export default function WishlistDetail() {
                     <ItemDetailModal
                         isOpen={isDetailOpen}
                         onClose={() => setIsDetailOpen(false)}
-                        item={selectedItem}
+                        item={wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem}
                         onUpdate={() => fetchWishlist(true)}
                         wisherName={selectedItem.originalUser?.name || wishlist.user?.name || "User"}
                         wisherId={selectedItem.originalUser?.id || wishlist.userId}
@@ -713,30 +664,15 @@ export default function WishlistDetail() {
                 )
             }
             {/* Edit Wishlist Modal */}
-            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle>Edit Wishlist</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Title</label>
-                            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Description</label>
-                            <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Public Visibility</label>
-                            <input type="checkbox" checked={editIsPublic} onChange={(e) => setEditIsPublic(e.target.checked)} className="h-5 w-5" />
-                        </div>
-                        <Button className="w-full" onClick={handleUpdateWishlist}>
-                            Save Changes
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            {isEditModalOpen && <MarketplaceDialog title={detailText('edit')} onClose={()=>setIsEditModalOpen(false)} closeDisabled={operation.busy} closeLabel={t('common.close')}>
+                <div className="space-y-4">
+                    <label className="block">{detailText('title')}<Input value={editTitle} maxLength={200} onChange={e=>setEditTitle(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
+                    <label className="block">{detailText('description')}<Input value={editDesc} maxLength={1000} onChange={e=>setEditDesc(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
+                    <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={editIsPublic} onChange={e=>setEditIsPublic(e.target.checked)} disabled={operation.busy || !!operation.pending}/>{detailText('public')}</label>
+                    <Button className="min-h-11 w-full" onClick={handleUpdateWishlist} disabled={!canMutate()}>{t('common.save')}</Button>
+                    {(operation.issue || operation.notice) && <p role="status">{operation.issue || operation.notice}</p>}
+                </div>
+            </MarketplaceDialog>}
 
             {/* Delete Confirmation Modal */}
             <DeleteConfirmModal
@@ -767,8 +703,8 @@ export default function WishlistDetail() {
             }
             {/* Feedback Toast */}
             {
-                feedbackMessage && (
-                    <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
+                feedbackMessage && !operation.pending && (
+                    <div role="status" className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-in fade-in slide-in-from-bottom-2">
                         {feedbackMessage}
                     </div>
                 )

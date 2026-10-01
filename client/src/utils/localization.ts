@@ -53,6 +53,14 @@ export const getNextHoliday = () => nextHoliday(getUserLocale(), new Date());
 
 const translations: Record<string, Record<string, string>> = {
     'zh-TW': {
+        'route.loading': '正在載入頁面…',
+        'route.unavailable': '此頁暫時無法顯示',
+        'route.loadFailed': '頁面資源未能載入。請確認網路連線後重試。',
+        'route.renderFailed': '頁面顯示時發生問題，可以重試或使用導覽前往其他功能。',
+        'route.recoveryHint': '若重試仍失敗，可重新整理網站取得目前版本。若先前操作結果不明，請先查核結果。',
+        'route.retry': '重試載入頁面',
+        'route.reload': '重新整理網站',
+        'route.home': '返回首頁',
         // Navigation
         'nav.home': '首頁',
         'nav.dashboard': '禮物',
@@ -428,6 +436,14 @@ const translations: Record<string, Record<string, string>> = {
 
     },
     'en-US': {
+        'route.loading': 'Loading page…',
+        'route.unavailable': 'This page is temporarily unavailable',
+        'route.loadFailed': 'Page resources could not be loaded. Check your connection and retry.',
+        'route.renderFailed': 'This page encountered a display problem. Retry or use navigation to visit another feature.',
+        'route.recoveryHint': 'If retry still fails, reload the site to get the current version. Verify any earlier operation whose result is unknown before acting again.',
+        'route.retry': 'Retry loading page',
+        'route.reload': 'Reload site',
+        'route.home': 'Back to home',
         // Navigation
         'nav.home': 'Home',
         'nav.dashboard': 'Dashboard',

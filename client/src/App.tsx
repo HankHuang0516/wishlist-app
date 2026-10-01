@@ -1,41 +1,41 @@
-import { lazy, Suspense, useEffect } from "react";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./layouts/Layout";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-
-import WishlistDashboard from "./pages/WishlistDashboard";
-import WishlistDetail from "./pages/WishlistDetail";
-import SocialPage from "./pages/SocialPage";
-import SettingsPage from "./pages/SettingsPage";
-import NotificationsSettingsPage from "./pages/NotificationsSettingsPage";
-import FriendProfilePage from "./pages/FriendProfilePage";
-import ChangePasswordPage from "./pages/ChangePasswordPage";
-import PurchaseHistoryPage from "./pages/PurchaseHistoryPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import EmailVerification from "./pages/EmailVerification";
-import ResetPassword from "./pages/ResetPassword";
-import TermsOfUse from "./pages/TermsOfUse";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import SupportPage from "./pages/SupportPage";
-import PartnerInquiryPage from "./pages/PartnerInquiryPage";
-import PartnerPage from "./pages/PartnerPage";
-import ApiDocsPage from "./pages/ApiDocsPage";
-import ApiShowcasePage from "./pages/ApiShowcasePage";
-import ChangelogPage from "./pages/ChangelogPage";
-import ListingBatchPage from "./pages/ListingBatchPage";
-import PublicListingPage from "./pages/PublicListingPage";
-import AccountDeletionPage from "./pages/AccountDeletionPage";
-import MyListingsPage from './pages/MyListingsPage';
-const ExplorePage = lazy(() => import('./pages/ExplorePage'));
-const ListingReportsPage = lazy(() => import('./pages/ListingReportsPage'));
-const ChatPage = lazy(() => import('./pages/ChatPage'));
-const WishesPage = lazy(() => import('./pages/WishesPage'));
 import { AuthProvider } from "./context/AuthContext";
-
-import NotFound from "./pages/NotFound";
 import OfflineBanner from "./components/OfflineBanner";
+import { createLazyPage } from "./components/LazyPage";
+
+const Home = createLazyPage(() => import('./pages/Home'));
+const Login = createLazyPage(() => import('./pages/Login'));
+const Register = createLazyPage(() => import('./pages/Register'));
+const WishlistDashboard = createLazyPage(() => import('./pages/WishlistDashboard'));
+const WishlistDetail = createLazyPage(() => import('./pages/WishlistDetail'));
+const SocialPage = createLazyPage(() => import('./pages/SocialPage'));
+const SettingsPage = createLazyPage(() => import('./pages/SettingsPage'));
+const NotificationsSettingsPage = createLazyPage(() => import('./pages/NotificationsSettingsPage'));
+const FriendProfilePage = createLazyPage(() => import('./pages/FriendProfilePage'));
+const ChangePasswordPage = createLazyPage(() => import('./pages/ChangePasswordPage'));
+const PurchaseHistoryPage = createLazyPage(() => import('./pages/PurchaseHistoryPage'));
+const ForgotPasswordPage = createLazyPage(() => import('./pages/ForgotPasswordPage'));
+const EmailVerification = createLazyPage(() => import('./pages/EmailVerification'));
+const ResetPassword = createLazyPage(() => import('./pages/ResetPassword'));
+const TermsOfUse = createLazyPage(() => import('./pages/TermsOfUse'));
+const PrivacyPolicy = createLazyPage(() => import('./pages/PrivacyPolicy'));
+const SupportPage = createLazyPage(() => import('./pages/SupportPage'));
+const PartnerInquiryPage = createLazyPage(() => import('./pages/PartnerInquiryPage'));
+const PartnerPage = createLazyPage(() => import('./pages/PartnerPage'));
+const ApiDocsPage = createLazyPage(() => import('./pages/ApiDocsPage'));
+const ApiShowcasePage = createLazyPage(() => import('./pages/ApiShowcasePage'));
+const ChangelogPage = createLazyPage(() => import('./pages/ChangelogPage'));
+const ListingBatchPage = createLazyPage(() => import('./pages/ListingBatchPage'));
+const PublicListingPage = createLazyPage(() => import('./pages/PublicListingPage'));
+const AccountDeletionPage = createLazyPage(() => import('./pages/AccountDeletionPage'));
+const MyListingsPage = createLazyPage(() => import('./pages/MyListingsPage'));
+const ExplorePage = createLazyPage(() => import('./pages/ExplorePage'));
+const ListingReportsPage = createLazyPage(() => import('./pages/ListingReportsPage'));
+const ChatPage = createLazyPage(() => import('./pages/ChatPage'));
+const WishesPage = createLazyPage(() => import('./pages/WishesPage'));
+const NotFound = createLazyPage(() => import('./pages/NotFound'));
 
 // Separate component to handle route changes
 function RouteTracker() {
@@ -74,12 +74,12 @@ function App() {
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
-            <Route path="wishes" element={<Suspense fallback={<p role="status">正在載入我的願望…</p>}><WishesPage /></Suspense>} />
+            <Route path="wishes" element={<WishesPage />} />
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
-            <Route path="explore" element={<Suspense fallback={<p role="status">正在載入探索地圖…</p>}><ExplorePage /></Suspense>} />
-            <Route path="reports" element={<Suspense fallback={<p role="status">正在載入檢舉紀錄…</p>}><ListingReportsPage /></Suspense>} />
-            <Route path="chat" element={<Suspense fallback={<p role="status">正在載入商品聊天…</p>}><ChatPage /></Suspense>} />
+            <Route path="explore" element={<ExplorePage />} />
+            <Route path="reports" element={<ListingReportsPage />} />
+            <Route path="chat" element={<ChatPage />} />
             <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />

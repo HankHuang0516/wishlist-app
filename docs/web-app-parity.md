@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十二批：各頁分開載入與資源故障恢復（仍未部署）
+
+- 所有頁面改由穩定的 `createLazyPage` 載入；Router／Auth／Layout及導覽仍在頁面boundary外。正常rerender／query改變不重建lazy身份、不清掉欄位；拒絕的lazy promise只在明確重試或失敗後的新navigation重建。載入與render錯誤分開提示，不向頁面暴露原例外，焦點移到錯誤標題，按鈕44px，繁中／英文都有文案；不加自動reload／重送API。
+- 本機production主JS由761.80KB降至約328.78KB（約57%）；地圖仍約1089.08KB／worker507.81KB，PWA完整預載91entries／5892.97KiB仍大。這是入口拆分，不宣稱整站下載量／PWA效能達標；預載總量甚至略增，相關警告與升級／舊快取隱私缺口保留。
+- 真Chrome使用production建置、同源代理至隔離UTF8 DB `wishlist_marketplace_test_routes_20261002_32` 的已編譯handlers；載入首頁／Login／Dashboard／Settings／Sell模組。臨時asset transport只對刊登chunk回503，為避免PWA預載掩蓋故障而在此fixture拒絕SW；未改產品SW。錯誤畫面與導覽維持，點重試仍回錯誤，能進Settings的既有安全拒絕畫面，再返回Sell。恢復資源後Chrome保留失敗module，新React promise也不能清除；點「重新整理網站」才真正收到原chunk200並顯示刊登標題。mutation attempts全0、未新增照片／願望／刊登／管理回執。390×844：錯誤document390、恢復document375、設定導航1個、錯誤標題取得焦點／按鈕44px。HTTP production build會拒絕私人pending scope的非HTTPS API，Settings及Sell如實停用修改；本批沒有繞過此保護，也不把模組恢復當成商品功能成功。
+- 截圖：`web-parity-route-load-failure-390-20261002.jpg`、`web-parity-route-recovered-390-20261002.jpg`；同outputs的 `wishlist-web-route-loading-evidence-20261002.json` 保留metrics、transport、限制與最新CI。測試服務首個root403、瀏覽器ERR_BLOCKED_BY_CLIENT及缺少production相對API代理造成的「Invalid session response」已留下初次state，修正臨時fixture後重新核對；沒有改production API來源／安全驗證。
+- `LazyPage.test.tsx` 新增6項：pending／retry／重複失敗／shell保留／form及query／失敗新navigation／English及render containment；舊App的永真smoke改成等待Home內容、點Login及驗證shell。完整pre-push重跑退出0：Web78檔1216／Server56檔913＋3skipped／HTTP DB30檔444／Native42檔852／42 migrations與schema一致。首輪既有externalIntake integration的單項HTTP Parse Error保留在 `/tmp/wishlist-route32-prepush-20261002.log`，完整重跑 `/tmp/wishlist-route32-prepush-retry-20261002.log` 通過，未刪斷言／放寬期限。
+- 本批精確新提交CI另回讀；原生程式未改、其他工作區刪檔／.gitignore未納入。完整功能矩陣、真provider／跨端、舊願望／註冊／全站英文／政策客服／PWA與正式preflight／合併／Railway驗收繼續，首頁／設定各90%與功能100%門檻不變。PR82 draft／目標active／未部署。
+
+
 ## 2026-10-02 第三十一批：穩定網頁日曆與新協定延長期限驗收（仍未部署）
 
 - 刊登共同設定與本人商品延長共用`DateField`網頁日曆；保留原生type=date手動輸入、minimum及後台驗證，隱藏重複browser indicator。月份由元件保存，切月與父頁rerender不更新日期或回跳；只有點日格／清空才更新原欄位。dialog／月份公告、Tab循環、Escape／背景關閉、焦點進入／返回及方向鍵跨週／月／年保留；延長期限禁止早於minimum的日格／月份。APP與後台協定不改。

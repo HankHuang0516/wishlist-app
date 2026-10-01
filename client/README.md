@@ -81,3 +81,9 @@ Coverage lives in `listingComposerDraft.test.ts`, `ListingBatchLocalDraft.test.t
 ## Marketplace date fields
 
 `DateField` keeps the native date input for manual entry and provides a named web calendar for batch expiry and owner extensions. Its month changes through navigation, independently of parent rerenders. Selecting or clearing invokes the original controlled-field handler; extension minimums and backend validation remain in force. Keyboard arrows move by day/week, Tab stays within the dialog, and Escape closes without applying a value. The component and page tests cover cross-year selection, leap days, minimums, focus, lock changes and publication confirmation resets.
+
+## Page loading and recovery
+
+All page imports in `App.tsx` use `createLazyPage`. Router, authentication, navigation and the shared layout stay outside the page boundary. The lazy identity stays stable during healthy rerenders and query changes; only a retry or navigation from a failed page creates a new promise. Import errors and render errors have distinct localized messages, and raw exception details never appear in the fallback. Focus moves to its heading. No automatic reload is attached to `vite:preloadError`.
+
+Some browsers cache a failed module request even after the server recovers. A new React lazy promise cannot clear that browser cache; the explicit reload button obtains a fresh document/module graph. The page does not claim that a retry guarantees recovery. `LazyPage.test.tsx` covers loading, repeated failures, shell preservation, form state, navigation recovery, English and render failure containment; the App smoke test waits for real page content and login navigation. The reduced entry bundle does not reduce the complete PWA precache; offline upgrades and private cache cleanup still need separate validation.

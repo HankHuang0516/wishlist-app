@@ -36,6 +36,7 @@
 - 手機390×844、documentWidth375、設定導航1個，正確捲動座標原尺寸截圖已檢視。證據：原outputs的`wishlist-web-avatar-current-20261002.png`、`wishlist-web-avatar-cleared-20261002.png`、`wishlist-web-avatar-evidence-20261002.json`。新增8項實質回歸：失聯重掛不重送、保存失敗、無效URL、跨帳號晚回覆、GET失敗、清理失敗、同一輪連點、較新分頁提醒不被清理。網頁72檔1165項与TypeScript／Vite build通過；完整pre-push與新提交CI結果另追加。
 - 完整pre-push第一輪後台913＋3skipped通過，但既有HTTP／DB照片隱私測試超時及追蹤測試socket hang up，421/423，不能稱通過；Jest未退出，停止的是本次自有驗證程序。未放寬15秒期限或斷言，兩個原suite focused25項均通過，根因未重現／未假稱已修。停止自有瀏覽器測試服務後完整重驗，保留兩份原紀錄。
 - 第二輪完整pre-push退出0：後台56檔913通過＋3skipped、41份migration／schema一致、真HTTP／DB29檔423項、網頁72檔1165項／build、原生42檔852項／TypeScript／Expo及QA安全檢查成功。自有loopback API／Vite已停止，viewport還原，QA tab關閉，合成DB／照片／截圖保留；其他人的刪檔與.gitignore不納入。
+- 第二十八批精確提交`3fbd6c2f44fa2e6c8888899a03748f4766c646e1`的[CI36894575966](https://github.com/HankHuang0516/wishlist-app/actions/runs/36894575966)已回讀completed/success，Client／Server／Native 3/3。前批提交`6c915cb`亦單獨通過CI36892597373；未用前批成功替代本批驗證。PR描述已改為最終功能、驗證與未達門檻摘要，詳細歷史保留在本文件。
 - 不擴張旧API能力：頭像原操作結果仍無持久回執，不宣稱可安全重試同一上傳或取消原請求。其餘刊登未送出草稿、批次照片移除、真MiniMax／Flickr／跨端、舊願望／註冊／全站英文／政策客服／PWA效能與正式部署仍依完整矩陣驗收。APP程式／風格不改，首頁與設定各90%及功能100%條件不變；PR82仍draft，目標active。
 
 ## 2026-10-02 第二十七批：尚未送出的商品編輯草稿（仍未部署）

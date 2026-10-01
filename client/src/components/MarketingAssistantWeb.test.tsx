@@ -4,23 +4,29 @@ import MarketingAssistantWeb from './MarketingAssistantWeb';
 import { webcrypto } from 'node:crypto';
 import { sha256 } from '../lib/webPendingStore';
 import { marketingQueueJournal,parseMarketingQueueJournal } from '../lib/marketingQueueWeb';
-const queueStore=vi.hoisted(()=>({get:vi.fn(async()=>null as string|null),save:vi.fn(async()=>{}),clear:vi.fn(async()=>true)}));
+import { marketingApprovalJournal,parseMarketingApprovalJournal } from '../lib/marketingApprovalWeb';
+const queueStore=vi.hoisted(()=>({get:vi.fn(async(_key:string)=>null as string|null),save:vi.fn(async(_key:string,_raw:string)=>{}),clear:vi.fn(async(_key:string,_raw:string)=>true)}));
 vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),privatePendingStore:queueStore}));
 const source = '11111111-1111-4111-8111-111111111111', listingId = '22222222-2222-4222-8222-222222222222';
 const jobId = '33333333-3333-4333-8333-333333333333';
 const media = [1, 2, 3, 4].map(slot => ({ id: `44444444-4444-4444-8444-44444444444${slot}`, marketingSlot: slot, marketingSelected: false }));
-const job = { id: jobId, sourceMediaId:source,listingId,status: 'REVIEW', parentJobId: null, deliveredAt: new Date().toISOString(), copy: '測試行銷文案', generatedMedia: media,previousMedia:[],selectedMediaIds:[] };
+const job = { id: jobId, sourceMediaId:source,listingId,status: 'REVIEW', parentJobId: null, deliveredAt: new Date().toISOString(), copy: '合成二手商品行銷文案，售價 NT$350。僅供隔離驗收，非真實商品。', generatedMedia: media,previousMedia:[],selectedMediaIds:[] };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const releaseApproval = vi.fn();
 const props = { token: 'fixture-session',userId:42,getExpectedVersion:()=>1, sourceMediaId: source, listingId, beforeStart: vi.fn(async () => true), beforeApprove: vi.fn(async () => releaseApproval), onApproved: vi.fn(async () => undefined) };
 beforeEach(() => {vi.stubGlobal('crypto',webcrypto);queueStore.get.mockReset().mockResolvedValue(null);queueStore.save.mockReset().mockResolvedValue(undefined);queueStore.clear.mockReset().mockResolvedValue(true); props.beforeStart.mockClear(); props.beforeApprove.mockClear(); props.onApproved.mockClear(); releaseApproval.mockClear(); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const open = async () => fireEvent.click(await screen.findByRole('button', { name: '開啟行銷小助手 Beta' }));
+const approvalBody=()=>({kind:'APPROVE' as const,jobId,sourceMediaId:source,listingId,expectedVersion:1,selectedMediaIds:media.map(m=>m.id),copy:job.copy});
+async function proof(clientActionId:string,body=approvalBody()) {return {receipt:{clientActionId,jobId:body.jobId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,requestHash:await sha256(JSON.stringify(body)),state:'APPLIED',reason:null,appliedVersion:body.expectedVersion+1,selectedMediaIds:body.selectedMediaIds,copy:body.copy,createdAt:new Date().toISOString()}};}
+const successNotice='已核對原確認回執（當時版本 2）；沒有再次套用。商品目前內容可能已有後續更新。';
 function install(latest: unknown = { job: { id: jobId } }) {
+  let applied:ReturnType<typeof approvalBody>|null=null;
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/availability')) return ok({ available: true });
     if (url.includes('?sourceMediaId')) return ok(latest);
-    if (url.endsWith(`/jobs/${jobId}`)) return ok(job);
+    if (url.endsWith(`/jobs/${jobId}`)) return ok(applied?{...job,status:'COMPLETED',copy:applied.copy,selectedMediaIds:applied.selectedMediaIds}:job);
+    if (init?.method==='POST'&&url.includes('/approvals/')){applied=JSON.parse(String(init.body));return ok(await proof(url.split('/').at(-1)!,applied!));}
     if (init?.method === 'POST'&&url.includes('/requests/')){const body=JSON.parse(String(init.body)),clientRequestId=url.split('/').at(-1);return ok({receipt:{clientRequestId,sourceMediaId:source,requestHash:await sha256(JSON.stringify(body)),state:'QUEUED',jobId,createdAt:new Date().toISOString()},job:{id:jobId,status:'REVIEW',sourceMediaId:source,listingId,parentJobId:null}});}
     if (init?.method === 'POST') return ok({ id: jobId, status: 'PENDING' });
     throw new Error('photo mock unavailable');
@@ -97,19 +103,20 @@ describe('shared web marketing entry for drafts and published products', () => {
   });
   it('offers a collapsed Beta entry and four selectable images after expanding', async () => {
     install(); render(<MarketingAssistantWeb {...props} />); await open();
-    expect(await screen.findByRole('textbox', { name: '編輯行銷文案' })).toHaveValue('測試行銷文案');
+    expect(await screen.findByRole('textbox', { name: '編輯行銷文案' })).toHaveValue(job.copy);
     expect(screen.getAllByRole('checkbox', { name: /選用/ })).toHaveLength(4);
     expect(screen.getByRole('button', { name: '確認照片與文案' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /往前移/ })).not.toBeInTheDocument();
   });
-  it('supports keyboard sorting and sends the selected cover order to the same approve API', async () => {
+  it('supports keyboard sorting and sends the selected cover order with the original action/context/version', async () => {
     const fetch = install(); render(<MarketingAssistantWeb {...props} />); await open(); await screen.findByDisplayValue(job.copy);
     fireEvent.keyDown(screen.getByRole('button', { name: '拖放圖 2，目前第 2 張' }), { key: 'ArrowUp' });
     expect(screen.getByRole('button', { name: '拖放圖 2，目前第 1 張' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '確認照片與文案' }));
     await vi.waitFor(() => expect(props.onApproved).toHaveBeenCalledTimes(1));
-    const approve = fetch.mock.calls.find(([url, init]) => url.endsWith('/approve') && init?.method === 'POST');
-    expect(JSON.parse(String(approve?.[1]?.body))).toEqual({ selectedMediaIds: [media[1].id, media[0].id, media[2].id, media[3].id], copy: job.copy });
+    const approve = fetch.mock.calls.find(([url, init]) => url.includes('/approvals/') && init?.method === 'POST');
+    expect(JSON.parse(String(approve?.[1]?.body))).toEqual({ ...approvalBody(), selectedMediaIds: [media[1].id, media[0].id, media[2].id, media[3].id] });
+    const recorded=await parseMarketingApprovalJournal(String(queueStore.save.mock.calls[0]?.[1]));expect(approve?.[0]).toContain(recorded.clientActionId);expect(recorded.body.selectedMediaIds).toEqual([media[1].id,media[0].id,media[2].id,media[3].id]);
   });
   it('supports pointer drag on touch and mouse without arrow buttons', async () => {
     install(); render(<MarketingAssistantWeb {...props} />); await open(); await screen.findByDisplayValue(job.copy);
@@ -147,37 +154,38 @@ describe('shared web marketing entry for drafts and published products', () => {
     render(<MarketingAssistantWeb {...props} onApproved={refresh} />); await open(); await screen.findByDisplayValue(job.copy);
     const approve=screen.getByRole('button',{name:'確認照片與文案'}); fireEvent.click(approve); fireEvent.click(approve);
     await vi.waitFor(()=>expect(refresh).toHaveBeenCalledOnce()); expect(releaseApproval).not.toHaveBeenCalled(); expect(approve).toBeDisabled();
-    expect(fetch.mock.calls.filter(([url,init])=>url.endsWith('/approve')&&init?.method==='POST')).toHaveLength(1);
-    await act(async()=>finish()); expect(releaseApproval).toHaveBeenCalledOnce(); await screen.findByText('已更新商品照片與文案；實拍原圖保留。');
+    expect(fetch.mock.calls.filter(([url,init])=>url.includes('/approvals/')&&init?.method==='POST')).toHaveLength(1);
+    await act(async()=>finish()); expect(releaseApproval).toHaveBeenCalledOnce(); await screen.findByText(successNotice);
   });
   it('preserves acknowledged success if the host refresh fails and retries only GET and refresh',async()=>{
     let applied=false;
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
       if(url.endsWith('/availability'))return ok({available:true});
       if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});
-      if(url.endsWith('/approve')){applied=true;return ok({listingId,selectedMediaIds:media.map(m=>m.id)});}
+      if(url.includes('/approvals/')&&init?.method==='POST'){applied=true;return ok(await proof(url.split('/').at(-1)!,JSON.parse(String(init.body))));}
       if(url.endsWith(`/jobs/${jobId}`))return ok({...job,status:applied?'COMPLETED':'REVIEW',selectedMediaIds:media.map(m=>m.id)});
       throw Error('photo unavailable');
     }); vi.stubGlobal('fetch',fetch);
     const refresh=vi.fn().mockRejectedValueOnce(Error('read failed')).mockResolvedValue(undefined);
     render(<MarketingAssistantWeb {...props} onApproved={refresh}/>); await open();await screen.findByDisplayValue(job.copy);
-    fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText('後台已確認套用，畫面尚未重新讀取；請只重新核對，不要再套用。');
-    expect(releaseApproval).toHaveBeenCalledOnce();fireEvent.click(screen.getByRole('button',{name:'查核原行銷套用結果'}));
-    await screen.findByText('已重新核對已套用的行銷結果；沒有再次套用。');
-    expect(fetch.mock.calls.filter(([url,init])=>url.endsWith('/approve')&&init?.method==='POST')).toHaveLength(1); expect(refresh).toHaveBeenCalledTimes(2); expect(releaseApproval).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText('原確認回執已核對，商品畫面仍需讀取；不會再次套用。');
+    expect(releaseApproval).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'以相同識別碼重試原確認'})).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'只重新讀取商品並清理原確認紀錄'}));
+    await screen.findByText(successNotice);
+    expect(fetch.mock.calls.filter(([url,init])=>url.includes('/approvals/')&&init?.method==='POST')).toHaveLength(1); expect(refresh).toHaveBeenCalledTimes(2); expect(releaseApproval).toHaveBeenCalledTimes(2);
   });
   it.each(['same','wrong-copy','wrong-order','pending'])('unknown approve ACK uses only readback: %s proof',async(mode)=>{
-    let sent=false;
+    let sent=false,originalProof:Awaited<ReturnType<typeof proof>>|null=null;
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
       if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});
-      if(url.endsWith('/approve')){sent=true;throw Error('committed lost ACK');}
-      if(url.endsWith(`/jobs/${jobId}`))return ok({...job,status:sent&&mode!=='pending'?'COMPLETED':'REVIEW',copy:sent&&mode==='wrong-copy'?'另一份文案':job.copy,selectedMediaIds:sent&&mode==='wrong-order'?[...media].reverse().map(m=>m.id):media.map(m=>m.id)});
+      if(url.includes('/approvals/')&&init?.method==='POST'){sent=true;originalProof=await proof(url.split('/').at(-1)!,JSON.parse(String(init.body)));throw Error('committed lost ACK');}
+      if(url.includes('/approvals/')){if(mode==='pending')throw Error('not found');return ok({receipt:{...originalProof!.receipt,copy:mode==='wrong-copy'?'另一份文案':job.copy,selectedMediaIds:mode==='wrong-order'?[...media].reverse().map(m=>m.id):media.map(m=>m.id)}});}
+      if(url.endsWith(`/jobs/${jobId}`))return ok({...job,status:sent?'COMPLETED':'REVIEW',selectedMediaIds:media.map(m=>m.id)});
       throw Error('photo unavailable');
     });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
-    fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText('套用結果尚未確認，不代表失敗；請重新載入核對原工作與商品，不要連續重送。');
+    fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText('套用回覆尚未確認，不代表失敗；原選圖與文案已保留，重開只查核，不會重送。');
     expect(screen.getByRole('button',{name:'確認照片與文案'})).toBeDisabled();expect(screen.getByRole('textbox',{name:'編輯行銷文案'})).toBeDisabled();
     fireEvent.click(screen.getByRole('button',{name:'查核原行銷套用結果'}));
-    await screen.findByText(mode==='same'?'已重新核對已套用的行銷結果；沒有再次套用。':'原套用結果仍待確認；保留原選圖與文案，不會再次套用。');
+    await screen.findByText(mode==='same'?successNotice:'原套用結果仍待確認；保留原選圖與文案，不會再次套用。');
     expect(props.onApproved).toHaveBeenCalledTimes(mode==='same'?1:0); expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
   });
   it('does not send after unmount while acquiring the approval guard and releases it',async()=>{
@@ -191,5 +199,55 @@ describe('shared web marketing entry for drafts and published products', () => {
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});if(url.endsWith(`/jobs/${jobId}`))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo unavailable');}));
     render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);
     for(const check of screen.getAllByRole('checkbox',{name:/選用/}))expect(check).toBeDisabled();expect(screen.getByRole('button',{name:'拖放圖 1，目前第 1 張'})).toBeDisabled();expect(screen.getByRole('button',{name:'免費調整一次'})).toBeEnabled();
+  });
+  it('restores an applied approval after reload with GET only and its immutable historical order',async()=>{
+    const original={...approvalBody(),selectedMediaIds:[media[2].id,media[0].id,media[3].id,media[1].id]},raw=await marketingApprovalJournal(original),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==='POST')throw Error('no writes');if(url.includes('/approvals/'))return ok(await proof(j.clientActionId,original));if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:original.selectedMediaIds,generatedMedia:media.map(m=>({...m,marketingSelected:false}))});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText(successNotice);expect(props.onApproved).toHaveBeenCalledOnce();expect(queueStore.clear).toHaveBeenCalledWith(expect.stringContaining('marketing.'+source),raw);
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(fetch.mock.calls.filter(([url])=>url.includes('/approvals/'))).toHaveLength(1);
+    expect(await screen.findByRole('button',{name:'拖放圖 3，目前第 1 張'})).toBeDisabled();expect(screen.getByText('此工作當時的排序僅供閱覽；商品目前可能已由後續調整更新。')).toBeInTheDocument();
+  });
+  it('leaves a known receipt pending if storage cleanup fails, with readonly cleanup only',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);queueStore.clear.mockRejectedValueOnce(Error('clear')).mockResolvedValue(true);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==='POST')throw Error('no writes');if(url.includes('/approvals/'))return ok(await proof(j.clientActionId));if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原確認回執已核對，商品畫面仍需讀取；不會再次套用。');expect(screen.queryByRole('button',{name:'以相同識別碼重試原確認'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'只重新讀取商品並清理原確認紀錄'}));await screen.findByText(successNotice);expect(fetch.mock.calls.filter(([url])=>url.includes('/approvals/'))).toHaveLength(1);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(queueStore.clear).toHaveBeenCalledTimes(2);
+  });
+  it('does not clear a journal replaced by another tab, even when original approval succeeded',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValueOnce(raw).mockResolvedValue('different original operation');queueStore.clear.mockResolvedValue(false);
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/approvals/'))return ok(await proof(j.clientActionId));if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');}));
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原確認回執已核對，商品畫面仍需讀取；不會再次套用。');expect(screen.getByRole('region',{name:'原行銷確認操作待查核'})).toBeInTheDocument();expect(screen.queryByText(successNotice)).not.toBeInTheDocument();expect(queueStore.clear).toHaveBeenCalledWith(expect.any(String),raw);
+  });
+  it('preserves unknown approval and explicitly retries the same ID/body exactly once',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.includes('/approvals/')){if(init?.method==='POST')return ok(await proof(j.clientActionId,JSON.parse(String(init.body))));throw Error('not found');}if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原套用結果仍待確認；保留原選圖與文案，不會再次套用。');expect(screen.getByText('原文案：'+job.copy)).toBeInTheDocument();expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+    const retry=screen.getByRole('button',{name:'以相同識別碼重試原確認'});fireEvent.click(retry);fireEvent.click(retry);await screen.findByText(successNotice);
+    const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(writes[0][0]).toContain('/approvals/'+j.clientActionId);expect(JSON.parse(String(writes[0][1]?.body))).toEqual(j.body);
+  });
+  it.each(['CONFLICT','ABANDONED'])('keeps %s original visible until explicit readonly reconciliation',async state=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==='POST')throw Error('no writes');if(url.includes('/approvals/'))return ok({receipt:{...(await proof(j.clientActionId)).receipt,state,reason:state==='CONFLICT'?'LISTING_CONFLICT':null,appliedVersion:null,selectedMediaIds:null,copy:null}});if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});if(url.endsWith('/jobs/'+jobId))return ok(job);throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByRole('button',{name:'讀取後台並結束原確認操作'});expect(queueStore.clear).not.toHaveBeenCalled();expect(props.onApproved).not.toHaveBeenCalled();expect(screen.getByText('原文案：'+job.copy)).toBeInTheDocument();expect(screen.queryByRole('button',{name:'以相同識別碼重試原確認'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'讀取後台並結束原確認操作'}));await screen.findByText('已讀取後台並結束原確認操作；沒有套用或刪除照片。');expect(queueStore.clear).toHaveBeenCalledOnce();expect(props.onApproved).toHaveBeenCalledOnce();expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(screen.getByRole('textbox',{name:'編輯行銷文案'})).toBeEnabled();
+  });
+  it('requires a second confirmation to cancel; never deletes photos or automatically accepts cancellation',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.endsWith('/abandon'))return ok({receipt:{...(await proof(j.clientActionId)).receipt,state:'ABANDONED',appliedVersion:null,selectedMediaIds:null,copy:null}});throw Error('unknown');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);await screen.findByText('原套用結果仍待確認；保留原選圖與文案，不會再次套用。');fireEvent.click(screen.getByRole('button',{name:'取消未套用的原確認'}));expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'確認取消未套用操作'}));await screen.findByRole('button',{name:'讀取後台並結束原確認操作'});const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toEqual({jobId,sourceMediaId:source,listingId,requestHash:j.requestHash});expect(queueStore.clear).not.toHaveBeenCalled();expect(props.onApproved).not.toHaveBeenCalled();expect(fetch.mock.calls.some(([,init])=>init?.method==='DELETE')).toBe(false);
+  });
+  it('does not send approval if encrypted original recording fails',async()=>{
+    const fetch=install();queueStore.save.mockRejectedValue(Error('storage'));render(<MarketingAssistantWeb {...props}/>);await open();await screen.findByDisplayValue(job.copy);fireEvent.click(screen.getByRole('button',{name:'確認照片與文案'}));await screen.findByText('無法安全保存原確認內容；不會在未記錄時套用，請檢查文案與商品儲存。');expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(props.onApproved).not.toHaveBeenCalled();expect(releaseApproval).toHaveBeenCalledOnce();
+  });
+  it('ignores a late approval receipt after account replacement without clearing original private content',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValueOnce(raw).mockResolvedValue(null);let finish!:(value:unknown)=>void;
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/approvals/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:null});throw Error('unexpected');}));
+    const view=render(<MarketingAssistantWeb {...props}/>);await screen.findByRole('region',{name:'原行銷確認操作待查核'});view.rerender(<MarketingAssistantWeb {...props} userId={43} token="other-synthetic"/>);await screen.findByRole('button',{name:'開啟行銷小助手 Beta'});await act(async()=>finish(ok(await proof(j.clientActionId))));expect(queueStore.clear).not.toHaveBeenCalled();expect(props.onApproved).not.toHaveBeenCalled();expect(props.beforeApprove).not.toHaveBeenCalled();expect(screen.queryByText('原文案：'+job.copy)).not.toBeInTheDocument();
+  });
+  it('disables recovery actions while reload read and host guard are pending',async()=>{
+    const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);let finish!:(value:unknown)=>void;
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.includes('/approvals/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
+    render(<MarketingAssistantWeb {...props}/>);const retry=await screen.findByRole('button',{name:'以相同識別碼重試原確認'});expect(retry).toBeDisabled();fireEvent.click(retry);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);await act(async()=>finish(ok(await proof(j.clientActionId))));await screen.findByText(successNotice);expect(props.beforeApprove).toHaveBeenCalledOnce();
   });
 });

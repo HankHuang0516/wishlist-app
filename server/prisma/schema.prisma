@@ -71,6 +71,7 @@ model User {
   listingMedia    ListingMedia[]
   marketingJobs   MarketingJob[]
   marketingRequestReceipts MarketingRequestReceipt[]
+  marketingApprovalReceipts MarketingApprovalReceipt[]
   buyerConversations Conversation[] @relation("ConversationBuyer")
   sellerConversations Conversation[] @relation("ConversationSeller")
   conversationParticipants ConversationParticipant[]
@@ -141,6 +142,27 @@ model MarketingRequestReceipt {
   user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientRequestId])
+}
+
+// Immutable approval proof survives later revisions and job/source erasure.
+// A partial SQL unique index permits at most one APPLIED receipt per job.
+model MarketingApprovalReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientActionId String @db.Uuid
+  jobId String @db.Uuid
+  sourceMediaId String @db.Uuid
+  listingId String? @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  reason String?
+  appliedVersion Int?
+  selectedMediaIds Json?
+  copy String?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientActionId])
+  @@index([userId, jobId])
 }
 
 // A delivered job contains four privately stored images and seller-editable

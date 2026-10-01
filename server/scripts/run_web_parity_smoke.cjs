@@ -39,7 +39,7 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
   if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval', 'draft', 'marketingApprove', 'marketingQueue'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
@@ -52,7 +52,7 @@ app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method === 'POST' && /^\/api\/marketing\/requests\/[^/]+$/.test(req.path) ? 'marketingQueue' :
     req.method === 'POST' && /^\/api\/listing-media\/[^/]+\/seller-draft-operations\/[^/]+$/.test(req.path) ? 'draft' :
-    req.method === 'POST' && /^\/api\/marketing\/jobs\/[^/]+\/approve$/.test(req.path) ? 'marketingApprove' :
+    req.method === 'POST' && (/^\/api\/marketing\/jobs\/[^/]+\/approve$/.test(req.path)||/^\/api\/marketing\/approvals\/[^/]+$/.test(req.path)) ? 'marketingApprove' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
@@ -61,6 +61,8 @@ app.use((req, res, next) => {
     req.method === 'POST' && /^\/api\/users\/me\/profile-operations\/[^/]+$/.test(req.path) ? 'profile' : null;
   if (req.method === 'GET' && /\/profile-operations\//.test(req.path)) attempts.profileReceipt++;
   if (req.method === 'GET' && /\/marketing\/requests\/[^/]+$/.test(req.path)) attempts.marketingQueueReceipt++;
+  if (req.method === 'GET' && /\/marketing\/approvals\/[^/]+$/.test(req.path)) attempts.marketingApprovalReceipt++;
+  if (req.method === 'POST' && /\/marketing\/approvals\/[^/]+\/abandon$/.test(req.path)) attempts.marketingApprovalAbandon++;
   if (req.method === 'GET' && /\/seller-draft-operations\//.test(req.path)) attempts.draftReceipt++;
   if (req.method === 'POST' && /\/seller-draft-operations\/[^/]+\/abandon$/.test(req.path)) attempts.draftAbandon++;
   if (req.method === 'GET' && /\/messages\/by-client-id\//.test(req.path)) attempts.messageReceipt++;
@@ -131,6 +133,7 @@ app.get('/__test/state', async (_req, res) => {
     sellerDraftReceipts: await prisma.sellerDraftReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientActionId: true, mediaId: true, state: true, appliedVersion: true } }),
     sellerDrafts: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, capturePurpose: 'BATCH_ITEM' }, select: { id: true, sellerDraftVersion: true, sellerDraft: true } }),
     marketingRequestReceipts: await prisma.marketingRequestReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{clientRequestId:true,state:true,jobId:true}}),
+    marketingApprovalReceipts: await prisma.marketingApprovalReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{clientActionId:true,jobId:true,state:true,reason:true,appliedVersion:true,selectedMediaIds:true}}),
     marketingJobs: await prisma.marketingJob.findMany({ where: { ownerUserId: { in: users.map(user => user.id) } }, select: { id: true, status: true, parentJobId: true, revisionSlots: true, copy: true, generatedMedia: { select: { id: true, marketingSlot: true, marketingSelected: true, position: true } } } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });

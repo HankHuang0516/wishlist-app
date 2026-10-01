@@ -4,6 +4,7 @@ import PrivatePhoto from './PrivateMarketplacePhoto';
 import { API_URL } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { abandonMarketingQueue, marketingQueueJournal, parseMarketingQueueJournal, parseMarketingJob, readMarketingQueue, sendMarketingQueue, type MarketingJob, type MarketingQueueBody, type MarketingQueueResult } from '../lib/marketingQueueWeb';
+import { abandonMarketingApproval,marketingApprovalJournal,parseMarketingApprovalJournal,readMarketingApproval,sendMarketingApproval,type MarketingApprovalBody,type MarketingApprovalResult } from '../lib/marketingApprovalWeb';
 
 type Props={token:string;userId:number;sourceMediaId:string;listingId?:string;getExpectedVersion:()=>number;beforeStart:()=>Promise<boolean>;beforeApprove:()=>Promise<(()=>void)|null>;onApproved:()=>Promise<void>};
 export default function MarketingAssistantWeb(props:Props){return <MarketingAssistantSession key={`${props.userId}:${props.token}:${props.sourceMediaId}:${props.listingId??''}`} {...props} />;}
@@ -15,7 +16,8 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const [refreshNeeded, setRefreshNeeded] = useState(false);
-  const approvalOriginal = useRef<{ jobId: string; copy: string; selected: string[]; acknowledged: boolean } | null>(null);
+  const approvalOriginal=useRef(''),approvalConfirmed=useRef<MarketingApprovalResult|null>(null);
+  const [approvalDetails,setApprovalDetails]=useState<MarketingApprovalBody|null>(null),[approvalResult,setApprovalResult]=useState<MarketingApprovalResult|null>(null),[approvalCancel,setApprovalCancel]=useState(false);
   const sortList = useRef<HTMLOListElement>(null);
   const running = useRef(false), active = useRef(true);
   const lifetime=useRef(0),queueKey=useRef(''),queueOriginal=useRef(''),queueConfirmed=useRef<MarketingQueueResult|null>(null);
@@ -31,6 +33,13 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     void (async()=>{
       const key=await pendingRequestKey(API_URL,userId,'marketing.'+sourceMediaId),raw=await privatePendingStore.get(key);
       if(!isActive())return;queueKey.current=key;
+      if(raw&&JSON.parse(raw)?.body?.kind==='APPROVE'){
+        const journal=await parseMarketingApprovalJournal(raw);if(journal.body.sourceMediaId!==sourceMediaId||journal.body.listingId!==(listingId??null))throw new Error('MARKETING_CONTEXT_CHANGED');
+        if(!isActive())return;approvalOriginal.current=raw;setApprovalDetails(journal.body);setRefreshNeeded(true);setExpanded(true);setEnabled(true);running.current=true;setBusy(true);
+        try{await settleApproval(await readMarketingApproval(token,raw),raw,isActive);}catch{if(isActive())setError(approvalConfirmed.current?'原確認回執已核對，商品畫面仍需讀取；不會再次套用。':'原套用結果仍待確認；保留原選圖與文案，不會再次套用。');}
+        finally{if(isActive()){running.current=false;setBusy(false);}}
+        if(isActive())setQueueReady(true);return;
+      }
       if(raw){const journal=await parseMarketingQueueJournal(raw);if(journal.body.sourceMediaId!==sourceMediaId||journal.body.listingId!==(listingId??null))throw new Error('MARKETING_CONTEXT_CHANGED');
         if(!isActive())return;queueOriginal.current=raw;setQueuePending(raw);setQueueDetails(journal.body);setExpanded(true);setEnabled(true);
         try{await settleQueue(await readMarketingQueue(token,raw),raw,isActive);}catch{if(isActive())setError('原行銷排隊結果仍待查核；不會自動重送。');}
@@ -96,7 +105,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     await settleQueue(await sendMarketingQueue(token,raw,privatePendingStore,queueKey.current,isActive),raw,isActive);
   }
   async function start() {
-    if (running.current || !active.current || !queueReady || queueOriginal.current) return;
+    if (running.current || !active.current || !queueReady || queueOriginal.current || refreshNeeded) return;
     running.current = true;
     setBusy(true); setError('');
     const epoch=lifetime.current,isActive=()=>epoch===lifetime.current;let release:(()=>void)|null=null;
@@ -110,48 +119,51 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
       : queueOriginal.current?'排隊回覆尚未確認，不代表失敗；請查核原工作，不要重新生成。':'無法安全保存排隊操作；請先儲存商品並重試，不會在未記錄時送出。'); }
     finally { release?.();running.current = false; if (isActive()) setBusy(false); }
   }
-  async function approve() {
-    if (running.current || !active.current || refreshNeeded || queueOriginal.current || !queueReady) return;
-    if (!job || !selected.length) { setError('請至少選一張行銷圖。'); return; }
-    running.current = true; setBusy(true); setError(''); setNotice('');
-    let release: (() => void) | null = null, applied = false;
-    try {
-      release = await beforeApprove();
-      if (!release) { if (active.current) setError('請先完成或查核商品儲存；未儲存的修改不會被行銷結果覆蓋。'); return; }
-      if (!active.current) return;
-      approvalOriginal.current = { jobId: job.id, copy, selected: [...selected], acknowledged: false };
-      setRefreshNeeded(true);
-      await api(token, `/marketing/jobs/${job.id}/approve`, { method: 'POST',
-        body: JSON.stringify({ selectedMediaIds: selected, copy }) });
-      applied = true;
-      approvalOriginal.current.acknowledged = true;
-      if (!active.current) return;
-      const updated = parseMarketingJob(await api<unknown>(token, `/marketing/jobs/${job.id}`),sourceMediaId,listingId??null,job.id);
-      if (!active.current) return;
-      setJob(updated); await onApproved();
-      if (active.current) { setRefreshNeeded(false); approvalOriginal.current = null; setNotice(listingId ? '已更新商品照片與文案；實拍原圖保留。' : '已加入私人草稿；實拍原圖保留。'); }
-    }
-    catch { if (active.current) setError(applied ? '後台已確認套用，畫面尚未重新讀取；請只重新核對，不要再套用。' : '套用結果尚未確認，不代表失敗；請重新載入核對原工作與商品，不要連續重送。'); }
-    finally { release?.(); running.current = false; if (active.current) setBusy(false); }
+  async function settleApproval(result:MarketingApprovalResult,raw:string,isActive:()=>boolean,held=false,accept=false){
+    if(!isActive())return;approvalConfirmed.current=result;setApprovalResult(result);
+    if(result.state!=='APPLIED'&&!accept){setError(result.state==='CONFLICT'?'原確認未套用：商品或選图已變更。請核對原文案，再讀取後台結果。':'原確認已取消；晚到的原請求不會套用。請核對原文案，再讀取後台結果。');return;}
+    let release:(()=>void)|null=null;
+    try{
+      if(!held){release=await beforeApprove();if(!release)throw new Error('HOST_EDIT_PENDING');}
+      if(!isActive())return;
+      const original=await parseMarketingApprovalJournal(raw);
+      const target=result.state==='APPLIED'?{job:{id:original.body.jobId}}:await api<{job:{id:string}|null}>(token,`/marketing/jobs?sourceMediaId=${sourceMediaId}`);
+      if(!isActive())return;
+      let restored:MarketingJob|null=null;
+      if(target.job){try{restored=parseMarketingJob(await api<unknown>(token,`/marketing/jobs/${target.job.id}`),sourceMediaId,listingId??null,target.job.id);}
+        catch(failure){if(!(failure instanceof ApiFailure&&failure.status===404))throw failure;}}
+      if(!isActive())return;await onApproved();if(!isActive())return;
+      const cleared=await privatePendingStore.clear(queueKey.current,raw);
+      if(!isActive())return;if(!cleared&&await privatePendingStore.get(queueKey.current)!==null)throw new Error('MARKETING_CLEANUP_PENDING');
+      if(!isActive())return;setJob(restored);approvalOriginal.current='';approvalConfirmed.current=null;setApprovalDetails(null);setApprovalResult(null);setApprovalCancel(false);setRefreshNeeded(false);setError('');
+      setNotice(result.state==='APPLIED'?`已核對原確認回執（當時版本 ${result.appliedVersion}）；沒有再次套用。商品目前內容可能已有後續更新。`:'已讀取後台並結束原確認操作；沒有套用或刪除照片。');
+    }finally{release?.();}
   }
-  async function refreshApproved() {
-    if (running.current || !active.current || !job) return;
-    running.current = true; setBusy(true); setError('');
-    let release: (() => void) | null = null;
-    try {
-      release = await beforeApprove();
-      if (!release) { if (active.current) setError('請先完成或查核商品儲存；未儲存的修改不會被行銷結果覆蓋。'); return; }
-      if (!active.current) return;
-      const latest = parseMarketingJob(await api<unknown>(token, `/marketing/jobs/${job.id}`),sourceMediaId,listingId??null,job.id);
-      if (!active.current) return;
-      const original = approvalOriginal.current;
-      if (!original || latest.id !== original.jobId || latest.status !== 'COMPLETED' ||
-        !original.acknowledged && (latest.copy !== original.copy.trim() || JSON.stringify(latest.selectedMediaIds) !== JSON.stringify(original.selected))) throw new Error('MARKETING_RECHECK_REQUIRED');
-      original.acknowledged = true;
-      setJob(latest); await onApproved();
-      if (active.current) { setRefreshNeeded(false); approvalOriginal.current = null; setNotice('已重新核對已套用的行銷結果；沒有再次套用。'); }
-    } catch { if (active.current) setError(approvalOriginal.current?.acknowledged ? '行銷結果已確認，畫面仍需重新核對；沒有再次套用。' : '原套用結果仍待確認；保留原選圖與文案，不會再次套用。'); }
-    finally { release?.(); running.current = false; if (active.current) setBusy(false); }
+  async function approve(){
+    if(running.current||!active.current||refreshNeeded||queueOriginal.current||!queueReady)return;
+    if(!job||!selected.length){setError('請至少選一張行銷圖。');return;}
+    running.current=true;setBusy(true);setError('');setNotice('');
+    const epoch=lifetime.current,isActive=()=>epoch===lifetime.current;let release:(()=>void)|null=null;
+    try{
+      release=await beforeApprove();if(!release){if(isActive())setError('請先完成或查核商品儲存；未儲存的修改不會被行銷結果覆蓋。');return;}
+      if(!isActive())return;
+      const body:MarketingApprovalBody={kind:'APPROVE',jobId:job.id,sourceMediaId,listingId:listingId??null,expectedVersion:getExpectedVersion(),selectedMediaIds:[...selected],copy};
+      const raw=await marketingApprovalJournal(body);await privatePendingStore.save(queueKey.current,raw);if(!isActive())return;
+      approvalOriginal.current=raw;setApprovalDetails((await parseMarketingApprovalJournal(raw)).body);setRefreshNeeded(true);
+      await settleApproval(await sendMarketingApproval(token,raw,privatePendingStore,queueKey.current,isActive),raw,isActive,true);
+    }catch{if(isActive())setError(approvalConfirmed.current?'原確認回執已核對，商品畫面仍需讀取；不會再次套用。':approvalOriginal.current?'套用回覆尚未確認，不代表失敗；原選圖與文案已保留，重開只查核，不會重送。':'無法安全保存原確認內容；不會在未記錄時套用，請檢查文案與商品儲存。');}
+    finally{release?.();running.current=false;if(isActive())setBusy(false);}
+  }
+  async function recoverApproval(mode:'read'|'retry'|'cancel'|'accept'){
+    if(running.current||!active.current||!approvalOriginal.current)return;
+    running.current=true;setBusy(true);setError('');const raw=approvalOriginal.current,epoch=lifetime.current,isActive=()=>epoch===lifetime.current;
+    let release:(()=>void)|null=null;
+    try{
+      if(mode==='retry'){release=await beforeApprove();if(!release)throw new Error('HOST_EDIT_PENDING');if(!isActive())return;}
+      const result=mode==='accept'?approvalConfirmed.current:mode==='cancel'?await abandonMarketingApproval(token,raw,isActive):mode==='retry'?await sendMarketingApproval(token,raw,privatePendingStore,queueKey.current,isActive):await readMarketingApproval(token,raw);
+      if(!result)throw new Error('NO_APPROVAL_PROOF');await settleApproval(result,raw,isActive,!!release,mode==='accept');
+    }catch{if(isActive())setError(approvalConfirmed.current?'原確認回執已核對，商品畫面仍需讀取；不會再次套用。':'原套用結果仍待確認；保留原選圖與文案，不會再次套用。');}
+    finally{release?.();running.current=false;if(isActive())setBusy(false);}
   }
   async function revise() {
     if (running.current || !active.current || refreshNeeded || queueOriginal.current || !queueReady) return;
@@ -194,7 +206,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
         {!cancelConfirm?<button type="button" disabled={busy} onClick={()=>setCancelConfirm(true)}>取消未建立的原排隊</button>:<><p>若工作已建立，只回讀原結果；不會撤銷已建立工作或刪除照片。</p><button type="button" disabled={busy} onClick={()=>void recoverQueue('cancel')}>確認取消未建立工作</button><button type="button" disabled={busy} onClick={()=>setCancelConfirm(false)}>返回查核</button></>}
       </>}
     </div>}
-    {!job || job.status === 'FAILED' ? <button type="button" disabled={busy||!queueReady||!!queuePending} onClick={() => void start()}
+    {!job || job.status === 'FAILED' ? <button type="button" disabled={busy||!queueReady||!!queuePending||refreshNeeded} onClick={() => void start()}
       className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{job ? '重新排隊生成四圖' : '生成四張行銷圖'}</button>
       : ['PENDING', 'PROCESSING'].includes(job.status) ? <p role="status" className="mt-3 text-orange-900">
         {job.status === 'PENDING' ? '已排隊，稍後自動更新' : '正在生成四張圖片與文案'}</p>
@@ -209,7 +221,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
               className="rounded-xl border bg-white p-2 text-left"><PrivatePhoto id={media.id} token={token} />
               <span>{selected.includes(media.id) ? '☑ 保留原版' : '☐ 選原版'} · 圖 {media.marketingSlot}</span>
             </button>)}</div></div>}
-          {!!selected.length && <div className="mt-4"><p className="font-semibold">{job.status==='COMPLETED'?'已套用的公開順序（第一張為封面）':'拖放公開順序（第一張為封面）'}</p><p id={`sort-help-${sourceMediaId}`} className="text-stone-600">{job.status==='COMPLETED'?'已確認的排序僅供閱覽。':'拖動右側把手；也可聚焦把手後按鍵盤上下方向鍵調整。'}</p>
+          {!!selected.length && <div className="mt-4"><p className="font-semibold">{job.status==='COMPLETED'?'此工作確認時的順序（第一張為封面）':'拖放公開順序（第一張為封面）'}</p><p id={`sort-help-${sourceMediaId}`} className="text-stone-600">{job.status==='COMPLETED'?'此工作當時的排序僅供閱覽；商品目前可能已由後續調整更新。':'拖動右側把手；也可聚焦把手後按鍵盤上下方向鍵調整。'}</p>
             {job.status === 'COMPLETED' && <p className="mt-1 text-stone-600">此工作已確認，照片與順序僅供閱覽；如仍有免費調整機會，可在下方另行提出。</p>}
             <ol ref={sortList}>{selected.map((id, index) => <li key={id} className={`mt-2 flex items-center gap-3 rounded-xl border p-3 ${dragging === id ? 'bg-orange-100 ring-2 ring-orange-400' : 'bg-white'}`}>
               <span className="flex-1">{index === 0 ? '封面' : index + 1}. 圖 {choices.find(media => media.id === id)?.marketingSlot}</span>
@@ -238,7 +250,17 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
             <button type="button" disabled={busy || refreshNeeded || !!queuePending || !queueReady} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">免費調整一次</button>
           </div>}
         </>}
-    {refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshApproved()} className="mt-3 min-h-11 rounded-xl border px-4">查核原行銷套用結果</button>}
+    {refreshNeeded&&approvalDetails&&<div role="region" aria-label="原行銷確認操作待查核" className="mt-3 rounded-xl border border-orange-300 p-3">
+      <p>原選用 {approvalDetails.selectedMediaIds.length} 張 · 原商品版本 {approvalDetails.expectedVersion}；重新開頁只查核原回執，不會自動重送。</p>
+      <p className="mt-2 whitespace-pre-wrap break-words">原文案：{approvalDetails.copy}</p>
+      <p className="mt-2">原照片順序：{approvalDetails.selectedMediaIds.map((id,index)=>`第${index+1}張${choices.find(m=>m.id===id)?`（圖 ${choices.find(m=>m.id===id)!.marketingSlot}）`:'（待讀取原工作）'}`).join(' → ')}</p>
+      {approvalResult?<><p className="mt-2">{approvalResult.state==='APPLIED'?`原操作已套用，當時版本 ${approvalResult.appliedVersion}；後續商品編輯不會改變此回執。`:approvalResult.state==='CONFLICT'?'原操作未套用；商品或選图已變更。':'原操作已取消，不代表撤回其他已套用工作。'}</p>
+        <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('accept')}>{approvalResult.state==='APPLIED'?'只重新讀取商品並清理原確認紀錄':'讀取後台並結束原確認操作'}</button></>:
+        <><button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('read')}>查核原行銷套用結果</button>
+          <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('retry')}>以相同識別碼重試原確認</button>
+          {!approvalCancel?<button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>setApprovalCancel(true)}>取消未套用的原確認</button>:<><p>只阻止尚未套用的原請求；已套用則回讀原回執，不回復商品或刪除照片。</p><button type="button" disabled={busy} onClick={()=>void recoverApproval('cancel')}>確認取消未套用操作</button><button type="button" disabled={busy} onClick={()=>setApprovalCancel(false)}>返回查核</button></>}
+        </>}
+    </div>}
     {notice && <p role="status" className="mt-2 text-green-800">{notice}</p>}
     {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
   </section>;

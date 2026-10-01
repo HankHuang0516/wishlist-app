@@ -5,14 +5,13 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
 import MarketplaceDialog from "../components/MarketplaceDialog";
-import { legacyDetail, detailEditAck, detailItemAck, detailText, type LegacyDetailItem as Item, type LegacyDetailList as Wishlist } from '../lib/legacyDetailWeb';
+import { legacyDetail, detailEditAck, detailItemAck, detailText, detailItemBody, detailItemEditAck, detailDeletedAck, detailCloneAck, detailCloneTargets, detailItemText, type LegacyDetailItem as Item, type LegacyDetailList as Wishlist } from '../lib/legacyDetailWeb';
 import { useLegacyDetailOperation } from '../lib/useLegacyDetailOperation';
 import { legacyListText } from '../lib/legacyWishlistWeb';
 import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon, Gift, AlertCircle, UserPlus, Check, Share2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ItemDetailModal from "../components/ItemDetailModal";
 import { API_URL } from '../config';
-import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
@@ -30,7 +29,7 @@ export function WishlistDetailSession() {
     const { token, user } = useAuth();
     const [wishlist, setWishlist] = useState<Wishlist | null>(null);
     const [loading, setLoading] = useState(true);
-    const [readError,setReadError]=useState('');
+    const [readError,setReadError]=useState(''),[deleted,setDeleted]=useState(false);
     const active=useRef(true),readSequence=useRef(0),lifetime=useRef(0);
     const operation=useLegacyDetailOperation(user?.id,token);
     useEffect(()=>{active.current=true;return()=>{active.current=false;lifetime.current++;readSequence.current++;};},[]);
@@ -119,7 +118,7 @@ export function WishlistDetailSession() {
         return () => clearInterval(interval);
     }, [pendingItemSignature, id, operation.busy, operation.pending, isEditModalOpen, isDetailOpen, readError]);
 
-    const fetchWishlist = async (silent = false):Promise<boolean> => {
+    const fetchWishlist = async (silent = false,allowMissing=false):Promise<boolean> => {
         const sequence=++readSequence.current,version=lifetime.current;
         const current=()=>active.current && version===lifetime.current && sequence===readSequence.current;
         try {
@@ -129,7 +128,7 @@ export function WishlistDetailSession() {
             if(!res.ok) {
                 setReadError(detailText(res.status===404?'missing':[401,403].includes(res.status)?'denied':'readError'));
                 if([401,403,404].includes(res.status))setWishlist(null);
-                return false;
+                return res.status===404 && allowMissing;
             }
             const data=legacyDetail(await res.json(),Number(id));if(!current())return false;
             setWishlist(data);setReadError('');
@@ -222,41 +221,25 @@ export function WishlistDetailSession() {
     };
 
     const executeDelete = async () => {
-        if (!canMutate() || !deleteTarget) return;
-        setIsDeleting(true);
+        if (!canMutate() || !deleteTarget || !wishlist || user?.id!==wishlist.userId) return;
+        setIsDeleting(true);readSequence.current++;
+        const target=deleteTarget,deletedId=target.type==='wishlist'?wishlist.id:target.id!;
         try {
-            if (deleteTarget.type === 'wishlist') {
-                const res = await fetch(`${API_URL}/wishlists/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    navigate('/dashboard');
-                } else {
-                    setFeedbackMessage(t('common.error'));
-                    setTimeout(() => setFeedbackMessage(null), 3000);
-                }
-            } else if (deleteTarget.type === 'item' && deleteTarget.id) {
-                const res = await fetch(`${API_URL}/items/${deleteTarget.id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    fetchWishlist(true);
-                    setDeleteModalOpen(false);
-                } else {
-                    const data = await res.json();
-                    setFeedbackMessage(`Delete failed: ${data.error || res.statusText}`);
-                    setTimeout(() => setFeedbackMessage(null), 3000);
-                }
-            }
-        } catch (error: any) {
-            setFeedbackMessage("Error executing delete: " + error.message);
-            setTimeout(() => setFeedbackMessage(null), 3000);
-        } finally {
-            setIsDeleting(false);
-        }
+            await operation.run({id:wishlist.id,kind:target.type==='wishlist'?'DELETE_LIST':'DELETE_ITEM',...(target.type==='item'?{itemId:deletedId}:{})},target.type==='wishlist'?'/wishlists/'+wishlist.id:'/items/'+deletedId,undefined,ack=>{
+                detailDeletedAck(ack,deletedId);setDeleteModalOpen(false);setIsDetailOpen(false);setSelectedItem(null);
+                if(target.type==='wishlist'){setDeleted(true);setWishlist(null);setReadError('');}
+                else setWishlist(old=>old?{...old,items:old.items.filter(row=>row.id!==deletedId)}:old);
+            },'DELETE');
+        }finally{if(active.current){setIsDeleting(false);setDeleteModalOpen(false);}}
     };
+
+    async function handleItemSave(item:Item,body:ReturnType<typeof detailItemBody>) {
+        if(!canMutate() || !wishlist || user?.id!==wishlist.userId)return false;readSequence.current++;
+        return operation.run({id:wishlist.id,kind:'ITEM_EDIT',itemId:item.id},'/items/'+item.id,body,ack=>{
+            const updated=detailItemEditAck(ack,item,wishlist.id,body);
+            setWishlist(old=>old?{...old,items:old.items.map(row=>row.id===item.id?updated:row)}:old);setFeedbackMessage(detailItemText('saved'));
+        });
+    }
 
     const handleToggleHide = async (item: Item) => {
         if(!canMutate() || !wishlist || user?.id!==wishlist.userId)return;
@@ -270,63 +253,39 @@ export function WishlistDetailSession() {
     // Clone Modal State
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [itemToClone, setItemToClone] = useState<Item | null>(null);
-    const [myWishlists, setMyWishlists] = useState<Wishlist[]>([]);
+    const [myWishlists, setMyWishlists] = useState<ReturnType<typeof detailCloneTargets>>([]);
+    const [targetsLoading,setTargetsLoading]=useState(false),[targetsError,setTargetsError]=useState('');
+    const targetsSequence=useRef(0);
     const [selectedTargetWishlistId, setSelectedTargetWishlistId] = useState<number | null>(null);
 
     const fetchMyWishlists = async () => {
+        if(!token || !user || operation.busy || operation.pending)return;
+        const sequence=++targetsSequence.current,version=lifetime.current,current=()=>active.current && version===lifetime.current && sequence===targetsSequence.current;
+        setTargetsLoading(true);setTargetsError('');setMyWishlists([]);setSelectedTargetWishlistId(null);
         try {
-            const res = await fetch(`${API_URL}/wishlists`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setMyWishlists(data);
-                if (data.length > 0) setSelectedTargetWishlistId(data[0].id);
-            }
-        } catch (err) { console.error(err); }
+            const res=await fetch(API_URL+'/wishlists',{headers:{Authorization:'Bearer '+token},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(30000)});
+            if(!current())return;if(!res.ok)throw new Error('Unconfirmed targets');const data=detailCloneTargets(await res.json(),user.id);if(!current())return;setMyWishlists(data);
+        }catch{if(current())setTargetsError(detailItemText('targetsUnknown'));}
+        finally{if(current())setTargetsLoading(false);}
     };
 
     const handleCloneClick = (item: Item) => {
-        if (!token) {
-            // Guest guard
-            if (confirm("Sign in to save this item to your wishlist!")) {
-                navigate('/login?redirect=' + encodeURIComponent(window.location.pathname));
-            }
-            return;
-        }
-
-        setItemToClone(item);
-        fetchMyWishlists(); // Load fresh list
-        setIsCloneModalOpen(true);
+        if(!token){navigate('/login?redirect='+encodeURIComponent('/wishlists/'+id));return;}
+        if(!canMutate())return;operation.resetFeedback();setFeedbackMessage(null);setIsDetailOpen(false);setSelectedItem(null);setItemToClone(item);setIsCloneModalOpen(true);void fetchMyWishlists();
     };
 
     const handleCloneConfirm = async () => {
-        if (!canMutate() || !itemToClone || !selectedTargetWishlistId) return;
-
-        try {
-            const res = await fetch(`${API_URL}/items/${itemToClone.id}/clone`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ targetWishlistId: selectedTargetWishlistId })
-            });
-            if (res.ok) {
-                setFeedbackMessage(t('detail.cloneSuccess'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-                setIsCloneModalOpen(false);
-                setItemToClone(null);
-            } else {
-                const data = await res.json();
-                setFeedbackMessage(data.error || t('common.error'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-            }
-        } catch (err) { console.error(err); }
+        if(!canMutate() || !wishlist || !itemToClone || !selectedTargetWishlistId || targetsLoading || targetsError)return;
+        const target=myWishlists.find(row=>row.id===selectedTargetWishlistId);if(!target || target.count>=target.maxItems)return;
+        const intent={id:wishlist.id,kind:'CLONE' as const,itemId:itemToClone.id,targetWishlistId:target.id,clientRequestId:crypto.randomUUID()};
+        await operation.run(intent,'/items/'+intent.itemId+'/clone',{targetWishlistId:target.id,clientRequestId:intent.clientRequestId},ack=>{
+            detailCloneAck(ack,intent);setIsCloneModalOpen(false);setItemToClone(null);setFeedbackMessage(detailItemText('created'));
+        },'POST');
     };
 
     const openDetail = (item: Item) => {
         if(operation.busy || operation.pending)return;
+        operation.resetFeedback();setFeedbackMessage(null);
         setSelectedItem(item);
         setIsDetailOpen(true);
     };
@@ -337,13 +296,17 @@ export function WishlistDetailSession() {
         {operation.notice && <p role="status">{operation.notice}</p>}
         {readError && <Button onClick={()=>void fetchWishlist()} disabled={operation.busy}>{detailText('retry')}</Button>}
         {operation.pending && operation.pending.id!==Number(id) ? <Link to={'/wishlists/'+operation.pending.id}>{detailText('original')}</Link> : operation.pending && <>
-            <Button onClick={()=>void operation.check(()=>fetchWishlist())} disabled={operation.busy || operation.known}>{legacyListText('read')}</Button>
-            <Button onClick={()=>void operation.acknowledge()} disabled={operation.busy || !operation.checked && !operation.known}>{legacyListText(operation.known?'clean':'resume')}</Button>
+            {operation.pending.kind==='CLONE'?<>
+                <Button className="min-h-11" onClick={()=>void operation.checkClone('read')} disabled={operation.busy || operation.known}>{detailItemText('read')}</Button>
+                <Button className="min-h-11" onClick={()=>void operation.checkClone('stop')} disabled={operation.busy || operation.known}>{detailItemText('stop')}</Button>
+                {operation.known && <Link className="inline-flex min-h-11 items-center underline" to={'/wishlists/'+operation.pending.targetWishlistId}>{detailItemText('target')}</Link>}
+            </>:<Button className="min-h-11" onClick={()=>void operation.check(()=>fetchWishlist(false,operation.pending?.kind==='DELETE_LIST'))} disabled={operation.busy || operation.known}>{legacyListText('read')}</Button>}
+            <Button className="min-h-11" onClick={()=>void operation.acknowledge()} disabled={operation.busy || !operation.checked && !operation.known}>{legacyListText(operation.known?'clean':'resume')}</Button>
         </>}
         {!operation.ready && token && <Button onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
     </section>;
     if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
-    if (!wishlist) return <div className="p-4 space-y-4">{recovery}{!token && <Link to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
+    if (!wishlist) return <div className="p-4 space-y-4">{deleted && <p role="status">{detailItemText('listDeleted')}</p>}{recovery}<Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('dashboard')}</Link>{!token && <Link to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
 
     const isOwner = user?.id === wishlist.userId;
 
@@ -406,7 +369,7 @@ export function WishlistDetailSession() {
 
                 {isOwner && !isEditing && (
                     <div className="flex gap-2 self-end sm:self-start">
-                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={detailText('edit')} disabled={!canMutate()} onClick={() => {setEditTitle(wishlist.title);setEditDesc(wishlist.description);setEditIsPublic(wishlist.isPublic);setFeedbackMessage(null);setIsEditModalOpen(true);}}>
+                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={detailText('edit')} disabled={!canMutate()} onClick={() => {setEditTitle(wishlist.title);setEditDesc(wishlist.description);setEditIsPublic(wishlist.isPublic);setFeedbackMessage(null);operation.resetFeedback();setIsEditModalOpen(true);}}>
                             <Edit2 className="w-5 h-5 text-gray-600" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={t('wishlist.share')} onClick={() => handleShare()}>
@@ -615,54 +578,30 @@ export function WishlistDetailSession() {
                 )
             }
 
-            {/* Detail Modal */}
-            {
-                selectedItem && (
-                    <ItemDetailModal
-                        isOpen={isDetailOpen}
-                        onClose={() => setIsDetailOpen(false)}
-                        item={wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem}
-                        onUpdate={() => fetchWishlist(true)}
-                        wisherName={selectedItem.originalUser?.name || wishlist.user?.name || "User"}
-                        wisherId={selectedItem.originalUser?.id || wishlist.userId}
-                        isOwner={isOwner}
-                    />
-                )
-            }
+            {/* Detail Modal — all writes use the parent operation gate */}
+            {selectedItem && isDetailOpen && <ItemDetailModal
+                key={selectedItem.id} isOpen={isDetailOpen} onClose={()=>{setIsDetailOpen(false);setSelectedItem(null);}}
+                item={wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem}
+                wisherName={selectedItem.originalUser?.name || wishlist.user?.name || 'User'}
+                wisherId={selectedItem.originalUser?.id || wishlist.userId} isOwner={isOwner}
+                busy={operation.busy} locked={!!token && !canMutate()} issue={operation.issue} notice={operation.notice}
+                onSave={body=>handleItemSave(wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem,body)}
+                onDelete={()=>{setIsDetailOpen(false);handleDeleteItem(selectedItem.id);}}
+                onClone={()=>handleCloneClick(selectedItem)}
+            />}
 
-            {/* Clone Selection Modal */}
-            {
-                isCloneModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <Card className="w-full max-w-sm bg-white">
-                            <CardHeader>
-                                <CardTitle>{t('detail.cloneTitle')}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <p className="text-sm text-gray-600">{t('detail.cloneDesc')}</p>
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                    {myWishlists.length > 0 ? myWishlists.map(wl => (
-                                        <div
-                                            key={wl.id}
-                                            className={`p-3 rounded border cursor-pointer flex items-center justify-between ${selectedTargetWishlistId === wl.id ? 'border-muji-primary bg-stone-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                                            onClick={() => setSelectedTargetWishlistId(wl.id)}
-                                        >
-                                            <span className="font-medium text-sm truncate">{wl.title}</span>
-                                            {selectedTargetWishlistId === wl.id && <div className="w-2 h-2 rounded-full bg-muji-primary" />}
-                                        </div>
-                                    )) : (
-                                        <p className="text-sm text-red-500">{t('dashboard.emptyOwner')}</p>
-                                    )}
-                                </div>
-                            </CardContent>
-                            <CardFooter className="flex justify-end gap-2">
-                                <Button variant="secondary" onClick={() => setIsCloneModalOpen(false)}>{t('common.cancel')}</Button>
-                                <Button onClick={handleCloneConfirm} disabled={!selectedTargetWishlistId}>{t('detail.cloneConfirm')}</Button>
-                            </CardFooter>
-                        </Card>
-                    </div>
-                )
-            }
+            {isCloneModalOpen && <MarketplaceDialog title={detailText('clone')+' · '+(itemToClone?.name??'')} onClose={()=>setIsCloneModalOpen(false)} closeDisabled={operation.busy} closeLabel={t('common.close')}>
+                <div className="space-y-4">
+                    {targetsLoading && <p role="status">{t('common.loading')}</p>}
+                    {targetsError && <p role="alert">{targetsError}</p>}
+                    {!targetsLoading && !targetsError && !myWishlists.length && <p>{detailItemText('emptyTargets')}</p>}
+                    {myWishlists.map(row=><label key={row.id} className="flex min-h-11 items-center gap-3 rounded-xl border p-3"><input type="radio" name="clone-target" value={row.id} checked={selectedTargetWishlistId===row.id} onChange={()=>setSelectedTargetWishlistId(row.id)} disabled={row.count>=row.maxItems || !canMutate()}/><span>{row.title} · {row.count}/{row.maxItems}</span></label>)}
+                    <Button className="min-h-11" onClick={()=>void fetchMyWishlists()} disabled={operation.busy || !!operation.pending || targetsLoading}>{detailItemText('readTargets')}</Button>
+                    <Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('createList')}</Link>
+                    <Button className="min-h-11" onClick={handleCloneConfirm} disabled={!selectedTargetWishlistId || !canMutate() || !!targetsError || targetsLoading}>{detailItemText('confirmClone')}</Button>
+                    {(operation.issue || operation.notice) && <p role="status">{operation.issue || operation.notice}</p>}
+                </div>
+            </MarketplaceDialog>}
             {/* Edit Wishlist Modal */}
             {isEditModalOpen && <MarketplaceDialog title={detailText('edit')} onClose={()=>setIsEditModalOpen(false)} closeDisabled={operation.busy} closeLabel={t('common.close')}>
                 <div className="space-y-4">
@@ -674,15 +613,10 @@ export function WishlistDetailSession() {
                 </div>
             </MarketplaceDialog>}
 
-            {/* Delete Confirmation Modal */}
-            <DeleteConfirmModal
-                isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
-                onConfirm={executeDelete}
-                title={deleteTarget?.type === 'wishlist' ? t('detail.deleteWishlistTitle') : t('detail.deleteItemTitle')}
-                message={deleteTarget?.type === 'item' ? t('detail.deleteItemConfirm') : t('dashboard.deleteConfirmMsg')}
-                isDeleting={isDeleting}
-            />
+            {deleteModalOpen && <MarketplaceDialog title={(deleteTarget?.type==='wishlist'?detailText('removeList'):detailText('remove'))+' · '+(deleteTarget?.type==='wishlist'?wishlist.title:wishlist.items.find(item=>item.id===deleteTarget?.id)?.name??'')} onClose={()=>setDeleteModalOpen(false)} closeDisabled={isDeleting || operation.busy} closeLabel={t('common.close')}>
+                <p className="mb-4">{detailItemText('deleteConfirm')}</p>
+                <div className="flex flex-wrap justify-end gap-3"><Button className="min-h-11" variant="secondary" onClick={()=>setDeleteModalOpen(false)} disabled={isDeleting || operation.busy}>{t('common.cancel')}</Button><Button className="min-h-11" variant="destructive" onClick={executeDelete} disabled={isDeleting || !canMutate()}>{deleteTarget?.type==='wishlist'?detailText('removeList'):detailText('remove')}</Button></div>
+            </MarketplaceDialog>}
 
             {/* Guest CTA Banner */}
             {

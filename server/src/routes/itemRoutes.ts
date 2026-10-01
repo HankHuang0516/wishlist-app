@@ -12,6 +12,8 @@ import {
     upsertEclawListing,
 } from '../controllers/itemController';
 
+import { getCloneReceipt, abandonClone } from '../controllers/wishCloneController';
+
 const router = express.Router();
 
 // Public Routes (No Auth) — MUST precede the auth middleware and the
@@ -28,6 +30,8 @@ router.post('/upsert-listing', authenticateEclawAgent, upsertEclawListing);
 // Protected Routes
 router.use(authenticateToken);
 
+router.get('/clone-receipts/:clientRequestId', getCloneReceipt);
+router.post('/clone-receipts/:clientRequestId/abandon', abandonClone);
 router.get('/:id', getItem);
 router.put('/:id', updateItem);
 router.delete('/:id', deleteItem);

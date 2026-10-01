@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十七批：願望複製權限、回執與詳情操作（仍未部署）
+
+- 原POST /api/items/:id/clone保留舊row／201及無target的本人預設清單相容；新增明確target與可選clientRequestId。交易鎖actor、依ID排序來源／目標parent及source item，再讀公開／隱藏／本人權限與目標容量；他人私人／隱藏404、 他人目標403、容量或處理中來源409。與native新增共用容量鎖，保留參考價格／幣別、獨立預算／幣別、最初許願者、notes／link／image reference／priority及實際穩定AI狀態；不繼承認領、隱藏、proxy reference或provider診斷，不把processing工作複製成完成。
+- 可重查複製使用既有WishCreateReceipt的CLONE／CLONE_STOP種類與source-target hash，無新migration。相同owner／UUID重送只讀原clone，換來源／目標或native種類409；原願望後來刪除提供tombstone，不再建立。新增本人GET clone-receipts及POST abandon；先停止留下墓碑、晚到POST410，已建立時stop只回原結果、不刪願望。private,no-store、輸入及錯誤內容有界。原DELETE item移到typed transactional handler、保留photo-erasure queue及舊message，commit後新增id／deleted ACK。
+- ItemDetailModal改為純顯示／表單，共用parent同步gate與最小加密操作標記；逐欄核對名稱／備註／URL／參考價／幣別／預算／幣別，0／null可明確保存，不先顯示未確認欄位。兩個複製入口同一具名target dialog， fresh本人清單及容量驗證、明確選擇、只呼叫來源clone endpoint。失聯／reload不重送；原clone查receipt或safe stop後明確CAS清理，其他舊操作只能明示讀目前狀態、不冒充歷史。只讀詳情在storage failure時仍可看、所有modal寫入鎖定；unsafe link不顯示，真正搜尋fallback不冒稱AI連結，保留403圖片替代提示與原許願者profile。
+- 真Chrome／Vite DEV／compiled handlers／新UTF8 DB42migrations：來源編輯確認345.67 USD與900.25 TWD；另一合成帳號從詳情入口clone201。第二次明確clone commit後502，reload只GET原receipt200／CREATED再清理；第三次明確clone先延遲502，GET404不清，stop200／CLONE_STOP後釋放原POST410，目標仍2筆。最終3items／2CLONE＋1STOP、兩份clone保留原許願者1、AI SKIPPED／未認領／未隱藏；新journal clone statuses201／502／502／410，receipt GET2、stop1、DELETE0。最初編輯後QA-only select錯誤修正曾restart，journal只涵蓋重啟後，先前edit以UI／DB值佐證、不虛稱完整journal。390×844／document390、設定1、dialog focus／44px，刪除確認只取消；8張原始圖及outputs/wishlist-web-legacy-clone-evidence-20261002.json保留。
+- 新增Web27項與HTTP DB18項；完整pre-push退出0：Server56檔913＋3skipped／HTTP30檔465／Web85檔1340／Native42檔852／42migrations schema一致；browser抓建立清單未翻譯key，補中英及English picker回歸後最終Web85檔1341及build再次通過。主JS330.92KB／PWA92entries5925.16KiB，既有地圖／worker預載警告保留。focused初次2項重複DOM query修正不降低原斷言，測試件數不等於全站覆蓋率。新提交精確CI回讀另記JSON／roadmap。
+- 本批不是舊照片／URL create、媒體provider／來源刪除後圖片持久性、管理全部分頁、真provider／跨端、全語系／PWA／正式驗收完成聲明；這些續作。APP未改、其他worktree刪檔／.gitignore保留；只停止自有QA服務／PG、合成DB未刪。PR82 draft／未部署／目標active，首頁與設定各≥90/100、功能100%門檻維持。
+
 ## 2026-10-02 第三十六批：原願望詳情編輯與送禮契約（仍未部署）
 
 - 修正舊詳情清單編輯把無items的ACK當完整清單、造成render崩潰；核對id／owner／名稱／說明／公開值後合併已確認子項目。送禮改用真PUT /api/items/:id與isPurchased boolean、接受公開最小id／isPurchased ACK，不再把AI COMPLETED當送禮；隱藏核對id／isHidden。三種操作先保存API／帳號隔離最小加密標記，唯一local ID只防晚到CAS清理，不送後台、不冒充歷史回執；同步gate、no-store／拒絕redirect／30秒期限、未知ACK保留標記，reload不重送，只提供目前GET＋明確閱讀後清理。已確認但清理失敗只重試清理，儲存失敗不送出、切帳號晚到回覆不清原標記。

@@ -4,6 +4,14 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Permission-aware wish clone and detail follow-up
+
+Legacy cloning now locks the actor, sorted source/destination parents and source item before rechecking source visibility, destination ownership and native list capacity. Private/hidden outsider sources cannot be enumerated; in-flight jobs are rejected. Separate budgets/reference prices, original wisher and actual stable processing states are retained, while purchase/hide/proxy state and provider diagnostics are not copied. Item deletion rechecks ownership under transactional locks, retains the erasure queue and returns additive exact identity/deletion acknowledgement after commit.
+
+Existing owner/request-unique WishCreateReceipt records use distinct CLONE/CLONE_STOP kinds and a source-target hash. Native-kind or changed-input reuse is denied. Read-only history preserves original creation identity and later deletion tombstones; an explicit stop fences a delayed POST and never deletes an existing clone. No migration or automatic recovery mutation was added. The pure detail dialog shares the account/API-scoped encrypted gate and exact field acknowledgement checks, including explicit zero/null; failed restoration disables all modal writes. Only clone has new historical receipts; current-state reads for other legacy actions are explicitly not history.
+
+Actual PostgreSQL tests cover privacy/hidden changes after proven lock waits, native-create capacity contention, concurrent same-key clone/stop, cross-kind reuse, stop/tombstones and deletion ownership. DEV Chrome proves commit-then-502 receipt recovery and stopped delayed POST 410; permanent deletion was cancelled in the browser. Image-provider/erasure durability, legacy URL/photo creation and final production/PWA/device checks remain pending. Native APP source was not changed.
+
 ## 2026-10-02 Legacy detail operation follow-up
 
 Detail list edits preserve children when the legacy ACK omits them; gift/hide actions validate exact identity and requested booleans against the actual item endpoint. Account/API encrypted minimal markers, synchronous gates and scoped late-response guards prevent automatic mutation replay after unknown responses. Current-state reads are explicitly not historical receipts. Public DTOs do not invent private AI status or capacity. Share links omit query/fragment parameters, and cancelling native share no longer copies automatically. Source-blocked help retains only a sanitized 403 marker.

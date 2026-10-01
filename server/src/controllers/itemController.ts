@@ -10,7 +10,6 @@ import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
 import { isLikelyImageResourceUrl } from '../lib/eclawRecognition';
 import { parseEclawPublicCode, verifyPublicCode, ECLAW_PUBLIC_CODE_PREFIX } from '../lib/eclawBridge';
 import { parseOptionalPrice, parseOptionalCurrency } from '../lib/matchmakingPrice';
-import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -286,44 +285,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const deleteItem = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const { id } = req.params;
-
-        if (isNaN(Number(id))) {
-            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        console.log(`[DeleteItem] User ${userId} attempting to delete Item ${id}`);
-
-        const item = await prisma.item.findUnique({
-            where: { id: Number(id) },
-            include: { wishlist: true }
-        });
-
-        if (!item) {
-            console.log(`[DeleteItem] Item ${id} not found`);
-            return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
-        }
-
-        if (item.wishlist.userId !== userId) {
-            console.log(`[DeleteItem] Permission denied. Owner: ${item.wishlist.userId}, Requester: ${userId}`);
-            return res.status(403).json({ error: 'Access denied: You do not own this wishlist item', errorCode: API_ERROR_CODES.ACCESS_DENIED });
-        }
-
-        await prisma.$transaction(async tx => {
-            await enqueueWishPhotoErasure(tx, [Number(id)]);
-            await tx.item.delete({ where: { id: Number(id) } });
-        });
-        console.log(`[DeleteItem] Success`);
-
-        res.json({ message: 'Item deleted' });
-    } catch (error) {
-        console.error('Delete Item Error:', error);
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { deleteItem } from './wishDeleteController';
 
 export { updateItem } from './wishItemController';
 
@@ -704,73 +666,7 @@ export const createItemFromUrl = async (req: AuthRequest, res: Response) => {
 };
 
 // Clone an item to my own wishlist
-export const cloneItem = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const { id } = req.params; // ID of item to clone
-
-        if (isNaN(Number(id))) {
-            return res.status(400).json({ error: 'Invalid item ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-        }
-
-        const { targetWishlistId } = req.body; // Optional target
-
-        // 1. Get source item
-        const sourceItem = await prisma.item.findUnique({
-            where: { id: Number(id) },
-            include: { wishlist: true } // Need wishlist to check original owner if originalUserId is null
-        });
-        if (!sourceItem) return res.status(404).json({ error: 'Item not found', errorCode: API_ERROR_CODES.ITEM_NOT_FOUND });
-
-        let targetId = targetWishlistId;
-
-        // 2. Validate Target or Find Default
-        if (targetId) {
-            // Verify ownership
-            const wishlist = await prisma.wishlist.findFirst({
-                where: { id: Number(targetId), userId: userId }
-            });
-            if (!wishlist) return res.status(403).json({ error: 'Invalid target wishlist', errorCode: API_ERROR_CODES.ACCESS_DENIED });
-        } else {
-            // Default to first available
-            const userWishlist = await prisma.wishlist.findFirst({
-                where: { userId: userId },
-                orderBy: { createdAt: 'asc' }
-            });
-            if (!userWishlist) {
-                return res.status(400).json({ error: 'You need to create a wishlist first', errorCode: API_ERROR_CODES.INVALID_INPUT });
-            }
-            targetId = userWishlist.id;
-        }
-
-        // 3. Duplicate Item with Deep Persistence
-        // If sourceItem has originalUserId, it means it was already cloned or tracked. Preserve it.
-        // If NOT, then the *Creator* of that sourceItem is the original wisher.
-        // sourceItem.wishlist.userId is the owner of the list the item is currently in.
-        const originalWisherId = sourceItem.originalUserId || sourceItem.wishlist.userId;
-
-        const newItem = await prisma.item.create({
-            data: {
-                name: sourceItem.name,
-                price: sourceItem.price,
-                currency: sourceItem.currency,
-                link: sourceItem.link,
-                aiLink: sourceItem.aiLink, // Copy AI link as well
-                imageUrl: sourceItem.imageUrl,
-                notes: sourceItem.notes,
-                wishlistId: Number(targetId),
-                aiStatus: 'COMPLETED', // Already processed
-                isHidden: false,
-                originalUserId: originalWisherId // Persist the deep original wisher
-            }
-        });
-
-        res.status(201).json(newItem);
-    } catch (error) {
-        console.error('Clone Item Error:', error);
-        res.status(500).json({ error: 'Failed to clone item', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { cloneItem } from './wishCloneController';
 
 // Watch an item
 export const watchItem = async (req: AuthRequest, res: Response) => {

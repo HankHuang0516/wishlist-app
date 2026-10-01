@@ -8,6 +8,9 @@ import { authenticateToken } from '../../middleware/auth';
 import { updateItem } from '../../controllers/wishItemController';
 import { createWishlist, getWishlist, getWishlists, updateWishlist, deleteWishlist } from '../../controllers/wishlistController';
 import { getItem, getPublicItems } from '../../controllers/wishItemReadController';
+import { cloneItem, getCloneReceipt, abandonClone } from '../../controllers/wishCloneController';
+import { createNativeWish } from '../../controllers/nativeWishController';
+import { deleteItem } from '../../controllers/wishDeleteController';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
 const secret = 'wish-ownership-integration-only'; process.env.JWT_SECRET = secret;
@@ -18,6 +21,11 @@ app.get('/api/wishlists/:id', authenticateToken, getWishlist);
 app.get('/api/wishlists', authenticateToken, getWishlists);
 app.put('/api/wishlists/:id', authenticateToken, updateWishlist);
 app.delete('/api/wishlists/:id', authenticateToken, deleteWishlist);
+app.post('/api/items/:id/clone', authenticateToken, cloneItem);
+app.get('/api/items/clone-receipts/:clientRequestId', authenticateToken, getCloneReceipt);
+app.post('/api/items/clone-receipts/:clientRequestId/abandon', authenticateToken, abandonClone);
+app.post('/api/native-wishes/lists/:id/items', authenticateToken, createNativeWish);
+app.delete('/api/items/:id', authenticateToken, deleteItem);
 const server = createServer(app);
 let owner: number, first: number, second: number, listId: number, itemId: number;
 const auth = (id: number) => 'Bearer ' + jwt.sign({ id }, secret, { algorithm: 'HS256' });
@@ -38,6 +46,92 @@ afterAll(async () => {
     await prisma.$disconnect();
 });
 describe('wish privacy and fulfillment / actual PostgreSQL transactions', () => {
+    const target = (userId = first,maxItems=100) => prisma.wishlist.create({data:{userId,title:'合成複製目標',maxItems}});
+    const copy = (targetWishlistId:number,userId=first,clientRequestId?:string) => request(server).post('/api/items/'+itemId+'/clone').set('Authorization',auth(userId)).send({targetWishlistId,...(clientRequestId?{clientRequestId}:{})});
+    const receiptUrl=(key:string,targetWishlistId:number,sourceItemId=itemId)=>'/api/items/clone-receipts/'+key+'?sourceItemId='+sourceItemId+'&targetWishlistId='+targetWishlistId;
+    it('denies cloning private or hidden sources, and cannot copy into another owner target',async()=>{
+        const destination=await target();expect((await copy(destination.id)).status).toBe(404);
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{isHidden:true,aiStatus:'SKIPPED'}});
+        expect((await copy(destination.id)).status).toBe(404);
+        await prisma.item.update({where:{id:itemId},data:{isHidden:false}});expect((await copy(listId)).status).toBe(403);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+    });
+    it('copies a visible public wish with separate budget and AI price, retaining attribution without private references',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED',isPurchased:true,purchasedById:second,originalUserId:second,aiError:'403 synthetic-private-diagnostic'}});
+        const destination=await target(),key=randomUUID(),r=await copy(destination.id,first,key);expect(r.status).toBe(201);expect(r.headers['cache-control']).toBe('private, no-store');
+        expect(r.body).toMatchObject({wishlistId:destination.id,clonedFromItemId:itemId,clientRequestId:key,replayed:false,maxPrice:5000,priceCurrency:'TWD',price:'45000',currency:'USD',originalUserId:second,isPurchased:false,purchasedById:null,isHidden:false,aiStatus:'SKIPPED',aiError:'403',proxy_end_user_id:null});
+        expect(r.body.id).not.toBe(itemId);expect(JSON.stringify(r.body)).not.toContain('synthetic-private-diagnostic');expect(await prisma.wishCreateReceipt.findUnique({where:{userId_clientRequestId:{userId:first,clientRequestId:key}}})).toMatchObject({kind:'CLONE',resourceId:r.body.id});
+    });
+    it('retains legacy owner copying of a private hidden wish and default target selection',async()=>{
+        await prisma.item.update({where:{id:itemId},data:{isHidden:true,aiStatus:'SKIPPED'}});
+        const r=await request(server).post('/api/items/'+itemId+'/clone').set('Authorization',auth(owner)).send({});expect(r.status).toBe(201);expect(r.body).toMatchObject({wishlistId:listId,originalUserId:owner,isHidden:false,maxPrice:5000,aiStatus:'SKIPPED'});
+    });
+    it('serializes capacity for concurrent clones rather than overfilling the native list bound',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(first,1);
+        const results=await Promise.all([copy(destination.id,first,randomUUID()),copy(destination.id,first,randomUUID())]);expect(results.map(r=>r.status).sort()).toEqual([201,409]);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(1);
+    });
+    it('shares the capacity lock with native wish creation',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(first,1);
+        const create=request(server).post('/api/native-wishes/lists/'+destination.id+'/items').set('Authorization',auth(first)).send({clientRequestId:randomUUID(),name:'合成原生手動願望'});
+        const results=await Promise.all([copy(destination.id,first,randomUUID()),create]);expect(results.map(r=>r.status).sort()).toEqual([201,409]);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(1);
+    });
+    it('serializes simultaneous original requests with the same clone identity to one wish',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(),key=randomUUID();
+        const results=await Promise.all([copy(destination.id,first,key),copy(destination.id,first,key)]);expect(results.map(r=>r.status)).toEqual([201,201]);expect(new Set(results.map(r=>r.body.id)).size).toBe(1);expect(results.filter(r=>r.body.replayed)).toHaveLength(1);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(1);
+    });
+    it('replays the same clone receipt without duplicating or adopting later source changes, and rejects changed targets',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(),key=randomUUID(),firstCopy=await copy(destination.id,first,key);expect(firstCopy.status).toBe(201);
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:false}});await prisma.item.update({where:{id:itemId},data:{name:'後來修改的合成來源',maxPrice:999}});
+        const replay=await copy(destination.id,first,key);expect(replay.status).toBe(201);expect(replay.body).toMatchObject({id:firstCopy.body.id,name:'Sony 相機',maxPrice:5000,replayed:true});expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(1);
+        const changed=await target();expect((await copy(changed.id,first,key)).status).toBe(409);
+    });
+    it('returns owner-bound clone history and a tombstone after later deletion without recreating',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(),key=randomUUID(),created=await copy(destination.id,first,key);expect(created.status).toBe(201);
+        const url=receiptUrl(key,destination.id);expect((await request(server).get(url).set('Authorization',auth(second))).status).toBe(404);expect((await request(server).get(receiptUrl(key,destination.id,itemId+10000)).set('Authorization',auth(first))).status).toBe(409);
+        const found=await request(server).get(url).set('Authorization',auth(first));expect(found.body).toMatchObject({clientRequestId:key,kind:'CLONE',sourceItemId:itemId,targetWishlistId:destination.id,state:'CREATED',resourceId:created.body.id,deleted:false,resource:{id:created.body.id}});expect(found.headers['cache-control']).toBe('private, no-store');
+        await prisma.item.delete({where:{id:created.body.id}});const gone=await request(server).get(url).set('Authorization',auth(first));expect(gone.body).toMatchObject({state:'CREATED',resourceId:created.body.id,deleted:true,resource:null});expect((await copy(destination.id,first,key)).status).toBe(410);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+    });
+    it('safely stops an unreceived original clone and prevents a delayed POST from creating anything',async()=>{
+        const destination=await target(),key=randomUUID(),body={sourceItemId:itemId,targetWishlistId:destination.id};
+        const stop=await request(server).post('/api/items/clone-receipts/'+key+'/abandon').set('Authorization',auth(first)).send(body);expect(stop.status).toBe(200);expect(stop.body).toMatchObject({state:'ABANDONED',resourceId:null,resource:null,deleted:false});
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});expect((await copy(destination.id,first,key)).status).toBe(410);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+        expect((await request(server).get(receiptUrl(key,destination.id)).set('Authorization',auth(first))).body.state).toBe('ABANDONED');
+    });
+    it('does not delete a created wish when stop is requested after commit',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(),key=randomUUID(),created=await copy(destination.id,first,key);expect(created.status).toBe(201);
+        const stopped=await request(server).post('/api/items/clone-receipts/'+key+'/abandon').set('Authorization',auth(first)).send({sourceItemId:itemId,targetWishlistId:destination.id});expect(stopped.status).toBe(200);expect(stopped.body).toMatchObject({state:'CREATED',resourceId:created.body.id,deleted:false});expect(await prisma.item.findUnique({where:{id:created.body.id}})).not.toBeNull();
+    });
+    it('orders a simultaneous clone and stop by the same owner operation lock',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target(),key=randomUUID();
+        const stop=request(server).post('/api/items/clone-receipts/'+key+'/abandon').set('Authorization',auth(first)).send({sourceItemId:itemId,targetWishlistId:destination.id});const [created,stopped]=await Promise.all([copy(destination.id,first,key),stop]);expect(stopped.status).toBe(200);
+        expect(created.status).toBe(stopped.body.state==='CREATED'?201:410);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(stopped.body.state==='CREATED'?1:0);expect(await prisma.wishCreateReceipt.count({where:{userId:first,clientRequestId:key}})).toBe(1);
+    });
+    it.each(['private','hidden'])('rechecks %s source permissions after a proven database lock wait',async mode=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});await prisma.item.update({where:{id:itemId},data:{aiStatus:'SKIPPED'}});const destination=await target();
+        let ready!:()=>void,unlock!:()=>void;const acquired=new Promise<void>(r=>{ready=r;}),held=new Promise<void>(r=>{unlock=r;});
+        const change=prisma.$transaction(async tx=>{if(mode==='private')await tx.wishlist.update({where:{id:listId},data:{isPublic:false}});else await tx.item.update({where:{id:itemId},data:{isHidden:true}});ready();await held;});await acquired;
+        const attempt=copy(destination.id).then(r=>r);
+        try{let waiting=false;for(let n=0;n<50 && !waiting;n++){const rows=await prisma.$queryRaw<Array<{count:number}>>`SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT "id" FROM %'`;waiting=rows[0].count>0;if(!waiting)await new Promise(r=>setTimeout(r,20));}expect(waiting).toBe(true);}finally{unlock();}
+        await change;expect((await attempt).status).toBe(404);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+    });
+    it('rejects in-flight source jobs instead of manufacturing a completed or stuck copied job',async()=>{
+        await prisma.wishlist.update({where:{id:listId},data:{isPublic:true}});const destination=await target();
+        for(const patch of [{aiStatus:'PROCESSING',uploadStatus:'COMPLETED'},{aiStatus:'COMPLETED',uploadStatus:'UPLOADING'}]){await prisma.item.update({where:{id:itemId},data:patch});expect((await copy(destination.id)).status).toBe(409);}expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+    });
+    it('requires auth and rejects malformed clone IDs, targets, request identities and extra fields',async()=>{
+        expect((await request(server).post('/api/items/'+itemId+'/clone').send({})).status).toBe(401);const destination=await target();
+        for(const body of [{targetWishlistId:0},{targetWishlistId:[destination.id]},{targetWishlistId:destination.id,clientRequestId:'invalid'},{clientRequestId:randomUUID()},{targetWishlistId:destination.id,proxy_end_user_id:'injected'}])expect((await request(server).post('/api/items/'+itemId+'/clone').set('Authorization',auth(first)).send(body)).status).toBe(400);
+        for(const value of ['0','1.2','2147483648'])expect((await request(server).post('/api/items/'+value+'/clone').set('Authorization',auth(first)).send({targetWishlistId:destination.id})).status).toBe(400);
+    });
+    it('refuses to reuse a native create identity for clone or stop',async()=>{
+        const destination=await target(),key=randomUUID();await prisma.wishCreateReceipt.create({data:{userId:first,clientRequestId:key,kind:'ITEM',requestHash:'a'.repeat(64),resourceId:itemId}});
+        expect((await copy(destination.id,first,key)).status).toBe(409);expect((await request(server).post('/api/items/clone-receipts/'+key+'/abandon').set('Authorization',auth(first)).send({sourceItemId:itemId,targetWishlistId:destination.id})).status).toBe(409);expect(await prisma.item.count({where:{wishlistId:destination.id}})).toBe(0);
+    });
+    it('acknowledges exact item deletion only after commit while preserving the old message',async()=>{
+        const r=await request(server).delete('/api/items/'+itemId).set('Authorization',auth(owner));expect(r.status).toBe(200);expect(r.body).toEqual({message:'Item deleted',id:itemId,deleted:true});expect(r.headers['cache-control']).toBe('private, no-store');expect(await prisma.item.findUnique({where:{id:itemId}})).toBeNull();expect((await request(server).delete('/api/items/'+itemId).set('Authorization',auth(owner))).status).toBe(404);
+    });
+    it('denies outsider deletion and malformed IDs without changing the source',async()=>{
+        expect((await request(server).delete('/api/items/'+itemId).set('Authorization',auth(first))).status).toBe(403);for(const value of ['0','1.2','2147483648'])expect((await request(server).delete('/api/items/'+value).set('Authorization',auth(owner))).status).toBe(400);expect(await prisma.item.findUnique({where:{id:itemId}})).not.toBeNull();
+    });
     it('confirms legacy privacy for the same owner and list, preserving wishes and private no-store', async () => {
         const r = await request(server).put('/api/wishlists/' + listId).set('Authorization', auth(owner)).send({ isPublic: true });
         expect(r.status).toBe(200); expect(r.body).toMatchObject({ id: listId, userId: owner, isPublic: true }); expect(r.headers['cache-control']).toBe('private, no-store');

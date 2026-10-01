@@ -24,10 +24,31 @@ beforeAll(async()=>{
 });
 beforeEach(async()=>{
   await prisma.profileUpdateReceipt.deleteMany({where:{userId:owner}});
-  await prisma.user.update({where:{id:owner},data:{profileVersion:0,authVersion:0,nicknames:'原暱稱',birthday:new Date('1993-05-16'),email:null}});
+  await prisma.user.update({where:{id:owner},data:{profileVersion:0,authVersion:0,nicknames:'原暱稱',birthday:new Date('1993-05-16'),email:null,marketingEmailsEnabled:false}});
 });
 afterAll(async()=>{try { if(server.listening) await new Promise<void>(resolve => server.close(() => resolve())); await prisma.user.deleteMany({where:{id:{in:[owner,other]}}}); } finally { await prisma.$disconnect();if(oldSecret===undefined)delete process.env.JWT_SECRET;else process.env.JWT_SECRET=oldSecret; } });
 describe('real profile handlers / PostgreSQL receipt transactions',()=>{
+  it('defaults to opt-out, saves/retrieves exact opt-in and opt-out without affecting another account',async()=>{
+    expect((await call('get','/me',otherToken)).body.marketingEmailsEnabled).toBe(false);
+    const id=randomUUID();
+    const saved=await call('post',base(id)).send({expectedVersion:0,updates:{marketingEmailsEnabled:true}});
+    expect(saved.status).toBe(200);expect(saved.body.profile).toMatchObject({marketingEmailsEnabled:true,profileVersion:1});
+    expect((await call('get',base(id))).body.receipt).toEqual(saved.body.receipt);
+    expect((await call('get',base(id),otherToken)).status).toBe(404);
+    expect((await call('get','/me',otherToken)).body.marketingEmailsEnabled).toBe(false);
+    const off=await call('post',base(randomUUID())).send({expectedVersion:1,updates:{marketingEmailsEnabled:false}});
+    expect(off.status).toBe(200);expect(off.body.profile).toMatchObject({marketingEmailsEnabled:false,profileVersion:2});
+    expect((await call('get','/me')).body.marketingEmailsEnabled).toBe(false);
+    expect((await call('get',base(id))).body.receipt).toEqual(saved.body.receipt);
+    expect((await prisma.user.findUniqueOrThrow({where:{id:owner}})).marketingEmailsEnabled).toBe(false);
+  });
+  it('rejects malformed preference and stale revision without changing consent',async()=>{
+    for(const value of ['true',1,null]) expect((await call('post',base(randomUUID())).send({expectedVersion:0,updates:{marketingEmailsEnabled:value}})).status).toBe(400);
+    await prisma.user.update({where:{id:owner},data:{profileVersion:1}});
+    const stale=await call('post',base(randomUUID())).send({expectedVersion:0,updates:{marketingEmailsEnabled:true}});
+    expect(stale.body.receipt.state).toBe('CONFLICT');expect(stale.body.profile.marketingEmailsEnabled).toBe(false);
+    expect(await prisma.profileUpdateReceipt.count({where:{userId:owner}})).toBe(1);
+  });
   it('clears birthday and acknowledges only the exact patch without secrets',async()=>{
     const id=randomUUID(),updates={birthday:'',nicknames:' 新暱稱 ',isBirthdayVisible:false};
     const res=await call('post',base(id)).send({expectedVersion:0,updates});expect(res.status).toBe(200);

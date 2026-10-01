@@ -1,5 +1,10 @@
 import { profilePatch, profileData, profileVersion, profileHash, profileActionId } from '../lib/profileUpdate';
 describe('bounded canonical profile patch', () => {
+    it('accepts only explicit boolean notification consent; no fake security or push fields', () => {
+        for (const value of [true, false]) expect(profilePatch({marketingEmailsEnabled:value})).toEqual({marketingEmailsEnabled:value});
+        for (const value of ['true', 1, null, [], {}]) expect(() => profilePatch({marketingEmailsEnabled:value})).toThrow();
+        for (const value of [{securityEmailsEnabled:false},{pushEnabled:true}]) expect(() => profilePatch(value)).toThrow();
+    });
     it('clears birthday explicitly and preserves booleans without coercion', () => {
         expect(profilePatch({ birthday:'',isBirthdayVisible:false })).toEqual({birthday:null,isBirthdayVisible:false});
         expect(profileData(profilePatch({birthday:''}))).toEqual({birthday:null,profileVersion:{increment:1}});

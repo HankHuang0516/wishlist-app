@@ -44,7 +44,7 @@ global.fetch = vi.fn(() =>
             nicknames: 'Tester',
             isAvatarVisible: true, isPremium: false,
             isPhoneVisible: false, isRealNameVisible: false, isAddressVisible: false,
-            isEmailVisible: false, isBirthdayVisible: false
+            isEmailVisible: false, isBirthdayVisible: false, marketingEmailsEnabled: false
         })
     })
 ) as any;

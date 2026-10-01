@@ -11,4 +11,5 @@ export const ownProfileSelect = {
     isEmailVerified: true, isPhoneVerified: true, subscriptionStatus: true,
     subscriptionExpiresAt: true, autoRenew: true, lastFeedbackAt: true,
     aiUsageCount: true, lastAiUsageDate: true,
+    marketingEmailsEnabled: true,
 } satisfies Prisma.UserSelect;

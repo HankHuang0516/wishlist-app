@@ -27,6 +27,7 @@ model User {
   isRealNameVisible Boolean   @default(false)
   isAddressVisible  Boolean   @default(false)
   isBirthdayVisible Boolean   @default(false)
+  marketingEmailsEnabled Boolean @default(false)
   isPremium         Boolean   @default(false)
   maxWishlistItems  Int       @default(100)
   maxFollowing      Int       @default(100)

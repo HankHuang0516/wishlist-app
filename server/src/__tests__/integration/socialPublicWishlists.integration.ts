@@ -31,6 +31,14 @@ afterAll(async () => {
  await prisma.$disconnect();
 });
 describe('actual social route / public wishlist privacy', () => {
+ it('never exposes private notification consent in user search or public wishes', async () => {
+  await prisma.user.update({where:{id:owner},data:{marketingEmailsEnabled:true}});
+  const fixture=await prisma.user.findUniqueOrThrow({where:{id:owner},select:{phoneNumber:true}});
+  const r=await request(server).get('/api/users/search').query({query:fixture.phoneNumber}).set('Authorization',auth());
+  expect(r.status).toBe(200);expect(r.body).toHaveLength(1);expect(r.body[0].id).toBe(owner);
+  expect(r.body[0]).not.toHaveProperty('marketingEmailsEnabled');
+  expect(JSON.stringify((await get()).body)).not.toContain('marketingEmailsEnabled');
+ });
  it('requires a valid user session', async () => {
   expect((await request(server).get(`/api/users/${owner}/wishlists`)).status).toBe(401);
   expect((await request(server).get(`/api/users/${owner}/wishlists`).set('Authorization','Bearer invalid')).status).toBe(401);

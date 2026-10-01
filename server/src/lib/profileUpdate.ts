@@ -4,7 +4,7 @@ export class ProfileUpdateError extends Error {
     constructor(public status = 400) { super('Profile operation rejected'); }
 }
 const textLimits: Record<string, number> = { name: 50, realName: 100, address: 500, nicknames: 254, email: 254, avatarUrl: 2048 };
-const flags = ['isAvatarVisible', 'isPhoneVisible', 'isRealNameVisible', 'isAddressVisible', 'isEmailVisible', 'isBirthdayVisible'];
+const flags = ['isAvatarVisible', 'isPhoneVisible', 'isRealNameVisible', 'isAddressVisible', 'isEmailVisible', 'isBirthdayVisible', 'marketingEmailsEnabled'];
 export function profilePatch(value: unknown): Record<string, string | boolean | null> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ProfileUpdateError();
     const keys = Object.keys(value).sort();

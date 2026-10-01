@@ -1,7 +1,7 @@
 import { api } from './marketplaceApi';
 import { sha256, type PendingStore } from './webPendingStore';
 
-export const profileFlags = ['isAvatarVisible', 'isPhoneVisible', 'isRealNameVisible', 'isAddressVisible', 'isEmailVisible', 'isBirthdayVisible'] as const;
+export const profileFlags = ['isAvatarVisible', 'isPhoneVisible', 'isRealNameVisible', 'isAddressVisible', 'isEmailVisible', 'isBirthdayVisible', 'marketingEmailsEnabled'] as const;
 export const profileText = ['nicknames', 'realName', 'address', 'birthday', 'email'] as const;
 export type ProfileField = typeof profileFlags[number] | typeof profileText[number];
 export type ProfilePatch = Partial<Record<ProfileField, string | boolean | null>>;

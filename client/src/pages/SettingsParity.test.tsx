@@ -12,7 +12,7 @@ vi.mock('../lib/webPendingStore',async importOriginal => ({ ...await importOrigi
 } }));
 const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture-session', login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
 const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 'fixture', nicknames: '合成暱稱', birthday: '1993-05-16', isPremium: false,
-  isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false };
+  isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
 beforeEach(() => { pending.clear(); localStorage.setItem('user-locale', 'zh-TW'); });

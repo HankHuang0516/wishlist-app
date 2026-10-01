@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { abandonProfileOperation, normalizeProfilePatch, parseOwnProfile, parseProfileJournal, profileJournal, profileResult, readProfileOperation, sendProfileOperation } from './profileWeb';
 import type { PendingStore } from './webPendingStore';
-const profile = {id:19,profileVersion:0,name:null,phoneNumber:'fixture',nicknames:'原暱稱',isPremium:false,isAvatarVisible:false,isPhoneVisible:false,isRealNameVisible:false,isAddressVisible:false,isEmailVisible:false,isBirthdayVisible:false};
+const profile = {id:19,profileVersion:0,name:null,phoneNumber:'fixture',nicknames:'原暱稱',isPremium:false,isAvatarVisible:false,isPhoneVisible:false,isRealNameVisible:false,isAddressVisible:false,isEmailVisible:false,isBirthdayVisible:false,marketingEmailsEnabled:false};
 const ok = (body: unknown) => ({ok:true,status:200,json:async()=>body});
 afterEach(()=>vi.unstubAllGlobals());
 describe('profile operation contract and persist-before-send',()=>{

@@ -20,9 +20,11 @@ export const publicListingSelect = {
             capturePurpose: true } },
 } satisfies Prisma.ListingSelect;
 
-class ListingConflict extends Error {}
-class ListingForbidden extends Error {}
+export class ListingConflict extends Error {}
+export class ListingForbidden extends Error {}
+export class ListingMissing extends Error {}
 function fail(res: Response, error: unknown) {
+    if (error instanceof ListingMissing) return res.status(404).json({ error: '商品不存在' });
     if (error instanceof ListingCreationError) return res.status(error.status).json({ error: '請查核原刊登操作或重新登入', errorCode: error.code });
     if (error instanceof ListingInputError) return res.status(400).json({ error: error.message, field: error.field, errorCode: 'INVALID_LISTING_INPUT' });
     if (error instanceof ListingForbidden) return res.status(403).json({ error: error.message, errorCode: 'LISTING_ACCESS_DENIED' });
@@ -204,8 +206,13 @@ export async function changeListingStatus(req: AuthRequest, res: Response) {
         const id = req.params.id;
         if (!isListingId(id)) throw new ListingInputError('id');
         const body = versionBody(req.body, ['expectedVersion', 'action']);
-        const listing = await prisma.listing.findFirst({ where: { id, ownerUserId: req.user.id } });
-        if (!listing) return res.status(404).json({ error: '商品不存在' });
+        return res.json(await prisma.$transaction(tx => applyListingStatus(tx, req.user!.id, id, body)));
+    } catch (error) { return fail(res, error); }
+}
+
+export async function applyListingStatus(tx: Prisma.TransactionClient, userId: number, id: string, body: Record<string, unknown>) {
+        const listing = await tx.listing.findFirst({ where: { id, ownerUserId: userId } });
+        if (!listing) throw new ListingMissing();
         const transitions: Record<string, { from: string[]; to: 'ACTIVE' | 'RESERVED' | 'SOLD' | 'REMOVED' }> = {
             reserve: { from: ['ACTIVE'], to: 'RESERVED' }, release: { from: ['RESERVED'], to: 'ACTIVE' },
             sold: { from: ['ACTIVE', 'RESERVED'], to: 'SOLD' }, remove: { from: ['DRAFT', 'PENDING_CONFIRMATION', 'ACTIVE', 'RESERVED', 'EXPIRED'], to: 'REMOVED' },
@@ -213,11 +220,10 @@ export async function changeListingStatus(req: AuthRequest, res: Response) {
         const transition = typeof body.action === 'string' && Object.prototype.hasOwnProperty.call(transitions, body.action) ? transitions[body.action] : undefined;
         if (!transition) throw new ListingInputError('action');
         if (!transition.from.includes(listing.status) || (transition.to !== 'REMOVED' && !isDiscoverable(listing.status, listing.expiresAt, new Date()))) throw new ListingConflict();
-        const changed = await prisma.listing.updateMany({ where: { id, ownerUserId: req.user.id, version: body.expectedVersion as number, status: listing.status,
+        const changed = await tx.listing.updateMany({ where: { id, ownerUserId: userId, version: body.expectedVersion as number, status: listing.status,
             ...(transition.to !== 'REMOVED' ? { expiresAt: { gt: new Date() } } : {}) }, data: { status: transition.to, version: { increment: 1 } } });
         if (changed.count !== 1) throw new ListingConflict();
-        return res.json(await prisma.listing.findUnique({ where: { id }, select: publicListingSelect }));
-    } catch (error) { return fail(res, error); }
+        return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
 }
 
 export async function extendListingExpiry(req: AuthRequest, res: Response) {
@@ -227,16 +233,20 @@ export async function extendListingExpiry(req: AuthRequest, res: Response) {
         if (!isListingId(id)) throw new ListingInputError('id');
         const body = versionBody(req.body, ['expectedVersion', 'expiryDate']);
         if (body.expiryDate === undefined) throw new ListingInputError('expiryDate', '請明確選擇延長後的失效日期');
-        const listing = await prisma.listing.findFirst({ where: { id, ownerUserId: req.user.id } });
-        if (!listing) return res.status(404).json({ error: '商品不存在' });
+        return res.json(await prisma.$transaction(tx => applyListingExtension(tx, req.user!.id, id, body)));
+    } catch (error) { return fail(res, error); }
+}
+
+export async function applyListingExtension(tx: Prisma.TransactionClient, userId: number, id: string, body: Record<string, unknown>) {
+        const listing = await tx.listing.findFirst({ where: { id, ownerUserId: userId } });
+        if (!listing) throw new ListingMissing();
         if (!['ACTIVE', 'RESERVED', 'EXPIRED'].includes(listing.status) || !listing.publishedAt) throw new ListingConflict();
         const expiry = publicationExpiry(new Date(), body.expiryDate);
         if (listing.expiresAt && expiry.expiresAt <= listing.expiresAt) throw new ListingInputError('expiryDate', '延長日期須晚於目前失效日期');
-        const changed = await prisma.listing.updateMany({ where: { id, ownerUserId: req.user.id, version: body.expectedVersion as number, status: listing.status },
+        const changed = await tx.listing.updateMany({ where: { id, ownerUserId: userId, version: body.expectedVersion as number, status: listing.status },
             data: { ...expiry, status: listing.status === 'EXPIRED' ? 'ACTIVE' : listing.status, version: { increment: 1 }, lastVerifiedAt: new Date() } });
         if (changed.count !== 1) throw new ListingConflict();
-        return res.json(await prisma.listing.findUnique({ where: { id }, select: publicListingSelect }));
-    } catch (error) { return fail(res, error); }
+        return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
 }
 
 type ListingWithAssets = Prisma.ListingGetPayload<{ include: { location: true; media: true } }>;
@@ -256,8 +266,13 @@ export async function editListing(req: AuthRequest, res: Response) {
         const id = req.params.id;
         if (!isListingId(id)) throw new ListingInputError('id');
         const body = versionBody(req.body, ['expectedVersion', 'title', 'description', 'condition', 'category', 'brand', 'price', 'currency', 'deliveryMethods', 'negotiable', 'location', 'mediaIds']);
-        const listing = await prisma.listing.findFirst({ where: { id, ownerUserId: req.user.id }, include: { location: true, media: { orderBy: { position: 'asc' } } } });
-        if (!listing) return res.status(404).json({ error: '商品不存在' });
+        return res.json(await prisma.$transaction(tx => applyListingEdit(tx, req.user!.id, id, body)));
+    } catch (error) { return fail(res, error); }
+}
+
+export async function applyListingEdit(tx: Prisma.TransactionClient, ownerUserId: number, id: string, body: Record<string, unknown>) {
+        const listing = await tx.listing.findFirst({ where: { id, ownerUserId }, include: { location: true, media: { orderBy: { position: 'asc' } } } });
+        if (!listing) throw new ListingMissing();
         if (!['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(listing.status)) throw new ListingConflict();
         const { expectedVersion, ...changes } = body;
         const parsed = parseListingCreate({ ...editablePayload(listing), ...changes,
@@ -265,8 +280,6 @@ export async function editListing(req: AuthRequest, res: Response) {
             ...(listing.expiryMode === 'CUSTOM_DATE' && listing.expiresAt ? { expiryDate: listing.expiresAt.toISOString().slice(0, 10) } : {}),
         }, listing.publishedAt ?? new Date());
         assertListingPolicy(parsed.data);
-        const ownerUserId = req.user.id;
-        const result = await prisma.$transaction(async tx => {
             const media = await tx.listingMedia.findMany({ where: { id: { in: parsed.mediaIds }, ownerUserId, wishItemId: null,
                 AND: [{ OR: [{ listingId: null }, { listingId: id }] }, { OR: [{ capturePurpose: { not: 'AI_MARKETING' } }, { marketingSelected: true }] }] },
                 select: { id: true } });
@@ -283,9 +296,6 @@ export async function editListing(req: AuthRequest, res: Response) {
                 if (bound.count !== 1) throw new ListingConflict();
             }
             return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
-        });
-        return res.json(result);
-    } catch (error) { return fail(res, error); }
 }
 
 export async function publishListing(req: AuthRequest, res: Response) {

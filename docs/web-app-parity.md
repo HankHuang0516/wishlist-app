@@ -6,6 +6,7 @@
 
 ## 最新目標修正：僅網頁、核准示意圖相似度至少90%（2026-10-01）
 
+- **現行目標摘要（Hank 最新指示）：網頁首頁 ≥90/100、設定頁 ≥90/100；以核准 AI 示意圖及實際網站截圖逐頁人工審查，不以兩頁平均分替代。沿用原網頁風格、僅一個設定入口；APP 不改。功能對齊仍為100%，視覺目標值不代表已驗收或已上線。**
 - 執行與交付目標統一為：**網頁首頁與設定頁各自通過核准 AI 示意圖至少90/100的人工視覺審查，完整可適用功能對齊100%，部署後以正式網站實際截圖與操作再驗收。** 舊99%不再作為本次網頁交付門檻；本機通過不能代替正式網站驗收。
 - Hank 已核准「首頁｜沿用原網站風格／設定｜沿用原網站風格」AI示意圖，並指出頂部重複設定齒輪；實作基準須移除無標籤的多餘齒輪，只保留一個「設定」入口。2026-10-01要求取代本次網頁視覺的舊99%門檻，以至少90%為目標；APP既定設計、原生程式與商店素材不在本次風格改造範圍。
 - 基準圖：`/Users/hank/.codex/generated_images/01a0e2b1-99bb-7ae3-a9fe-51cb8aa65488/exec-5d99a706-56c1-4263-a9f4-5e605920305b.png`。這是兩頁並排的概念板，不是正式站截圖，也不是可宣稱的像素級規格。
@@ -24,7 +25,7 @@
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
 | 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；真AI、舊紀錄來源、照片移除、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
-| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 隔離Chrome／真DB已驗證編輯、延長與保留commit後502僅查核恢復、恢復在售；售出／移除／衝突／跨reload原操作持久保存仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
+| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、原版／免費調整queue及不可變批准回執、加密原選圖／文案／版本紀錄已實作；實際批准commit後502→reload只GET恢復，child套用後root歷史證據不變且月次數1；能力關閉時仍可查看／批准既有結果，新生成及免費調整停用、明確只讀重查，Chrome暫停期間實測同樣成功恢復；上下文變更、舊紀錄及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
 | 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
@@ -397,3 +398,14 @@
 - 新增3項元件回歸：跨年受控日期／版號送出、空值與未延長日期先拒絕、延長失聯僅GET恢復不重送；管理頁13項、最新完整網頁64檔1067項與TypeScript／Vite build成功。日期fixture採2100／2101避免近日過期。後台build成功；沒有新增正式migration或APP變更。主JS688.00KB、map1088.99KB、worker507.81KB、PWA5804.06KiB警告仍保留，件數不是覆蓋率。
 - 390×844實際管理頁documentWidth375≤390、header設定1個、照片naturalWidth240／height320。保存並檢視 `wishlist-web-owner-management-mobile-20261001.jpg`，另保存 `wishlist-web-owner-status-unknown-20261001.jpg`，都在既有outputs目錄，不是AI概念圖。自有API／Vite／PG正常停止、viewport還原、QA tab關閉；合成商品／圖片／DB及證據保留，沒有正式資料、付款、郵件、商店或使用者檔案刪除。
 - 下一個明确管理缺口：`unconfirmed`目前只有頁內狀態，跨reload尚無持久原操作紀錄；只讀恢復會關閉編輯器，完整衝突比較／未送出修改保存亦待補。售出／移除／草稿發布／分頁的實際瀏覽器、其他完整功能矩陣、真MiniMax／Flickr／跨端、PWA與全站效能、正式migration preflight／最終CI／合併／Railway回讀全部保留。精確新提交CI須另回讀；PR82仍draft，整體目標active、未合併／部署，不把本批部分管理測試當全功能完成。
+
+## 2026-10-01 第二十三批：商品管理原操作跨重開恢復與衝突比較（仍未部署）
+
+- 前一回合為實作／驗證進展，不是等待或整體完成。本批保留首頁／設定各90/100的逐頁人工視覺門檻與全部可適用功能100%，APP既定介面不變；不重新計算或把本機90/90當正式站通過。
+- 商品編輯、狀態與延長新增不可變、hash-only的管理回執；商品 mutation 與回執同一交易提交，12個並行同鍵請求只更新1次，取消／送出競態只產生1個終態，回執寫入失敗整筆回滾。原回執在後續修改／商品實體刪除後仍可查核，不重新建立商品；讀取／提交／取消皆在owner鎖內重新驗證JWT與API key，舊APP三個API的回應格式與他人404契約保留。
+- 網頁先以既有AES-GCM／API及帳號隔離／CAS保存原名稱、說明、價格、動作及版本，再送出；重開只GET原回執與最新商品，不自動POST。明確重試原鍵、兩步取消與已讀清理分開，已套用的回執不能被取消冒充未執行。CONFLICT保留「您的原操作」與「後台最新」比較；保留修改不發POST，明確儲存才使用新鍵／最新expectedVersion。同一已套用版號若返回矛盾內容仍鎖定並保留紀錄，切換帳號後的晚到POST不顯示或清理另一帳號資料。本機加密不代表防XSS或硬體Keychain。
+- Chrome／真編譯handler／独立DB `wishlist_marketplace_test_management_browser_20261001_2023`：合成賣家1商品`85c66daa-2240-4b67-bfc9-92cd52be5224`，編輯commit後502→reload找回原名称／說明／NT$320，POST1、GET回執1、APPLIED v2；同一合成帳號另一裝置用舊PATCH保存v3／NT$280，舊頁v2送出得到CONFLICT，reload仍保留原修改NT$310。按保留修改時管理POST仍2，明確再儲存才APPLIED v4。標記售出commit後502，reload與已售出分頁確認SOLD v5。中斷後再次SQL回讀4份回執：APPLIED v2、CONFLICT expected2、APPLIED v4、STATUS APPLIED v5；商品SOLD／price310。未把已停止listener的計數當最新證據。
+- 手機390×844：documentWidth375≤390、header設定1個、合成實拍縮圖240×320，所有本頁按鈕高44px。未後製截圖已保存及檢視：`wishlist-web-management-pending-20261001.jpg`、`wishlist-web-management-recovered-20261001.jpg`、`wishlist-web-management-conflict-20261001.jpg`、`wishlist-web-management-conflict-mobile-20261001.jpg`、`wishlist-web-management-conflict-resolved-20261001.jpg`、`wishlist-web-management-sold-recovered-20261001.jpg`，位於既有outputs目錄。它們是本機功能證據，不是AI示意圖、90%視覺重新評分或正式部署證據。
+- 最新網頁65檔1089項、focused55項、後台單元54檔899項＋3skipped、真HTTP／DB27檔405項與client/server build通過；兩份獨立新DB均39份migration，browser DB schema diff無差異。前期TS不支援Object.hasOwn／price nullable及日期fixture非標準ISO已修正，不降型別或斷言；測試曾早於最新資料查核就結束，改等待實際v3。原生未改，最新精確提交的雲端3項CI仍須另回讀。件數不是覆蓋率，主JS699.03KB、map1088.99KB、worker507.81KB、PWA5814.89KiB及既有警告保留。
+- 原生confirm曾令CDP讀取逾時，未重送原操作；切回本次QA分頁，以Chrome可見確認框完成後回讀真DB。中斷後確認原API／Vite handle已不存在、原port不在监听，不另起相同fixture；QA分頁已不存在，viewport中斷前已還原。自有PG在確認無其他客戶端後正常停止，合成商品／照片／DB與截圖保留。新發現工作區其他檔案刪除及.gitignore修改不屬本批，未復原、未stage或納入提交。
+- 尚未達全目標：新協定延長／保留／移除／全部分頁真UI、未送出新編輯autosave、日曆完整選日、私人照片刪除失聯／舊紀錄、真MiniMax／Flickr四圖與跨端、行銷舊工作與上下文轉換、舊願望／分享／隱私／刪除、個資其他設定／註冊／社交／通知／政策、PWA舊快取與全站響應式／效能、正式資料migration preflight及最後CI／合併／Railway正式回讀仍保留。PR82 draft／未部署，完整目標active；不以本批成功替代全部功能100%。

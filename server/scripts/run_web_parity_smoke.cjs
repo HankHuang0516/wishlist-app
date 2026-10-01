@@ -31,6 +31,7 @@ const { searchListings, createListing, myListings, getListingCreation, abandonLi
 const { getMatchWishes, matchWishListings } = require('../dist/controllers/wishlistMatchController');
 const { authenticateToken, optionalAuthenticateToken } = require('../dist/middleware/auth');
 const { getListing } = require('../dist/controllers/listingController');
+const { readListingManagement, submitListingManagement, abandonListingManagement } = require('../dist/controllers/listingManagementController');
 const chatRoutes = require('../dist/routes/chatRoutes').default;
 const nativeWishRoutes = require('../dist/routes/nativeWishRoutes').default;
 const listingMediaRoutes = require('../dist/routes/listingMediaRoutes').default;
@@ -40,7 +41,8 @@ app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
-for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish']) { dropped[kind]=0; attempts[kind]=0; }
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement']) { dropped[kind]=0; attempts[kind]=0; }
+attempts.listingManagementRead=0; attempts.listingManagementAbandon=0;
 app.post('/__test/drop-next-ack', (req, res) => {
   if (typeof req.body?.kind !== 'string' || !Object.hasOwn(dropped, req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
@@ -59,6 +61,7 @@ app.post('/__test/marketing/availability', (req,res) => {
 });
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    req.method === 'POST' && /^\/api\/listings\/management-operations\/[^/]+$/.test(req.path) ? 'listingManagement' :
     req.method === 'PATCH' && /^\/api\/listings\/[^/]+$/.test(req.path) ? 'listingEdit' :
     req.method === 'POST' && /^\/api\/listings\/[^/]+\/status$/.test(req.path) ? 'listingStatus' :
     req.method === 'POST' && /^\/api\/listings\/[^/]+\/extend$/.test(req.path) ? 'listingExtend' :
@@ -73,6 +76,8 @@ app.use((req, res, next) => {
     req.method === 'POST' && /^\/api\/native-wishes\/photo-removals\/[^/]+$/.test(req.path) ? 'photoRemoval' :
     req.method === 'POST' && /^\/api\/users\/me\/profile-operations\/[^/]+$/.test(req.path) ? 'profile' : null;
   if (req.method === 'GET' && /\/profile-operations\//.test(req.path)) attempts.profileReceipt++;
+  if (req.method === 'GET' && /\/listings\/management-operations\/[^/]+$/.test(req.path)) attempts.listingManagementRead++;
+  if (req.method === 'POST' && /\/listings\/management-operations\/[^/]+\/abandon$/.test(req.path)) attempts.listingManagementAbandon++;
   if (req.method === 'GET' && /\/marketing\/requests\/[^/]+$/.test(req.path)) attempts.marketingQueueReceipt++;
   if (req.method === 'GET' && /\/marketing\/approvals\/[^/]+$/.test(req.path)) attempts.marketingApprovalReceipt++;
   if (req.method === 'POST' && /\/marketing\/approvals\/[^/]+\/abandon$/.test(req.path)) attempts.marketingApprovalAbandon++;
@@ -113,6 +118,9 @@ app.get('/api/listings/match-wishes', authenticateToken, getMatchWishes);
 app.get('/api/listings/matches', authenticateToken, matchWishListings);
 app.get('/api/listings/creation-receipts/:clientListingId', authenticateToken, getListingCreation);
 app.post('/api/listings/creation-receipts/:clientListingId/abandon', authenticateToken, abandonListingCreation);
+app.get('/api/listings/management-operations/:clientActionId', authenticateToken, readListingManagement);
+app.post('/api/listings/management-operations/:clientActionId', authenticateToken, submitListingManagement);
+app.post('/api/listings/management-operations/:clientActionId/abandon', authenticateToken, abandonListingManagement);
 app.get('/api/listings/:id', optionalAuthenticateToken, getListing);
 app.patch('/api/listings/:id', authenticateToken, editListing);
 app.post('/api/listings/:id/status', authenticateToken, changeListingStatus);
@@ -145,6 +153,7 @@ app.get('/__test/state', async (_req, res) => {
     photos: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, clientUploadId: { not: null } }, select: { id: true, clientUploadId: true, wishItemId: true, byteSize: true, width: true, height: true } }),
     createdListings: await prisma.listing.findMany({ where: { ownerUserId: users[0].id }, select: { id: true, title: true, status: true, clientListingId: true, expiryMode: true, expiresAt: true, media: { select: { id: true } } } }),
     listingCreationReceipts: await prisma.listingCreateReceipt.findMany({ where: { userId: users[0].id }, select: { clientListingId: true, state: true, listingId: true } }),
+    listingManagementReceipts: await prisma.listingManagementReceipt.findMany({ where: { userId: { in: users.map(user=>user.id) } }, select: { clientActionId:true, listingId:true, kind:true, state:true, reason:true, appliedVersion:true, expectedVersion:true } }),
     photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
     photoUploadReceipts: await prisma.photoUploadReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, state: true } }),
     sellerDraftReceipts: await prisma.sellerDraftReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientActionId: true, mediaId: true, state: true, appliedVersion: true } }),

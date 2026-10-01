@@ -13,6 +13,12 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('persists owner management separately from creates and refuses cross-account/API replacement',async()=>{
+    const {factory,name,store}=fixture(),a=await pendingRequestKey('https://example.com/api',42,'listing-management'),b=await pendingRequestKey('https://example.com/api',43,'listing-management'),c=await pendingRequestKey('https://other.example/api',42,'listing-management');
+    await store.save(a,'private-original-edit');await store.save(scope+'.listing','unrelated-create');
+    expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe('private-original-edit');expect(await store.get(b)).toBeNull();expect(await store.get(c)).toBeNull();
+    await expect(store.save(a,'other-edit')).rejects.toThrow();expect(await store.clear(a,'other-edit')).toBe(false);expect(await store.clear(a,'private-original-edit')).toBe(true);expect(await store.get(scope+'.listing')).toBe('unrelated-create');
+  });
   it('resolves the real production same-origin API without accepting arbitrary relative URLs',async()=>{
     vi.stubGlobal('window',{location:{origin:'https://wishlist-app-production.up.railway.app'}});
     expect(await pendingRequestKey('/api',42,'listing-draft')).toBe(await pendingRequestKey('https://wishlist-app-production.up.railway.app/api',42,'listing-draft'));

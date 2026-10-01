@@ -63,6 +63,7 @@ model User {
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   profileUpdateReceipts ProfileUpdateReceipt[]
   listingCreateReceipts ListingCreateReceipt[]
+  listingManagementReceipts ListingManagementReceipt[]
   photoUploadReceipts PhotoUploadReceipt[]
   sellerDraftReceipts SellerDraftReceipt[]
   listings        Listing[]
@@ -780,6 +781,24 @@ model WishPhotoRemovalReceipt {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientUploadId])
+}
+
+// Immutable, hash-only owner management evidence; survives listing removal.
+model ListingManagementReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientActionId String   @db.Uuid
+  listingId      String   @db.Uuid
+  kind           String   @db.VarChar(12)
+  expectedVersion Int
+  requestHash    String   @db.VarChar(64)
+  state          String   @db.VarChar(12)
+  reason         String?  @db.VarChar(32)
+  appliedVersion Int?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
 }
 
 // Hash-only profile operation journal; no personal values or credentials.

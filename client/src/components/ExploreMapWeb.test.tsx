@@ -36,12 +36,12 @@ describe('real web map lifecycle and photo isolation', () => {
   it('sizes the actual preview canvas rather than clipping the full map and its attribution', () => {
     const mounted = render(<ExploreMapWeb {...props()} preview />);
     const map = screen.getByRole('region', { name: '商品探索地圖，亦可切換商品列表使用鍵盤操作' });
-    expect(map).toHaveClass('h-40');
+    expect(map).toHaveClass('h-32');
     expect(map.parentElement).not.toHaveClass('overflow-hidden');
     expect(screen.getByText(/底圖：OpenFreeMap／OpenStreetMap/)).toBeVisible();
     mounted.rerender(<ExploreMapWeb {...props()} />);
     expect(map).toHaveClass('h-[480px]');
-    expect(map).not.toHaveClass('h-40');
+    expect(map).not.toHaveClass('h-32');
   });
   it('keeps search/list available when the browser cannot start WebGL', () => {
     mocks.fail = true; render(<ExploreMapWeb {...props()} />);

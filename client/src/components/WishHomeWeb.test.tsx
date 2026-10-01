@@ -19,12 +19,17 @@ describe('APP-equivalent homepage match UX', () => {
     const expand = screen.getByRole('button', { name: /共有2件吻合商品/ });
     expect(expand).toHaveAttribute('aria-expanded', 'false'); fireEvent.click(expand);
     expect(screen.getByRole('link', { name: new RegExp(first.listing.title) })).toBeInTheDocument();
-    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['Welcome Back.', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用', '今天想找什麼？']);
+    const chooser = screen.getByText('選願望交叉比對').closest('details')!;
+    expect(chooser).not.toHaveAttribute('open'); chooser.setAttribute('open', '');
+    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['Welcome Back.', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用']);
+    expect(chooser.querySelector('summary')).toHaveTextContent('今天想找什麼？');
     expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
   });
   it('passes the single match ID for fresh lookup and automatic map framing', async () => {
     const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([match]))));
-    render(view()); const link = await screen.findByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
+    render(view()); await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
+    screen.getByText('選願望交叉比對').closest('details')!.setAttribute('open', '');
+    const link = screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
     const productLinks = await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
     expect(productLinks).toHaveLength(2);
     for (const productLink of productLinks) expect(productLink).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);

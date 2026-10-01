@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Camera, Images, Search, MapPin, RefreshCw } from 'lucide-react';
+import { Camera, Images, Search, MapPin, RefreshCw, ChevronDown } from 'lucide-react';
 import { api } from '../lib/marketplaceApi';
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import { readAllMatchWishes, readHomeMatches, type MatchGroup } from '../lib/homeMatches';
@@ -79,7 +79,7 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
     return camera ? { serial: Date.now(), camera } : null;
   }, [mapCameraKey]);
   return <section aria-labelledby="home-matches-heading" className="space-y-4">
-    <div><h1 className="text-2xl font-bold text-muji-primary">Welcome Back.</h1><p className="mt-1 text-xs text-gray-500">今天想找什麼？</p></div>
+    <div><h1 className="text-[22px] font-bold leading-7 text-muji-primary">Welcome Back.</h1><p className="mt-1 text-xs text-gray-500">今天想找什麼？</p></div>
     <div className="rounded-lg border border-muji-border bg-white p-3 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div><h2 id="home-matches-heading" className="text-base font-semibold">願望吻合的商品</h2>
@@ -114,7 +114,8 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" aria-hidden="true" /><label htmlFor="home-search" className="sr-only">搜尋商品</label><input id="home-search" maxLength={100} value={query} onChange={event => setQuery(event.target.value)} placeholder="搜尋商品或願望" className="h-11 w-full rounded-md border border-gray-200 pl-10 pr-3 focus-visible:outline-muji-primary" /></div>
         <button type="submit" className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-blue-700 hover:bg-gray-50"><MapPin className="h-5 w-5" aria-hidden="true" />在地圖查看</button>
       </form>
-      {wishes.length > 0 && <div><h2 className="mb-3 text-lg font-semibold">今天想找什麼？</h2><div role="radiogroup" aria-label="選擇要交叉比對的願望" className="flex gap-3 overflow-x-auto pb-2">
+      {mapItems.length > 0 && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">地圖預覽暫時無法使用，仍可點擊上方商品卡片，或前往探索的商品列表。</p>}><Suspense fallback={<p role="status">正在載入商品地圖…</p>}><div aria-label="願望吻合商品地圖預覽"><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
+      {wishes.length > 0 && <details className="group border-t pt-2"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm focus-visible:outline-muji-primary sm:min-h-8"><span className="font-semibold">今天想找什麼？</span><span className="text-xs text-gray-500">選願望交叉比對</span><ChevronDown className="ml-auto h-4 w-4 group-open:rotate-180" aria-hidden="true" /></summary><div role="radiogroup" aria-label="選擇要交叉比對的願望" className="mt-2 flex gap-3 overflow-x-auto pb-2">
         {wishes.map((item, index) => <button type="button" role="radio" key={item.id} aria-checked={selected === item.id} tabIndex={selected === item.id ? 0 : -1} onClick={() => setSelected(item.id)} onKeyDown={event => {
           if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
@@ -122,10 +123,10 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
           setSelected(wishes[next].id);
           event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
         }} className={`min-h-14 min-w-36 max-w-60 flex-none rounded-md border p-3 text-left ${selected === item.id ? 'border-muji-primary bg-gray-50' : 'bg-white'}`}>
-          <span className="block break-words font-medium">{item.name}</span><span className="text-xs text-gray-500">{item.wishlist.title}</span></button>)}</div></div>}
+          <span className="block break-words font-medium">{item.name}</span><span className="text-xs text-gray-500">{item.wishlist.title}</span></button>)}</div>
       {wish && <Link to={exploreLink(wish.id, matches.length === 1 ? matches[0].listing.id : undefined)} aria-label={`在地圖交叉比對${wish.name}`} className="flex min-h-11 items-center gap-2 text-sm font-medium text-blue-700 underline"><MapPin className="h-5 w-5" aria-hidden="true" />在地圖交叉比對這個願望</Link>}
-      {mapItems.length > 0 && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">地圖預覽暫時無法使用，仍可點擊上方商品卡片，或前往探索的商品列表。</p>}><Suspense fallback={<p role="status">正在載入商品地圖…</p>}><div aria-label="願望吻合商品地圖預覽"><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
-      <Link to="/explore" className="inline-flex min-h-11 items-center text-sm text-blue-700 underline">不套用願望，瀏覽商品地圖</Link>
+      </details>}
+      <Link to="/explore" className="inline-flex min-h-11 items-center text-xs text-blue-700 underline sm:min-h-8">不套用願望，瀏覽商品地圖</Link>
     </div>
   </section>;
 }

@@ -33,11 +33,10 @@ export default function AccountBenefits() {
   }, [token, retry]);
   const current = state?.token === token ? state : null;
   return <section aria-labelledby="benefits-title" className="account-benefits rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="benefits-title" className="flex items-center gap-2 font-semibold"><Crown className="h-5 w-5" aria-hidden />贊助與升級</h2>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="benefits-title" className="flex items-center gap-2 text-sm font-semibold"><Crown className="h-5 w-5" aria-hidden />贊助與升級</h2>
       <p className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">購買與訂閱操作暫停</p></div>
-    <p className="my-2 text-xs text-gray-600">商店付款與後端驗單尚未開放；既有權益不受影響。</p>
-    <details className="border-t"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm"><Heart className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">贊助服務</span><ChevronRight className="ml-auto h-4 w-4" aria-hidden /></summary>
-      <p className="pb-3 text-sm text-gray-600">目前未開放收款，不會導向付款頁。</p></details>
+    <details className="mt-2 border-t"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm"><Heart className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">贊助服務</span><ChevronRight className="ml-auto h-4 w-4" aria-hidden /></summary>
+      <div className="space-y-2 pb-3 text-sm text-gray-600"><p>目前未開放收款，不會導向付款頁。</p><p>商店付款與後端驗單尚未開放；既有權益不受影響。</p></div></details>
     <details className="border-t"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm"><Award className="h-4 w-4 shrink-0 text-amber-600" aria-hidden /><span className="font-medium">尊榮版訂閱 · NT$90／月</span><ChevronRight className="ml-auto h-4 w-4" aria-hidden /></summary>
       <div className="space-y-2 pb-3 text-sm text-gray-600"><p>{current ? current.premium ? '既有尊榮會員；請於原付款平台管理訂閱。' : '每月 100 次行銷額度；購買尚未開放。' : '會員狀態暫時無法確認。'}</p>
         <p>若有持續扣款，請由原付款平台管理；未驗證的商店交易不會開通權益。</p></div></details>

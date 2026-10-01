@@ -136,7 +136,7 @@ function SettingsSession() {
                     {feedback.message}
                 </div>
             )}
-            <div><h1 className="text-2xl font-bold text-muji-primary">個人資料</h1><p className="mt-1 text-xs text-gray-500">管理你的帳號與偏好設定</p></div>
+            <div><h1 className="text-[22px] font-bold leading-7 text-muji-primary">個人資料</h1><p className="mt-1 text-xs text-gray-500">管理你的帳號與偏好設定</p></div>
             {settings.notice && <section aria-label="個人資料儲存狀態" className="rounded-md border bg-white p-3 text-sm"><p role="status">{settings.notice}</p>
                 {settings.pending && <div className="mt-2 flex flex-wrap gap-2">
                     <Button disabled={settings.busy} onClick={() => settings.recover('read')}>查核原儲存結果</Button>
@@ -281,7 +281,7 @@ function SettingsSession() {
             {/* Notification Settings */}
             <Link to="/settings/notifications" className="block">
                 <Card className="settings-notifications hover:bg-gray-50 transition-colors cursor-pointer">
-                    <CardHeader className="flex flex-row items-center gap-3 py-3">
+                    <CardHeader className="flex flex-row items-center gap-3 space-y-0 py-3">
                         <Bell className="h-5 w-5 shrink-0" aria-hidden="true" />
                         <div className="space-y-1">
                             <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
@@ -405,6 +405,9 @@ function SettingsSession() {
                     </CardContent>
                 </Card>
 
+                <details className="settings-contact">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-xs sm:min-h-8"><span className="font-medium">聯絡資料與公開權限</span><span className="ml-auto text-gray-500">手機{profile.isPhoneVisible ? '公開' : '隱藏'} · 信箱{profile.isEmailVisible ? '公開' : '隱藏'}</span><ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" /></summary>
+                    <div className="settings-contact-fields mt-2 grid gap-3 sm:grid-cols-2">
                 {/* Phone (Read Only) */}
                 <Card>
                     <CardContent className="pt-6">
@@ -469,10 +472,12 @@ function SettingsSession() {
                     </CardContent>
                 </Card>
 
+                    </div>
+                </details>
             </div></fieldset>
             <AccountBenefits key={`benefits-${token}`} />
             <details className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center gap-3"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block font-semibold">進階功能</span><span className="text-xs text-gray-500">AI 整合・交易紀錄・安裝網頁 App・好友與送禮</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 sm:min-h-0"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block text-sm font-semibold leading-5">進階功能</span><span className="block text-xs leading-4 text-gray-500">AI 整合・交易紀錄・安裝網頁 App・好友與送禮</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
                 <div className="mt-4 space-y-3">
                     <Link to="/dashboard" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">原願望清單 · 分享與送禮</Link>
                     <Link to="/social" className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm text-blue-700"><Users className="h-4 w-4" aria-hidden="true" />好友與社交</Link>

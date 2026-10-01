@@ -56,6 +56,7 @@ export default function Home() {
                             <p className="text-xs text-pink-500 mt-1">
                                 {nextHoliday.date.toLocaleDateString()}
                             </p>
+                            {nextHoliday.calendarNotice && <p role="status" className="mt-2 text-xs text-pink-700">{nextHoliday.calendarNotice}</p>}
                         </CardContent>
                     </Card>
 

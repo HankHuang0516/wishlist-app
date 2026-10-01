@@ -1,3 +1,5 @@
+import { nextHoliday } from './holidayCalendar';
+
 export const getUserLocale = (): string => {
     if (typeof window !== 'undefined' && window.localStorage) {
         const saved = window.localStorage.getItem('user-locale');
@@ -47,62 +49,7 @@ export const formatPrice = (amount: number): string => {
     }
 };
 
-interface Holiday {
-    name: string;
-    date: Date;
-}
-
-export const getNextHoliday = (): Holiday => {
-    const locale = getUserLocale();
-    const today = new Date();
-    const year = today.getFullYear();
-    let holidays: Holiday[] = [];
-
-    if (locale.startsWith('zh-TW')) {
-        // Taiwan Holidays
-        holidays = [
-            { name: "元旦 New Year", date: new Date(year, 0, 1) },
-            { name: "農曆新年 Lunar New Year", date: new Date(year, 0, 29) }, // Approx 2025
-            { name: "和平紀念日 Peace Day", date: new Date(year, 1, 28) },
-            { name: "兒童節 Children's Day", date: new Date(year, 3, 4) },
-            { name: "清明節 Tomb Sweeping", date: new Date(year, 3, 5) },
-            { name: "勞動節 Labor Day", date: new Date(year, 4, 1) },
-            { name: "端午節 Dragon Boat", date: new Date(year, 4, 31) }, // Approx 2025
-            { name: "中秋節 Moon Festival", date: new Date(year, 9, 6) }, // Approx 2025
-            { name: "國慶日 National Day", date: new Date(year, 9, 10) },
-        ];
-    } else if (locale.startsWith('en-US')) {
-        // US Holidays
-        holidays = [
-            { name: "New Year's Day", date: new Date(year, 0, 1) },
-            { name: "Valentine's Day", date: new Date(year, 1, 14) },
-            { name: "Independence Day", date: new Date(year, 6, 4) },
-            { name: "Halloween", date: new Date(year, 9, 31) },
-            { name: "Thanksgiving", date: new Date(year, 10, 27) }, // Approx
-            { name: "Christmas", date: new Date(year, 11, 25) },
-        ];
-    } else {
-        // Generic / International
-        holidays = [
-            { name: "New Year's Day", date: new Date(year, 0, 1) },
-            { name: "Christmas", date: new Date(year, 11, 25) },
-        ];
-    }
-
-    // Find next
-    let next = holidays.find(h => h.date >= today);
-
-    // Check next year's first holiday if none found this year
-    if (!next) {
-        if (locale.startsWith('zh-TW')) {
-            next = { name: "元旦 New Year", date: new Date(year + 1, 0, 1) };
-        } else {
-            next = { name: "New Year's Day", date: new Date(year + 1, 0, 1) };
-        }
-    }
-
-    return next || { name: "Holiday", date: new Date() };
-};
+export const getNextHoliday = () => nextHoliday(getUserLocale(), new Date());
 
 const translations: Record<string, Record<string, string>> = {
     'zh-TW': {

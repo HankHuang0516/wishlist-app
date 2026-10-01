@@ -22,6 +22,10 @@ describe('settings hub retains web-only functionality while adding app actions',
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ok(url.endsWith('/availability') ? { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 0, paidPurchasesAvailable: false }
       : url.endsWith('/ai-usage') ? { used: 1, limit: 3, isUnlimited: false } : profile)));
     render(view()); await screen.findByRole('heading', { name: '個人資料' });
+    const contact = screen.getByText('聯絡資料與公開權限').closest('details')!;
+    expect(contact).not.toHaveAttribute('open');
+    expect(contact.querySelector('summary')).toHaveTextContent('手機隱藏 · 信箱隱藏');
+    contact.setAttribute('open', '');
     expect(screen.getAllByLabelText('生日')).toHaveLength(1);
     for (const label of ['公開生日', '公開手機號碼', '公開真實姓名', '公開電子信箱', '公開寄送地址']) expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /我的商品 · 閱覽與管理/ })).toHaveAttribute('href', '/my-listings');

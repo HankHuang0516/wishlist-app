@@ -11,7 +11,10 @@ describe('APP-equivalent homepage match UX', () => {
     const first = makeMatch(), best = makeMatch(1, makeListing('最匹配的三國演義'), 98);
     vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([first, best]))));
     render(view());
-    await screen.findByRole('link', { name: /最匹配的三國演義/ });
+    const bestLinks = await screen.findAllByRole('link', { name: /最匹配的三國演義/ });
+    expect(bestLinks).toHaveLength(2);
+    for (const link of bestLinks) expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${best.listing.id}`);
+    expect(screen.getByRole('button', { name: /共有2件吻合商品/ }).closest('a')).toBeNull();
     expect(screen.queryByRole('link', { name: new RegExp(first.listing.title) })).not.toBeInTheDocument();
     const expand = screen.getByRole('button', { name: /共有2件吻合商品/ });
     expect(expand).toHaveAttribute('aria-expanded', 'false'); fireEvent.click(expand);
@@ -22,7 +25,9 @@ describe('APP-equivalent homepage match UX', () => {
   it('passes the single match ID for fresh lookup and automatic map framing', async () => {
     const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([match]))));
     render(view()); const link = await screen.findByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
-    await screen.findByRole('link', { name: new RegExp(match.listing.title) });
+    const productLinks = await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
+    expect(productLinks).toHaveLength(2);
+    for (const productLink of productLinks) expect(productLink).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
     expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
   });
   it('shows incomplete failure instead of no matching items, and offers a retry', async () => {

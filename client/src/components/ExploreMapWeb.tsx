@@ -14,6 +14,7 @@ export type MapSelection = { kind: 'seller' | 'external'; id: string };
 export type MapFrame = { serial: number; camera: ResultCamera };
 type Props = {
   items: PublicListing[]; external: ExternalListing[]; frame: MapFrame | null; visible: boolean;
+  preview?: boolean;
   onViewport: (bounds: Bounds) => void; onSelect: (item: MapSelection) => void;
   onCluster: (kind: MapSelection['kind'], ids: string[]) => void;
 };
@@ -183,7 +184,7 @@ export default function ExploreMapWeb(props: Props) {
   useEffect(() => { if (props.visible) mapRef.current?.resize(); }, [props.visible]);
   return <div className={props.visible ? 'space-y-2' : 'hidden'}>
     {(error || photoError) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{error || photoError}</p>}
-    <div ref={container} role="region" aria-label="商品探索地圖，亦可切換商品列表使用鍵盤操作" className="h-[480px] w-full overflow-hidden rounded-2xl border bg-gray-100" />
+    <div ref={container} role="region" aria-label="商品探索地圖，亦可切換商品列表使用鍵盤操作" className={`${props.preview ? 'h-40 rounded-md' : 'h-[480px] rounded-2xl'} w-full overflow-hidden border bg-gray-100`} />
     <p className="text-xs text-gray-500">綠色：站內商品 · 橘色：外部來源。位置為約略範圍；重疊商品可點擊群聚數量，或切换列表。底圖：OpenFreeMap／OpenStreetMap。</p>
   </div>;
 }

@@ -33,6 +33,16 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const listing = () => parsePublicListing(makeListing(), marketplaceOrigin(), true);
 const props = () => ({ items: [listing()], external: [], frame: null, visible: true, onViewport: vi.fn(), onSelect: vi.fn(), onCluster: vi.fn() });
 describe('real web map lifecycle and photo isolation', () => {
+  it('sizes the actual preview canvas rather than clipping the full map and its attribution', () => {
+    const mounted = render(<ExploreMapWeb {...props()} preview />);
+    const map = screen.getByRole('region', { name: '商品探索地圖，亦可切換商品列表使用鍵盤操作' });
+    expect(map).toHaveClass('h-40');
+    expect(map.parentElement).not.toHaveClass('overflow-hidden');
+    expect(screen.getByText(/底圖：OpenFreeMap／OpenStreetMap/)).toBeVisible();
+    mounted.rerender(<ExploreMapWeb {...props()} />);
+    expect(map).toHaveClass('h-[480px]');
+    expect(map).not.toHaveClass('h-40');
+  });
   it('keeps search/list available when the browser cannot start WebGL', () => {
     mocks.fail = true; render(<ExploreMapWeb {...props()} />);
     expect(screen.getByRole('status')).toHaveTextContent('請使用商品列表'); expect(mocks.maps).toHaveLength(0);

@@ -39,25 +39,21 @@ export default function Home() {
             <div className="mx-auto max-w-6xl">
                 {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id}>
                 <div className="flex flex-wrap justify-center gap-3">
-                    <Link to="/wishes">
-                        <Button size="lg" className="w-full md:w-auto px-12">我的願望</Button>
-                    </Link>
-                    <Link to="/sell">
-                        <Button size="lg" variant="outline" className="w-full md:w-auto px-12">拍照刊登好物</Button>
-                    </Link>
+                    <Link to="/wishes" className="inline-flex min-h-11 items-center justify-center rounded-md bg-muji-primary px-12 py-2 text-sm font-medium text-white shadow-sm hover:bg-opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary sm:min-h-9">我的願望</Link>
+                    <Link to="/sell" className="inline-flex min-h-11 items-center justify-center rounded-md border border-muji-border px-12 py-2 text-sm font-medium hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary sm:min-h-9">拍照刊登好物</Link>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="home-reminders grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Holiday Card */}
                     <Card className="bg-pink-50 border-none shadow-sm h-full">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-lg font-medium text-pink-600">Upcoming Holiday</CardTitle>
+                        <CardHeader className="p-4 pb-1">
+                            <CardTitle className="text-xs font-medium text-pink-600">Upcoming Holiday</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-xl font-bold text-pink-700">
+                        <CardContent className="px-4 pb-4">
+                            <div className="text-base font-bold text-pink-700">
                                 {nextHoliday.name}
                             </div>
-                            <p className="text-sm text-pink-500 mt-2">
+                            <p className="text-xs text-pink-500 mt-1">
                                 {nextHoliday.date.toLocaleDateString()}
                             </p>
                         </CardContent>
@@ -65,11 +61,11 @@ export default function Home() {
 
                     {/* Birthdays Card */}
                     <Card className="bg-blue-50 border-none shadow-sm h-full">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-lg font-medium text-blue-600">Upcoming Friend Birthdays</CardTitle>
+                        <CardHeader className="p-4 pb-1">
+                            <CardTitle className="text-xs font-medium text-blue-600">Upcoming Friend Birthdays</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4 max-h-[300px] overflow-y-auto">
-                            {birthdayError ? <p role="status">{birthdayError}</p> : upcomingBirthdays.length > 0 ? upcomingBirthdays.map(friend => (
+                        <CardContent className="space-y-4 px-4 pb-4 max-h-[300px] overflow-y-auto">
+                            {birthdayError ? <p role="alert">{birthdayError}</p> : birthdayState.session !== session ? <p role="status" className="text-xs text-blue-600">正在讀取好友生日…</p> : upcomingBirthdays.length > 0 ? upcomingBirthdays.map(friend => (
                                 <div key={friend.id} className="flex items-center bg-white p-3 rounded-lg shadow-sm">
                                     {/* Avatar */}
                                     <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-100 mr-3">
@@ -108,7 +104,7 @@ export default function Home() {
                                     </div>
                                 </div>
                             )) : (
-                                <p className="text-blue-400">No upcoming birthdays.</p>
+                                <p className="text-xs text-blue-600">No upcoming birthdays.</p>
                             )}
                         </CardContent>
                     </Card>

@@ -17,6 +17,14 @@ describe('same-backend membership and permanent credits', () => {
     expect(screen.getByText('行銷小助手加值 · US$1／10 次')).toBeInTheDocument();
     expect(screen.queryByText(/本月免費次數已用完/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    const premium = screen.getByText('尊榮版訂閱 · NT$90／月').closest('details')!;
+    expect(premium).not.toHaveAttribute('open');
+    expect(premium.querySelector('summary')).toBeInTheDocument();
+    fireEvent.click(premium.querySelector('summary')!);
+    // Native <details> exposes the complete description without a payment or
+    // mutation action. DOM opening is also checked in the real browser review.
+    expect(premium).toContainElement(screen.getByText('既有尊榮會員；請於原付款平台管理訂閱。'));
+    expect(screen.getByText('永久加值剩餘：7 次').closest('details')).toBeNull();
   });
   it('only shows exhausted free allowance when the backend reports exhaustion', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ok(url.endsWith('/users/me') ? { isPremium: false } : { ...allowance, freeUsedThisMonth: 3 })));

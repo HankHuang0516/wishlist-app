@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
@@ -130,13 +130,13 @@ function SettingsSession() {
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
     return (
-        <div className="settings-hub max-w-3xl mx-auto space-y-4 pb-8 relative">
+        <div className="settings-hub max-w-[28.5rem] mx-auto space-y-3 pb-8 relative">
             {feedback && (
                 <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full shadow-lg z-50 text-sm font-medium animate-fade-in-down ${feedback.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
                     {feedback.message}
                 </div>
             )}
-            <div><h1 className="text-3xl font-bold text-muji-primary">個人資料</h1><p className="mt-1 text-sm text-gray-500">管理你的帳號與偏好設定</p></div>
+            <div><h1 className="text-2xl font-bold text-muji-primary">個人資料</h1><p className="mt-1 text-xs text-gray-500">管理你的帳號與偏好設定</p></div>
             {settings.notice && <section aria-label="個人資料儲存狀態" className="rounded-md border bg-white p-3 text-sm"><p role="status">{settings.notice}</p>
                 {settings.pending && <div className="mt-2 flex flex-wrap gap-2">
                     <Button disabled={settings.busy} onClick={() => settings.recover('read')}>查核原儲存結果</Button>
@@ -194,7 +194,7 @@ function SettingsSession() {
                         { to: '/sell', label: '刊登好物', description: '連拍或批次上傳', icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
                 </div>
             </section>
-            <fieldset disabled={settings.locked || isUploading} className="min-w-0 space-y-4 border-0 p-0"><legend className="sr-only">個人資料與隱私設定</legend><Card className="settings-avatar">
+            <fieldset disabled={settings.locked || isUploading} className="min-w-0 border-0 p-0"><legend className="sr-only">個人資料與隱私設定</legend><Card className="settings-avatar">
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                         <span>大頭照與暱稱</span>
@@ -280,16 +280,14 @@ function SettingsSession() {
 
             {/* Notification Settings */}
             <Link to="/settings/notifications" className="block">
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-muji-secondary">
-                    <CardHeader className="flex flex-row items-center justify-between py-4">
+                <Card className="settings-notifications hover:bg-gray-50 transition-colors cursor-pointer">
+                    <CardHeader className="flex flex-row items-center gap-3 py-3">
+                        <Bell className="h-5 w-5 shrink-0" aria-hidden="true" />
                         <div className="space-y-1">
                             <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
                             <CardDescription>{t('settings.emailNotifs')}</CardDescription>
                         </div>
-                        <div className="text-muji-secondary">
-                            <i className="fas fa-chevron-right"></i> {/* Or just chevron icon */}
-                            <span className="text-2xl">›</span>
-                        </div>
+                        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muji-secondary" aria-hidden="true" />
                     </CardHeader>
                 </Card>
             </Link>

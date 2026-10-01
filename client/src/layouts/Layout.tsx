@@ -18,10 +18,10 @@ export default function Layout() {
         <div className="min-h-screen bg-muji-bg font-sans text-muji-primary flex flex-col">
             {/* Navbar */}
             <header className="sticky top-0 z-50 w-full border-b border-muji-border bg-white/80 backdrop-blur-md">
-                <div className="container mx-auto flex min-h-16 flex-wrap items-center justify-between gap-x-4 px-4 py-2">
+                <div className="container mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-4 px-4 py-1">
                     <div className="flex items-center gap-1">
-                        <Link to="/" className="flex items-center space-x-2 font-bold text-xl tracking-tight text-muji-primary shrink-0">
-                            <Gift className="h-6 w-6" />
+                        <Link to="/" className="flex items-center space-x-2 font-bold text-base tracking-tight text-muji-primary shrink-0">
+                            <Gift className="h-5 w-5" />
                             <span>Wishlist.ai</span>
                         </Link>
                         {isAuthenticated && isPremium && (
@@ -51,17 +51,17 @@ export default function Layout() {
             <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
             {/* Main Content */}
-            <main className="flex-1 container mx-auto px-4 py-8">
+            <main className="flex-1 container mx-auto px-4 py-6">
                 <Outlet />
             </main>
 
             {/* Footer */}
             {/* Footer */}
-            <footer className="border-t border-muji-border bg-white py-6">
-                <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-muji-secondary gap-4">
-                    <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+            <footer className="border-t border-muji-border bg-white py-3">
+                <div className="mx-auto px-4 flex flex-col sm:flex-row justify-between items-center text-xs text-muji-secondary gap-3">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
                         <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
-                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-2">
                             <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
                             <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
                             <Link to="/support" className="hover:text-muji-primary transition-colors">支援與聯絡</Link>

@@ -13,6 +13,7 @@ model User {
   password          String
   authVersion       Int       @default(0)
   profileVersion    Int       @default(0)
+  followingVersion  Int       @default(0)
   apiKey            String?   @unique
   name              String?
   nicknames         String?
@@ -63,6 +64,7 @@ model User {
   wishCreateReceipts WishCreateReceipt[]
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   profileUpdateReceipts ProfileUpdateReceipt[]
+  followOperationReceipts FollowOperationReceipt[]
   listingCreateReceipts ListingCreateReceipt[]
   listingManagementReceipts ListingManagementReceipt[]
   photoUploadReceipts PhotoUploadReceipt[]
@@ -813,6 +815,25 @@ model ProfileUpdateReceipt {
   appliedVersion Int?
   createdAt      DateTime @default(now())
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
+}
+
+// Immutable account-scoped follow receipts; no names, contacts or credentials.
+// Target ID is deliberately not a foreign key: removing the target must not
+// destroy evidence of an already-committed operation.
+model FollowOperationReceipt {
+  id              String   @id @default(uuid())
+  userId          Int
+  clientActionId  String   @db.Uuid
+  requestHash     String   @db.VarChar(64)
+  targetUserId    Int?
+  wanted          Boolean?
+  expectedVersion Int?
+  state           String   @db.VarChar(16)
+  appliedVersion  Int?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientActionId])
 }

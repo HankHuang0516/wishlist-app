@@ -5,12 +5,14 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
 import { Search, UserMinus, Users, Eye, Info, X, Loader2 } from "lucide-react";
-import ActionConfirmModal from "../components/ActionConfirmModal";
+import MarketplaceDialog from '../components/MarketplaceDialog';
 import { Link } from "react-router-dom";
 
 import { api } from '../lib/marketplaceApi';
 import { parseSocialUsers, socialAvatar, type SocialUser as User } from '../lib/socialWeb';
 import { t } from "../utils/localization";
+import { useFollowOperation } from '../lib/useFollowOperation';
+import FollowRecovery from '../components/FollowRecovery';
 
 export default function SocialPage() {
     const { token, user } = useAuth();
@@ -25,15 +27,19 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
     const [followingList, setFollowingList] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
-    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
     const [searchError, setSearchError] = useState(''), [followingError, setFollowingError] = useState('');
     const [followingLoaded, setFollowingLoaded] = useState(false), [followingLoading, setFollowingLoading] = useState(false);
     const [limit, setLimit] = useState<{max: number; premium: boolean} | null>(null), [limitError, setLimitError] = useState(false);
     const [limitLoading, setLimitLoading] = useState(false);
-    const [busy, setBusy] = useState(false), [unknown, setUnknown] = useState<number | null>(null);
-    const epoch = useRef(0), busyRef = useRef(false), searchSeq = useRef(0), followingSeq = useRef(0);
+    const epoch = useRef(0), searchSeq = useRef(0), followingSeq = useRef(0);
     const searchAbort = useRef<AbortController | null>(null), followingAbort = useRef<AbortController | null>(null);
     const limitAbort = useRef<AbortController | null>(null), limitSeq = useRef(0);
+    const follow = useFollowOperation(token,userId,state=>{
+        setSearchResults(prev=>prev.map(row=>row.id===state.targetUserId?{...row,isFollowing:state.isFollowing}:row));
+        if(!state.isFollowing)setFollowingList(prev=>prev.filter(row=>row.id!==state.targetUserId));
+        setLimit({max:state.maxFollowing,premium:state.isPremium});setLimitError(false);
+    });
+    const busy = follow.locked;
 
     // Modal State
     const [confirmModal, setConfirmModal] = useState<{
@@ -101,42 +107,17 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
     }, [activeTab]);
 
     const handleFollow = async (userId: number) => {
-        await changeFollow(userId,true);
+        await follow.change(userId,true);
     };
 
     const handleUnfollow = async (userId: number) => {
-        await changeFollow(userId,false);
-    };
-    const changeFollow = async (targetId: number, wanted: boolean) => {
-        if (busyRef.current || unknown !== null) return;
-        const generation = epoch.current; busyRef.current = true; setBusy(true); setFeedbackMessage('');
-        try {
-            const result = await api<{message:string}>(token,`/users/${targetId}/follow`,{method:wanted?'POST':'DELETE'});
-            if (epoch.current !== generation) return;
-            if (result.message !== (wanted ? 'Followed successfully' : 'Unfollowed successfully')) throw new Error();
-            setSearchResults(prev => prev.map(u => u.id === targetId ? {...u,isFollowing:wanted} : u));
-            if (!wanted) setFollowingList(prev => prev.filter(u => u.id !== targetId));
-            setFeedbackMessage(t('social.changeConfirmed'));
-        } catch { if (epoch.current === generation) { setUnknown(targetId); setFeedbackMessage(t('social.changeUnknown')); } }
-        finally { if (epoch.current === generation) { busyRef.current = false; setBusy(false); } }
-    };
-    const recoverFollow = async () => {
-        if (unknown === null || busyRef.current) return;
-        const targetId = unknown, generation = epoch.current; busyRef.current = true; setBusy(true);
-        try {
-            const remote = await api<{id:number;isFollowing:boolean}>(token,`/users/${targetId}`);
-            if (epoch.current !== generation) return;
-            if (remote.id !== targetId || typeof remote.isFollowing !== 'boolean') throw new Error();
-            setSearchResults(prev => prev.map(u => u.id === targetId ? {...u,isFollowing:remote.isFollowing} : u));
-            if (!remote.isFollowing) setFollowingList(prev => prev.filter(u => u.id !== targetId));
-            setUnknown(null); setFeedbackMessage(remote.isFollowing ? t('social.currentFollowing') : t('social.currentNotFollowing'));
-        } catch { if (epoch.current === generation) setFeedbackMessage(t('social.changeUnknown')); }
-        finally { if (epoch.current === generation) { busyRef.current = false; setBusy(false); } }
+        await follow.change(userId,false);
     };
 
     return (
         <div className="container mx-auto p-4 space-y-6 max-w-2xl">
             <h1 className="text-3xl font-bold font-serif text-gray-800">{t('social.title')}</h1>
+            <FollowRecovery operation={follow} />
 
             <div className="flex space-x-4 border-b">
                 <button
@@ -233,11 +214,11 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
 
                                         {/* C: Follow/Unfollow */}
                                         {user.isFollowing ? (
-                                            <Button aria-label={`${t('social.unfollow')} · ${user.name ?? t('social.anonymous')}`} disabled={busy || unknown !== null} variant="ghost" size="icon" className="min-h-11 min-w-11 text-red-500 hover:bg-red-50" onClick={() => handleUnfollow(user.id)} title={t('social.unfollow')}>
+                                            <Button aria-label={`${t('social.unfollow')} · ${user.name ?? t('social.anonymous')}`} disabled={busy} variant="ghost" size="icon" className="min-h-11 min-w-11 text-red-500 hover:bg-red-50" onClick={() => handleUnfollow(user.id)} title={t('social.unfollow')}>
                                                 <UserMinus className="w-5 h-5" />
                                             </Button>
                                         ) : (
-                                            <Button aria-label={`${t('social.follow')} · ${user.name ?? t('social.anonymous')}`} disabled={busy || unknown !== null} variant="ghost" size="icon" className="min-h-11 min-w-11 text-green-600 hover:bg-green-50" onClick={() => handleFollow(user.id)} title={t('social.follow')}>
+                                            <Button aria-label={`${t('social.follow')} · ${user.name ?? t('social.anonymous')}`} disabled={busy} variant="ghost" size="icon" className="min-h-11 min-w-11 text-green-600 hover:bg-green-50" onClick={() => handleFollow(user.id)} title={t('social.follow')}>
                                                 <Users className="w-5 h-5" /> {/* UserPlus icon requested as 'two small people', Users is close */}
                                             </Button>
                                         )}
@@ -318,7 +299,7 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                             className="min-h-11 min-w-11 text-red-500 hover:bg-red-50 hover:text-red-600"
                                             title={t('social.unfollow')}
                                             aria-label={`${t('social.unfollow')} · ${user.name ?? t('social.anonymous')}`}
-                                            disabled={busy || unknown !== null}
+                                            disabled={busy}
                                             onClick={() => {
                                                 setConfirmModal({
                                                     isOpen: true,
@@ -346,19 +327,7 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                 </div>
             )}
 
-            <ActionConfirmModal
-                isOpen={confirmModal.isOpen}
-                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                onConfirm={confirmModal.onConfirm}
-                title={confirmModal.title}
-                message={confirmModal.message}
-                confirmText={t('common.confirm')}
-                cancelText={t('common.cancel')}
-                variant="destructive"
-                isProcessing={busy}
-            />
-            {feedbackMessage && <p role="status" aria-live="polite" className="rounded-lg border bg-white p-3 text-sm">{feedbackMessage}</p>}
-            {unknown !== null && <Button className="min-h-11" disabled={busy} onClick={() => void recoverFollow()}>{t('social.checkCurrentFollow')}</Button>}
+            {confirmModal.isOpen && <MarketplaceDialog title={confirmModal.title} closeLabel={t('social.closeDialog')} onClose={()=>setConfirmModal(prev=>({...prev,isOpen:false}))}><p>{confirmModal.message}</p><div className="mt-4 flex gap-2"><Button className="min-h-11" disabled={busy} variant="destructive" onClick={confirmModal.onConfirm}>{t('common.confirm')}</Button><Button className="min-h-11" variant="outline" onClick={()=>setConfirmModal(prev=>({...prev,isOpen:false}))}>{t('common.cancel')}</Button></div></MarketplaceDialog>}
 
             {/* Feedback Toast */}
         </div >

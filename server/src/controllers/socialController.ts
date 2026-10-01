@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { socialCard, socialCardSelect, socialSearchQuery, socialSearchWhere } from '../lib/socialPrivacy';
+import { legacyFollow } from './followOperationController';
 
 // Search users by name or phone (excluding self)
 export const searchUsers = async (req: Request, res: Response) => {
@@ -42,99 +43,8 @@ export const searchUsers = async (req: Request, res: Response) => {
     }
 };
 
-// Follow a user
-export const followUser = async (req: Request, res: Response) => {
-    const { id } = req.params; // ID of user to follow
-    const currentUserId = (req as any).user.id;
-    const targetId = parseInt(id as string);
-    if (isNaN(targetId)) {
-        return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-    }
-
-    if (targetId === currentUserId) {
-        return res.status(400).json({ error: 'Cannot follow yourself', errorCode: API_ERROR_CODES.INVALID_INPUT });
-    }
-
-    try {
-        // Check if user exists and check limit
-        const currentUser = await prisma.user.findUnique({
-            where: { id: currentUserId },
-            include: {
-                _count: {
-                    select: { following: true }
-                }
-            }
-        });
-
-        if (!currentUser) return res.status(404).json({ error: 'Current user not found' });
-
-        if (!currentUser.isPremium && currentUser._count.following >= currentUser.maxFollowing) {
-            return res.status(403).json({ error: `Following limit reached (${currentUser.maxFollowing}). Please expand capacity.` });
-        }
-
-        // Check if target user exists
-        const targetUser = await prisma.user.findUnique({
-            where: { id: targetId }
-        });
-
-        if (!targetUser) {
-            return res.status(404).json({ error: 'User to follow not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
-        }
-
-        // Check if already following
-        const existingFollow = await prisma.follow.findUnique({
-            where: {
-                followerId_followingId: {
-                    followerId: currentUserId,
-                    followingId: targetId
-                }
-            }
-        });
-
-        if (existingFollow) {
-            return res.status(400).json({ error: 'Already following' });
-        }
-
-        await prisma.follow.create({
-            data: {
-                followerId: currentUserId,
-                followingId: targetId
-            }
-        });
-
-        res.json({ message: 'Followed successfully' });
-    } catch (error) {
-        console.error('Follow error:', error);
-        res.status(500).json({ error: 'Failed to follow user', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
-
-// Unfollow a user
-export const unfollowUser = async (req: Request, res: Response) => {
-    const { id } = req.params; // ID of user to unfollow
-    const currentUserId = (req as any).user.id;
-    const targetId = parseInt(id as string);
-
-    if (isNaN(targetId)) {
-        return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
-    }
-
-    try {
-        await prisma.follow.delete({
-            where: {
-                followerId_followingId: {
-                    followerId: currentUserId,
-                    followingId: targetId
-                }
-            }
-        });
-
-        res.json({ message: 'Unfollowed successfully' });
-    } catch (error) {
-        console.error('Unfollow error:', error);
-        res.status(500).json({ error: 'Failed to unfollow user', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export const followUser = legacyFollow(true);
+export const unfollowUser = legacyFollow(false);
 
 // Get list of people I follow
 export const getFollowing = async (req: Request, res: Response) => {

@@ -24,3 +24,13 @@ export function parseSocialUsers(raw: unknown, kind: 'search' | 'following'): So
         return result;
     });
 }
+
+export type PublicProfile=Pick<SocialUser,'id'|'name'|'nicknames'|'phoneNumber'|'avatarUrl'|'birthday'> & {realName:string|null;address:string|null;isFollowing:boolean};
+export function parsePublicProfile(value:unknown,targetId:number):PublicProfile{
+    if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid public profile');
+    const row=value as Record<string,unknown>;
+    const card=parseSocialUsers([{id:row.id,name:row.name,nicknames:row.nicknames,phoneNumber:row.phoneNumber,avatarUrl:row.avatarUrl,birthday:row.birthday,isFollowing:row.isFollowing}],'search')[0];
+    if(card.id!==targetId)throw Error('Wrong profile identity');
+    const field=(key:string,max:number)=>{const val=row[key];if(val===null)return null;if(typeof val!=='string'||val.length>max||/[\u0000-\u001f\u007f]/.test(val))throw Error('Invalid profile field');return val;};
+    return {...card,realName:field('realName',100),address:field('address',500),isFollowing:row.isFollowing as boolean};
+}

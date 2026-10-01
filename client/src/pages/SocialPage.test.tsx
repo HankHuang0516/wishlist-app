@@ -3,6 +3,12 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import SocialPage from './SocialPage';
+import {webcrypto} from 'node:crypto';
+import {sha256} from '../lib/webPendingStore';
+const journals=vi.hoisted(()=>new Map<string,string>());
+vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),privatePendingStore:{get:vi.fn(async(key:string)=>journals.get(key)??null),save:vi.fn(async(key:string,raw:string)=>{if(journals.has(key)&&journals.get(key)!==raw)throw Error('CAS');journals.set(key,raw);}),clear:vi.fn(async(key:string,raw:string)=>journals.get(key)===raw?journals.delete(key):false)}}));
+const state={userId:19,targetUserId:20,targetExists:true,isFollowing:false,followingVersion:0,followingCount:0,isPremium:false,maxFollowing:100};
+async function proof(url:string,body:string){const input=JSON.parse(body);return {receipt:{clientActionId:url.split('/').at(-1),requestHash:await sha256(body),...input,state:'APPLIED',appliedVersion:1,createdAt:'2026-10-01T13:00:00.000Z'},current:{...state,isFollowing:true,followingVersion:1,followingCount:1}};}
 const auth={user:{id:19,phoneNumber:'synthetic'},token:'social-fixture',login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn(),isAuthenticated:true};
 const friend={id:20,name:'合成朋友',nicknames:null,phoneNumber:null,avatarUrl:null,birthday:null,isFollowing:false,isMutual:false};
 const self={id:19,maxFollowing:0,isPremium:false};
@@ -10,7 +16,7 @@ const ok=(value:unknown)=>({ok:true,status:200,json:async()=>value});
 const view=(identity=auth)=><MemoryRouter><AuthContext.Provider value={identity}><SocialPage /></AuthContext.Provider></MemoryRouter>;
 const input=()=>screen.getByRole('textbox',{name:'姓名、手機號碼或電子信箱'});
 const submit=(query='合成')=>{fireEvent.change(input(),{target:{value:query}});fireEvent.click(screen.getByRole('button',{name:'搜尋使用者'}));};
-beforeEach(()=>localStorage.setItem('user-locale','zh-TW'));
+beforeEach(()=>{journals.clear();vi.stubGlobal('crypto',webcrypto);localStorage.setItem('user-locale','zh-TW');});
 afterEach(()=>{localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('actual friends page, safe reads and uncertain mutations',()=>{
     it('successful cards retain hidden contacts and non-nested labelled profile/wish links',async()=>{
@@ -83,28 +89,33 @@ describe('actual friends page, safe reads and uncertain mutations',()=>{
         expect(screen.queryByRole('heading',{name:'取消追蹤'})).not.toBeInTheDocument();expect(screen.getByText('合成朋友')).toBeInTheDocument();
         expect(fetcher.mock.calls.some(([url])=>url.endsWith('/follow'))).toBe(false);
     });
-    it('unknown follow ACK offers only current-state GET, never auto-retries or claims historical success',async()=>{
+    it('unknown follow ACK reads the original durable receipt, never auto-retries',async()=>{
+        let receipt:unknown;
         const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
-            if(init?.method==='POST')throw Error('lost ACK');
-            if(url.endsWith('/me'))return ok(self);if(url.endsWith('/users/20'))return ok({id:20,isFollowing:true});return ok([friend]);
+            if(init?.method==='POST'){receipt=await proof(url,String(init.body));throw Error('lost ACK');}
+            if(url.includes('/follow-operations/'))return ok(receipt);
+            if(url.includes('/follow-state/'))return ok(state);
+            if(url.endsWith('/me'))return ok(self);return ok([friend]);
         });vi.stubGlobal('fetch',fetcher);render(view());submit();await screen.findByText('合成朋友');
-        fireEvent.click(screen.getByRole('button',{name:'追蹤 · 合成朋友'}));await screen.findByText(/尚未確認追蹤變更結果/);
-        expect(screen.getByRole('button',{name:'追蹤 · 合成朋友'})).toBeDisabled();expect(screen.queryByText('後台已確認追蹤變更。')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button',{name:'查核目前追蹤狀態'}));await screen.findByText(/目前後台顯示已追蹤/);
+        await vi.waitFor(()=>expect(screen.getByRole('button',{name:'追蹤 · 合成朋友'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'追蹤 · 合成朋友'}));await screen.findByText(/原追蹤結果尚未確認/);
+        expect(screen.getByRole('button',{name:'追蹤 · 合成朋友'})).toBeDisabled();expect(screen.queryByText('後台回執已確認原追蹤變更完成。')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button',{name:'查核原追蹤回執'}));await screen.findByText('後台回執已確認原追蹤變更完成。');
+        expect(screen.getByRole('button',{name:'取消追蹤 · 合成朋友'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'已讀回執，清理本機標記'}));await screen.findByText(/已清理讀過的本機回執標記/);
         expect(screen.getByRole('button',{name:'取消追蹤 · 合成朋友'})).not.toBeDisabled();
         expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
-        const read=fetcher.mock.calls.find(call=>call[0].endsWith('/users/20'))!;expect(read[1]).not.toHaveProperty('method');
+        const read=fetcher.mock.calls.find(call=>call[0].includes('/follow-operations/')&&!call[1]?.method)!;expect(read[1]).not.toHaveProperty('method');
     });
     it('fast duplicate follow is gated; late ACK does not update a replacement account',async()=>{
         let ack!:(value:unknown)=>void;
         const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
             if(init?.method==='POST')return new Promise(r=>{ack=r;});
+            if(url.includes('/follow-state/'))return ok(state);
             if(url.endsWith('/me'))return ok((init?.headers as Record<string,string>).Authorization==='Bearer social-fixture'?self:{...self,id:21});return ok([friend]);
         });vi.stubGlobal('fetch',fetcher);const mounted=render(view());submit();await screen.findByText('合成朋友');
-        const button=screen.getByRole('button',{name:'追蹤 · 合成朋友'});fireEvent.click(button);fireEvent.click(button);
+        const button=screen.getByRole('button',{name:'追蹤 · 合成朋友'});await vi.waitFor(()=>expect(button).toBeEnabled());fireEvent.click(button);fireEvent.click(button);
         await vi.waitFor(()=>expect(ack).toBeTypeOf('function'));expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
         mounted.rerender(view({...auth,user:{id:21,phoneNumber:'other'},token:'other-social'}));await act(async()=>ack(ok({message:'Followed successfully'})));
-        expect(screen.queryByText('後台已確認追蹤變更。')).not.toBeInTheDocument();expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();
+        expect(screen.queryByText('後台回執已確認原追蹤變更完成。')).not.toBeInTheDocument();expect(screen.queryByText('合成朋友')).not.toBeInTheDocument();expect(journals.size).toBe(1);
     });
     it('English keeps readable privacy and failure instructions',async()=>{
         localStorage.setItem('user-locale','en-US');vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.endsWith('/me'))return ok(self);throw Error('offline');}));render(view());

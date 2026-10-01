@@ -7,6 +7,7 @@ import { getAiUsageInfo } from '../lib/usageService';
 import { generateApiKey } from '../lib/apiKey';
 import { ownProfileSelect } from '../lib/ownProfile';
 import { updateLegacyProfile } from './profileUpdateController';
+import { followUserId } from '../lib/followOperation';
 
 import { APP_CONSTANTS, getApiUrl } from '../config/constants';
 // import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
@@ -46,12 +47,14 @@ export const getUserProfile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        if (isNaN(Number(id))) {
+        let targetId:number;
+        try { targetId=followUserId(id); } catch {
             return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
         }
 
         const user = await prisma.user.findUnique({
-            where: { id: Number(id) }
+            where: { id: targetId },
+            select: {id:true,name:true,nicknames:true,phoneNumber:true,isPhoneVisible:true,realName:true,isRealNameVisible:true,address:true,isAddressVisible:true,birthday:true,isBirthdayVisible:true,avatarUrl:true,isAvatarVisible:true}
         });
 
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -90,7 +93,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
         res.json(publicProfile);
     } catch (error) {
-        console.error('Get User Profile Error:', error);
+        console.error('Public profile unavailable; personal and database details withheld');
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

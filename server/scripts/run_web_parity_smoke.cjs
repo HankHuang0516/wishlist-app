@@ -43,7 +43,8 @@ app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
-for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow']) { dropped[kind]=0; attempts[kind]=0; }
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow','followOperation']) { dropped[kind]=0; attempts[kind]=0; }
+attempts.followReceipt=0;attempts.followState=0;attempts.followAbandon=0;
 let rejectSocialRead = null;
 for (const kind of ['socialSearch','socialFollowing','socialProfile']) attempts[kind]=0;
 app.post('/__test/reject-next-social-read', (req,res) => {
@@ -68,12 +69,16 @@ app.post('/__test/marketing/availability', (req,res) => {
   return res.json({syntheticOnly:true,available:req.body.available});
 });
 app.use((req, res, next) => {
+  if(req.method==='GET'&&req.path.includes('/me/follow-operations/'))attempts.followReceipt++;
+  if(req.method==='GET'&&req.path.includes('/me/follow-state/'))attempts.followState++;
+  if(req.method==='POST'&&/\/me\/follow-operations\/[^/]+\/abandon$/.test(req.path))attempts.followAbandon++;
   const socialRead = req.method === 'GET' ? req.path === '/api/users/search' ? 'search' : req.path === '/api/users/following' ? 'following' : /^\/api\/users\/[1-9]\d*$/.test(req.path) ? 'profile' : null : null;
   if (socialRead) {
     attempts['social'+socialRead[0].toUpperCase()+socialRead.slice(1)]++;
     if (rejectSocialRead === socialRead) { rejectSocialRead=null;return res.status(503).json({errorCode:'TEST_SOCIAL_READ_UNAVAILABLE'}); }
   }
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    req.method==='POST' && /^\/api\/users\/me\/follow-operations\/[^/]+$/.test(req.path) ? 'followOperation' :
     ['POST','DELETE'].includes(req.method) && /^\/api\/users\/[1-9]\d*\/follow$/.test(req.path) ? 'socialFollow' :
     req.method === 'POST' && /^\/api\/listings\/management-operations\/[^/]+$/.test(req.path) ? 'listingManagement' :
     req.method === 'PATCH' && /^\/api\/listings\/[^/]+$/.test(req.path) ? 'listingEdit' :
@@ -177,6 +182,7 @@ app.get('/__test/state', async (_req, res) => {
     marketingRequestReceipts: await prisma.marketingRequestReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{clientRequestId:true,state:true,jobId:true}}),
     marketingApprovalReceipts: await prisma.marketingApprovalReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{clientActionId:true,jobId:true,state:true,reason:true,appliedVersion:true,selectedMediaIds:true}}),
     marketingJobs: await prisma.marketingJob.findMany({ where: { ownerUserId: { in: users.map(user => user.id) } }, select: { id: true, status: true, parentJobId: true, revisionSlots: true, copy: true, generatedMedia: { select: { id: true, marketingSlot: true, marketingSelected: true, position: true } } } }),
+    followReceipts: await prisma.followOperationReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{userId:true,clientActionId:true,targetUserId:true,state:true,appliedVersion:true}}),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });
 app.post('/__test/marketing/deliver', async (req, res) => {

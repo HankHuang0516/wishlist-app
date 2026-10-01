@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "./ui/Card";
 import { useAuth } from "../context/AuthContext";
@@ -10,11 +10,12 @@ interface FeedbackModalProps {
 }
 
 export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
+    const submissionId = useRef(crypto.randomUUID());
     const { token, isAuthenticated } = useAuth();
     const [content, setContent] = useState("");
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<{ message: string, aiAnalysis: string } | null>(null);
+    const [result, setResult] = useState<{ message: string, aiAnalysis: string, inquiryId: string, notificationStatus: string } | null>(null);
     const [error, setError] = useState("");
 
     if (!isOpen) return null;
@@ -37,6 +38,7 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                     'Authorization': token ? `Bearer ${token}` : ''
                 },
                 body: JSON.stringify({
+                    clientSubmissionId: submissionId.current,
                     content,
                     email: !isAuthenticated ? email : undefined,
                     language: getUserLocale()
@@ -54,7 +56,7 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
             }
         } catch (err) {
             console.error(err);
-            setError("Network error");
+            setError("連線中斷，收件狀態未確定；請保留內容並用原識別碼重試。識別碼：" + submissionId.current);
         } finally {
             setLoading(false);
         }
@@ -71,6 +73,8 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                         <div className="bg-green-50 p-4 rounded-lg space-y-4">
                             <h3 className="font-bold text-green-800">{t('feedback.success')}</h3>
                             <p className="text-sm text-green-700">{result.message}</p>
+                            <p>收件編號：{result.inquiryId}</p>
+                            <p>通知狀態：{result.notificationStatus === "ACCEPTED" ? "通知已交付郵件服務（不代表收件匣送達）" : "收件已保存；通知尚未確認，由管理端追蹤"}</p>
 
                             {result.aiAnalysis && (
                                 <div className="mt-4 border-t border-green-200 pt-2">

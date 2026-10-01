@@ -270,17 +270,28 @@ export const getUserPublicWishlists = async (req: Request, res: Response) => {
     }
 
     try {
+        // Public visibility never overrides an individual item's hidden flag.
+        // Project explicit public fields instead of serializing Prisma rows.
         const wishlists = await prisma.wishlist.findMany({
-            where: {
-                userId: targetId,
-                isPublic: true
+            where: { userId: targetId, isPublic: true },
+            select: {
+                id: true, title: true, description: true, isPublic: true,
+                createdAt: true, updatedAt: true,
+                items: {
+                    where: { isHidden: false },
+                    select: {
+                        id: true, name: true, price: true, currency: true,
+                        askPrice: true, maxPrice: true, priceCurrency: true,
+                        link: true, imageUrl: true, notes: true, priority: true,
+                        isPurchased: true, createdAt: true, updatedAt: true,
+                    },
+                },
             },
-            include: {
-                items: true // We might want to limit items or show preview
-            }
         });
 
-        res.json(wishlists);
+        res.set('Cache-Control', 'private, no-store').json(wishlists.map(list => ({
+            ...list, _count: { items: list.items.length },
+        })));
     } catch (error) {
         console.error('Get user wishlists error:', error);
         res.status(500).json({ error: 'Failed to fetch wishlists', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

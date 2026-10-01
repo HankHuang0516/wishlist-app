@@ -76,12 +76,16 @@ describe('public listing share destination', () => {
     expect(screen.queryByText('無法分享，請稍後重試。')).not.toBeInTheDocument();
   });
   it('removes expired goods on foreground checks and no longer exposes contact or share', async () => {
+    const listeners = vi.spyOn(document, 'addEventListener');
     const item = { ...listing(), expiresAt: new Date(Date.now() + 60_000).toISOString() };
     vi.stubGlobal('fetch', vi.fn(async () => responseOk(item))); mount('/listings/' + id);
     await screen.findByRole('heading', { name: '二手檯燈' }); vi.spyOn(Date, 'now').mockReturnValue(Date.parse(item.expiresAt));
     fireEvent(document, new Event('visibilitychange'));
     await screen.findByRole('heading', { name: '商品已停止刊登或連結無效' });
     expect(screen.queryByRole('button', { name: '分享商品' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '登入以聯絡賣家或檢舉商品' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '在探索地圖定位此商品' })).not.toBeInTheDocument();
+    expect(listeners.mock.calls.filter(call => call[0] === 'visibilitychange')).toHaveLength(1);
   });
   it('does not admit delayed data or old-owner actions after an account switch', async () => {
     let finish!: (value: unknown) => void;

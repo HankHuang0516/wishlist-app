@@ -6,13 +6,13 @@ import { api, ApiFailure } from '../lib/marketplaceApi';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import MarketingAssistantWeb from '../components/MarketingAssistantWeb';
 import { useAuth } from '../context/AuthContext';
-import { buildPublishedListing, emptyListingDraft, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile, sameSellerContent } from '../lib/listingBatch';
-import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingTouched, PublishDetails } from '../lib/listingBatch';
+import { buildPublishedListing, emptyListingDraft, firstListingPublishIssue, isUuid, listingCategories, mergeAiDraft, parseAiState, parseSellerDraft, prepareListingUploadFile, sameSellerContent } from '../lib/listingBatch';
+import type { AiDraft, AiStatus, ListingDraftForm, ListingField, ListingPublishField, ListingTouched, PublishDetails } from '../lib/listingBatch';
 import { forgetPendingUploads, loadPrivateMediaPages, readPendingUploads, reconcilePendingUploads, rememberPendingUpload } from '../lib/listingUploadJournal';
 
 type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
-  error: string };
+  error: string; confirmed: boolean };
 const emptyDetails: PublishDetails = { county: '', district: '', latitude: '', longitude: '', meetup: true, shipping: false, negotiable: false, expiryDate: '', consent: false };
 const pendingKey = (userId: number) => `wishlist:listing-pending:${userId}`;
 
@@ -26,9 +26,18 @@ function fromMedia(raw: unknown): Card {
   const form = ai.draft ? mergeAiDraft(saved?.form ?? emptyListingDraft(), touched, ai.draft) : saved?.form ?? emptyListingDraft();
   return { id: row.id, clientListingId: saved?.clientListingId ?? crypto.randomUUID(), form, touched,
     version: row.sellerDraftVersion as number, ai: ai.status, draft: ai.draft, dirty: !saved || !sameSellerContent({ form, touched }, saved),
-    saving: false, publishing: false, published: false, error: '' };
+    saving: false, publishing: false, published: false, error: '', confirmed: false };
 }
 
+function applyAi(card: Card, ai: { status: AiStatus; draft: AiDraft | null }): Card {
+  const form = ai.draft ? mergeAiDraft(card.form, card.touched, ai.draft) : card.form;
+  const changed = !sameSellerContent(card, { form, touched: card.touched });
+  // An identical poll is not a new suggestion. Changed evidence also requires
+  // review even when the editable fields happen to remain the same.
+  const reviewChanged = changed || JSON.stringify(ai.draft) !== JSON.stringify(card.draft);
+  return { ...card, ai: ai.status, draft: ai.draft, form, dirty: card.dirty || changed,
+    confirmed: reviewChanged ? false : card.confirmed, error: '' };
+}
 
 export default function ListingBatchPage() {
   const { token, user } = useAuth();
@@ -45,13 +54,29 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState('');
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [unresolvedUploads, setUnresolvedUploads] = useState<string[]>([]);
+  const [invalid, setInvalid] = useState<{ cardId: string; field: ListingPublishField | 'review' } | null>(null);
+  const fieldNodes = useRef(new Map<string, HTMLElement>());
+  const busyRef = useRef(false);
+  const savingIds = useRef(new Set<string>());
+  const pollIds = useRef(new Set<string>());
+  const lifetime = useRef(0);
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
+  const confirmedCards = cards.filter(card => card.confirmed && !card.published);
+  const locked = busy || !!pending || !ready;
+
+  useEffect(() => {
+    lifetime.current++;
+    return () => { lifetime.current++; };
+  }, []);
 
   const reload = useCallback(async () => {
+    const epoch = lifetime.current;
     const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>(token,
       '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
     const [items, availability] = await Promise.all([loadBatch(),
@@ -62,7 +87,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     // Private uploads can span multiple 30-item pages. The 12-item limit
     // applies only to new captures, never to owner recovery.
     const recovered = checked.items.slice().reverse().map(fromMedia);
-    setCards(old => [...recovered.map(card => old.find(previous => previous.id === card.id && previous.dirty) ?? card),
+    if (epoch !== lifetime.current) return;
+    setCards(old => [...recovered.map(card => {
+      const previous = old.find(item => item.id === card.id);
+      if (previous?.dirty || previous?.published) return previous;
+      return previous && previous.version === card.version && sameSellerContent(previous, card) &&
+        JSON.stringify(previous.draft) === JSON.stringify(card.draft) ? { ...card, confirmed: previous.confirmed } : card;
+    }),
       ...old.filter(card => card.published || card.dirty && !recovered.some(item => item.id === card.id))]);
     setUnresolvedUploads(checked.unresolved);
     setAiAvailable(typeof availability?.available === 'boolean' ? availability.available : null);
@@ -82,14 +113,15 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     if (!token || !ready || !hasPendingAi) return;
     let active = true;
     const timer = window.setInterval(() => {
+      if (busyRef.current) return;
       for (const card of cardsRef.current.filter(item => item.ai === 'PENDING' || item.ai === 'PROCESSING')) {
+        if (pollIds.current.has(card.id)) continue;
+        pollIds.current.add(card.id);
         void api<unknown>(token, `/listing-media/${card.id}/ai-draft`).then(raw => {
           const ai = parseAiState(raw, card.id);
-          if (!active) return;
-          setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? { ...item, ai: ai.status, draft: ai.draft,
-            form: ai.draft ? mergeAiDraft(item.form, item.touched, ai.draft) : item.form,
-            dirty: item.dirty || !!ai.draft, error: '' } : item));
-        }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ });
+          if (!active || busyRef.current) return;
+          setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? applyAi(item, ai) : item));
+        }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ }).finally(() => pollIds.current.delete(card.id));
       }
     }, 3000);
     return () => { active = false; window.clearInterval(timer); };
@@ -105,15 +137,51 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }, [busy, pending, cards]);
 
   const replace = (id: string, change: (card: Card) => Card) => setCards(old => old.map(card => card.id === id ? change(card) : card));
-  const updateField = (id: string, field: ListingField, value: string) => replace(id, card => ({ ...card,
-    form: { ...card.form, [field]: value }, touched: { ...card.touched, [field]: true }, dirty: true, error: '' }));
+  function updateField(id: string, field: ListingField, value: string) {
+    if (busyRef.current || pendingRef.current) return;
+    setInvalid(null);
+    replace(id, card => ({ ...card, form: { ...card.form, [field]: value }, touched: { ...card.touched, [field]: true }, dirty: true, confirmed: false, error: '' }));
+  }
+  function updateDetails(change: Partial<PublishDetails>) {
+    if (busyRef.current || pendingRef.current) return;
+    setInvalid(null);
+    setDetails(old => ({ ...old, ...change, consent: 'consent' in change ? !!change.consent : false }));
+    setCards(old => old.map(card => card.published ? card : { ...card, confirmed: false, error: '' }));
+  }
+  function fieldProps(cardId: string, field: ListingPublishField | 'review') {
+    const highlighted = invalid?.field === field && (cardId === 'shared' || invalid.cardId === cardId);
+    return { ref: (node: HTMLElement | null) => {
+      const key = `${cardId}:${field}`;
+      if (node) fieldNodes.current.set(key, node); else fieldNodes.current.delete(key);
+    }, 'aria-invalid': highlighted || undefined, 'aria-describedby': highlighted ? `listing-error-${invalid?.cardId}` : undefined,
+      style: highlighted ? { outline: '3px solid #dc2626', outlineOffset: '3px', scrollMarginTop: '100px' } : { scrollMarginTop: '100px' },
+      'data-highlighted': highlighted ? 'true' : undefined };
+  }
+  function sharedProps(field: ListingPublishField) { return fieldProps('shared', field); }
+  function showIssue(card: Card, issue: { field: ListingPublishField | 'review'; message: string }) {
+    replace(card.id, current => ({ ...current, confirmed: false, error: issue.message }));
+    setInvalid({ cardId: card.id, field: issue.field });
+    const node = fieldNodes.current.get(`${card.id}:${issue.field}`) ?? fieldNodes.current.get(`shared:${issue.field}`);
+    node?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
+    node?.focus({ preventScroll: true });
+    // Bounded visual attention; keep the persistent outline and accessible
+    // error when animations are unavailable or reduced motion is requested.
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+      node?.animate?.([{ opacity: 1 }, { opacity: 0.45 }, { opacity: 1 }], { duration: 480, iterations: 3 });
+  }
+  function confirmCard(card: Card) {
+    if (locked || busyRef.current || card.saving || card.published) return;
+    if (card.confirmed) { replace(card.id, current => ({ ...current, confirmed: false })); return; }
+    const issue = firstListingPublishIssue(card, card.id, details);
+    if (issue) { showIssue(card, issue); return; }
+    setInvalid(null);
+    replace(card.id, current => ({ ...current, confirmed: true, error: '' }));
+  }
 
   async function requestAi(id: string): Promise<boolean> {
     try {
       const state = parseAiState(await api<unknown>(token!, `/listing-media/${id}/ai-draft`, { method: 'POST' }), id);
-      replace(id, card => ({ ...card, ai: state.status, draft: state.draft,
-        form: state.draft ? mergeAiDraft(card.form, card.touched, state.draft) : card.form,
-        dirty: card.dirty || !!state.draft, error: '' }));
+      replace(id, card => !card.publishing && !card.published ? applyAi(card, state) : card);
       return true;
     } catch (error) {
       if (error instanceof ApiFailure && error.code === 'LISTING_AI_UNAVAILABLE') setAiAvailable(false);
@@ -123,15 +191,18 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || !ready || busy || pending || unresolvedUploads.length) return;
+    if (!files || !ready || busyRef.current || pending || unresolvedUploads.length) return;
     if (cards.filter(card => !card.published).length + files.length > 12) { setMessage('一次最多處理 12 件商品。'); return; }
-    setBusy(true); setMessage('');
+    busyRef.current = true; setBusy(true); setMessage('');
+    const epoch = lifetime.current;
     let aiCanQueue = aiAvailable !== false;
     try {
       for (const [index, file] of Array.from(files).entries()) {
+        if (epoch !== lifetime.current) break;
         let prepared: File;
         try { prepared = await prepareListingUploadFile(file); }
         catch (error) { setMessage(`第 ${index + 1} 張照片無法處理：${(error as Error).message}；後續照片尚未上傳。`); break; }
+        if (epoch !== lifetime.current) break;
         const uploadId = crypto.randomUUID();
         const body = new FormData(); body.append('clientUploadId', uploadId); body.append('capturePurpose', 'BATCH_ITEM'); body.append('image', prepared);
         try { rememberPendingUpload(userId!, uploadId); }
@@ -150,8 +221,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           const record = raw as { id?: unknown };
           if (!isUuid(record?.id)) throw new Error('照片上傳結果未確認');
           confirmedPrivate = true;
+          if (epoch !== lifetime.current) break; // Preserve the upload journal for owner recovery.
           const card: Card = { id: record.id, clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {},
-            version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '' };
+            version: 0, ai: 'SKIPPED', draft: null, dirty: true, saving: false, publishing: false, published: false, error: '', confirmed: false };
           setCards(old => old.some(item => item.id === card.id) ? old : [...old, card]);
           if (aiCanQueue) aiCanQueue = await requestAi(record.id);
           forgetPendingUploads(userId!, [uploadId]);
@@ -166,11 +238,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           break;
         }
       }
-    } finally { setBusy(false); }
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function save(card: Card): Promise<boolean> {
-    if (card.saving || card.published) return false;
+    if (card.saving || card.published || savingIds.current.has(card.id)) return false;
+    savingIds.current.add(card.id);
     replace(card.id, current => ({ ...current, saving: true, error: '' }));
     const draft = { clientListingId: card.clientListingId, form: card.form, touched: card.touched };
     try {
@@ -183,38 +256,32 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     } catch (error) {
       replace(card.id, current => ({ ...current, saving: false, error: `草稿尚未儲存：${(error as Error).message}` }));
       return false;
-    }
+    } finally { savingIds.current.delete(card.id); }
   }
 
   function saveOnBlur(card: Card, event: FocusEvent<HTMLElement>) {
     // Publish/save buttons perform their own flush. Avoid racing a blur save
     // against that explicit action; navigation and moving fields still save.
-    if (card.dirty && !(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('button'))) void save(card);
+    if (!locked && !busyRef.current && card.dirty && !(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('button, [data-batch-review]'))) void save(card);
   }
 
-  async function publish(card: Card) {
-    if (busy || pending || card.publishing || card.published || !card.id) return;
-    let body: string;
-    try { body = JSON.stringify(buildPublishedListing({ clientListingId: card.clientListingId, form: card.form, touched: card.touched }, card.id, details)); }
-    catch (error) { replace(card.id, current => ({ ...current, error: (error as Error).message })); return; }
-    if (!window.confirm(`確定公開刊登「${card.form.title}」？照片、售價與約略位置將出現在商品地圖。`)) return;
-    setBusy(true);
+  async function commitReviewedCard(card: Card, body: string, epoch: number): Promise<boolean> {
     // Freeze the reviewed card before any await: a late AI poll must not
     // replace the fields on screen while this exact confirmed body is sent.
     replace(card.id, current => ({ ...current, form: card.form, touched: card.touched,
       ai: card.ai, draft: card.draft, publishing: true, error: '' }));
     if (card.dirty && !await save(card)) {
       replace(card.id, current => ({ ...current, publishing: false }));
-      setBusy(false); return;
+      return false;
     }
+    if (epoch !== lifetime.current) return false;
     // Keep the exact request for an uncertain network outcome. Replaying it
     // uses the server's clientListingId idempotency key, never a new listing.
     try { localStorage.setItem(pendingKey(userId!), body); }
     catch {
       replace(card.id, current => ({ ...current, publishing: false,
         error: '此瀏覽器無法安全記錄刊登操作；商品尚未送出。請允許網站儲存空間後重試。' }));
-      setBusy(false);
-      return;
+      return false;
     }
     setPending(body);
     try {
@@ -222,22 +289,52 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       if (!isUuid(result.id) || result.status !== 'ACTIVE') throw new Error('刊登結果尚未確認');
       localStorage.removeItem(pendingKey(userId!)); setPending('');
       replace(card.id, current => ({ ...current, publishing: false, published: true, dirty: false }));
-      setMessage('商品已刊登。其他照片仍是私人草稿。');
+      return true;
     } catch (error) {
       if (error instanceof ApiFailure && [400, 403, 422].includes(error.status)) {
         localStorage.removeItem(pendingKey(userId!)); setPending('');
         replace(card.id, current => ({ ...current, publishing: false, error: `未刊登：${error.message}` }));
-        setBusy(false);
-        return;
+        return false;
       }
       replace(card.id, current => ({ ...current, publishing: false, error: `刊登結果待確認：${(error as Error).message}` }));
       setMessage('請先確認上一筆刊登結果；系統不會用新識別碼重複建立商品。');
-    } finally { setBusy(false); }
+      return false;
+    }
+  }
+
+  async function publishReviewed(selected: Card[]) {
+    if (busyRef.current || locked || unresolvedUploads.length || !selected.length ||
+      selected.some(card => card.published || card.publishing || card.saving || savingIds.current.has(card.id))) return;
+    // Validate and freeze the entire reviewed set before showing confirmation.
+    // Publication is sequential: a failed or unknown item stops the next item.
+    const requests: { card: Card; body: string }[] = [];
+    for (const card of selected) {
+      const issue = firstListingPublishIssue(card, card.id, details);
+      if (issue) { showIssue(card, issue); return; }
+      if (!card.confirmed) { showIssue(card, { field: 'review', message: '請先逐欄確認這件商品的照片、內容及售價。' }); return; }
+      requests.push({ card, body: JSON.stringify(buildPublishedListing(card, card.id, details)) });
+    }
+    const title = selected.length === 1 ? `「${selected[0].form.title}」` : `已逐件確認的 ${selected.length} 件商品`;
+    if (!window.confirm(`確定公開刊登${title}？照片、售價與約略位置將出現在商品地圖。`)) return;
+    busyRef.current = true; setBusy(true); setInvalid(null); setMessage('');
+    const epoch = lifetime.current;
+    let completed = 0;
+    try {
+      for (const request of requests) {
+        if (epoch !== lifetime.current) return;
+        if (!await commitReviewedCard(request.card, request.body, epoch)) {
+          if (completed) setMessage(`已確認刊登 ${completed} 件；本件未完成或結果待確認，後續 ${requests.length - completed - 1} 件尚未送出。請先處理提示。`);
+          return;
+        }
+        completed++;
+      }
+      setMessage(selected.length === 1 ? '商品已刊登。其他照片仍是私人草稿。' : `已確認刊登 ${completed} 件商品。未勾選的照片仍是私人草稿。`);
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function reconcile() {
-    if (!pending || busy) return;
-    setBusy(true);
+    if (!pending || busyRef.current) return;
+    busyRef.current = true; setBusy(true);
     try {
       const parsed = JSON.parse(pending) as { mediaIds?: string[] };
       const result = await api<{ id: unknown; status: string }>(token!, '/listings', { method: 'POST', body: pending });
@@ -246,15 +343,15 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       setCards(old => old.map(card => parsed.mediaIds?.includes(card.id) ? { ...card, published: true, dirty: false } : card));
       setMessage('前次刊登已確認，不會建立重複商品。');
     } catch (error) { setMessage(`前次刊登仍待確認：${(error as Error).message}`); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   }
 
   async function remove(id: string) {
-    if (busy || pending || !window.confirm('確定刪除這張尚未刊登的私人商品照片？')) return;
-    setBusy(true);
+    if (busyRef.current || pending || !window.confirm('確定刪除這張尚未刊登的私人商品照片？')) return;
+    busyRef.current = true; setBusy(true);
     try { await api<void>(token!, `/listing-media/${id}`, { method: 'DELETE' }); setCards(old => old.filter(card => card.id !== id)); }
     catch (error) { replace(id, card => ({ ...card, error: (error as Error).message })); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   }
 
   function abandonUploadCheck() {
@@ -267,9 +364,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   function locate() {
+    if (busyRef.current || locked) return;
+    const epoch = lifetime.current;
     if (!navigator.geolocation) { setMessage('此瀏覽器無法取得位置；請手動填寫縣市、行政區及座標。'); return; }
     navigator.geolocation.getCurrentPosition(position => {
-      setDetails(old => ({ ...old, latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) }));
+      if (epoch !== lifetime.current || busyRef.current || pendingRef.current) return;
+      updateDetails({ latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) });
       setMessage('已取得座標。請再填寫縣市與行政區；公開地圖只顯示約 2 公里網格位置。');
     }, () => setMessage('無法取得位置；可手動填寫座標。'), { enableHighAccuracy: false, timeout: 10000 });
   }
@@ -302,47 +402,49 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
     {cards.some(card => !card.published) && <section className="rounded-3xl bg-white p-6 shadow-sm sm:p-8" aria-label="共同刊登設定">
       <h2 className="text-xl font-semibold">共同刊登設定</h2>
-      <p className="mt-2 text-sm text-stone-500">只在你按下各商品的「確認並刊登」後使用。可先編輯草稿，不需要立刻提供位置。</p>
+      <p className="mt-2 text-sm text-stone-500">同一批商品使用以下地點、交付方式與失效日期。可先編輯私人草稿；公開前請逐件核對。修改共同設定後須重新確認各件商品。</p>
+      <fieldset disabled={locked}>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">縣市<input className="mt-1 w-full rounded-xl border p-3" value={details.county} maxLength={30} onChange={event => setDetails(old => ({ ...old, county: event.target.value, consent: false }))} placeholder="例如：臺北市" /></label>
-        <label className="text-sm">行政區<input className="mt-1 w-full rounded-xl border p-3" value={details.district} maxLength={30} onChange={event => setDetails(old => ({ ...old, district: event.target.value, consent: false }))} placeholder="例如：中山區" /></label>
-        <label className="text-sm">緯度<input className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={details.latitude} onChange={event => setDetails(old => ({ ...old, latitude: event.target.value, consent: false }))} placeholder="25.05" /></label>
-        <label className="text-sm">經度<input className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={details.longitude} onChange={event => setDetails(old => ({ ...old, longitude: event.target.value, consent: false }))} placeholder="121.53" /></label>
+        <label className="text-sm">縣市<input {...sharedProps('county')} className="mt-1 w-full rounded-xl border p-3" value={details.county} maxLength={30} onChange={event => updateDetails({ county: event.target.value })} placeholder="例如：臺北市" /></label>
+        <label className="text-sm">行政區<input {...sharedProps('district')} className="mt-1 w-full rounded-xl border p-3" value={details.district} maxLength={30} onChange={event => updateDetails({ district: event.target.value })} placeholder="例如：中山區" /></label>
+        <label className="text-sm">緯度（度）<input {...sharedProps('latitude')} className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={details.latitude} onChange={event => updateDetails({ latitude: event.target.value })} placeholder="25.05" /></label>
+        <label className="text-sm">經度（度）<input {...sharedProps('longitude')} className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={details.longitude} onChange={event => updateDetails({ longitude: event.target.value })} placeholder="121.53" /></label>
       </div>
-      <button className="mt-4 inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm" onClick={locate}><MapPin size={16} />使用目前位置</button>
+      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm"><p className="text-xs font-semibold text-blue-800">快捷選用 · 可略過並手動填寫</p><button className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2" onClick={locate}><MapPin size={16} />使用目前位置</button></div>
       <p className="mt-2 text-xs text-stone-500">送出前即轉為約 2 公里的網格點；伺服器也只保存該約略位置。請勿填住家門牌。</p>
       <div className="mt-5 flex flex-wrap gap-5 text-sm">
-        <label><input type="checkbox" checked={details.meetup} onChange={event => setDetails(old => ({ ...old, meetup: event.target.checked, consent: false }))} /> 面交</label>
-        <label><input type="checkbox" checked={details.shipping} onChange={event => setDetails(old => ({ ...old, shipping: event.target.checked, consent: false }))} /> 寄送</label>
-        <label><input type="checkbox" checked={details.negotiable} onChange={event => setDetails(old => ({ ...old, negotiable: event.target.checked, consent: false }))} /> 可議價</label>
+        <label><input {...sharedProps('delivery')} type="checkbox" checked={details.meetup} onChange={event => updateDetails({ meetup: event.target.checked })} /> 面交</label>
+        <label><input type="checkbox" checked={details.shipping} onChange={event => updateDetails({ shipping: event.target.checked })} /> 寄送</label>
+        <label><input type="checkbox" checked={details.negotiable} onChange={event => updateDetails({ negotiable: event.target.checked })} /> 可議價</label>
       </div>
-      <label className="mt-5 block text-sm">自訂失效日期（不填預設 30 天）<input type="date" className="mt-1 block rounded-xl border p-3" value={details.expiryDate} onChange={event => setDetails(old => ({ ...old, expiryDate: event.target.value, consent: false }))} /></label>
-      <label className="mt-5 flex items-start gap-3 text-sm"><input type="checkbox" checked={details.consent} onChange={event => setDetails(old => ({ ...old, consent: event.target.checked }))} />我已確認商品真實、照片與描述可公開，並同意將照片、售價及約略位置顯示在商品地圖。</label>
+      <label className="mt-5 block text-sm">自訂失效日期（不填預設 30 天）<input {...sharedProps('expiryDate')} type="date" className="mt-1 block rounded-xl border p-3" value={details.expiryDate} onChange={event => updateDetails({ expiryDate: event.target.value })} /></label>
+      <label className="mt-5 flex items-start gap-3 text-sm"><input {...sharedProps('consent')} type="checkbox" checked={details.consent} onChange={event => updateDetails({ consent: event.target.checked })} />我已確認商品真實、照片與描述可公開，並同意將照片、售價及約略位置顯示在商品地圖。</label>
+      </fieldset>
     </section>}
 
     <section className="space-y-5" aria-label="私人商品草稿">
       {ready && !cards.length && <p className="rounded-3xl bg-white p-8 text-center text-stone-500">還沒有私人商品照片，現在就拍第一件吧。</p>}
       {cards.map((card, index) => <article key={card.id} className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-start gap-5"><PrivatePhoto id={card.id} token={token} />
+        <div className="flex flex-wrap items-start gap-5"><PrivatePhoto id={card.id} token={token} label={card.published ? '已公開的商品實拍照片' : '僅本人可見的商品照片'} />
           <div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-widest text-stone-500">第 {index + 1} 件 · {card.published ? '已公開' : '私人草稿'}</p>
             <h3 className="mt-2 text-lg font-semibold">{card.form.title || '等待辨識或手動填寫'}</h3>
-            <p className="mt-2 text-sm text-stone-600">{card.ai === 'PENDING' || card.ai === 'PROCESSING' ? 'AI 正在排隊辨識…' : card.ai === 'COMPLETED' ? 'AI 已提供建議，請核對商品實況' : card.ai === 'FAILED' ? 'AI 暫時無法辨識，可重試或手動填寫' : aiAvailable === false ? '可手動填寫私人草稿' : '可請 AI 辨識'}</p>
+            <p className="mt-2 text-sm text-stone-600">{card.published ? '已刊登，可前往我的商品管理。' : card.ai === 'PENDING' || card.ai === 'PROCESSING' ? 'AI 正在排隊辨識…' : card.ai === 'COMPLETED' ? 'AI 已提供建議，請核對商品實況' : card.ai === 'FAILED' ? 'AI 暫時無法辨識，可重試或手動填寫' : aiAvailable === false ? '可手動填寫私人草稿' : '可請 AI 辨識'}</p>
             {card.draft && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">AI 參考價格：{card.draft.estimatedPriceLowTwd === null ? '無足夠依據' : `NT$${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}<br />{card.draft.priceBasis || '請自行核對市場價格'}<p className="mt-1 text-xs">AI 可能辨識錯誤；下方售價由賣家決定。</p></div>}
           </div>
         </div>
         {!card.published && <><div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <label className="text-sm">商品名稱<input className="mt-1 w-full rounded-xl border p-3" disabled={busy || card.saving} maxLength={100} value={card.form.title} onChange={event => updateField(card.id, 'title', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
-          <label className="text-sm">品牌（選填）<input className="mt-1 w-full rounded-xl border p-3" disabled={busy || card.saving} maxLength={60} value={card.form.brand} onChange={event => updateField(card.id, 'brand', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
-          <label className="text-sm">分類<select className="mt-1 w-full rounded-xl border p-3" disabled={busy || card.saving} value={card.form.category} onChange={event => updateField(card.id, 'category', event.target.value)} onBlur={event => saveOnBlur(card, event)}>{listingCategories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          <label className="text-sm">新舊狀態<select className="mt-1 w-full rounded-xl border p-3" disabled={busy || card.saving} value={card.form.condition} onChange={event => updateField(card.id, 'condition', event.target.value)} onBlur={event => saveOnBlur(card, event)}><option value="USED">二手</option><option value="NEW">全新</option></select></label>
-          <div className="text-sm"><label>賣家售價（TWD）<input className="mt-1 w-full rounded-xl border p-3" disabled={busy || card.saving} inputMode="decimal" value={card.form.price} onChange={event => updateField(card.id, 'price', event.target.value)} onBlur={event => saveOnBlur(card, event)} placeholder="請填寫或確認售價" /></label>
+          <label className="text-sm">商品名稱<input {...fieldProps(card.id, 'title')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} maxLength={100} value={card.form.title} onChange={event => updateField(card.id, 'title', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm">品牌（選填）<input {...fieldProps(card.id, 'brand')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} maxLength={60} value={card.form.brand} onChange={event => updateField(card.id, 'brand', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm">分類<select {...fieldProps(card.id, 'category')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} value={card.form.category} onChange={event => updateField(card.id, 'category', event.target.value)} onBlur={event => saveOnBlur(card, event)}>{listingCategories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label className="text-sm">新舊狀態<select {...fieldProps(card.id, 'condition')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} value={card.form.condition} onChange={event => updateField(card.id, 'condition', event.target.value)} onBlur={event => saveOnBlur(card, event)}><option value="USED">二手</option><option value="NEW">全新</option></select></label>
+          <div className="text-sm"><label>賣家售價（TWD）<input {...fieldProps(card.id, 'price')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} inputMode="decimal" value={card.form.price} onChange={event => updateField(card.id, 'price', event.target.value)} onBlur={event => saveOnBlur(card, event)} placeholder="請填寫或確認售價" /></label>
             {card.draft && !card.touched.price && card.draft.estimatedPriceLowTwd !== null && <p className="mt-1 text-xs text-amber-800">此售價由 AI 參考區間中間值預填，不是已驗證行情；發布前請確認或修改。</p>}
           </div>
-          <label className="text-sm sm:col-span-2">商品說明<textarea className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={busy || card.saving} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm sm:col-span-2">商品說明<textarea {...fieldProps(card.id, 'description')} className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={locked} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
         </div>
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
           {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} sourceMediaId={card.id}
-            beforeStart={async () => card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
+            beforeStart={async () => !busyRef.current && !locked && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
               !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
             onApproved={async () => {
               const rows = await loadPrivateMediaPages(cursor => api<unknown>(token,
@@ -352,15 +454,18 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
               if (!updated) throw new Error('PRIVATE_DRAFT_NOT_FOUND');
               replace(card.id, () => fromMedia(updated));
             }} />}
-          {card.error && <p role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
+          <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={locked || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
+          {card.error && <p id={`listing-error-${card.id}`} role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
             {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
             <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={busy || !!pending || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={busy || !!pending || card.saving || card.publishing} onClick={() => void publish(card)}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={locked || !!unresolvedUploads.length || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
             <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={busy || !!pending} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
           </div>
         </>}
       </article>)}
     </section>
+    {cards.some(card => !card.published) && <div className="rounded-2xl border border-stone-200 bg-white p-5"><p className="mb-3 text-sm text-stone-600">僅送出已逐件核對的商品；任何一件失敗或結果待確認時，後續商品會停止送出。</p><button className="min-h-11 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white" disabled={locked || !!unresolvedUploads.length || !confirmedCards.length || confirmedCards.some(card => card.saving)} onClick={() => void publishReviewed(confirmedCards)}>刊登已逐件確認的商品（{confirmedCards.length}）</button></div>}
+    {cards.some(card => card.published) && <Link to="/my-listings" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-5 py-3 text-sm text-blue-700">前往我的商品查看與管理</Link>}
   </div>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildPublishedListing, emptyListingDraft, mergeAiDraft, parseAiState, prepareListingUploadFile, sameSellerContent } from './listingBatch';
+import { buildPublishedListing, emptyListingDraft, firstListingPublishIssue, mergeAiDraft, parseAiState, prepareListingUploadFile, sameSellerContent } from './listingBatch';
 import type { AiDraft, PublishDetails, SellerDraft } from './listingBatch';
 
 const mediaId = '11111111-1111-4111-8111-111111111111';
@@ -12,6 +12,30 @@ const details: PublishDetails = { county: '臺北市', district: '中山區', la
   negotiable: false, expiryDate: '', consent: true };
 
 describe('web listing batch publication boundary', () => {
+  it.each([
+    ['title', { title: '' }, {}], ['description', { description: '' }, {}],
+    ['brand', { brand: '長'.repeat(61) }, {}], ['price', { price: '3.141' }, {}],
+    ['condition', { condition: 'BROKEN' }, {}], ['category', { category: 'invalid' }, {}],
+    ['county', {}, { county: '' }], ['district', {}, { district: '' }],
+    ['latitude', {}, { latitude: 'NaN' }], ['longitude', {}, { longitude: '130' }],
+    ['delivery', {}, { meetup: false, shipping: false }], ['consent', {}, { consent: false }],
+    ['expiryDate', {}, { expiryDate: '2027-02-30' }],
+  ])('returns the actionable %s field under exactly the same publication constraints', (field, formChange, sharedChange) => {
+    const changed = { ...draft, form: { ...draft.form, ...formChange } } as SellerDraft;
+    const shared = { ...details, ...sharedChange };
+    const issue = firstListingPublishIssue(changed, mediaId, shared);
+    expect(issue?.field).toBe(field);
+    expect(() => buildPublishedListing(changed, mediaId, shared)).toThrow(issue!.message);
+  });
+
+  it('validates the Taiwan end-of-day expiry boundary and optional server default', () => {
+    expect(firstListingPublishIssue(draft, mediaId, details)).toBeNull();
+    const dated = { ...details, expiryDate: '2027-01-31' };
+    expect(firstListingPublishIssue(draft, mediaId, dated, new Date('2027-01-31T15:59:59.998Z'))).toBeNull();
+    expect(firstListingPublishIssue(draft, mediaId, dated, new Date('2027-01-31T15:59:59.999Z'))?.field).toBe('expiryDate');
+    expect(firstListingPublishIssue(draft, 'invalid-id', details)?.field).toBe('photo');
+    expect(firstListingPublishIssue({ ...draft, form: { ...draft.form, price: '0' } }, mediaId, details)).toBeNull();
+  });
   it('never overwrites a seller-edited price with an AI midpoint', () => {
     const form = mergeAiDraft(draft.form, draft.touched, ai);
     expect(form.price).toBe('350');

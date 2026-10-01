@@ -1,6 +1,8 @@
 # Wishlist.ai 網頁／APP 2.0.12 完整功能對齊驗收
 
-目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能；保留網頁原有功能。這不是 APP 發布成功或付款正式開通的聲明。
+目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
+
+目前狀態：目標持續進行；90%是待驗收門檻，不是已達成分數。需完成逐頁實際瀏覽器截圖與評分，才可宣稱視覺通過。
 
 ## 最新目標修正：僅網頁、核准示意圖相似度至少90%（2026-10-01）
 
@@ -19,8 +21,8 @@
 | 功能 | APP 基準／後台 | 網頁狀態 | 必要驗收 |
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
-| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | sell 既有，新增設定入口；待完整比對 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
-| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | sell 既有；待比對 | 日期切月穩定、預設30天、未填欄定位高亮 |
+| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機補齊逐件核對與批次發布；隔離瀏覽器2張真照片上傳→手動草稿→2件發布→我的商品已驗證；真AI與完整恢復仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
+| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；日曆切月仍待實測 | 日期切月穩定、預設30天、未填欄定位高亮 |
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 本機實作；版本與未知回應測試通過，待隔離DB實測 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、收合入口與拖放／鍵盤排序已實作；待完整queue恢復驗證 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作 |
@@ -189,3 +191,17 @@
 - 390×844恢復頁documentWidth375 <=390、頂部1個設定連結。保存 `wishlist-web-profile-pending-20261001.jpg`、`wishlist-web-profile-recovered-20261001.jpg`、`wishlist-web-profile-conflict-20261001.jpg`；尺寸已還原、驗收分頁已關閉。這些不是90%視覺評分或正式部署證據。
 - 最新前端54檔／817項全套及production build成功；後台50個單元檔／873項及build成功。獨立UTF8 loopback DB完整31份遷移，schema與DB無差異，19檔／294項真實HTTP／DB全套通過，包含新增profile10項（並行、取消競爭、回滾、跨owner、刪除cascade、middleware後撤銷session等）。件數不是分支／功能覆蓋率百分比；本批CI提交後須重新回讀。
 - 仍待完成：大頭照上傳的未知回應／重試完整流程與其他進階設定回歸、原有語言／註冊驗證重設／社交通知政策、真正MiniMax及跨端／provider證據、分類／旧detail／隱私分享與刪除、完整sell與日期／批次恢復、行銷4圖／免費修改／未知回執、owner狀態實際操作、PWA舊快取、全站效能／響應式、逐頁90%視覺審查及最終CI／合併／Railway部署回讀。全目標仍active，不以個資回執代替全部對齊。
+
+## 2026-10-01 第十一批：逐件核對、批次刊登與欄位定位（仍未部署）
+
+- 前一回合已將90%門檻明確加入文件頂部完整目標；本批保留完整功能對齊、APP風格不變與尚未評分的90%視覺審查。未把局部刊登驗收當成全網站完成。
+- 比對原生 `ListingBatchComposer` 後，網頁補上每件「我已逐欄確認…」及「刊登已逐件確認的商品（N）」。只送出勾選項目；共用一次最終公開確認，依序送出，遇到失敗或未知結果即停止後續商品。單件發布也不能跳過逐件核對。
+- 核對與實際發布共用 `firstListingPublishIssue`，商品名稱／說明／品牌／售價／照片／新舊／分類／縣市／行政區／緯度／經度／交付／公開同意／失效日期都有可操作的欄位。錯誤自動滾到該欄、聚焦、有限次閃爍及持續紅框，並用 `aria-invalid`／`aria-describedby`連結錯誤；減少動態偏好不閃爍。
+- 商品欄位、AI內容或辨識依據、共同地點／交付／日期／公開同意改動後取消舊核對；相同AI輪詢不取消。共同設定在送出及待確認時鎖住；同步操作鎖防快速重複點擊。切帳號或卸載後停止下一張上傳／下一件刊登，已送出照片保留原帳號查詢紀錄。
+- 實際瀏覽器发现失焦背景儲存會暫停下一欄編輯，導致連續輸入可能漏掉；移除背景儲存期間的欄位停用，保留較新表單內容為dirty。單件同步鎖避免重疊PUT，送出前仍要完成保存；未知保存回應與多分頁衝突恢復尚未完成，不能聲稱此處具備完整回執協定。
+- 以loopback真實編譯handler與既有隔離DB、新建合成帳號234／233驗收：實際相簿選2張自製橘燈／藍杯PNG，私密縮圖均載入；勾選時缺名稱則聚焦且紅框、內容補齊後缺縣市則定位到共同欄位。原生日曆鍵盤輸入與清空都取消核對及公开同意；自動化工具直接fill日期不足以證明React接收，最終以原生鍵盤變更及重繪後保留／清空狀態為證據。日曆彈窗跨月尚未驗證，不記為通過。
+- 一次確認後，後台attempts.listing=2、createdListings=2、每件各綁1張原照片及不同clientListingId；DB核對兩件status ACTIVE、expiryMode DEFAULT_30_DAYS、expiresAt-publishedAt正好30 days。網頁「我的商品」在售2件，名稱、照片、NT$350／NT$60與2026-10-31期限正確；改登入合成帳號233後只見其原有1件漫畫，不顯示234的2件管理資料。未碰真實Hank帳號或正式DB。
+- 批次確認曾因背景分頁的原生confirm使瀏覽器操作逾時；先回讀隔離後台attempts.listing=0，再用Chrome本任務分頁的實際確認視窗完成原操作，沒有重點發布或重啟後台。尺寸390×844、documentWidth375 <=390；保存 `wishlist-web-batch-missing-field-20261001.jpg`、`wishlist-web-batch-published-20261001.jpg`、`wishlist-web-batch-my-listings-20261001.jpg`、`wishlist-web-batch-account-isolation-20261001.jpg`。驗收分頁／Vite／loopback API／隔離PG已關閉，viewport還原；測試資料及私密照片只保留在隔離環境。
+- 完整client回歸曾出現PublicListing前景失效檢查的時序失敗：ready重繪後新effect尚未安裝，舊閉包仍為null。改用從mount持續存在的單一listener讀取最新ref，原斷言保留並補上聯絡／分享／定位全部移除及只註冊1次的證據。最後54檔841測試全部通過、TypeScript／Vite build通過；仍有主要JS／地圖chunk大小警告，效能門檻尚未通過。新提交CI需另外回讀，不借用前一提交的綠燈。
+- 此隔離驗收刻意關閉AI，並非MiniMax辨識／Flickr傳輸／跨平台完成證據。刊登原有plaintext、僅userId範圍的pending journal與POST重送式查核仍須改為加密API+帳號範圍、GET唯讀確認及明確重試／終止；上傳journal的scope／CAS／雜湊、私人草稿未知回執、照片移除恢復、真AI重試、行銷任務／四圖／免费修改、原生日期切月替代與完整公開ACK投影核對仍待完成。這些是部署前缺口，不因批次功能存在而刪除。
+- 其餘完整矩陣、正式Railway回讀及逐頁90%視覺審查继续保留；PR保持draft，沒有合併、沒有部署、目標維持active。

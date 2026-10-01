@@ -19,6 +19,12 @@ describe('web private batch listing flow', () => {
   let currentUploadId = '';
   let holdOldAccountList = false;
   let manyPrivateDrafts = 0;
+  let completedPrivateDrafts = false;
+  let aiGetStatus: 'PENDING' | 'COMPLETED' = 'COMPLETED';
+  let rejectPublicationAt = 0;
+  let losePublicationAt = 0;
+  let holdUploadAck = false;
+  let releaseUploadAck: (() => void) | undefined;
   let showUploadedPrivatePhoto = false;
   let showPendingPrivatePhoto = false;
   let holdSellerSave = false;
@@ -33,6 +39,12 @@ describe('web private batch listing flow', () => {
     currentUploadId = '';
     holdOldAccountList = false;
     manyPrivateDrafts = 0;
+    completedPrivateDrafts = false;
+    aiGetStatus = 'COMPLETED';
+    rejectPublicationAt = 0;
+    losePublicationAt = 0;
+    holdUploadAck = false;
+    releaseUploadAck = undefined;
     showUploadedPrivatePhoto = false;
     showPendingPrivatePhoto = false;
     holdSellerSave = false;
@@ -53,7 +65,10 @@ describe('web private batch listing flow', () => {
         if (manyPrivateDrafts) {
           const rows = Array.from({ length: manyPrivateDrafts }, (_, index) => ({
             id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
-            aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: null, sellerDraftVersion: 0,
+            aiDraftStatus: 'SKIPPED', aiDraft: null, sellerDraft: completedPrivateDrafts ? {
+              clientListingId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+              touched: {}, form: { title: `測試商品 ${index + 1}`, description: '賣家已核對照片及實際商品狀況。', brand: '', category: 'home', condition: 'USED', price: '350' },
+            } : null, sellerDraftVersion: 0,
           }));
           const cursor = new URL(path).searchParams.get('cursor');
           const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
@@ -74,6 +89,7 @@ describe('web private batch listing flow', () => {
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
       if (path.endsWith('/listing-media') && method === 'POST') {
         currentUploadId = String((init?.body as FormData).get('clientUploadId'));
+        if (holdUploadAck) await new Promise<void>(resolve => { releaseUploadAck = resolve; });
         if (loseUploadResponse) throw new Error('upload ACK lost');
         return { ok: true, status: 201, json: async () => ({ id: mediaId }) };
       }
@@ -83,12 +99,16 @@ describe('web private batch listing flow', () => {
         return { ok: true, status: 200, json: async () => ({ id: mediaId, listingId: null, wishItemId: null }) };
       }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
-      if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
-      if (path.endsWith(`/listing-media/${mediaId}/seller-draft`) && method === 'PUT') {
+      if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: aiGetStatus, draft: aiGetStatus === 'COMPLETED' ? ai : null }) };
+      if (/\/listing-media\/[0-9a-f-]{36}\/seller-draft$/.test(path) && method === 'PUT') {
         if (holdSellerSave) await new Promise<void>(resolve => { releaseSellerSave = resolve; });
-        return { ok: true, status: 200, json: async () => ({ mediaId, version: 1 }) };
+        return { ok: true, status: 200, json: async () => ({ mediaId: path.split('/').at(-2), version: JSON.parse(String(init?.body)).expectedVersion + 1 }) };
       }
       if (path.endsWith('/listings') && method === 'POST') {
+        if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === losePublicationAt)
+          throw new Error('response lost');
+        if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === rejectPublicationAt)
+          return { ok: false, status: 422, json: async () => ({ error: '商品資料需要重新確認' }) };
         if (loseFirstPublicationResponse) { loseFirstPublicationResponse = false; throw new Error('response lost'); }
         return { ok: true, status: 201, json: async () => ({ id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }) };
       }
@@ -96,6 +116,200 @@ describe('web private batch listing flow', () => {
     }));
   });
   afterEach(() => vi.restoreAllMocks());
+
+  function fillSharedDetails() {
+    fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
+    fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
+    fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+  }
+
+  it('focuses and highlights the exact missing field when review cannot be checked', async () => {
+    showUploadedPrivatePhoto = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');
+    const review = screen.getByLabelText(/我已逐欄確認第 1 件/);
+    fireEvent.click(review);
+    expect(review).not.toBeChecked();
+    expect(screen.getByLabelText('縣市')).toHaveFocus();
+    expect(screen.getByLabelText('縣市')).toHaveAttribute('aria-invalid', 'true');
+    fillSharedDetails();
+    fireEvent.change(screen.getByLabelText('賣家售價（TWD）'), { target: { value: '' } });
+    fireEvent.click(review);
+    expect(screen.getByLabelText('賣家售價（TWD）')).toHaveFocus();
+    expect(screen.getByLabelText('賣家售價（TWD）')).toHaveAttribute('data-highlighted', 'true');
+    expect(screen.getByLabelText('賣家售價（TWD）')).toHaveAccessibleDescription(/請填寫有效售價/);
+    expect(screen.getByLabelText('縣市')).not.toHaveAttribute('aria-invalid');
+    expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
+  });
+
+  it('requires review even when all content and public consent are filled', async () => {
+    showUploadedPrivatePhoto = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');
+    fillSharedDetails();
+    fireEvent.click(screen.getByText('確認並刊登'));
+    expect(screen.getByLabelText(/我已逐欄確認第 1 件/)).toHaveFocus();
+    expect(await screen.findByText('請先逐欄確認這件商品的照片、內容及售價。')).toBeInTheDocument();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
+  });
+
+  it('invalidates review after individual edits or shared expiry and consent changes', async () => {
+    showUploadedPrivatePhoto = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');
+    fillSharedDetails();
+    const review = screen.getByLabelText(/我已逐欄確認第 1 件/);
+    fireEvent.click(review);
+    expect(review).toBeChecked();
+    fireEvent.change(screen.getByLabelText('商品名稱'), { target: { value: '已確認正常的檯燈' } });
+    expect(review).not.toBeChecked();
+    fireEvent.click(review);
+    fireEvent.change(screen.getByLabelText(/自訂失效日期/), { target: { value: '2030-01-31' } });
+    expect(review).not.toBeChecked();
+    expect(screen.getByLabelText(/我已確認商品真實/)).not.toBeChecked();
+    fireEvent.click(review);
+    expect(screen.getByLabelText(/我已確認商品真實/)).toHaveFocus();
+    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(review);
+    expect(review).toBeChecked();
+    fireEvent.change(screen.getByLabelText(/自訂失效日期/), { target: { value: '' } });
+    expect(review).not.toBeChecked();
+    expect(screen.getByLabelText(/自訂失效日期/)).toHaveValue('');
+    expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
+  });
+
+  it('keeps review on identical polls but resets it on a new AI suggestion', async () => {
+    showPendingPrivatePhoto = true;
+    aiGetStatus = 'PENDING';
+    let tick: (() => void) | undefined;
+    const original = window.setInterval.bind(window);
+    vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout, ...args) => {
+      if (timeout === 3000) { tick = handler as () => void; return 1; }
+      return original(handler, timeout, ...args);
+    });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('賣家確認的檯燈');
+    fillSharedDetails();
+    const review = screen.getByLabelText(/我已逐欄確認第 1 件/);
+    fireEvent.click(review);
+    await act(async () => tick!());
+    expect(review).toBeChecked();
+    aiGetStatus = 'COMPLETED';
+    await act(async () => tick!());
+    expect(review).not.toBeChecked();
+    expect(screen.getByDisplayValue('二手檯燈')).toBeInTheDocument();
+  });
+
+  it('publishes only checked items with one batch confirmation and distinct original IDs', async () => {
+    manyPrivateDrafts = 3; completedPrivateDrafts = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('測試商品 1');
+    fillSharedDetails();
+    const reviews = screen.getAllByLabelText(/我已逐欄確認第/);
+    fireEvent.click(reviews[0]); fireEvent.click(reviews[2]);
+    fireEvent.click(screen.getByText('刊登已逐件確認的商品（2）'));
+    await screen.findByText('已確認刊登 2 件商品。未勾選的照片仍是私人草稿。');
+    const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(posts).toHaveLength(2);
+    expect(posts.map(post => JSON.parse(post.body!).title)).toEqual(['測試商品 3', '測試商品 1']);
+    expect(new Set(posts.map(post => JSON.parse(post.body!).clientListingId)).size).toBe(2);
+    expect(screen.getByDisplayValue('測試商品 2')).toBeInTheDocument();
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText('前往我的商品查看與管理')).toHaveAttribute('href', '/my-listings');
+  });
+
+  it('stops after a failed middle item and never sends the later reviewed item', async () => {
+    manyPrivateDrafts = 3; completedPrivateDrafts = true; rejectPublicationAt = 2;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('測試商品 1');
+    fillSharedDetails();
+    for (const review of screen.getAllByLabelText(/我已逐欄確認第/)) fireEvent.click(review);
+    fireEvent.click(screen.getByText('刊登已逐件確認的商品（3）'));
+    await screen.findByText(/已確認刊登 1 件；本件未完成/);
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(2);
+    expect(screen.getByDisplayValue('測試商品 1')).toBeInTheDocument();
+    expect(screen.getByText(/未刊登：商品資料需要重新確認/)).toBeInTheDocument();
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
+  });
+
+  it('stops the remaining batch when a middle publication has an unknown outcome', async () => {
+    manyPrivateDrafts = 3; completedPrivateDrafts = true; losePublicationAt = 2;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('測試商品 1');
+    fillSharedDetails();
+    for (const review of screen.getAllByLabelText(/我已逐欄確認第/)) fireEvent.click(review);
+    fireEvent.click(screen.getByText('刊登已逐件確認的商品（3）'));
+    await screen.findByText('前次刊登結果尚未確認');
+    const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(posts).toHaveLength(2);
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBe(posts[1].body);
+    expect(screen.getByLabelText('縣市')).toBeDisabled();
+    expect(screen.getByDisplayValue('測試商品 1')).toBeDisabled();
+    expect(screen.getByText(/刊登已逐件確認的商品/)).toBeDisabled();
+    expect(screen.getByText(/已確認刊登 1 件；本件未完成/)).toHaveTextContent('後續 1 件尚未送出');
+  });
+
+  it('stops uploading the next photo after the account changes while the first ACK is pending', async () => {
+    holdUploadAck = true;
+    const view = render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    await waitFor(() => expect(input).toBeEnabled());
+    fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' }), new File(['cup'], 'cup.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(releaseUploadAck).toBeDefined());
+    view.rerender(<MemoryRouter><AuthContext.Provider value={{ ...auth, user: { id: 20, phoneNumber: 'other' }, token: 'other-session' }}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText('還沒有私人商品照片，現在就拍第一件吧。');
+    await act(async () => releaseUploadAck!());
+    expect(calls.filter(call => call.path.endsWith('/listing-media') && call.method === 'POST')).toHaveLength(1);
+    expect(calls.some(call => call.path.endsWith('/ai-draft') && call.method === 'POST')).toBe(false);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:19')).toContain(currentUploadId);
+    expect(localStorage.getItem('wishlist:listing-upload-pending:20')).toBeNull();
+    expect(screen.queryByDisplayValue('二手檯燈')).toBeNull();
+  });
+
+  it('locks shared settings and rejects rapid duplicate publication while saving', async () => {
+    showUploadedPrivatePhoto = true; holdSellerSave = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');
+    fillSharedDetails();
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
+    const publish = screen.getByText('確認並刊登');
+    fireEvent.click(publish); fireEvent.click(publish);
+    await waitFor(() => expect(releaseSellerSave).toBeDefined());
+    expect(screen.getByLabelText('縣市')).toBeDisabled();
+    expect(screen.getByLabelText(/自訂失效日期/)).toBeDisabled();
+    expect(screen.getByLabelText(/我已逐欄確認第 1 件/)).toBeDisabled();
+    await act(async () => releaseSellerSave!());
+    await screen.findByText('商品已刊登。其他照片仍是私人草稿。');
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
+    expect(window.confirm).toHaveBeenCalledOnce();
+  });
+
+  it('allows the next field to be edited while background save is pending and retains the newer draft', async () => {
+    showUploadedPrivatePhoto = true; holdSellerSave = true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');
+    const title = screen.getByLabelText('商品名稱');
+    const description = screen.getByLabelText('商品說明');
+    fireEvent.change(title, { target: { value: '手動核對後的檯燈' } });
+    fireEvent.blur(title, { relatedTarget: description });
+    await waitFor(() => expect(releaseSellerSave).toBeDefined());
+    expect(description).not.toBeDisabled();
+    fireEvent.change(description, { target: { value: '儲存期間仍可輸入的最新商品說明。' } });
+    fireEvent.blur(description, { relatedTarget: screen.getByLabelText('賣家售價（TWD）') });
+    expect(calls.filter(call => call.path.endsWith('/seller-draft') && call.method === 'PUT')).toHaveLength(1);
+    await act(async () => releaseSellerSave!());
+    expect(description).toHaveValue('儲存期間仍可輸入的最新商品說明。');
+    expect(screen.getByText('儲存私人草稿')).toBeEnabled();
+    holdSellerSave = false;
+    fireEvent.click(screen.getByText('儲存私人草稿'));
+    await screen.findByText('已儲存');
+    const saves = calls.filter(call => call.path.endsWith('/seller-draft') && call.method === 'PUT');
+    expect(saves).toHaveLength(2);
+    expect(JSON.parse(saves[1].body!)).toMatchObject({ expectedVersion: 1, draft: { form: { description: '儲存期間仍可輸入的最新商品說明。' } } });
+  });
 
   it('restores every returned private draft even when another device exceeded one capture batch', async () => {
     manyPrivateDrafts = 13;
@@ -131,9 +345,10 @@ describe('web private batch listing flow', () => {
 
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
-    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
-    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
     const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
@@ -169,9 +384,10 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('品牌（選填）'), { target: { value: '自有品牌' } });
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
-    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
-    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await waitFor(() => expect(releaseSellerSave).toBeDefined());
     await act(async () => { aiTick!(); });
@@ -190,9 +406,10 @@ describe('web private batch listing flow', () => {
     await screen.findByDisplayValue('二手檯燈');
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
-    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
-    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await screen.findByText(/前次刊登結果尚未確認/);
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeTruthy();
@@ -211,9 +428,10 @@ describe('web private batch listing flow', () => {
     await screen.findByDisplayValue('二手檯燈');
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
-    fireEvent.change(screen.getByLabelText('緯度'), { target: { value: '25.05' } });
-    fireEvent.change(screen.getByLabelText('經度'), { target: { value: '121.53' } });
+    fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
+    fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     const realSetItem = localStorage.setItem.bind(localStorage);
     vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
       if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'QuotaExceededError');

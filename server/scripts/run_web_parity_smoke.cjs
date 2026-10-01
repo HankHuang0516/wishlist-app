@@ -27,7 +27,7 @@ const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userControl
 const { getProfileOperation, submitProfileOperation, abandonProfileOperation } = require('../dist/controllers/profileUpdateController');
 const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
 const { marketingAvailability } = require('../dist/controllers/marketingController');
-const { searchListings } = require('../dist/controllers/listingController');
+const { searchListings, createListing, myListings } = require('../dist/controllers/listingController');
 const { getMatchWishes, matchWishListings } = require('../dist/controllers/wishlistMatchController');
 const { authenticateToken } = require('../dist/middleware/auth');
 const { getListing } = require('../dist/controllers/listingController');
@@ -39,16 +39,17 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, dropped = { profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { listing: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
 // The later commit/recovery check is performed separately with the real API.
 app.post('/__test/reject-next-photo-removal', (_req, res) => { rejectRemoval = true; res.json({ syntheticOnly: true, armed: true }); });
 app.use((req, res, next) => {
-  const kind = req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
+  const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
     req.method === 'POST' && /^\/api\/native-wishes\/lists\/[^/]+\/items$/.test(req.path) ? 'wish' :
@@ -76,6 +77,8 @@ app.get('/api/users/me/ai-usage', authenticateToken, getAiUsage);
 app.get('/api/users/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
 app.get('/api/marketing/availability', authenticateToken, marketingAvailability);
 app.get('/api/listings', searchListings);
+app.post('/api/listings', authenticateToken, createListing);
+app.get('/api/listings/mine', authenticateToken, myListings);
 app.get('/api/listings/match-wishes', authenticateToken, getMatchWishes);
 app.get('/api/listings/matches', authenticateToken, matchWishListings);
 app.get('/api/listings/:id', getListing);
@@ -102,6 +105,7 @@ app.get('/__test/state', async (_req, res) => {
     messageCount: await prisma.message.count({ where: { conversationId: { in: rooms.map(room => room.id) } } }),
     wishes: await prisma.item.findMany({ where: { wishlist: { userId: { in: users.map(user => user.id) } } }, select: { id: true, wishlistId: true, aiStatus: true, imageUrl: true } }),
     photos: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, clientUploadId: { not: null } }, select: { id: true, clientUploadId: true, wishItemId: true, byteSize: true, width: true, height: true } }),
+    createdListings: await prisma.listing.findMany({ where: { ownerUserId: users[0].id }, select: { id: true, title: true, status: true, clientListingId: true, expiryMode: true, expiresAt: true, media: { select: { id: true } } } }),
     photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });

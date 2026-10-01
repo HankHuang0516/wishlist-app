@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { MapPin, Share2 } from 'lucide-react';
 import { API_URL } from '../config';
@@ -14,6 +14,8 @@ export default function PublicListingPage() {
 }
 function PublicListingSession({ id, token, userId }: { id?: string; token: string | null; userId: number | null }) {
   const [listing, setListing] = useState<(PublicListing & { version: number }) | null>(null);
+  const listingRef = useRef(listing);
+  listingRef.current = listing;
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [shareNotice, setShareNotice] = useState(''), [report, setReport] = useState(false), [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -36,10 +38,14 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     return () => controller.abort();
   }, [id, attempt]);
   useEffect(() => {
-    const check = () => { if (listing && Date.parse(listing.expiresAt) <= Date.now()) { setReport(false); setListing(null); setState('unavailable'); } };
+    // Keep one foreground listener from mount. Reading the current render via
+    // a ref avoids the old null closure between the ready render and its next
+    // passive effect, when a foreground event could otherwise be missed.
+    const check = () => { const current = listingRef.current;
+      if (current && Date.parse(current.expiresAt) <= Date.now()) { setReport(false); setListing(null); setState('unavailable'); } };
     const timer = window.setInterval(check, 30_000); document.addEventListener('visibilitychange', check);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', check); };
-  }, [listing]);
+  }, []);
 
   async function share() {
     if (!listing || Date.parse(listing.expiresAt) <= Date.now()) { setShareNotice('商品已失效，請重新載入核對。'); return; }

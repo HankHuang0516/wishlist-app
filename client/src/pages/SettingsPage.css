@@ -36,9 +36,16 @@
 .settings-private h2 { font-size: .875rem; }
 .settings-private { gap: .5rem; }
 .settings-avatar input { font-size: .8125rem; }
+.settings-avatar-upload:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 4px; }
+.settings-avatar-upload[aria-disabled="true"] { cursor: not-allowed; }
 .account-benefits summary:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 2px; }
 .account-benefits details[open] > summary > svg:last-child { transform: rotate(90deg); }
 @media (min-width: 640px) {
+  /* The approved desktop board uses small, consistent gaps between cards.
+     Do not compress expanded forms, feedback, or the mobile touch targets. */
+  .settings-hub.space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: .5rem; }
+  .settings-hub > section[aria-labelledby="settings-actions"] h2 { font-size: .875rem; line-height: 1.25rem; }
+  .settings-hub > fieldset .settings-avatar h3 { font-size: .875rem; line-height: 1.25rem; }
   .settings-hub > section[aria-labelledby="settings-actions"] a { min-height: 2rem; padding-top: .25rem; padding-bottom: .25rem; font-size: .75rem; }
   .settings-hub > section[aria-label="帳號安全"] > button { padding: .5rem .75rem; font-size: .875rem; }
   .settings-language button { height: 2rem; min-width: 9rem; }
@@ -55,4 +62,5 @@
   .settings-language { align-items: flex-start; }
   .settings-private { grid-template-columns: minmax(0, 1fr); }
   .settings-private > div { grid-column: 1; }
+  .settings-private button { width: 2.75rem; min-height: 2.75rem; }
 }

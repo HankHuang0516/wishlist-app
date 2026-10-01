@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
@@ -215,11 +215,12 @@ function SettingsSession() {
                 <CardContent className="flex items-center gap-4">
                     {/* Avatar Image & Overlay */}
                     <div
-                        className="relative group cursor-pointer w-16 h-16 shrink-0"
+                        className="settings-avatar-upload relative group cursor-pointer w-16 h-16 shrink-0 rounded-full"
                         role="button"
                         tabIndex={settings.locked || isUploading ? -1 : 0}
                         aria-disabled={settings.locked || isUploading}
                         aria-label="上傳大頭照"
+                        title="點擊或按 Enter 選擇大頭照"
                         onKeyDown={event => { if (!settings.locked && !isUploading && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInputRef.current?.click(); } }}
                         onClick={() => { if (!settings.locked && !isUploading) fileInputRef.current?.click(); }}
                     >
@@ -240,12 +241,14 @@ function SettingsSession() {
                                 <Camera className="w-8 h-8 text-white" />
                             </div>
                         </div>
+                        <span className="pointer-events-none absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-muji-primary text-white" aria-hidden="true"><Camera className="h-3 w-3" /></span>
 
                         <input
                             type="file"
                             ref={fileInputRef}
                             className="hidden"
                             accept="image/*"
+                            onClick={event => event.stopPropagation()}
                             onChange={handleAvatarUpload}
                         />
                     </div>
@@ -296,7 +299,7 @@ function SettingsSession() {
             <AccountSecurityPanel key={token} />
             <fieldset disabled={settings.locked || isUploading} className="min-w-0 border-0 p-0"><legend className="sr-only">私人資料與公開權限</legend>
             <div className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold">{t('settings.privacyTitle')}</h2>
+                <h2 className="flex items-center gap-2 text-lg font-semibold"><Truck className="h-5 w-5 shrink-0" aria-hidden="true" />{t('settings.privacyTitle')}</h2>
 
                 {/* Real Name */}
                 <Card>

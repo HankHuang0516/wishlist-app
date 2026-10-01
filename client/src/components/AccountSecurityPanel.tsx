@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, ChevronDown } from 'lucide-react';
+import { LockKeyhole, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -39,7 +39,7 @@ export default function AccountSecurityPanel({ initiallyOpen = false }: { initia
   return <section className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden" aria-label="帳號安全">
     <button type="button" className="w-full flex items-center gap-3 p-5 text-left font-semibold"
       aria-label="帳號安全" aria-expanded={open} aria-controls="account-security-fields" onClick={() => setOpen(value => !value)}>
-      <ShieldCheck aria-hidden className="h-5 w-5" /><span><span className="block">帳號安全</span><span className="block text-xs font-normal text-gray-500">密碼・登入裝置・登出・刪除帳號</span></span>
+      <LockKeyhole aria-hidden className="h-5 w-5" /><span><span className="block">帳號安全</span><span className="block text-xs font-normal text-gray-500">密碼・登入裝置・登出・刪除帳號</span></span>
       <ChevronDown aria-hidden className={`ml-auto h-5 w-5 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
     {open && <div id="account-security-fields" className="p-5 pt-0 space-y-4">

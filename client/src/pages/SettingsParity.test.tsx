@@ -37,6 +37,24 @@ describe('settings hub retains web-only functionality while adding app actions',
     expect(screen.getByRole('button', { name: /一鍵複製 AI 指令/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上傳大頭照' })).toHaveAttribute('tabindex', '0');
   });
+  it('keeps a visible camera affordance and opens the photo chooser from Enter and Space, not from focus', async () => {
+    const fetcher = vi.fn(async (url: string, _init?: RequestInit) => ok(url.endsWith('/availability') ? { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 0, paidPurchasesAvailable: false } : profile));
+    vi.stubGlobal('fetch', fetcher);
+    render(view());
+    const upload = await screen.findByRole('button', { name: '上傳大頭照' });
+    expect(upload).toHaveClass('settings-avatar-upload');
+    expect(upload.querySelector('span[aria-hidden="true"] svg')).toBeInTheDocument();
+    const chooser = upload.querySelector('input[type="file"]') as HTMLInputElement;
+    const click = vi.spyOn(chooser, 'click');
+    upload.focus(); expect(click).not.toHaveBeenCalled();
+    fireEvent.keyDown(upload, { key: 'Enter' });
+    expect(click).toHaveBeenCalledOnce();
+    fireEvent.keyDown(upload, { key: ' ' });
+    expect(click).toHaveBeenCalledTimes(2);
+    fireEvent.click(upload);
+    expect(click).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls.every(([, init]) => !(init as RequestInit | undefined)?.method)).toBe(true);
+  });
   it('does not show nickname saved just because a field blurred before an HTTP acknowledgement', async () => {
     let ack!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => init?.method === 'POST' ? new Promise(resolve => { ack = resolve; }) : ok(url.endsWith('/availability') ? { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 0, paidPurchasesAvailable: false } : profile)));

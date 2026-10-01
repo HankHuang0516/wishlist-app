@@ -192,7 +192,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           if (active && epoch === lifetime.current) await finishPhotoUpload(storedPhoto, result, epoch);
         }
       } catch (error) {
-        if (active && epoch === lifetime.current) setMessage(`恢復仍待確認：${(error as Error).message}。不會自動重新刊登。`);
+        if (active && epoch === lifetime.current) setMessage(removalConfirmed.current
+          ? '原移除回執已確認，但目前清單尚未同步；請只重試查核與清理，不要重送。'
+          : `恢復仍待確認：${(error as Error).message}。不會自動重新刊登。`);
       }
     })();
     return () => { active = false; };

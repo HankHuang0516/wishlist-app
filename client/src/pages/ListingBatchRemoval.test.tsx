@@ -67,6 +67,14 @@ describe('private photo removal original-operation recovery',()=>{
     expect(screen.queryByText('重試同一照片移除')).toBeNull();expect(pending.size).toBe(1);expect(exists).toBe(false);
     rejectRemovedInventory=false;fireEvent.click(screen.getByText('重試移除紀錄清理'));await waitFor(()=>expect(pending.size).toBe(0));expect(calls.filter(c=>c.method==='POST')).toHaveLength(1);
   });
+  it('reload with a confirmed receipt keeps truth if the following inventory refresh fails',async()=>{
+    const mounted=render(view());loseAck=true;await remove();await screen.findByText(/私人照片移除結果尚未確認/);mounted.unmount();
+    const originalFetch=fetch;let inventoryReads=0;vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      if(String(input).includes('/unused?purpose=')&&++inventoryReads>1)throw Error('refresh unavailable');return originalFetch(input,init);
+    }));
+    render(view());await screen.findByText('原移除回執已確認，但目前清單尚未同步；請只重試查核與清理，不要重送。');
+    expect(screen.queryByText('重試同一照片移除')).toBeNull();expect(screen.getByText('重試移除紀錄清理')).toBeEnabled();expect(pending.size).toBe(1);expect(calls.filter(c=>c.method==='POST')).toHaveLength(1);
+  });
   it('a late previous-account removal ACK cannot clear old evidence or change replacement account',async()=>{
     hold=true;const mounted=render(view());await remove();await waitFor(()=>expect(release).toBeTypeOf('function'));const key=await pendingRequestKey(API_URL,19,'listing-photo-remove');
     mounted.rerender(view({...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}));await screen.findByText('還沒有私人商品照片，現在就拍第一件吧。');await act(async()=>release!());expect(pending.has(key)).toBe(true);expect(screen.queryByText('原私人照片移除結果待確認')).toBeNull();

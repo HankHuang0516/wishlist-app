@@ -31,12 +31,14 @@
 
 - 新增第42份migration及`PhotoRemovalReceipt`，保存owner、原操作UUID、SHA-256、照片／草稿版本及REMOVED／CONFLICT／UNAVAILABLE／ABANDONED終態。照片與工作刪除不釋放原鍵，帳號刪除cascade；SQL CHECK拒絕空版本、錯誤終態／hash及非法移除ID。owner交易鎖內重新驗證JWT／API key，照片／使用中行銷檢查、刪除、清理outbox及回執同交易；寫回執失敗全部回滾。原生舊DELETE仍204／404，APP介面不改。
 - 網頁先保存API／帳號隔離AES-GCM原照片、版本、操作ID與hash，無法保存就不送HTTP；重開只GET原回執。明確重試原鍵、兩步hash-only安全停止、衝突比較與已確認僅清理分開。較新草稿、商品／願望綁定及PENDING／PROCESSING／REVIEW行銷照片均不能移除。已確認清單同步或本機清理失敗保留成功證據，沒有再次POST；跨帳號晚到及CAS較新journal保護保留。不可編輯照片的本頁文字可複製，不誤稱已刊登。
-- 新增21項真HTTP／PostgreSQL案例及16項前端契約／頁面回歸，涵蓋12並行同鍵只移除一次、晚到送出／停止競態、權限撤銷、綁定保護、原生相容、inactive生成圖清理、constraint、cascade、transaction rollback、重開GET-only、存儲故障、較新版比較及連續清單讀取失敗不倒退為未知。
+- 新增21項真HTTP／PostgreSQL案例及17項前端契約／頁面回歸，涵蓋12並行同鍵只移除一次、晚到送出／停止競態、權限撤銷、綁定保護、原生相容、inactive生成圖清理、constraint、cascade、transaction rollback、重開GET-only、存儲故障、較新版比較及連續清單讀取失敗不倒退為未知。
 - Chrome／compiled真handler／獨立UTF8 DB驗證：實際上傳合成檯燈，透過可見的臨時QA頁使用產品library保存加密journal（不POST）；CLI對同一合成照片送原移除，交易提交後故意回502。瀏覽器reload只GET恢復REMOVED，原POST仍1、照片清單0；SQL確認清理task仍1，畫面如實顯示檔案清理待後台。這不是永久刪除確認按鈕的真UI證據，未宣稱點過該按鈕。
 - 再真UI上傳合成照片，GET404時透過兩步安全停止回ABANDONED；CLI晚到同鍵POST仍ABANDONED、照片保留。實際UI儲存草稿（blur及明確儲存共2次）成v2，再以原v0合成操作得到CONFLICT。重開顯示v2／原名稱、說明及350，按核對後關閉不增加POST。最終回執3份（REMOVED／ABANDONED／CONFLICT各1）、移除POST3（含晚到與衝突）、GET4、停止POST1、照片1、私人草稿v2、公開新商品0、legacy DELETE0。初診斷誤預期v1而失敗，保留紀錄；以實際v2及browser比較為證據，沒有改產品行為或放寬測試斷言。
 - 390×844 documentWidth375≤390、設定導航1個。已檢視原尺寸未後製截圖：`web-parity-private-removal-recovered-390-20261002.png`、`web-parity-private-removal-conflict-390-20261002.png`，以及`wishlist-web-private-removal-evidence-20261002.json`均在原outputs。僅本機合成圖片、無MiniMax／Flickr／正式資料變更；頁面未送出文字跨reload持久保存仍待補，不能以本批比較取代該項。
-- 完整pre-push首次既有照片公開／過期測試15秒HTTP逾時，443/444，保留失敗log並停止本次未退出Jest。該suite改用一個自有loopback listener並於結束關閉，原斷言／期限不改，focused19項通過；這是測試連線穩定修正，不推定正式服務根因。第二輪完整pre-push退出0：後台56檔913通過＋3skipped、42 migrations／schema一致、HTTP DB30檔444項、網頁74檔1180項與build、原生42檔852項／typecheck／Expo及QA安全檢查。追加1項連續清單失敗回歸後完整網頁74檔1181再次通過；產品程式未再改。
-- 主JS742.45KB、地圖1088.99KB／worker507.81KB及PWA5856.20KiB警告保留。新提交CI另精確回讀，不沿用6eb0061成功；PR82仍draft／未合併部署，完整目標active。剩餘刊登未送出草稿、日曆完整選日、新商品管理動作、真MiniMax／Flickr／跨端、舊願望／註冊／全站英文／政策客服／PWA效能、正式migration preflight及Railway正式回讀依矩陣完成。首頁／設定各90%、功能100%、原站風格／單一設定入口與APP不改條件維持。
+- 完整pre-push首次既有照片公開／過期測試15秒HTTP逾時，443/444，保留失敗log並停止本次未退出Jest。該suite改用一個自有loopback listener並於結束關閉，原斷言／期限不改，focused19項通過；這是測試連線穩定修正，不推定正式服務根因。第二輪完整pre-push退出0：後台56檔913通過＋3skipped、42 migrations／schema一致、HTTP DB30檔444項、網頁74檔1180項與build、原生42檔852項／typecheck／Expo及QA安全檢查。追加連續清單失敗與重開已確認回執的清單失敗回歸，修正重開錯誤提示仍保留已確認結果；最新完整網頁74檔1182及TypeScript／Vite build通過。
+- 主JS742.55KB、地圖1088.99KB／worker507.81KB及PWA5856.31KiB警告保留。新提交CI另精確回讀，不沿用6eb0061成功；PR82仍draft／未合併部署，完整目標active。剩餘刊登未送出草稿、日曆完整選日、新商品管理動作、真MiniMax／Flickr／跨端、舊願望／註冊／全站英文／政策客服／PWA效能、正式migration preflight及Railway正式回讀依矩陣完成。首頁／設定各90%、功能100%、原站風格／單一設定入口與APP不改條件維持。
+
+- 首輪實作提交`abc99b73abc5348b6087b613c07e55e36adb1b3d`的[CI36900162379](https://github.com/HankHuang0516/wishlist-app/actions/runs/36900162379)已精確回讀completed/success，Client／Server／Native 3/3，網頁1181、後台913＋3skipped、真HTTP／DB444及42 migrations／schema一致。後續重開提示修正須另讀其提交CI，不以此成功代替。自有API／Vite／PG已停止、viewport還原、QA tab關閉，臨時QA HTML移除，合成照片／DB與證據保留；其他人的刪檔／.gitignore未stage。
 
 ## 2026-10-02 第二十八批：頭像未知回覆與只讀查核（仍未部署）
 

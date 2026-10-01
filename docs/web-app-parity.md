@@ -332,3 +332,14 @@
 - 390×844比較頁documentWidth375≤390、本人縮圖naturalWidth320；切換合成賣家153沒有買家的私人照片或草稿。原輸出目錄保存 `wishlist-web-seller-draft-unknown-20261001.jpg`、`wishlist-web-seller-draft-recovered-20261001.jpg`、`wishlist-web-seller-draft-conflict-20261001.jpg`、`wishlist-web-seller-draft-conflict-mobile-20261001.jpg`、`wishlist-web-seller-draft-saved-20261001.jpg`。較早desktop conflict截圖尚見舊「儲存中」標籤，修復以重開後mobile與最終保存截圖為準。
 - 邊界仍揭露：本頁儲存期間尚未送出的新修改僅保留於頁面及離頁提示，重新載入journal恢復的是原已送內容，尚非所有新編輯的持久autosave。行銷批准的晚到callback與草稿競態、混合待確認紀錄恢復、照片移除／舊紀錄來源、日曆切月、真AI／四圖／跨端、其餘完整矩陣、PWA升級／全站響應式效能及正式migration preflight／CI／合併／Railway回讀仍待補。本批main661.74KB、map1088.99KB、worker507.81KB及PWA5778.32KiB警告保留，不調高警告門檻。
 - 本批只使用loopback與合成資料，沒有正式帳號／資料、付款、郵件或外部provider變更；本機成功不等於部署。最新提交CI須精確回讀，不沿用第十六批bee6d81成功。PR82維持draft，整體目標active，未合併／部署。
+## 2026-10-01 第十八批：行銷批准編輯保護、只讀查核與四圖調整操作（仍未部署）
+
+- 網頁首頁／設定各至少90/100、沿用原網站风格、單一設定入口及APP風格不變；本批未重新評分。完整功能目標與正式部署門檻保留。
+- 行銷批准先取得所在頁的編輯保護：私人商品草稿保存／待確認、未儲存修改、刊登中及本人商品編輯中不能被行銷回覆覆蓋；取得後同步鎖住父頁欄位，直到後台工作及本人商品重新讀取完畢。晚到回覆核對目前照片／商品與頁面生命週期，不任意覆蓋新修改。
+- 區分「後台已確認套用但畫面讀取失敗」與「POST回覆遺失，結果未知」。保留原工作、原選圖順序及文案，凍結重送／選圖／調整，提供只GET的「查核原行銷套用結果」。未知結果須核對COMPLETED及原選图順序／文案；不一致或仍排隊不能誤報成功。已確認的工作照片與順序只讀；仍有免費調整機會時可另建一次調整。
+- 新增9項行銷元件案例及6項真父頁保護案例；行銷元件合計13項、父頁6項。涵蓋未儲存阻擋、延遲回覆期間鎖定、雙擊只送一次、原結果只讀恢復、不一致／未完成拒收、卸載釋放、完成後只讀、刷新失敗不抹除編輯。最新完整網頁60檔968項＋TypeScript／Vite通過；後台51檔876項單元通過。件數不是覆蓋率百分比；本批未宣稱重新本機執行原生或完整HTTP／DB，精確HEAD雲端CI另驗證。
+- loopback隔離harness新增明確opt-in的行銷候選素材交付與commit後502故障注入，仍先檢查隔離DB／localhost防護；只允許本次合成owner工作，不掛internalworker路由，callback token隨機且不輸出。素材是同一合成橘色檯燈的不同尺寸／編碼，不是MiniMax image-to-image四張創意成果，也未用Flickr或正式資料。
+- 實際Chrome合成賣家156在「我的商品→編輯資訊→額外選項」產生四圖候選；批准前公開商品只有原實拍1張。父頁未儲存修改阻擋批准，後台POST仍0。首次批准commit後502，畫面保持未知結果，按查核恢復v2與原排序，POST仍1。重新開頁只讀，沒有第二次批准。
+- 再調整槽2／4產生一個child，保留舊圖2、選新版圖4，鍵盤重排為2→1→4→3，明確批准後v3。回讀root／child各1個且COMPLETED，批准POST總2（原版與調整各一次），公開4張選用圖＋原實拍1張，舊圖2保留、新圖4替换、文案只一段。沒有再次免費調整入口；本批實際排序驗證是鍵盤，不宣稱實際滑鼠／觸控拖放已驗收。
+- 390×844實際網頁documentWidth375≤390，候選／原圖縮圖7張全部complete且naturalWidth240。原輸出目錄保存 `wishlist-web-marketing-approve-unknown-20261001.jpg`、`wishlist-web-marketing-revision-mobile-20261001.jpg`、`wishlist-web-marketing-approved-mobile-20261001.png`，最終截圖已檢視。已還原viewport、關閉自有QA tab、停止自有API／Vite／PG；合成資料、圖片、證據保留，沒有刪使用者檔案。
+- 仍待補：行銷建立／調整的持久原操作與恢復、批准原選圖快照跨reload持久化、嚴格工作投影與錯誤載入、非重疊polling／權限重新核對、真正MiniMax／Flickr四圖品質與跨端；私人新編輯autosave、照片移除未知回覆、日曆切月及其他完整矩陣、PWA升級、全站響應式／效能、正式migration preflight／最終CI／合併／Railway回讀。主JS664.75KB、地圖1088.99KB、worker507.81KB、PWA5781.26KiB警告保留，不調高門檻。PR82仍draft、整體目標active、未合併／部署。

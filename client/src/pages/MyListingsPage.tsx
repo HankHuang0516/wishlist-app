@@ -133,7 +133,18 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
           <h3 className="font-semibold">額外選項</h3>
           {source && ['ACTIVE', 'RESERVED'].includes(item.status) && !unconfirmed && <MarketingAssistantWeb token={token} sourceMediaId={source.id} listingId={item.id}
             beforeStart={async () => { if (busy || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) { setIssue('請先儲存商品資訊，再使用行銷小助手。'); return false; } return true; }}
-            onApproved={() => load()} />}
+            beforeApprove={async () => {
+              if (!active.current || running.current || unconfirmed || title !== item.title || description !== (item.description ?? '') || price !== (item.price === null ? '' : String(item.price))) return null;
+              running.current = true; setBusy(true);
+              return () => { if (active.current) { running.current = false; setBusy(false); } };
+            }}
+            onApproved={async () => {
+              const latest = parse(await api<unknown>(token, `/listings/${item.id}`));
+              if (!active.current) return;
+              if (latest.id !== item.id) throw new ManagedListingError();
+              setRows(old => old.map(row => row.id === item.id ? latest : row));
+              setTitle(latest.title); setDescription(latest.description ?? ''); setPrice(latest.price === null ? '' : String(latest.price));
+            }} />}
         </div>}
         {expiryId === item.id && <div className="rounded-xl bg-gray-50 p-4 space-y-3"><label htmlFor={`expiry-${item.id}`}>新的失效日期（台灣時間）</label>
           <Input id={`expiry-${item.id}`} type="date" min={earliestExtensionDate(item.expiresAt)} value={date} disabled={blocked} onChange={event => setDate(event.target.value)} />

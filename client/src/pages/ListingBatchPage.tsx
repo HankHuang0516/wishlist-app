@@ -638,13 +638,26 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} sourceMediaId={card.id}
             beforeStart={async () => !busyRef.current && !actionsLocked && !draftOperation.current && !savingIds.current.size && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
               !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
+            beforeApprove={async () => {
+              const current = cardsRef.current.find(item => item.id === card.id);
+              if (busyRef.current || pendingRef.current || draftOperation.current || savingIds.current.size || !ready ||
+                !current || current.dirty || current.saving || current.publishing || current.published) return null;
+              const epoch = lifetime.current;
+              busyRef.current = true; setBusy(true);
+              return () => { if (epoch === lifetime.current) { busyRef.current = false; setBusy(false); } };
+            }}
             onApproved={async () => {
+              const epoch = lifetime.current;
               const rows = await loadPrivateMediaPages(cursor => api<unknown>(token,
                 '/listing-media/unused?purpose=BATCH_ITEM' + (cursor ? `&cursor=${cursor}` : '')));
+              if (epoch !== lifetime.current) return;
               const updated = rows.find(row => typeof row === 'object' && row !== null &&
                 (row as { id?: unknown }).id === card.id);
               if (!updated) throw new Error('PRIVATE_DRAFT_NOT_FOUND');
-              replace(card.id, () => fromMedia(updated));
+              const current = cardsRef.current.find(item => item.id === card.id);
+              if (!current || current.dirty || draftOperation.current || savingIds.current.size) throw new Error('PRIVATE_DRAFT_EDIT_PENDING');
+              const restored = fromMedia(updated);
+              replace(card.id, current => current.dirty ? current : restored);
             }} />}
           <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={actionsLocked || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
           {card.error && <p id={`listing-error-${card.id}`} role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}

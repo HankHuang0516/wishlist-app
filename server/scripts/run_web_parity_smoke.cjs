@@ -39,9 +39,9 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval', 'draft'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval', 'draft', 'marketingApprove'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
@@ -51,6 +51,7 @@ app.post('/__test/reject-next-photo-receipt', (_req, res) => { rejectPhotoReceip
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method === 'POST' && /^\/api\/listing-media\/[^/]+\/seller-draft-operations\/[^/]+$/.test(req.path) ? 'draft' :
+    req.method === 'POST' && /^\/api\/marketing\/jobs\/[^/]+\/approve$/.test(req.path) ? 'marketingApprove' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
@@ -87,6 +88,7 @@ app.post('/api/users/me/profile-operations/:clientActionId/abandon', authenticat
 app.get('/api/users/me/ai-usage', authenticateToken, getAiUsage);
 app.get('/api/users/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
 app.get('/api/marketing/availability', authenticateToken, marketingAvailability);
+app.use('/api/marketing', require('../dist/routes/marketingRoutes').default);
 app.get('/api/listings', searchListings);
 app.post('/api/listings', authenticateToken, createListing);
 app.get('/api/listings/mine', authenticateToken, myListings);
@@ -124,7 +126,27 @@ app.get('/__test/state', async (_req, res) => {
     photoUploadReceipts: await prisma.photoUploadReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, state: true } }),
     sellerDraftReceipts: await prisma.sellerDraftReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientActionId: true, mediaId: true, state: true, appliedVersion: true } }),
     sellerDrafts: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, capturePurpose: 'BATCH_ITEM' }, select: { id: true, sellerDraftVersion: true, sellerDraft: true } }),
+    marketingJobs: await prisma.marketingJob.findMany({ where: { ownerUserId: { in: users.map(user => user.id) } }, select: { id: true, status: true, parentJobId: true, revisionSlots: true, copy: true, generatedMedia: { select: { id: true, marketingSlot: true, marketingSelected: true, position: true } } } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
+});
+app.post('/__test/marketing/deliver', async (req, res) => {
+  // An explicit synthetic delivery fixture, never a model or external worker.
+  if (process.env.WEB_PARITY_MARKETING_FIXTURES !== '1' || !users) return res.sendStatus(404);
+  const job = await prisma.marketingJob.findFirst({ where: { id: req.body.jobId, ownerUserId: users[1].id, status: { in: ['PENDING', 'PROCESSING'] } } });
+  if (!job || Object.keys(req.body).join(',') !== 'jobId') return res.sendStatus(409);
+  const sharp = require('sharp'), { ListingMediaStorage } = require('../dist/lib/listingMediaStorage');
+  const { createHash } = require('node:crypto'), storage = new ListingMediaStorage(); await storage.ready();
+  const slots = job.parentJobId ? job.revisionSlots : [1, 2, 3, 4];
+  const input = path.resolve(__dirname, '../../mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png');
+  for (const slot of slots) {
+    const id = randomUUID();
+    const image = await sharp(input).resize({ width: (job.parentJobId ? 640 : 800) + slot * 32 }).webp({ quality: 80 }).toBuffer();
+    const thumb = await sharp(image).resize({ width: 320, height: 320, fit: 'inside' }).webp({ quality: 75 }).toBuffer();
+    await storage.write(id, image, thumb);
+    await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, marketingJobId: job.id, marketingSlot: slot, capturePurpose: 'AI_MARKETING', imageUrl: `http://127.0.0.1:5183/api/listing-media/${id}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex') } });
+  }
+  await prisma.marketingJob.update({ where: { id: job.id }, data: { status: 'REVIEW', deliveredAt: new Date(), copy: '合成橘色二手檯燈，售價 NT$350。僅供隔離流程驗收，不是 AI 行銷成果或可購買商品。' } });
+  return res.json({ syntheticOnly: true, jobId: job.id, deliveredSlots: slots, modelCalled: false });
 });
 app.use((_req, res) => res.status(404).json({ error: 'This isolated smoke server does not expose that workflow' }));
 async function main() {
@@ -133,6 +155,18 @@ async function main() {
   listing = await prisma.listing.create({ data: { ownerUserId: users[1].id, clientListingId: randomUUID(), requestHash: 'synthetic-web-parity-only', title: '合成測試漫畫（不可購買）', description: '僅供隔離驗收，不是真實刊登；圖片為合成測試替代圖。', category: 'books', price: 59, condition: 'USED', deliveryMethods: ['MEETUP'], status: 'ACTIVE', publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), location: { create: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 } } } });
   photoId = randomUUID();
   await prisma.listingMedia.create({ data: { id: photoId, ownerUserId: users[1].id, listingId: listing.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/thumbnail`, contentHash: 'synthetic-placeholder-not-flickr', capturePurpose: 'MANUAL_PHOTO' } });
+  if (process.env.WEB_PARITY_MARKETING_FIXTURES === '1') {
+    process.env.MARKETING_ASSISTANT_ENABLED = '1';
+    process.env.MARKETING_ASSISTANT_PILOT_USER_ID = String(users[1].id);
+    process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = randomBytes(48).toString('hex');
+    const sharp = require('sharp'), { ListingMediaStorage } = require('../dist/lib/listingMediaStorage');
+    const { createHash } = require('node:crypto'), storage = new ListingMediaStorage(); await storage.ready();
+    const image = await sharp(path.resolve(__dirname, '../../mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png')).webp({ quality: 80 }).toBuffer();
+    const thumb = await sharp(image).resize({ width: 320, height: 320, fit: 'inside' }).webp({ quality: 75 }).toBuffer();
+    await storage.write(photoId, image, thumb);
+    listing = await prisma.listing.update({ where: { id: listing.id }, data: { title: '合成橘色二手檯燈（不可購買）', description: '僅供隔離行銷流程驗收，非真實庫存。', category: 'home', price: 350 } });
+    await prisma.listingMedia.update({ where: { id: photoId }, data: { contentHash: createHash('sha256').update(image).digest('hex') } });
+  }
   // Opt-in style review uses only this run's newly created synthetic owners.
   // Real compiled search/matching/media/profile handlers; no AI completion.
   if (process.env.WEB_PARITY_STYLE_FIXTURES === '1') {

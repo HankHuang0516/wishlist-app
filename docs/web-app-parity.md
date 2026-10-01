@@ -27,6 +27,17 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十批：刊登未送出文字與共同設定的本機恢復（仍未部署）
+
+- 批次刊登新增API／帳號隔離的AES-GCM本機文字草稿與共同設定；名稱、說明、品牌、分類、新舊、未完成售價及欄位修改標記在失焦之前即保存。每張照片保留原後台版本／內容作比較，mutable form使用序列CAS，原server-operation journals維持不可變。已刪帳號scope的墓碑阻止晚到寫入；不存token、照片或URL。這不是跨裝置同步或XSS／硬體Keychain防護。
+- 重開恢復本機文字，先GET私人清單；後台版本或內容變更須明確比較並選擇保留本機或採用後台，選擇本身不POST。私人草稿已確認後更新本機基準，保留送出期間的新修改；本機寫入失敗不把已證實後台結果倒退成未知。照片已不在私人清單時，文字備份仍可唯讀複製，不重建照片或商品；確認刊登／移除後只CAS清理相符本機草稿。
+- 共同設定恢復縣市、區域、交付、議價、日期與約略網格地點；有效座標先約略化，未填完仍可編輯。公開同意與逐件確認一律不恢復。儲存故障／另一分頁修改時保留本頁文字為唯讀，暫停送出並提供先複製再明確重讀；新AI／行銷、草稿保存、刊登及移除先核對本機保存與版本，不以local saved冒充後台saved。
+- 新增22項單元／實際頁面案例（library10、頁面11、store1）：未失焦／空欄／不完整售價、共同設定及確認重置、版本與同版不同內容、原ACK晚到保留新文字、CAS跨分頁、missing photo、quota／壞資料、帳號隔離、已證實後台保存但本機ACK寫入故障，以及scope發現與帳號刪除墓碑。件數不表示全網站覆蓋率。舊mock新增storage契約；既有恢復測試改為等候原本的清理／啟用完成，原安全斷言保留。
+- Chrome＋compiled真handler＋獨立UTF8 DB `wishlist_marketplace_test_composer_browser_20261002_30`：實際合成照片上傳1；既有失焦送出草稿1次成v1（只有名稱），說明與`1.`仍未送出。reload後完整恢復未送出說明／售價及25.05／121.53，draft POST仍1。雙分頁修改時舊頁自己的文字仍唯讀、新文字未被覆蓋；CLI以真舊PUT模擬另一裝置更新v2，重開顯示六欄比較／420，選保留本機不增加POST。UI再儲存350及第一頁新說明，commit後502；reload僅原receipt GET1恢復v3、已儲存，POST總2／lost ACK1／歷史APPLIED2／公開新商品0。切買家看不到賣家照片或欄位，切回賣家恢復文字及共同設定。沒有真MiniMax／Flickr、正式資料或永久捨棄確認操作。
+- 390×844、documentWidth375≤390、設定導航1個，原始截圖已檢視：`web-parity-composer-recovered-390-20261002.png`、`web-parity-composer-storage-conflict-390-20261002.png`、`web-parity-composer-server-conflict-390-20261002.png`、`web-parity-composer-settings-390-20261002.png`及`wishlist-web-composer-draft-evidence-20261002.json`均在原outputs。第二分頁初次桌面畫布造成空白裁圖，確認真390畫布後重拍覆存，不把初圖當手機證據。這不是首頁／設定90分的正式重審。
+- 最新完整pre-push退出0：後台56檔913＋3skipped、HTTP／DB30檔444、42 migrations／schema一致、網頁76檔1204、TypeScript／Vite build、原生42檔852／typecheck／Expo及既有QA全部通過。早期全網頁4項舊mock／異步等候失敗及新故障案例的key名稱斷言錯誤均保留logs，修正後完整重驗；沒有降低斷言或取消測試。主JS756.67KB、地圖1088.99KB／worker507.81KB及PWA5870.08KiB警告保留。
+- 前批最終提交`5f74d8689f60033a57bc97ee1178e512043915e1`的[CI36900732764](https://github.com/HankHuang0516/wishlist-app/actions/runs/36900732764)3/3 completed/success已精確回讀；本批新提交另查CI，不能沿用。PR82仍draft；其他人的刪檔與.gitignore未納入。本機草稿主缺口已有上述證據，其餘日曆完整選日、新商品管理動作、真provider／跨端、舊願望／註冊／全站英文／政策客服／PWA效能、正式migration preflight與合併／Railway回讀繼續完成。目標active、未部署；首頁／設定各90%、功能100%、原站風格／單一設定入口及APP不改條件維持。
+
 ## 2026-10-02 第二十九批：私人批次照片移除的持久回執（仍未部署）
 
 - 新增第42份migration及`PhotoRemovalReceipt`，保存owner、原操作UUID、SHA-256、照片／草稿版本及REMOVED／CONFLICT／UNAVAILABLE／ABANDONED終態。照片與工作刪除不釋放原鍵，帳號刪除cascade；SQL CHECK拒絕空版本、錯誤終態／hash及非法移除ID。owner交易鎖內重新驗證JWT／API key，照片／使用中行銷檢查、刪除、清理outbox及回執同交易；寫回執失敗全部回滾。原生舊DELETE仍204／404，APP介面不改。
@@ -107,7 +118,7 @@
 | 功能 | APP 基準／後台 | 網頁狀態 | 必要驗收 |
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
-| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；照片移除新增持久回執、真DB提交後502的GET恢復、安全停止與版本衝突真UI核對；永久移除確認按鈕、真AI、舊紀錄來源、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
+| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；照片移除新增持久回執、真DB提交後502的GET恢復、安全停止與版本衝突真UI核對；未失焦文字／共同設定的加密恢復、CAS雙分頁保護及後台版本比較已真UI驗證；公開同意／逐件確認不恢復。永久移除確認按鈕、真AI、舊紀錄來源與行銷跨端仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |

@@ -5,8 +5,11 @@ import ListingBatchPage from '../pages/ListingBatchPage';
 import { AuthContext } from '../context/AuthContext';
 
 vi.mock('../config', () => ({ API_URL: 'https://wishlist.invalid/api' }));
+const localDrafts=vi.hoisted(()=>new Map<string,string>());
 vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
-  get: vi.fn(async () => null), save: vi.fn(), clear: vi.fn(),
+  get: vi.fn(async (key:string) => localDrafts.get(key)??null), save: vi.fn(), clear: vi.fn(),
+  composerDraftKeys:async()=>[],clearComposerDraft:async()=>false,
+  replaceDraft:async(key:string,expected:string|null,raw:string)=>{if((localDrafts.get(key)??null)!==expected)throw Error('CAS');localDrafts.set(key,raw);},
 } }));
 
 const auth = { token: 'synthetic-token', user: { id: 11, name: 'Synthetic Seller' },
@@ -27,7 +30,7 @@ function renderWithAvailability(available: boolean) {
 }
 
 describe('batch listing AI gate', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {localStorage.clear();localDrafts.clear();});
   afterEach(() => vi.unstubAllGlobals());
 
   it('warns non-pilot sellers before capture while keeping manual upload available', async () => {

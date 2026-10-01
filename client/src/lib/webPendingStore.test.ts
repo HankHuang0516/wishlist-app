@@ -13,6 +13,12 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('discovers only this account and API composer drafts and preserves immutable server journals',async()=>{
+    const {store}=fixture(),id='11111111-1111-4111-8111-111111111111',compose=scope+'.listing-compose.'+id,details=scope+'.listing-compose-details',other=scope.replace('.42','.43')+'.listing-compose.'+id;
+    await store.replaceDraft(compose,null,'private-unsent-text');await store.replaceDraft(details,null,'approximate-local-settings');await store.replaceDraft(other,null,'other-account');await store.save(scope+'.listing-draft','immutable-server-operation');
+    expect(await store.composerDraftKeys(scope)).toEqual([compose]);await expect(store.replaceDraft(scope+'.listing-draft','immutable-server-operation','replacement')).rejects.toThrow();await expect(store.clearComposerDraft(scope+'.listing-draft','immutable-server-operation')).rejects.toThrow();
+    await store.eraseScope(scope);expect(await store.composerDraftKeys(scope)).toEqual([]);expect(await store.get(details)).toBeNull();expect(await store.get(other)).toBe('other-account');await expect(store.replaceDraft(compose,null,'late')).rejects.toThrow();
+  });
   it('persists owner management separately from creates and refuses cross-account/API replacement',async()=>{
     const {factory,name,store}=fixture(),a=await pendingRequestKey('https://example.com/api',42,'listing-management'),b=await pendingRequestKey('https://example.com/api',43,'listing-management'),c=await pendingRequestKey('https://other.example/api',42,'listing-management');
     await store.save(a,'private-original-edit');await store.save(scope+'.listing','unrelated-create');

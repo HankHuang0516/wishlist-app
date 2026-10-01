@@ -9,8 +9,8 @@ export type PendingStore = {
   clear(key: string, expectedBody: string): Promise<boolean>;
 };
 type Entry = { revision: string; iv: Uint8Array<ArrayBuffer>; cipher: ArrayBuffer };
-const resource = /^(profile|avatar|social-follow|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit)\.[0-9a-f-]{36})$/i;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|social-follow|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit)\.[0-9a-f-]{36})$/;
+const resource = /^(profile|avatar|social-follow|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|social-follow|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/;
 export async function sha256(value: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -111,10 +111,14 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
     }),
   };
   return { ...store,
+    clearComposerDraft: (key:string,body:string) => wrap(async()=>{
+      if(!/\.listing-compose\.[0-9a-f-]{36}$/.test(key))throw new PendingStoreError();
+      return store.clear(key,body);
+    }),
     // Mutable unsent form drafts only. Pending server-operation evidence remains
     // immutable through save(); replacing a draft is one encrypted CAS transaction.
     replaceDraft: (key: string, expectedBody: string | null, body: string) => wrap(async () => {
-      if (!/\.listing-edit\.[0-9a-f-]{36}$/.test(key)) throw new PendingStoreError();
+      if (!/\.(listing-edit|listing-compose)\.[0-9a-f-]{36}$/.test(key) && !key.endsWith('.listing-compose-details')) throw new PendingStoreError();
       validBody(body); if (expectedBody !== null) validBody(expectedBody);
       const scope = scopeOf(key), before = await read(key);
       if (before.erased || (before.entry ? await decode(key, before.entry, before.secret) : null) !== expectedBody) throw new PendingStoreError();
@@ -125,6 +129,19 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
       const [current, erased, storedSecret] = await Promise.all([request<Entry | undefined>(table.get(key)), request(tx.objectStore('erased').get(scope)), request(tx.objectStore('keys').get(scope))]);
       if (erased || !storedSecret || current?.revision !== before.entry?.revision) { tx.abort(); await done; throw new PendingStoreError(); }
       table.put({ revision: crypt.randomUUID(), iv, cipher } satisfies Entry, key); await done;
+    }),
+    // Metadata discovery is restricted to unsent composer drafts in this exact
+    // account/API scope, including photos later attached/deleted on another device.
+    composerDraftKeys: (scope: string) => wrap(async () => {
+      scopeOf(scope + '.listing');
+      const db = await open(), tx = db.transaction(['pending','erased'],'readonly'), done = completed(tx);
+      const [keys, erased] = await Promise.all([
+        request(tx.objectStore('pending').getAllKeys(IDBKeyRange.bound(scope + '.listing-compose.', scope + '.listing-compose.\uffff'))),
+        request(tx.objectStore('erased').get(scope)),
+      ]);
+      await done;
+      if (erased) return [];
+      return keys.map(String).filter(key=>keyPattern.test(key)&&/\.listing-compose\.[0-9a-f-]{36}$/.test(key));
     }),
     eraseScope: (scope: string) => wrap(async () => {
     // Only invoke after the server's authoritative ERASED receipt, never logout.

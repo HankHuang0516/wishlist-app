@@ -71,3 +71,9 @@ export default defineConfig([
   },
 ])
 ```
+
+## Batch listing local drafts
+
+`ListingComposerDrafts` saves unsent form text and common settings through the account/API scoped encrypted pending store. Mutable forms use serialized compare-and-swap; server operation journals remain immutable. Restore compares the stored backend baseline before permitting a new dispatch. Publication consent and item review reset on reopen; valid coordinates are normalized to the approximate grid before local persistence. A failed write retains the current page text for copying and blocks mutations. Confirmed server results remain confirmed if local rebasing or cleanup fails.
+
+Coverage lives in `listingComposerDraft.test.ts`, `ListingBatchLocalDraft.test.tsx`, and `webPendingStore.test.ts`. These tests exercise reload, incomplete inputs, version comparison, concurrent pages, in-flight edits, storage faults, account isolation and erasure fences. Local storage is browser-specific and is not cross-device synchronization or protection against same-origin script compromise.

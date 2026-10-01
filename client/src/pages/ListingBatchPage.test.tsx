@@ -9,8 +9,12 @@ import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { photoUploadJournal, parsePhotoUploadJournal } from '../lib/listingPhotoUploadWeb';
 import { sellerDraftJournal, parseSellerDraftJournal } from '../lib/sellerDraftWeb';
 const pending = vi.hoisted(() => new Map<string, string>());
+const compose=vi.hoisted(()=>new Map<string,string>());
 vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
-  get: vi.fn(async (key: string) => pending.get(key) ?? null),
+  get: vi.fn(async (key: string) => compose.get(key) ?? pending.get(key) ?? null),
+  composerDraftKeys:async(scope:string)=>[...compose.keys()].filter(key=>key.startsWith(scope+'.listing-compose.')),
+  replaceDraft:vi.fn(async(key:string,expected:string|null,body:string)=>{if((compose.get(key)??null)!==expected)throw Error('CAS');compose.set(key,body);}),
+  clearComposerDraft:async(key:string,body:string)=>compose.get(key)===body?compose.delete(key):false,
   save: vi.fn(async (key: string, body: string) => { if (pending.has(key) && pending.get(key) !== body) throw new Error('Different pending operation'); pending.set(key, body); }),
   clear: vi.fn(async (key: string, body: string) => { if (pending.get(key) !== body) return false; pending.delete(key); return true; }),
 } }));
@@ -71,7 +75,7 @@ describe('web private batch listing flow', () => {
     releaseOldAccountList = undefined;
     holdPublicationAck = false; releasePublicationAck = undefined;
     localStorage.clear();
-    pending.clear(); receipts.clear(); photoReceipts.clear(); draftReceipts.clear(); savedDrafts.clear();
+    pending.clear();compose.clear(); receipts.clear(); photoReceipts.clear(); draftReceipts.clear(); savedDrafts.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
     URL.revokeObjectURL = vi.fn();
@@ -626,7 +630,7 @@ describe('web private batch listing flow', () => {
     rejectPublicationAt = 0; fireEvent.click(screen.getByText('重試同一刊登'));
     await screen.findByText(/原刊登已確認；目前狀態：在售/);
     const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
-    expect(posts).toHaveLength(2); expect(posts[1].body).toBe(posts[0].body); expect(pending.size).toBe(0);
+    expect(posts).toHaveLength(2); expect(posts[1].body).toBe(posts[0].body); await waitFor(()=>expect(pending.size).toBe(0));
   });
 
   it('requires two-step terminal cancellation before a new reviewed operation can use a new ID', async () => {
@@ -677,7 +681,7 @@ describe('web private batch listing flow', () => {
     showUploadedPrivatePhoto = true; loseFirstPublicationResponse = true;
     const first = render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：response lost/);
     const old = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST')!.body!;
-    first.unmount(); pending.clear(); localStorage.setItem('wishlist:listing-pending:19', old);
+    first.unmount(); pending.clear();compose.clear(); localStorage.setItem('wishlist:listing-pending:19', old);
     render(view()); await screen.findByText('舊版刊登紀錄已核對');
     expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
     expect(pending.size).toBe(0); expect(localStorage.getItem('wishlist:listing-pending:19')).toBe(old);
@@ -706,6 +710,7 @@ describe('web private batch listing flow', () => {
     fireEvent.click(screen.getByText('查核原照片上傳'));
     await screen.findByText('照片結果已確認，紀錄待清理');
     expect(input).toBeDisabled();
+    await waitFor(()=>expect(screen.getByText('重試照片安全清理')).toBeEnabled());
     fireEvent.click(screen.getByText('重試照片安全清理'));
     await waitFor(() => expect(screen.queryByText('照片結果已確認，紀錄待清理')).toBeNull());
     expect(await screen.findByText('等待辨識或手動填寫')).toBeInTheDocument();

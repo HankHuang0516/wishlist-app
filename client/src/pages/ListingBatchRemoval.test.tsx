@@ -7,7 +7,8 @@ import { photoRemovalJournal, parsePhotoRemovalJournal } from '../lib/privatePho
 import { privatePendingStore, pendingRequestKey } from '../lib/webPendingStore';
 import { API_URL } from '../config';
 const pending=vi.hoisted(()=>new Map<string,string>());
-vi.mock('../lib/webPendingStore',async importOriginal=>({...await importOriginal<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:vi.fn(async(key:string)=>pending.get(key)??null),save:vi.fn(async(key:string,body:string)=>{if(pending.has(key)&&pending.get(key)!==body)throw Error();pending.set(key,body);}),clear:vi.fn(async(key:string,body:string)=>{if(pending.get(key)!==body)return false;pending.delete(key);return true;})}}));
+const compose=vi.hoisted(()=>new Map<string,string>());
+vi.mock('../lib/webPendingStore',async importOriginal=>({...await importOriginal<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:vi.fn(async(key:string)=>compose.get(key)??pending.get(key)??null),composerDraftKeys:async(scope:string)=>[...compose.keys()].filter(key=>key.startsWith(scope+'.listing-compose.')),replaceDraft:async(key:string,expected:string|null,body:string)=>{if((compose.get(key)??null)!==expected)throw Error('CAS');compose.set(key,body);},clearComposerDraft:async(key:string,body:string)=>compose.get(key)===body?compose.delete(key):false,save:vi.fn(async(key:string,body:string)=>{if(pending.has(key)&&pending.get(key)!==body)throw Error();pending.set(key,body);}),clear:vi.fn(async(key:string,body:string)=>{if(pending.get(key)!==body)return false;pending.delete(key);return true;})}}));
 const mediaId='11111111-1111-4111-8111-111111111111',clientListingId='22222222-2222-4222-8222-222222222222';
 const form={title:'原始私人商品',description:'原始私人說明',brand:'',category:'home',condition:'USED',price:'320'};
 const draft={clientListingId,form,touched:{title:true,description:true,price:true}};
@@ -17,7 +18,7 @@ const ok=(value:unknown)=>({ok:true,status:200,json:async()=>value,blob:async()=
 let exists=true,loseAck=false,version=0,conflict=false,rejectGet=false,rejectRemovedInventory=false,hold=false,release:(()=>void)|undefined;
 const calls:{path:string;method:string;body?:string}[]=[],receipts=new Map<string,any>();
 beforeEach(()=>{
-  exists=true;loseAck=false;version=0;conflict=false;rejectGet=false;rejectRemovedInventory=false;hold=false;release=undefined;pending.clear();receipts.clear();calls.length=0;localStorage.clear();vi.spyOn(window,'confirm').mockReturnValue(true);URL.createObjectURL=vi.fn(()=>'blob:synthetic');URL.revokeObjectURL=vi.fn();
+  exists=true;loseAck=false;version=0;conflict=false;rejectGet=false;rejectRemovedInventory=false;hold=false;release=undefined;pending.clear();compose.clear();receipts.clear();calls.length=0;localStorage.clear();vi.spyOn(window,'confirm').mockReturnValue(true);URL.createObjectURL=vi.fn(()=>'blob:synthetic');URL.revokeObjectURL=vi.fn();
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const path=String(input),method=init?.method??'GET';calls.push({path,method,body:typeof init?.body==='string'?init.body:undefined});
     const other=(init?.headers as Record<string,string>)?.Authorization==='Bearer other-session';

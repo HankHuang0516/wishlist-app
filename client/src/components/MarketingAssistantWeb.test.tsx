@@ -114,6 +114,7 @@ describe('shared web marketing entry for drafts and published products', () => {
     expect(screen.getByRole('button', { name: '拖放圖 2，目前第 1 張' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '確認照片與文案' }));
     await vi.waitFor(() => expect(props.onApproved).toHaveBeenCalledTimes(1));
+    await screen.findByText(successNotice);
     const approve = fetch.mock.calls.find(([url, init]) => url.includes('/approvals/') && init?.method === 'POST');
     expect(JSON.parse(String(approve?.[1]?.body))).toEqual({ ...approvalBody(), selectedMediaIds: [media[1].id, media[0].id, media[2].id, media[3].id] });
     const recorded=await parseMarketingApprovalJournal(String(queueStore.save.mock.calls[0]?.[1]));expect(approve?.[0]).toContain(recorded.clientActionId);expect(recorded.body.selectedMediaIds).toEqual([media[1].id,media[0].id,media[2].id,media[3].id]);

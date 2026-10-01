@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十一批：穩定網頁日曆與新協定延長期限驗收（仍未部署）
+
+- 刊登共同設定與本人商品延長共用`DateField`網頁日曆；保留原生type=date手動輸入、minimum及後台驗證，隱藏重複browser indicator。月份由元件保存，切月與父頁rerender不更新日期或回跳；只有點日格／清空才更新原欄位。dialog／月份公告、Tab循環、Escape／背景關閉、焦點進入／返回及方向鍵跨週／月／年保留；延長期限禁止早於minimum的日格／月份。APP與後台協定不改。
+- 新增6項元件案例：跨年返回及父頁重繪、實際點日格、閏日／清空、最小日期、方向鍵／取消、焦點循環及disabled鎖定。原管理跨年送出與刊登確認重置案例改為真正點日格／清空，原POST內容、確認文案及未刊登斷言保留。
+- Chrome真UI刊登：先勾公開同意／review，日曆依序2026年10→11→12→2027年1→返回2026年12，實際點12月1日；日期2026-12-01、兩確認均false。reload日期仍相同；再勾確認後日曆清空，日期空字串且兩確認重置（預設30天入口，未公開刊登）。不是DOM改值或只切月的證據。
+- 新管理協定補真UI延長：合成漫畫原v1／10月31日到期，日曆最早11月1日且上一月disabled；11→12→隔年1→返回12，實際點12月1日。確認框明示「確認延長至 2026-12-01？」；工具被原生確認框阻擋時真後台POST0，Chrome原生AX確認同一框一次後，原交易commit且故意回502。reload僅原回執GET恢復APPLIED v2／同日期；已讀清理不增加POST。真API為`2026-12-01T15:59:59.999Z`／CUSTOM_DATE，management POST1／GET1／lost ACK1、legacy extend0／新公開商品0。初證據斷言誤期待.000，依後台實際.999更正後精確通過，未改產品日期。
+- 390×844、documentWidth375≤390、單一dialog／焦點在內、31日格均44.14×44px；已檢視原始`web-parity-calendar-december-390-20261002.png`、`web-parity-calendar-extension-recovered-390-20261002.png`及`wishlist-web-calendar-evidence-20261002.json`在原outputs。合成DB／圖片保留，沒有正式商品、provider／付款／原生實機；新網頁替代流程驗收不推定OS picker根因或所有瀏覽器完成。
+- 最新完整pre-push退出0：網頁77檔1210及TypeScript／Vite build，後台56檔913＋3skipped、HTTP／DB30檔444、42 migrations／schema一致、原生42檔852／typecheck／Expo與QA。首次focused3項失敗因新日曆按鈕亦符合舊regex輸入查詢，改明確input selector且原斷言保留；focused4檔86及完整回歸通過。主JS761.80KB、地圖1088.99KB／worker507.81KB、PWA5875.53KiB警告保留。
+- 第三十批提交`b72f2c657acadbf8f548c48f39fa7967ffaa585e`的[CI36905534974](https://github.com/HankHuang0516/wishlist-app/actions/runs/36905534974)已精確回讀3/3 completed/success（網頁1204／後台913＋3skipped／HTTP444／原生852）；本批另查新提交CI。日曆與新協定延長有上述證據，移除／草稿發布／全部分頁管理、真provider／跨端、舊願望／註冊／全站英文／政策客服／PWA效能及正式preflight／合併／Railway回讀繼續。首頁／設定各90%、功能100%、原站風格／單一設定入口及APP不改，目標active、PR82 draft／未部署。
+
 ## 2026-10-02 第三十批：刊登未送出文字與共同設定的本機恢復（仍未部署）
 
 - 批次刊登新增API／帳號隔離的AES-GCM本機文字草稿與共同設定；名稱、說明、品牌、分類、新舊、未完成售價及欄位修改標記在失焦之前即保存。每張照片保留原後台版本／內容作比較，mutable form使用序列CAS，原server-operation journals維持不可變。已刪帳號scope的墓碑阻止晚到寫入；不存token、照片或URL。這不是跨裝置同步或XSS／硬體Keychain防護。
@@ -119,8 +129,8 @@
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
 | 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；照片移除新增持久回執、真DB提交後502的GET恢復、安全停止與版本衝突真UI核對；未失焦文字／共同設定的加密恢復、CAS雙分頁保護及後台版本比較已真UI驗證；公開同意／逐件確認不恢復。永久移除確認按鈕、真AI、舊紀錄來源與行銷跨端仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
-| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
-| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
+| 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；刊登與管理共用網頁日曆，Chrome跨年切月／返回、點日格、reload及清空已驗證；選日／清空取消公開確認，管理日期與新協定回執／後台一致 | 日期切月穩定、預設30天、未填欄定位高亮 |
+| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新協定延長已真UI點日格＋commit後502→GET恢復v2／日期一致；移除／草稿發布／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、原版／免費調整queue及不可變批准回執、加密原選圖／文案／版本紀錄已實作；實際批准commit後502→reload只GET恢復，child套用後root歷史證據不變且月次數1；能力關閉時仍可查看／批准既有結果，新生成及免費調整停用、明確只讀重查，Chrome暫停期間實測同樣成功恢復；上下文變更、舊紀錄及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
 | 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |

@@ -6,11 +6,11 @@ import { earliestExtensionDate, managementTab, MANAGEMENT_TABS, marketplaceOrigi
   ManagedListingError, parseManagedListing, parseManagedListingPage } from '../lib/managedListingWeb';
 import type { ManagedListing, ManagementTab } from '../lib/managedListingWeb';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
+import DateField from '../components/DateField';
 import ListingEditForm from '../components/ListingEditForm';
 import { parseListingEditDraft } from '../lib/listingEditDraft';
 import type { ListingEditFields } from '../lib/listingEditDraft';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { getFullApiUrl } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { abandonManagement, managementJournal, managementTargetStatus, parseManagementJournal, readManagement, sendManagement } from '../lib/listingManagementWeb';
@@ -239,8 +239,8 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
             setRows(old => old.map(row => row.id === item.id ? current : row));
             return current;
           }} />}
-        {expiryId === item.id && <div className="rounded-xl bg-gray-50 p-4 space-y-3"><label htmlFor={`expiry-${item.id}`}>新的失效日期（台灣時間）</label>
-          <Input id={`expiry-${item.id}`} type="date" min={earliestExtensionDate(item.expiresAt)} value={date} disabled={blocked} onChange={event => setDate(event.target.value)} />
+        {expiryId === item.id && <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+          <DateField label="新的失效日期（台灣時間）" id={`expiry-${item.id}`} min={earliestExtensionDate(item.expiresAt)} value={date} disabled={blocked} onChange={setDate} />
           <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => setExpiryId(null)}>取消延長</Button><Button disabled={blocked} onClick={() => extend(item)}>確認延長</Button></div></div>}
       </article>;
     })}

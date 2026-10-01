@@ -17,6 +17,7 @@ import { abandonSellerDraftOperation, parseSellerDraftJournal, readSellerDraftOp
 
 import { abandonPhotoRemoval, parsePhotoRemovalJournal, photoRemovalJournal, readPhotoRemoval, sendPhotoRemoval, type PhotoRemovalResult } from '../lib/privatePhotoRemovalWeb';
 import { ListingComposerDrafts } from '../lib/listingComposerDraft';
+import DateField from '../components/DateField';
 
 type Card = { unavailable?: boolean; serverDraft:SellerDraft|null; id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
@@ -747,7 +748,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         <label><input type="checkbox" checked={details.shipping} onChange={event => updateDetails({ shipping: event.target.checked })} /> 寄送</label>
         <label><input type="checkbox" checked={details.negotiable} onChange={event => updateDetails({ negotiable: event.target.checked })} /> 可議價</label>
       </div>
-      <label className="mt-5 block text-sm">自訂失效日期（不填預設 30 天）<input {...sharedProps('expiryDate')} type="date" className="mt-1 block rounded-xl border p-3" value={details.expiryDate} onChange={event => updateDetails({ expiryDate: event.target.value })} /></label>
+      <div className="mt-5"><DateField {...sharedProps('expiryDate')} label="自訂失效日期（不填預設 30 天）" disabled={locked || localFailed} value={details.expiryDate} onChange={expiryDate => updateDetails({ expiryDate })} /></div>
       <label className="mt-5 flex items-start gap-3 text-sm"><input {...sharedProps('consent')} type="checkbox" checked={details.consent} onChange={event => updateDetails({ consent: event.target.checked })} />我已確認商品真實、照片與描述可公開，並同意將照片、售價及約略位置顯示在商品地圖。</label>
       </fieldset>
     </section>}

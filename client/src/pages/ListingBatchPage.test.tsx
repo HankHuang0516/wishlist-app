@@ -231,6 +231,7 @@ describe('web private batch listing flow', () => {
     showUploadedPrivatePhoto = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
     await screen.findByDisplayValue('二手檯燈');
+    fireEvent.change(screen.getByLabelText(/自訂失效日期/,{selector:'input'}), { target: { value: '2030-01-05' } });
     fillSharedDetails();
     const review = screen.getByLabelText(/我已逐欄確認第 1 件/);
     fireEvent.click(review);
@@ -238,7 +239,8 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('商品名稱'), { target: { value: '已確認正常的檯燈' } });
     expect(review).not.toBeChecked();
     fireEvent.click(review);
-    fireEvent.change(screen.getByLabelText(/自訂失效日期/), { target: { value: '2030-01-31' } });
+    fireEvent.click(screen.getByRole('button', { name: '開啟「自訂失效日期（不填預設 30 天）」日曆' }));
+    fireEvent.click(screen.getByRole('button', { name: '選擇 2030-01-31' }));
     expect(review).not.toBeChecked();
     expect(screen.getByLabelText(/我已確認商品真實/)).not.toBeChecked();
     fireEvent.click(review);
@@ -246,9 +248,10 @@ describe('web private batch listing flow', () => {
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
     fireEvent.click(review);
     expect(review).toBeChecked();
-    fireEvent.change(screen.getByLabelText(/自訂失效日期/), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '開啟「自訂失效日期（不填預設 30 天）」日曆' }));
+    fireEvent.click(screen.getByRole('button', { name: '清除日期' }));
     expect(review).not.toBeChecked();
-    expect(screen.getByLabelText(/自訂失效日期/)).toHaveValue('');
+    expect(screen.getByLabelText(/自訂失效日期/,{selector:"input"})).toHaveValue('');
     expect(calls.some(call => call.path.endsWith('/listings'))).toBe(false);
   });
 
@@ -355,7 +358,7 @@ describe('web private batch listing flow', () => {
     fireEvent.click(publish); fireEvent.click(publish);
     await waitFor(() => expect(releaseSellerSave).toBeDefined());
     expect(screen.getByLabelText('縣市')).toBeDisabled();
-    expect(screen.getByLabelText(/自訂失效日期/)).toBeDisabled();
+    expect(screen.getByLabelText(/自訂失效日期/,{selector:"input"})).toBeDisabled();
     expect(screen.getByLabelText(/我已逐欄確認第 1 件/)).toBeDisabled();
     await act(async () => releaseSellerSave!());
     await screen.findByText('商品刊登已確認。其他照片仍是私人草稿。');

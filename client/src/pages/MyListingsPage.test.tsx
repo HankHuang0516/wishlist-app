@@ -100,7 +100,10 @@ describe('native-equivalent owner management', () => {
     await ready();fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
     const date = screen.getByLabelText('新的失效日期（台灣時間）');
     expect(date).toHaveAttribute('min', '2100-12-02');
-    fireEvent.change(date, { target: { value: '2101-01-15' } });
+    fireEvent.click(screen.getByRole('button', { name: '開啟「新的失效日期（台灣時間）」日曆' }));
+    fireEvent.click(screen.getByRole('button', { name: '下一個月' }));
+    expect(screen.getByRole('heading', { name: '2101 年 1 月' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '選擇 2101-01-15' }));
     expect(date).toHaveValue('2101-01-15');
     fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
     await screen.findByText('原商品操作已確認完成；不會再次套用。');

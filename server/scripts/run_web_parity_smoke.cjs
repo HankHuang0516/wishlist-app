@@ -39,9 +39,9 @@ const app = express();
 app.use(cors({ origin: 'http://127.0.0.1:5182' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0 }, users, listing, photoId, server;
+let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0 }, users, listing, photoId, server;
 app.post('/__test/drop-next-ack', (req, res) => {
-  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
+  if (!['listing', 'profile', 'message', 'meetup', 'photo', 'wish', 'photoRemoval', 'draft'].includes(req.body.kind)) return res.status(400).json({ error: 'Choose an isolated workflow' });
   drop = req.body.kind; res.json({ armed: drop });
 });
 // Non-destructive UI failure fixture. Return before ANY handler/DB mutation.
@@ -50,6 +50,7 @@ app.post('/__test/reject-next-photo-removal', (_req, res) => { rejectRemoval = t
 app.post('/__test/reject-next-photo-receipt', (_req, res) => { rejectPhotoReceipt = true; res.json({ syntheticOnly: true, armed: true }); });
 app.use((req, res, next) => {
   const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+    req.method === 'POST' && /^\/api\/listing-media\/[^/]+\/seller-draft-operations\/[^/]+$/.test(req.path) ? 'draft' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(req.path) ? 'message' :
     req.method === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/meetup$/.test(req.path) ? 'meetup' :
     req.method === 'POST' && req.path === '/api/listing-media' ? 'photo' :
@@ -57,6 +58,8 @@ app.use((req, res, next) => {
     req.method === 'POST' && /^\/api\/native-wishes\/photo-removals\/[^/]+$/.test(req.path) ? 'photoRemoval' :
     req.method === 'POST' && /^\/api\/users\/me\/profile-operations\/[^/]+$/.test(req.path) ? 'profile' : null;
   if (req.method === 'GET' && /\/profile-operations\//.test(req.path)) attempts.profileReceipt++;
+  if (req.method === 'GET' && /\/seller-draft-operations\//.test(req.path)) attempts.draftReceipt++;
+  if (req.method === 'POST' && /\/seller-draft-operations\/[^/]+\/abandon$/.test(req.path)) attempts.draftAbandon++;
   if (req.method === 'GET' && /\/messages\/by-client-id\//.test(req.path)) attempts.messageReceipt++;
   if (req.method === 'GET' && /\/listings\/creation-receipts\//.test(req.path)) attempts.listingReceipt++;
   if (req.method === 'POST' && /\/listings\/creation-receipts\/[^/]+\/abandon$/.test(req.path)) attempts.listingAbandon++;
@@ -119,6 +122,8 @@ app.get('/__test/state', async (_req, res) => {
     listingCreationReceipts: await prisma.listingCreateReceipt.findMany({ where: { userId: users[0].id }, select: { clientListingId: true, state: true, listingId: true } }),
     photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
     photoUploadReceipts: await prisma.photoUploadReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, state: true } }),
+    sellerDraftReceipts: await prisma.sellerDraftReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientActionId: true, mediaId: true, state: true, appliedVersion: true } }),
+    sellerDrafts: await prisma.listingMedia.findMany({ where: { ownerUserId: { in: users.map(user => user.id) }, capturePurpose: 'BATCH_ITEM' }, select: { id: true, sellerDraftVersion: true, sellerDraft: true } }),
     appointments: await prisma.meetupAppointment.findMany({ where: { conversationId: { in: rooms.map(room => room.id) } }, select: { version: true, status: true, buyerConfirmedAt: true, sellerConfirmedAt: true, buyerCompletedAt: true, sellerCompletedAt: true } }), dropped, attempts });
 });
 app.use((_req, res) => res.status(404).json({ error: 'This isolated smoke server does not expose that workflow' }));

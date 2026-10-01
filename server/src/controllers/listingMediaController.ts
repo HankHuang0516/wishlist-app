@@ -227,17 +227,20 @@ export async function saveListingSellerDraft(req: AuthRequest, res: Response) {
             !Number.isSafeInteger(req.body.expectedVersion) || req.body.expectedVersion < 0 || req.body.expectedVersion > 1_000_000)
             throw new ListingSellerDraftError();
         const draft = parseListingSellerDraft(req.body.draft);
-        const where = { id: req.params.id, ownerUserId: req.user.id, listingId: null, wishItemId: null };
-        const changed = await prisma.listingMedia.updateMany({ where: { ...where, sellerDraftVersion: req.body.expectedVersion },
-            data: { sellerDraft: draft, sellerDraftVersion: { increment: 1 } } });
-        if (!changed.count) {
-            const existing = await prisma.listingMedia.findFirst({ where, select: { sellerDraftVersion: true } });
-            return existing ? res.status(409).json({ error: '草稿已在其他地方更新，請重新開啟檢查', errorCode: 'SELLER_DRAFT_CONFLICT' }) :
-                res.status(404).json({ error: '私人商品草稿不存在' });
-        }
+        const userId = req.user.id, mediaId = req.params.id;
+        await prisma.$transaction(async tx => {
+            await listingCreationGate(tx, req, userId);
+            await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ListingMedia" WHERE "id" = ${mediaId} FOR UPDATE`);
+            const where = { id: mediaId, ownerUserId: userId, listingId: null, wishItemId: null, capturePurpose: { not: 'AI_MARKETING' as const } };
+            const existing = await tx.listingMedia.findFirst({ where, select: { sellerDraftVersion: true } });
+            if (!existing) throw new ListingCreationError(404, 'SELLER_DRAFT_MEDIA_UNAVAILABLE');
+            if (existing.sellerDraftVersion !== req.body.expectedVersion) throw new ListingCreationError(409, 'SELLER_DRAFT_CONFLICT');
+            await tx.listingMedia.update({ where: { id: mediaId }, data: { sellerDraft: draft, sellerDraftVersion: { increment: 1 } } });
+        });
         return res.json({ mediaId: req.params.id, version: req.body.expectedVersion + 1 });
     } catch (error) {
         if (error instanceof ListingSellerDraftError) return res.status(400).json({ error: error.message, errorCode: 'INVALID_SELLER_DRAFT' });
+        if (error instanceof ListingCreationError) return res.status(error.status).json({ error: '私人草稿需重新核對', errorCode: error.code });
         return res.status(503).json({ error: '私人商品草稿暫時無法儲存', errorCode: 'SELLER_DRAFT_UNAVAILABLE' });
     }
 }

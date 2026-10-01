@@ -5,6 +5,7 @@ import { AuthRequest, authenticateToken, optionalAuthenticateToken } from '../mi
 import { adoptLegacyBatchPhoto, deleteUnusedListingMedia, getListingAiAvailability, getListingAiDraft, getListingMedia, getMediaByUploadId, mediaError, myUnusedListingMedia, requestListingAiDraft, saveListingSellerDraft, uploadListingMedia } from '../controllers/listingMediaController';
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } from '../lib/listingPhoto';
 import { abandonPhotoUpload, getPhotoUploadReceipt } from '../controllers/photoUploadReceiptController';
+import { abandonSellerDraftOperation, readSellerDraftOperation, submitSellerDraftOperation } from '../controllers/sellerDraftOperationController';
 
 const router = Router();
 const slots = new PhotoUploadSlots(1);
@@ -39,6 +40,9 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
     } finally { release(); }
 });
 router.get('/upload-receipts/:clientUploadId', authenticateToken, getPhotoUploadReceipt);
+router.get('/seller-draft-operations/:clientActionId', authenticateToken, readSellerDraftOperation);
+router.post('/:id/seller-draft-operations/:clientActionId', authenticateToken, submitSellerDraftOperation);
+router.post('/:id/seller-draft-operations/:clientActionId/abandon', authenticateToken, uploads, abandonSellerDraftOperation);
 router.post('/upload-receipts/:clientUploadId/abandon', authenticateToken, uploads, abandonPhotoUpload);
 router.get('/by-upload-id/:clientUploadId', authenticateToken, getMediaByUploadId);
 router.get('/unused', authenticateToken, myUnusedListingMedia);

@@ -7,6 +7,7 @@ import { API_URL } from '../config';
 import { listingCreationJournal, parseListingCreationJournal } from '../lib/listingCreationWeb';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { photoUploadJournal, parsePhotoUploadJournal } from '../lib/listingPhotoUploadWeb';
+import { sellerDraftJournal, parseSellerDraftJournal } from '../lib/sellerDraftWeb';
 const pending = vi.hoisted(() => new Map<string, string>());
 vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
   get: vi.fn(async (key: string) => pending.get(key) ?? null),
@@ -38,12 +39,15 @@ describe('web private batch listing flow', () => {
   let showUploadedPrivatePhoto = false;
   let showPendingPrivatePhoto = false;
   let holdSellerSave = false;
+  let loseSellerSave = false;
   let releaseSellerSave: (() => void) | undefined;
   let releaseOldAccountList: (() => void) | undefined;
   let holdPublicationAck = false;
   let releasePublicationAck: (() => void) | undefined;
   const receipts = new Map<string, { receipt: Record<string, unknown>; listing: Record<string, unknown> | null }>();
   const photoReceipts = new Map<string, { receipt: Record<string, unknown>; media: Record<string, unknown> | null }>();
+  const draftReceipts = new Map<string, { receipt: Record<string, unknown>; media: Record<string, any> | null }>();
+  const savedDrafts = new Map<string, { sellerDraft: any; sellerDraftVersion: number }>();
   beforeEach(() => {
     calls.length = 0;
     loseFirstPublicationResponse = false;
@@ -62,11 +66,12 @@ describe('web private batch listing flow', () => {
     showUploadedPrivatePhoto = false;
     showPendingPrivatePhoto = false;
     holdSellerSave = false;
+    loseSellerSave = false;
     releaseSellerSave = undefined;
     releaseOldAccountList = undefined;
     holdPublicationAck = false; releasePublicationAck = undefined;
     localStorage.clear();
-    pending.clear(); receipts.clear(); photoReceipts.clear();
+    pending.clear(); receipts.clear(); photoReceipts.clear(); draftReceipts.clear(); savedDrafts.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
     URL.revokeObjectURL = vi.fn();
@@ -89,7 +94,7 @@ describe('web private batch listing flow', () => {
           const cursor = new URL(path).searchParams.get('cursor');
           const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
           const items = rows.slice(start, start + 30);
-          return { ok: true, status: 200, json: async () => ({ items,
+          return { ok: true, status: 200, json: async () => ({ items: items.map(row => ({...row,...savedDrafts.get(row.id)})),
             nextCursor: start + 30 < rows.length ? items[items.length - 1].id : null }) };
         }
         unusedReads++;
@@ -100,7 +105,7 @@ describe('web private batch listing flow', () => {
           (loseUploadResponse && unusedReads >= 3 || showUploadedPrivatePhoto) ? [{ id: mediaId, clientUploadId: currentUploadId,
             aiDraftStatus: showUploadedPrivatePhoto ? 'COMPLETED' : 'SKIPPED', aiDraft: showUploadedPrivatePhoto ? ai : null,
             sellerDraft: null, sellerDraftVersion: 0 }] : [];
-        return { ok: true, status: 200, json: async () => ({ items }) };
+        return { ok: true, status: 200, json: async () => ({ items: items.map(row => ({...row,...savedDrafts.get(row.id)})) }) };
       }
       if (/\/listing-media\/[0-9a-f-]{36}\/thumbnail$/.test(path)) return { ok: true, blob: async () => new Blob(['private']) };
       if (path.endsWith('/listing-media') && method === 'POST') {
@@ -124,9 +129,23 @@ describe('web private batch listing flow', () => {
       }
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'POST') return { ok: true, status: 202, json: async () => ({ mediaId, status: 'COMPLETED', draft: ai }) };
       if (path.endsWith(`/listing-media/${mediaId}/ai-draft`) && method === 'GET') return { ok: true, status: 200, json: async () => ({ mediaId, status: aiGetStatus, draft: aiGetStatus === 'COMPLETED' ? ai : null }) };
-      if (/\/listing-media\/[0-9a-f-]{36}\/seller-draft$/.test(path) && method === 'PUT') {
-        if (holdSellerSave) await new Promise<void>(resolve => { releaseSellerSave = resolve; });
-        return { ok: true, status: 200, json: async () => ({ mediaId: path.split('/').at(-2), version: JSON.parse(String(init?.body)).expectedVersion + 1 }) };
+      if (path.includes('/seller-draft-operations/')) {
+        const actionId=path.split('/seller-draft-operations/')[1].split('/')[0];
+        if(method==='POST'&&!path.endsWith('/abandon')&&!draftReceipts.has(actionId)){
+          const id=path.split('/seller-draft-operations/')[0].split('/').at(-1)!,body=JSON.parse(String(init?.body));
+          const journal=await parseSellerDraftJournal(await sellerDraftJournal(id,body.expectedVersion,body.draft,actionId));
+          const current=savedDrafts.get(id),conflict=!!current&&current.sellerDraftVersion!==body.expectedVersion;
+          if(!conflict)savedDrafts.set(id,{sellerDraft:journal.draft,sellerDraftVersion:body.expectedVersion+1});
+          draftReceipts.set(actionId,{receipt:{clientActionId:actionId,mediaId:id,requestHash:journal.requestHash,state:conflict?'CONFLICT':'APPLIED',appliedVersion:conflict?null:body.expectedVersion+1,createdAt:'2026-10-01T00:00:00.000Z'},media:{id,ownerUserId:19,listingId:null,wishItemId:null,capturePurpose:'BATCH_ITEM',...savedDrafts.get(id)}});
+          if(holdSellerSave)await new Promise<void>(resolve=>{releaseSellerSave=resolve;});
+          if(loseSellerSave){loseSellerSave=false;throw Error('synthetic draft ACK lost');}
+        }
+        if(method==='POST'&&path.endsWith('/abandon')&&!draftReceipts.has(actionId)){
+          const id=path.split('/seller-draft-operations/')[0].split('/').at(-1)!;
+          draftReceipts.set(actionId,{receipt:{clientActionId:actionId,mediaId:id,requestHash:JSON.parse(String(init?.body)).requestHash,state:'ABANDONED',appliedVersion:null,createdAt:'2026-10-01T00:00:00.000Z'},media:{id,ownerUserId:19,listingId:null,wishItemId:null,capturePurpose:'BATCH_ITEM',sellerDraft:null,sellerDraftVersion:0}});
+        }
+        const stored=draftReceipts.get(actionId);if(!stored)return{ok:false,status:404,json:async()=>({error:'unknown original save'})};
+        return {ok:true,status:200,json:async()=>({...stored,media:stored.media?{...stored.media,...savedDrafts.get(stored.media.id)}:null})};
       }
       if (path.endsWith('/listings') && method === 'POST') {
         if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === rejectPublicationAt)
@@ -340,6 +359,69 @@ describe('web private batch listing flow', () => {
     expect(window.confirm).toHaveBeenCalledOnce();
   });
 
+  it('recovers a committed but lost draft ACK on reopen using only the original GET',async()=>{
+    showUploadedPrivatePhoto=true;loseSellerSave=true;
+    const view=render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');fireEvent.change(screen.getByLabelText('商品名稱'),{target:{value:'失聯前原商品名稱'}});fireEvent.click(screen.getByText('儲存私人草稿'));
+    await screen.findByText('原私人草稿儲存結果待確認');expect(screen.getByLabelText('商品名稱')).toBeDisabled();
+    const key=await pendingRequestKey(API_URL,19,'listing-draft'),raw=pending.get(key);expect(raw).toBeTruthy();
+    view.unmount();render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText('私人草稿已確認儲存；若儲存期間有新修改，仍保留在欄位中，請再儲存。');expect(screen.getByLabelText('商品名稱')).toHaveValue('失聯前原商品名稱');
+    expect(calls.filter(c=>c.path.includes('/seller-draft-operations/')&&c.method==='POST')).toHaveLength(1);expect(calls.filter(c=>c.path.includes('/seller-draft-operations/')&&c.method==='GET')).toHaveLength(1);expect(pending.has(key)).toBe(false);
+  });
+  it('keeps acknowledged draft truth when cleanup fails and only retries cleanup',async()=>{
+    showUploadedPrivatePhoto=true;vi.mocked(privatePendingStore.clear).mockRejectedValueOnce(Error('cleanup full'));
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');fireEvent.click(screen.getByText('儲存私人草稿'));await screen.findByText('草稿結果已確認，紀錄待清理');
+    expect(screen.queryByText('重試完全相同草稿')).not.toBeInTheDocument();fireEvent.click(screen.getByText('重試草稿安全清理'));
+    await waitFor(()=>expect(screen.queryByText('草稿結果已確認，紀錄待清理')).not.toBeInTheDocument());
+    expect(calls.filter(c=>c.path.includes('/seller-draft-operations/')&&c.method==='POST')).toHaveLength(1);
+  });
+  it('compares conflict without overwriting and keeps local edits only after an explicit choice',async()=>{
+    showUploadedPrivatePhoto=true;
+    savedDrafts.set(mediaId,{sellerDraft:{clientListingId:'33333333-3333-4333-8333-333333333333',form:{title:'後台較新名稱',description:'已由另一裝置更新。',brand:'',category:'home',condition:'USED',price:'500'},touched:{title:true,description:true,price:true}},sellerDraftVersion:2});
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('後台較新名稱');fireEvent.change(screen.getByLabelText('商品名稱'),{target:{value:'我的未送出名稱'}});
+    savedDrafts.get(mediaId)!.sellerDraftVersion=3;
+    fireEvent.click(screen.getByText('儲存私人草稿'));await screen.findByText('私人草稿需要比較版本');
+    expect(screen.queryByRole('button',{name:'儲存中…'})).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'儲存私人草稿',exact:true})).toBeDisabled();
+    expect(screen.getByLabelText('商品名稱')).toHaveValue('我的未送出名稱');expect(screen.getByText('後台最新草稿（版本 3）')).toBeInTheDocument();
+    expect(savedDrafts.get(mediaId)!.sellerDraft.form.title).toBe('後台較新名稱');fireEvent.click(screen.getByText('保留我的修改，稍後再儲存'));
+    await screen.findByText('已保留你的修改並核對最新版本；尚未重新儲存，請逐欄比較後明確保存。');expect(calls.filter(c=>c.path.includes('/seller-draft-operations/')&&c.method==='POST')).toHaveLength(1);
+    fireEvent.click(screen.getByText('儲存私人草稿'));await screen.findByText('已儲存');expect(savedDrafts.get(mediaId)).toMatchObject({sellerDraftVersion:4,sellerDraft:{form:{title:'我的未送出名稱'}}});
+  });
+  it('can adopt a newer backend draft without another write after an older applied ACK',async()=>{
+    showUploadedPrivatePhoto=true;holdSellerSave=true;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');fireEvent.click(screen.getByText('儲存私人草稿'));await waitFor(()=>expect(releaseSellerSave).toBeDefined());
+    savedDrafts.set(mediaId,{sellerDraft:{...savedDrafts.get(mediaId)!.sellerDraft,form:{...savedDrafts.get(mediaId)!.sellerDraft.form,title:'另一裝置的新版本'}},sellerDraftVersion:3});
+    await act(async()=>releaseSellerSave!());await screen.findByText('私人草稿需要比較版本');fireEvent.click(screen.getByText('採用後台最新草稿'));
+    await screen.findByText('已採用後台最新草稿；沒有重新送出。');expect(screen.getByLabelText('商品名稱')).toHaveValue('另一裝置的新版本');expect(calls.filter(c=>c.path.includes('/seller-draft-operations/')&&c.method==='POST')).toHaveLength(1);
+  });
+  it('unknown draft cancellation requires two steps, transmits only hash, and does not discard the original',async()=>{
+    showUploadedPrivatePhoto=true;
+    const raw=await sellerDraftJournal(mediaId,0,{clientListingId:'33333333-3333-4333-8333-333333333333',form:{title:'保留原修改',description:'尚未確認的原說明。',brand:'',category:'home',condition:'USED',price:'350'},touched:{title:true}});
+    pending.set(await pendingRequestKey(API_URL,19,'listing-draft'),raw);
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/恢復仍待確認/);fireEvent.click(screen.getByText('安全取消原草稿儲存'));expect(calls.filter(c=>c.path.endsWith('/abandon'))).toHaveLength(0);
+    fireEvent.click(screen.getByText('確認安全取消草稿儲存'));await screen.findByText('私人草稿需要比較版本');expect(screen.getByLabelText('商品名稱')).toHaveValue('保留原修改');
+    const canceled=calls.find(c=>c.path.endsWith('/abandon'))!;expect(JSON.parse(canceled.body!)).toEqual({requestHash:(await parseSellerDraftJournal(raw)).requestHash});
+    expect(calls.some(c=>c.method==='DELETE')).toBe(false);
+  });
+  it('late draft ACK cannot clear another account journal after account teardown',async()=>{
+    showUploadedPrivatePhoto=true;holdSellerSave=true;
+    const view=render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByDisplayValue('二手檯燈');fireEvent.click(screen.getByText('儲存私人草稿'));await waitFor(()=>expect(releaseSellerSave).toBeDefined());
+    const oldKey=await pendingRequestKey(API_URL,19,'listing-draft');expect(pending.has(oldKey)).toBe(true);showUploadedPrivatePhoto=false;
+    view.rerender(<MemoryRouter><AuthContext.Provider value={{...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText('還沒有私人商品照片，現在就拍第一件吧。');await act(async()=>releaseSellerSave!());expect(pending.has(oldKey)).toBe(true);expect(screen.queryByText('原私人草稿儲存結果待確認')).not.toBeInTheDocument();
+  });
+  it('corrupt encrypted draft original freezes before inventory or write HTTP',async()=>{
+    pending.set(await pendingRequestKey(API_URL,19,'listing-draft'),'{bad');
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/此瀏覽器無法讀取安全刊登紀錄/);expect(calls).toHaveLength(0);expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+  });
+
   it('allows the next field to be edited while background save is pending and retains the newer draft', async () => {
     showUploadedPrivatePhoto = true; holdSellerSave = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
@@ -352,14 +434,14 @@ describe('web private batch listing flow', () => {
     expect(description).not.toBeDisabled();
     fireEvent.change(description, { target: { value: '儲存期間仍可輸入的最新商品說明。' } });
     fireEvent.blur(description, { relatedTarget: screen.getByLabelText('賣家售價（TWD）') });
-    expect(calls.filter(call => call.path.endsWith('/seller-draft') && call.method === 'PUT')).toHaveLength(1);
+    expect(calls.filter(call => call.path.includes('/seller-draft-operations/') && call.method === 'POST')).toHaveLength(1);
     await act(async () => releaseSellerSave!());
     expect(description).toHaveValue('儲存期間仍可輸入的最新商品說明。');
-    expect(screen.getByText('儲存私人草稿')).toBeEnabled();
+    await waitFor(() => expect(screen.getByText('儲存私人草稿')).toBeEnabled());
     holdSellerSave = false;
     fireEvent.click(screen.getByText('儲存私人草稿'));
     await screen.findByText('已儲存');
-    const saves = calls.filter(call => call.path.endsWith('/seller-draft') && call.method === 'PUT');
+    const saves = calls.filter(call => call.path.includes('/seller-draft-operations/') && call.method === 'POST');
     expect(saves).toHaveLength(2);
     expect(JSON.parse(saves[1].body!)).toMatchObject({ expectedVersion: 1, draft: { form: { description: '儲存期間仍可輸入的最新商品說明。' } } });
   });
@@ -489,7 +571,9 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
-    vi.mocked(privatePendingStore.save).mockRejectedValueOnce(new Error('Storage unavailable'));
+    const retain = async (key:string,body:string) => { if(pending.has(key)&&pending.get(key)!==body)throw Error('Different operation');pending.set(key,body); };
+    // Fail publication persistence, not the two preceding draft checks.
+    vi.mocked(privatePendingStore.save).mockImplementationOnce(retain).mockImplementationOnce(retain).mockRejectedValueOnce(new Error('Storage unavailable'));
     fireEvent.click(screen.getByText('確認並刊登'));
     await screen.findByText(/商品尚未送出/);
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
@@ -562,7 +646,8 @@ describe('web private batch listing flow', () => {
   });
 
   it('uses cleanup-only after a confirmed ACK whose browser CAS cleanup failed', async () => {
-    showUploadedPrivatePhoto = true; vi.mocked(privatePendingStore.clear).mockResolvedValueOnce(false);
+    showUploadedPrivatePhoto = true;
+    vi.mocked(privatePendingStore.clear).mockImplementationOnce(async(key,body)=>{if(pending.get(key)!==body)return false;pending.delete(key);return true;}).mockResolvedValueOnce(false);
     render(view()); await publishOne(); await screen.findByText(/瀏覽器紀錄未能安全清理/);
     expect(screen.queryByText('重試同一刊登')).toBeNull(); expect(pending.size).toBe(1);
     const before = calls.filter(call => call.path.includes('/listings')).length;

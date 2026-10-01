@@ -9,6 +9,7 @@ if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw Error('Equ
 let schema = '';
 const migration = path.resolve(__dirname, '../../..', 'prisma/migrations/20261001050000_listing_create_receipts/migration.sql');
 const photoMigration = path.resolve(__dirname, '../../..', 'prisma/migrations/20261001073000_photo_upload_receipts/migration.sql');
+const draftMigration = path.resolve(__dirname, '../../..', 'prisma/migrations/20261001080000_seller_draft_receipts/migration.sql');
 const sql = (query: string) => prisma.$executeRawUnsafe(query);
 beforeEach(async () => {
     schema = 'receipt_migration_' + randomUUID().replace(/-/g, '');
@@ -51,6 +52,22 @@ describe('legacy listing receipt migration', () => {
         expect(migrate()).toBe(false);
         expect((await rows(`SELECT to_regclass('"${schema}"."ListingCreateReceipt"')::text AS "table"`))[0].table).toBeNull();
         expect(await rows(`SELECT * FROM "${schema}"."Listing" ORDER BY "id"`)).toEqual(before);
+    });
+});
+
+describe('seller draft immutable operation migration', () => {
+    it('enforces terminal state/version/hash, account uniqueness and erasure cascade without a photo FK', async () => {
+        expect(migrate(draftMigration)).toBe(true);
+        const id=randomUUID(),mediaId=randomUUID(),hash='a'.repeat(64);
+        await prisma.$executeRawUnsafe(`INSERT INTO "${schema}"."SellerDraftReceipt" ("id","userId","clientActionId","mediaId","requestHash","state","appliedVersion") VALUES ($1,1,$2::uuid,$3::uuid,$4,'APPLIED',1),($5,2,$2::uuid,$3::uuid,$4,'ABANDONED',NULL)`,randomUUID(),id,mediaId,hash,randomUUID());
+        // No ListingMedia row exists; the operation must survive photo removal.
+        expect((await rows(`SELECT * FROM "${schema}"."SellerDraftReceipt"`)).length).toBe(2);
+        for(const [state,version,badHash] of [['APPLIED',null,hash],['APPLIED',0,hash],['CONFLICT',1,hash],['OTHER',null,hash],['ABANDONED',null,'bad']] as const){
+            await expect(prisma.$executeRawUnsafe(`INSERT INTO "${schema}"."SellerDraftReceipt" ("id","userId","clientActionId","mediaId","requestHash","state","appliedVersion") VALUES ($1,1,$2::uuid,$3::uuid,$4,$5,$6)`,randomUUID(),randomUUID(),mediaId,badHash,state,version)).rejects.toThrow();
+        }
+        await expect(prisma.$executeRawUnsafe(`INSERT INTO "${schema}"."SellerDraftReceipt" ("id","userId","clientActionId","mediaId","requestHash","state") VALUES ($1,1,$2::uuid,$3::uuid,$4,'ABANDONED')`,randomUUID(),id,mediaId,hash)).rejects.toThrow();
+        await sql(`DELETE FROM "${schema}"."User" WHERE "id"=1`);
+        expect((await rows(`SELECT "userId" FROM "${schema}"."SellerDraftReceipt"`))).toEqual([{userId:2}]);
     });
 });
 

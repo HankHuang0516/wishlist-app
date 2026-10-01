@@ -13,6 +13,7 @@ import { API_URL } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { abandonListingCreation, listingCreationJournal, parseListingCreationJournal, readListingCreation, sendListingCreation, type ListingCreationResult } from '../lib/listingCreationWeb';
 import { abandonPhotoUpload, parsePhotoUploadJournal, photoUploadJournal, readPhotoUpload, sendPhotoUpload, type PhotoUploadResult } from '../lib/listingPhotoUploadWeb';
+import { abandonSellerDraftOperation, parseSellerDraftJournal, readSellerDraftOperation, sellerDraftJournal, sendSellerDraftOperation, type SellerDraftResult } from '../lib/sellerDraftWeb';
 
 type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
@@ -70,10 +71,19 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const [photoCancel, setPhotoCancel] = useState(false);
   const photoJournalKey = useRef('');
   const photoConfirmed = useRef<PhotoUploadResult | null>(null);
+  const [draftPending, setDraftPending] = useState('');
+  const [draftInFlight, setDraftInFlight] = useState(false);
+  const [draftCleanup, setDraftCleanup] = useState(false);
+  const [draftDecision, setDraftDecision] = useState(false);
+  const [draftCancel, setDraftCancel] = useState(false);
+  const draftKey = useRef('');
+  const draftOperation = useRef('');
+  const draftConfirmed = useRef<SellerDraftResult | null>(null);
+  const draftOutcomeApplied = useRef(false);
   const journalKey = useRef('');
   const confirmedResult = useRef<ListingCreationResult | null>(null);
   const pendingRef = useRef(pending);
-  pendingRef.current = pending || photoPending || (photoLegacy ? 'legacy-photo' : '') || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
+  pendingRef.current = pending || photoPending || (!draftInFlight ? draftPending : '') || (photoLegacy ? 'legacy-photo' : '') || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [invalid, setInvalid] = useState<{ cardId: string; field: ListingPublishField | 'review' } | null>(null);
   const fieldNodes = useRef(new Map<string, HTMLElement>());
@@ -85,7 +95,8 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   cardsRef.current = cards;
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
   const confirmedCards = cards.filter(card => card.confirmed && !card.published);
-  const locked = busy || !!pending || !!photoPending || photoLegacy || !!legacy && !legacyVerified || storageError || !ready;
+  const locked = busy || !!pending || !!photoPending || !!draftPending && !draftInFlight || photoLegacy || !!legacy && !legacyVerified || storageError || !ready;
+  const actionsLocked = locked || !!draftPending;
 
   useEffect(() => {
     lifetime.current++;
@@ -120,18 +131,23 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     const epoch = lifetime.current;
     let active = true;
     void (async () => {
-      let stored: string | null, previous: string, storedPhoto: string | null;
+      let stored: string | null, previous: string, storedPhoto: string | null, storedDraft: string | null;
       try {
         const key = await pendingRequestKey(API_URL, userId, 'listing');
         stored = await privatePendingStore.get(key);
         const photoKey = await pendingRequestKey(API_URL, userId, 'listing-photo');
         storedPhoto = await privatePendingStore.get(photoKey);
         if (storedPhoto) await parsePhotoUploadJournal(storedPhoto);
+        const sellerKey = await pendingRequestKey(API_URL, userId, 'listing-draft');
+        storedDraft = await privatePendingStore.get(sellerKey);
+        if (storedDraft) await parseSellerDraftJournal(storedDraft);
         previous = localStorage.getItem(pendingKey(userId)) ?? '';
         if (stored) await parseListingCreationJournal(stored);
         if (!active || epoch !== lifetime.current) return;
         journalKey.current = key; setPending(stored ?? ''); setLegacy(previous); setLegacyVerified(false);
         photoJournalKey.current = photoKey; setPhotoPending(storedPhoto ?? '');
+        draftKey.current = sellerKey; draftOperation.current = storedDraft ?? ''; setDraftPending(storedDraft ?? '');
+        setDraftInFlight(false); setDraftCleanup(false); setDraftDecision(false); setDraftCancel(false); draftConfirmed.current = null; draftOutcomeApplied.current = false;
         setPhotoLegacy(!!localStorage.getItem(`wishlist:listing-upload-pending:${userId}`));
         setPhotoCleanup(false); setPhotoCancel(false); photoConfirmed.current = null;
         setStorageError(false); setCleanupOnly(false); confirmedResult.current = null;
@@ -141,6 +157,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       }
       try {
         await reload();
+        if (storedDraft && active && epoch === lifetime.current) {
+          const journal = await parseSellerDraftJournal(storedDraft);
+          if (readTick === 0) setCards(old => old.map(card => card.id === journal.mediaId ? { ...card, ...journal.draft, dirty: true, confirmed: false } : card));
+          const result = await readSellerDraftOperation(token, storedDraft, userId);
+          if (active && epoch === lifetime.current) await finishSellerDraft(storedDraft, result, epoch);
+        }
         if (!active || epoch !== lifetime.current) return;
         // Reopening is GET-only. An absent receipt is not proof that a POST
         // will never commit, and never authorizes automatic retransmission.
@@ -164,13 +186,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     if (!token || !ready || !hasPendingAi) return;
     let active = true;
     const timer = window.setInterval(() => {
-      if (busyRef.current) return;
+      if (busyRef.current || draftOperation.current) return;
       for (const card of cardsRef.current.filter(item => item.ai === 'PENDING' || item.ai === 'PROCESSING')) {
         if (pollIds.current.has(card.id)) continue;
         pollIds.current.add(card.id);
         void api<unknown>(token, `/listing-media/${card.id}/ai-draft`).then(raw => {
           const ai = parseAiState(raw, card.id);
-          if (!active || busyRef.current) return;
+          if (!active || busyRef.current || draftOperation.current) return;
           setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? applyAi(item, ai) : item));
         }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ }).finally(() => pollIds.current.delete(card.id));
       }
@@ -180,12 +202,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!busy && !pending && !photoPending && !photoLegacy && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
+      if (!busy && !pending && !photoPending && !draftPending && !photoLegacy && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
       event.preventDefault(); event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [busy, pending, photoPending, photoLegacy, legacy, legacyVerified, storageError, cards]);
+  }, [busy, pending, photoPending, draftPending, photoLegacy, legacy, legacyVerified, storageError, cards]);
 
   const replace = (id: string, change: (card: Card) => Card) => setCards(old => old.map(card => card.id === id ? change(card) : card));
   function updateField(id: string, field: ListingField, value: string) {
@@ -221,7 +243,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       node?.animate?.([{ opacity: 1 }, { opacity: 0.45 }, { opacity: 1 }], { duration: 480, iterations: 3 });
   }
   function confirmCard(card: Card) {
-    if (locked || busyRef.current || card.saving || card.published) return;
+    if (actionsLocked || busyRef.current || savingIds.current.size || card.saving || card.published) return;
     if (card.confirmed) { replace(card.id, current => ({ ...current, confirmed: false })); return; }
     const issue = firstListingPublishIssue(card, card.id, details);
     if (issue) { showIssue(card, issue); return; }
@@ -230,6 +252,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function requestAi(id: string): Promise<boolean> {
+    if (draftOperation.current || savingIds.current.size) return false;
     try {
       const state = parseAiState(await api<unknown>(token!, `/listing-media/${id}/ai-draft`, { method: 'POST' }), id);
       replace(id, card => !card.publishing && !card.published ? applyAi(card, state) : card);
@@ -242,7 +265,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || locked || busyRef.current) return;
+    if (!files || actionsLocked || busyRef.current || savingIds.current.size || draftOperation.current) return;
     if (cards.filter(card => !card.published).length + files.length > 12) { setMessage('一次最多處理 12 件商品。'); return; }
     busyRef.current = true; setBusy(true); setMessage('');
     const epoch = lifetime.current;
@@ -273,21 +296,72 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function save(card: Card): Promise<boolean> {
-    if (card.saving || card.published || savingIds.current.has(card.id)) return false;
+    if (card.saving || card.published || savingIds.current.size || draftOperation.current) return false;
+    const epoch = lifetime.current;
     savingIds.current.add(card.id);
     replace(card.id, current => ({ ...current, saving: true, error: '' }));
     const draft = { clientListingId: card.clientListingId, form: card.form, touched: card.touched };
+    let raw = '';
     try {
-      const result = await api<{ mediaId: string; version: number }>(token!, `/listing-media/${card.id}/seller-draft`, {
-        method: 'PUT', body: JSON.stringify({ expectedVersion: card.version, draft }) });
-      if (result.mediaId !== card.id || result.version !== card.version + 1) throw new Error('私人草稿儲存結果不正確');
-      replace(card.id, current => ({ ...current, version: result.version, saving: false,
-        dirty: !sameSellerContent(current, card) }));
-      return true;
+      raw = await sellerDraftJournal(card.id, card.version, draft);
+      await privatePendingStore.save(draftKey.current, raw);
+      if (epoch !== lifetime.current) return false;
+      draftOperation.current = raw; setDraftPending(raw); setDraftInFlight(true); setDraftCleanup(false); setDraftDecision(false); draftOutcomeApplied.current = false;
+      const result = await sendSellerDraftOperation(token, raw, userId, privatePendingStore, draftKey.current, () => epoch === lifetime.current);
+      return epoch === lifetime.current && await finishSellerDraft(raw, result, epoch);
     } catch (error) {
-      replace(card.id, current => ({ ...current, saving: false, error: `草稿尚未儲存：${(error as Error).message}` }));
+      if (epoch !== lifetime.current) return false;
+      replace(card.id, current => ({ ...current, saving: false, error: draftOperation.current
+        ? '原草稿儲存結果待確認；先查核，不要改送另一份內容。' : '尚未送出草稿；無法安全記錄原操作。' }));
+      setMessage(draftOperation.current ? `原草稿儲存結果待確認：${(error as Error).message}。保留未送出的修改，不會自動重送。` : `草稿尚未送出：${(error as Error).message}`);
       return false;
-    } finally { savingIds.current.delete(card.id); }
+    } finally { savingIds.current.delete(card.id); if (epoch === lifetime.current) setDraftInFlight(false); }
+  }
+
+  async function finishSellerDraft(raw: string, result: SellerDraftResult, epoch: number, choice?: 'server' | 'local') {
+    const journal = await parseSellerDraftJournal(raw);
+    if (epoch !== lifetime.current) return false;
+    draftConfirmed.current = result; setDraftCancel(false);
+    const media = result.media;
+    const available = !!media && media.listingId === null && media.wishItemId === null && media.capturePurpose === 'BATCH_ITEM';
+    if (available && !result.current && !choice && !draftOutcomeApplied.current) {
+      replace(journal.mediaId, card => ({ ...card, saving: false }));
+      setDraftCleanup(false); setDraftDecision(true);
+      setMessage(result.state === 'APPLIED' ? '原草稿已儲存，但後台已有較新版本；請比較後選擇，沒有覆蓋最新內容。' : result.state === 'ABANDONED' ? '原儲存已安全取消，修改仍保留；請選擇接下來保留哪一份內容。' : '草稿版本衝突；原操作沒有覆蓋後台最新內容。請比較後再決定。');
+      return false;
+    }
+    setDraftCleanup(true); setDraftDecision(false);
+    if (!draftOutcomeApplied.current) {
+      draftOutcomeApplied.current = true;
+      if (!available) {
+        setCards(old => old.filter(card => card.id !== journal.mediaId));
+        setMessage('原草稿操作已查核；照片已移除、轉作其他用途或刊登，不能再修改這份私人草稿。請到我的商品查看。');
+      } else {
+        replace(journal.mediaId, card => choice === 'server' ? { ...card, ...(media!.sellerDraft ?? { clientListingId: crypto.randomUUID(), form: emptyListingDraft(), touched: {} }), version: media!.sellerDraftVersion, saving: false, dirty: !media!.sellerDraft, confirmed: false, error: '' }
+          : { ...card, version: media!.sellerDraftVersion, saving: false, dirty: choice === 'local' || !sameSellerContent(card, journal.draft), confirmed: choice ? false : card.confirmed, error: '' });
+        setMessage(choice === 'server' ? '已採用後台最新草稿；沒有重新送出。' : choice === 'local' ? '已保留你的修改並核對最新版本；尚未重新儲存，請逐欄比較後明確保存。' : '私人草稿已確認儲存；若儲存期間有新修改，仍保留在欄位中，請再儲存。');
+      }
+    }
+    let cleared = false;
+    try { cleared = await privatePendingStore.clear(draftKey.current, raw); } catch { /* Preserve acknowledged truth. */ }
+    if (epoch !== lifetime.current) return false;
+    if (!cleared) { setMessage('草稿結果已確認，瀏覽器紀錄待安全清理；請重試清理，不會再次儲存。'); return false; }
+    draftOperation.current = ''; setDraftPending(''); setDraftCleanup(false); draftConfirmed.current = null;
+    return available && result.current && !choice;
+  }
+
+  async function reconcileSellerDraft(mode: 'read' | 'retry' | 'abandon' | 'cleanup' | 'server' | 'local') {
+    if (busyRef.current || !draftOperation.current) return;
+    const raw = draftOperation.current, epoch = lifetime.current;
+    busyRef.current = true; setBusy(true);
+    try {
+      const result = mode === 'cleanup' || mode === 'server' || mode === 'local' ? draftConfirmed.current!
+        : mode === 'retry' ? await sendSellerDraftOperation(token, raw, userId, privatePendingStore, draftKey.current, () => epoch === lifetime.current)
+        : mode === 'abandon' ? await abandonSellerDraftOperation(token, raw, userId, () => epoch === lifetime.current)
+        : await readSellerDraftOperation(token, raw, userId);
+      if (epoch === lifetime.current) await finishSellerDraft(raw, result, epoch, mode === 'server' || mode === 'local' ? mode : undefined);
+    } catch (error) { if (epoch === lifetime.current) setMessage(`原草稿仍需查核：${(error as Error).message}。沒有自動重送或丟棄你的修改。`); }
+    finally { if (epoch === lifetime.current) { busyRef.current = false; setBusy(false); } }
   }
 
   function saveOnBlur(card: Card, event: FocusEvent<HTMLElement>) {
@@ -377,7 +451,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function publishReviewed(selected: Card[]) {
-    if (busyRef.current || locked || !selected.length ||
+    if (busyRef.current || actionsLocked || draftOperation.current || savingIds.current.size || !selected.length ||
       selected.some(card => card.published || card.publishing || card.saving || savingIds.current.has(card.id))) return;
     // Validate and freeze the entire reviewed set before showing confirmation.
     // Publication is sequential: a failed or unknown item stops the next item.
@@ -425,7 +499,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function remove(id: string) {
-    if (busyRef.current || locked || !window.confirm('確定刪除這張尚未刊登的私人商品照片？')) return;
+    if (busyRef.current || actionsLocked || draftOperation.current || savingIds.current.size || !window.confirm('確定刪除這張尚未刊登的私人商品照片？')) return;
     busyRef.current = true; setBusy(true);
     try { await api<void>(token!, `/listing-media/${id}`, { method: 'DELETE' }); setCards(old => old.filter(card => card.id !== id)); }
     catch (error) { replace(id, card => ({ ...card, error: (error as Error).message })); }
@@ -469,7 +543,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   function locate() {
-    if (busyRef.current || locked) return;
+    if (busyRef.current || actionsLocked || draftOperation.current || savingIds.current.size) return;
     const epoch = lifetime.current;
     if (!navigator.geolocation) { setMessage('此瀏覽器無法取得位置；請手動填寫縣市、行政區及座標。'); return; }
     navigator.geolocation.getCurrentPosition(position => {
@@ -487,9 +561,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       {aiAvailable === false && <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">此帳號的 AI 辨識尚未開放。照片仍可私密上傳、手動填寫並刊登；不會進入 AI 隊列。</p>}
       <div className="mt-5 flex flex-wrap gap-3">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
-          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={locked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={actionsLocked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold"><ImagePlus size={18} />批次選照片
-          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={locked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
+          <input aria-label="批次選擇商品照片" className="sr-only" type="file" accept="image/*" multiple disabled={actionsLocked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
       </div>
       <p className="mt-3 text-xs text-stone-500">可重複拍照；單次最多 12 件。大張照片會先在瀏覽器縮放至 5MB 以下；支援的相片格式依瀏覽器而定。上傳後仍保持私人狀態。</p>
       {cards.filter(card => !card.published).length >= 12 && <p role="status" className="mt-2 text-sm text-amber-800">目前有 {cards.filter(card => !card.published).length} 件私人草稿；請先確認刊登或移除部分照片，再新增商品。</p>}
@@ -505,6 +579,15 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     {photoPending && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm"><p className="font-semibold">{photoCleanup ? '照片結果已確認，紀錄待清理' : '原照片上傳結果待確認'}</p><p className="mt-1">先只讀查核原照片，不會重新上傳。重試須選回同一張照片並核對內容摘要，不能用另一張照片取代。</p><div className="mt-3 flex flex-wrap gap-3">
       {photoCleanup ? <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('cleanup')}>重試照片安全清理</button><button className="min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setReadTick(value => value + 1)}>重新讀取目前照片紀錄</button></> : <><button className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('read')}>查核原照片上傳</button><label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border px-4 py-2">選回同一張照片重試<input aria-label="重試原照片上傳" className="sr-only" type="file" accept="image/*" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if(file)void reconcilePhoto('read', file); event.target.value = ''; }} /></label><button className="min-h-11 rounded-xl border border-red-300 px-4 py-2 text-red-800" disabled={busy} onClick={() => setPhotoCancel(true)}>安全取消原上傳</button></>}
       </div>{photoCancel && !photoCleanup && <div className="mt-4 rounded-xl border border-red-200 bg-white p-3"><p>只阻止尚未完成的原上傳。若已保存，會回報原照片，不會刪除它。確定取消？</p><button className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 py-2 text-white" disabled={busy} onClick={() => void reconcilePhoto('abandon')}>確認安全取消上傳</button><button className="ml-3 min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={() => setPhotoCancel(false)}>返回照片查核</button></div>}
+    </div>}
+    {draftPending && !draftInFlight && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm">
+      <p className="font-semibold">{draftDecision ? '私人草稿需要比較版本' : draftCleanup ? '草稿結果已確認，紀錄待清理' : '原私人草稿儲存結果待確認'}</p>
+      <p className="mt-1">你的原內容已安全保留；重開只讀查核，不會自動覆蓋後台或建立另一份儲存。</p>
+      {draftDecision && <div className="mt-3 rounded-xl bg-white p-3"><p className="font-semibold">後台最新草稿（版本 {draftConfirmed.current?.media?.sellerDraftVersion}）</p><p>商品名稱：{draftConfirmed.current?.media?.sellerDraft?.form.title || '未填寫'}</p><p className="whitespace-pre-wrap">商品說明：{draftConfirmed.current?.media?.sellerDraft?.form.description || '未填寫'}</p><p>品牌：{draftConfirmed.current?.media?.sellerDraft?.form.brand || '未填寫'} · 分類：{listingCategories.find(([key]) => key === draftConfirmed.current?.media?.sellerDraft?.form.category)?.[1] || '未填寫'} · 狀態：{draftConfirmed.current?.media?.sellerDraft?.form.condition === 'NEW' ? '全新' : draftConfirmed.current?.media?.sellerDraft?.form.condition === 'USED' ? '二手' : '未填寫'}</p><p>售價：TWD {draftConfirmed.current?.media?.sellerDraft?.form.price || '未填寫'}</p><p className="mt-2">下方欄位保留你的修改；請選擇要保留的版本。</p></div>}
+      <div className="mt-3 flex flex-wrap gap-3">
+        {draftDecision ? <><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('server')}>採用後台最新草稿</button><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('local')}>保留我的修改，稍後再儲存</button></> : draftCleanup ? <><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('cleanup')}>重試草稿安全清理</button><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => setReadTick(n => n + 1)}>重新讀取草稿紀錄</button></> : <><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('read')}>查核原草稿儲存</button><button disabled={busy} className="min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('retry')}>重試完全相同草稿</button><button disabled={busy} className="min-h-11 rounded-xl border border-red-300 px-4 py-2" onClick={() => setDraftCancel(true)}>安全取消原草稿儲存</button></>}
+      </div>
+      {draftCancel && !draftDecision && !draftCleanup && <div className="mt-3 rounded-xl border border-red-200 bg-white p-3"><p>只取消尚未完成的原儲存；若已完成就查回原結果，不刪照片、不撤銷已保存草稿。確定取消？</p><button disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('abandon')}>確認安全取消草稿儲存</button><button disabled={busy} className="ml-3 min-h-11 rounded-xl border px-4 py-2" onClick={() => setDraftCancel(false)}>返回草稿查核</button></div>}
     </div>}
     {message && <div role="status" className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">{message}</div>}
     {!ready && !message && <p className="text-sm text-stone-500">正在恢復私人草稿…</p>}
@@ -553,7 +636,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         </div>
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
           {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} sourceMediaId={card.id}
-            beforeStart={async () => !busyRef.current && !locked && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
+            beforeStart={async () => !busyRef.current && !actionsLocked && !draftOperation.current && !savingIds.current.size && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
               !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
             onApproved={async () => {
               const rows = await loadPrivateMediaPages(cursor => api<unknown>(token,
@@ -563,18 +646,18 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
               if (!updated) throw new Error('PRIVATE_DRAFT_NOT_FOUND');
               replace(card.id, () => fromMedia(updated));
             }} />}
-          <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={locked || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
+          <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={actionsLocked || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
           {card.error && <p id={`listing-error-${card.id}`} role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
-            {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={locked} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={locked || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={locked || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
-            <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={locked} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
+            {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={actionsLocked || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
+            <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={actionsLocked} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
           </div>
         </>}
       </article>)}
     </section>
-    {cards.some(card => !card.published) && <div className="rounded-2xl border border-stone-200 bg-white p-5"><p className="mb-3 text-sm text-stone-600">僅送出已逐件核對的商品；任何一件失敗或結果待確認時，後續商品會停止送出。</p><button className="min-h-11 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white" disabled={locked || !confirmedCards.length || confirmedCards.some(card => card.saving)} onClick={() => void publishReviewed(confirmedCards)}>刊登已逐件確認的商品（{confirmedCards.length}）</button></div>}
+    {cards.some(card => !card.published) && <div className="rounded-2xl border border-stone-200 bg-white p-5"><p className="mb-3 text-sm text-stone-600">僅送出已逐件核對的商品；任何一件失敗或結果待確認時，後續商品會停止送出。</p><button className="min-h-11 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white" disabled={actionsLocked || !confirmedCards.length || confirmedCards.some(card => card.saving)} onClick={() => void publishReviewed(confirmedCards)}>刊登已逐件確認的商品（{confirmedCards.length}）</button></div>}
     <Link to="/my-listings" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-5 py-3 text-sm text-blue-700">前往我的商品查看與管理</Link>
   </div>;
 }

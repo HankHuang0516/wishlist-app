@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import ListingBatchPage from './ListingBatchPage';
+import { API_URL } from '../config';
+import { listingCreationJournal, parseListingCreationJournal } from '../lib/listingCreationWeb';
+import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
+const pending = vi.hoisted(() => new Map<string, string>());
+vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
+  get: vi.fn(async (key: string) => pending.get(key) ?? null),
+  save: vi.fn(async (key: string, body: string) => { if (pending.has(key) && pending.get(key) !== body) throw new Error('Different pending operation'); pending.set(key, body); }),
+  clear: vi.fn(async (key: string, body: string) => { if (pending.get(key) !== body) return false; pending.delete(key); return true; }),
+} }));
 
 const mediaId = '11111111-1111-4111-8111-111111111111';
 const ai = { title: '二手檯燈', description: '賣家應確認功能是否正常。', brand: null, category: 'home', condition: 'USED',
@@ -30,6 +39,9 @@ describe('web private batch listing flow', () => {
   let holdSellerSave = false;
   let releaseSellerSave: (() => void) | undefined;
   let releaseOldAccountList: (() => void) | undefined;
+  let holdPublicationAck = false;
+  let releasePublicationAck: (() => void) | undefined;
+  const receipts = new Map<string, { receipt: Record<string, unknown>; listing: Record<string, unknown> | null }>();
   beforeEach(() => {
     calls.length = 0;
     loseFirstPublicationResponse = false;
@@ -50,7 +62,9 @@ describe('web private batch listing flow', () => {
     holdSellerSave = false;
     releaseSellerSave = undefined;
     releaseOldAccountList = undefined;
+    holdPublicationAck = false; releasePublicationAck = undefined;
     localStorage.clear();
+    pending.clear(); receipts.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
     URL.revokeObjectURL = vi.fn();
@@ -91,6 +105,7 @@ describe('web private batch listing flow', () => {
         currentUploadId = String((init?.body as FormData).get('clientUploadId'));
         if (holdUploadAck) await new Promise<void>(resolve => { releaseUploadAck = resolve; });
         if (loseUploadResponse) throw new Error('upload ACK lost');
+        showUploadedPrivatePhoto = true;
         return { ok: true, status: 201, json: async () => ({ id: mediaId }) };
       }
       if (path.includes('/listing-media/by-upload-id/')) {
@@ -105,12 +120,26 @@ describe('web private batch listing flow', () => {
         return { ok: true, status: 200, json: async () => ({ mediaId: path.split('/').at(-2), version: JSON.parse(String(init?.body)).expectedVersion + 1 }) };
       }
       if (path.endsWith('/listings') && method === 'POST') {
-        if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === losePublicationAt)
-          throw new Error('response lost');
         if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === rejectPublicationAt)
           return { ok: false, status: 422, json: async () => ({ error: '商品資料需要重新確認' }) };
+        const body = JSON.parse(String(init?.body)), raw = await listingCreationJournal(String(init?.body)), journal = await parseListingCreationJournal(raw);
+        const base = API_URL.replace(/\/api\/?$/, ''), timestamp = '2026-10-01T00:00:00.000Z';
+        const listing = { id: body.clientListingId, ownerUserId: 19, owner: { id: 19, name: '合成賣家' }, title: body.title,
+          description: body.description, condition: body.condition, category: body.category, brand: body.brand ?? null, price: String(body.price), currency: 'TWD',
+          deliveryMethods: body.deliveryMethods, negotiable: body.negotiable, status: 'ACTIVE', version: 1, expiryMode: body.expiryDate ? 'CUSTOM_DATE' : 'DEFAULT_30_DAYS',
+          createdAt: timestamp, updatedAt: timestamp, publishedAt: timestamp, lastVerifiedAt: timestamp, expiresAt: '2030-01-31T15:59:59.999Z',
+          location: { county: body.location.county, district: body.location.district, publicLatitude: body.location.latitude, publicLongitude: body.location.longitude, precisionMeters: 2200 },
+          media: body.mediaIds.map((id: string, position: number) => ({ id, imageUrl: `${base}/api/listing-media/${id}/image`, thumbnailUrl: `${base}/api/listing-media/${id}/thumbnail`, position, capturePurpose: 'BATCH_ITEM' })) };
+        receipts.set(body.clientListingId, { receipt: { clientListingId: body.clientListingId, requestHash: journal.requestHash, state: 'CREATED', listingId: listing.id, createdAt: timestamp }, listing });
+        if (holdPublicationAck) await new Promise<void>(resolve => { releasePublicationAck = resolve; });
+        if (calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST').length === losePublicationAt) throw new Error('response lost');
         if (loseFirstPublicationResponse) { loseFirstPublicationResponse = false; throw new Error('response lost'); }
-        return { ok: true, status: 201, json: async () => ({ id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }) };
+        return { ok: true, status: 201, json: async () => listing };
+      }
+      if (path.includes('/listings/creation-receipts/')) {
+        const id = path.split('/creation-receipts/')[1].split('/')[0];
+        if (method === 'POST' && path.endsWith('/abandon') && !receipts.has(id)) receipts.set(id, { receipt: { clientListingId: id, requestHash: JSON.parse(String(init?.body)).requestHash, state: 'ABANDONED', listingId: null, createdAt: '2026-10-01T00:00:00.000Z' }, listing: null });
+        return receipts.has(id) ? { ok: true, status: 200, json: async () => receipts.get(id) } : { ok: false, status: 404, json: async () => ({ error: 'Receipt not found', errorCode: 'LISTING_CREATE_NOT_FOUND' }) };
       }
       throw new Error(`Unexpected ${method} ${path}`);
     }));
@@ -123,6 +152,16 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+  }
+  const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>;
+  async function publishOne() {
+    await screen.findByDisplayValue('二手檯燈'); fillSharedDetails();
+    fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/)); fireEvent.click(screen.getByText('確認並刊登'));
+  }
+  async function uploadInput() {
+    const input = await screen.findByLabelText('批次選擇商品照片');
+    await waitFor(() => expect(input).not.toBeDisabled());
+    return input;
   }
 
   it('focuses and highlights the exact missing field when review cannot be checked', async () => {
@@ -231,7 +270,8 @@ describe('web private batch listing flow', () => {
     await screen.findByText(/已確認刊登 1 件；本件未完成/);
     expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(2);
     expect(screen.getByDisplayValue('測試商品 1')).toBeInTheDocument();
-    expect(screen.getByText(/未刊登：商品資料需要重新確認/)).toBeInTheDocument();
+    expect(screen.getByText(/刊登結果待確認：商品資料需要重新確認/)).toBeInTheDocument();
+    expect(pending.size).toBe(1);
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
   });
 
@@ -243,9 +283,11 @@ describe('web private batch listing flow', () => {
     for (const review of screen.getAllByLabelText(/我已逐欄確認第/)) fireEvent.click(review);
     fireEvent.click(screen.getByText('刊登已逐件確認的商品（3）'));
     await screen.findByText('前次刊登結果尚未確認');
+    await screen.findByText(/已確認刊登 1 件；本件未完成/);
     const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
     expect(posts).toHaveLength(2);
-    expect(localStorage.getItem('wishlist:listing-pending:19')).toBe(posts[1].body);
+    expect(JSON.stringify((await parseListingCreationJournal([...pending.values()][0])).payload)).toBe(posts[1].body);
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
     expect(screen.getByLabelText('縣市')).toBeDisabled();
     expect(screen.getByDisplayValue('測試商品 1')).toBeDisabled();
     expect(screen.getByText(/刊登已逐件確認的商品/)).toBeDisabled();
@@ -255,7 +297,7 @@ describe('web private batch listing flow', () => {
   it('stops uploading the next photo after the account changes while the first ACK is pending', async () => {
     holdUploadAck = true;
     const view = render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     await waitFor(() => expect(input).toBeEnabled());
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' }), new File(['cup'], 'cup.jpg', { type: 'image/jpeg' })] } });
     await waitFor(() => expect(releaseUploadAck).toBeDefined());
@@ -282,7 +324,7 @@ describe('web private batch listing flow', () => {
     expect(screen.getByLabelText(/自訂失效日期/)).toBeDisabled();
     expect(screen.getByLabelText(/我已逐欄確認第 1 件/)).toBeDisabled();
     await act(async () => releaseSellerSave!());
-    await screen.findByText('商品已刊登。其他照片仍是私人草稿。');
+    await screen.findByText('商品刊登已確認。其他照片仍是私人草稿。');
     expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
     expect(window.confirm).toHaveBeenCalledOnce();
   });
@@ -332,7 +374,7 @@ describe('web private batch listing flow', () => {
 
   it('keeps upload private until seller supplies details and explicitly confirms publication', async () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     await screen.findByDisplayValue('二手檯燈');
     expect(screen.getByText(/AI 參考價格/)).toHaveTextContent('NT$100–600');
@@ -353,12 +395,12 @@ describe('web private batch listing flow', () => {
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
     const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
     expect(JSON.parse(posted!.body!)).toMatchObject({ publish: true, mediaIds: [mediaId], price: 350, consentToMap: true });
-    expect(await screen.findByText('商品已刊登。其他照片仍是私人草稿。')).toBeInTheDocument();
+    expect(await screen.findByText('商品刊登已確認。其他照片仍是私人草稿。')).toBeInTheDocument();
   });
 
   it('labels an AI-prefilled price as unverified and removes that label after seller edits it', async () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     const price = await screen.findByLabelText('賣家售價（TWD）');
     await waitFor(() => expect(price).toHaveValue('350'));
@@ -396,12 +438,13 @@ describe('web private batch listing flow', () => {
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
     const posted = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST');
     expect(JSON.parse(posted!.body!)).toMatchObject({ title: '賣家確認的檯燈', brand: '自有品牌' });
+    await screen.findByText('商品刊登已確認。其他照片仍是私人草稿。');
   });
 
-  it('replays the identical idempotency key when publication response is lost', async () => {
+  it('uses a GET-only immutable receipt when publication response is lost', async () => {
     loseFirstPublicationResponse = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     await screen.findByDisplayValue('二手檯燈');
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
@@ -412,18 +455,21 @@ describe('web private batch listing flow', () => {
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await screen.findByText(/前次刊登結果尚未確認/);
-    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeTruthy();
-    fireEvent.click(screen.getByText('確認前次刊登'));
-    await screen.findByText('前次刊登已確認，不會建立重複商品。');
+    await screen.findByText(/刊登結果待確認：response lost/);
+    expect(pending.size).toBe(1);
+    expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
+    fireEvent.click(screen.getByText('查核原刊登結果'));
+    await screen.findByText(/原刊登已確認；目前狀態：在售/);
     const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
-    expect(posts).toHaveLength(2);
-    expect(posts[1].body).toBe(posts[0].body);
+    expect(posts).toHaveLength(1);
+    expect(calls.filter(call => call.path.includes('/creation-receipts/') && call.method === 'GET')).toHaveLength(1);
+    expect(pending.size).toBe(0);
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
   });
 
   it('never posts a listing when the browser cannot persist its publication journal', async () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     await screen.findByDisplayValue('二手檯燈');
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });
@@ -432,15 +478,13 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
     fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
-    const realSetItem = localStorage.setItem.bind(localStorage);
-    vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
-      if (key === 'wishlist:listing-pending:19') throw new DOMException('Storage unavailable', 'QuotaExceededError');
-      return realSetItem(key, value);
-    });
+    vi.mocked(privatePendingStore.save).mockRejectedValueOnce(new Error('Storage unavailable'));
     fireEvent.click(screen.getByText('確認並刊登'));
     await screen.findByText(/商品尚未送出/);
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
-    expect(screen.getByText('確認並刊登')).not.toBeDisabled();
+    expect(screen.getByText('確認並刊登')).toBeDisabled();
+    fireEvent.click(screen.getByText('重試讀取安全紀錄'));
+    await waitFor(() => expect(screen.getByText('確認並刊登')).not.toBeDisabled());
     expect(localStorage.getItem('wishlist:listing-pending:19')).toBeNull();
   });
 
@@ -456,10 +500,108 @@ describe('web private batch listing flow', () => {
     expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(false);
   });
 
+  it('reopens a committed unknown ACK with GET only and safely clears the original encrypted journal', async () => {
+    showUploadedPrivatePhoto = true; loseFirstPublicationResponse = true;
+    const first = render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：response lost/);
+    expect(pending.size).toBe(1); first.unmount();
+    render(view()); await screen.findByText(/原刊登已確認；目前狀態：在售/);
+    await waitFor(() => expect(pending.size).toBe(0));
+    expect(screen.getByText('前往我的商品查看與管理')).toHaveAttribute('href', '/my-listings');
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(call => call.path.includes('/creation-receipts/') && call.method === 'GET')).toHaveLength(1);
+  });
+
+  it('does not label later sold or physically erased goods as currently public on recovery', async () => {
+    showUploadedPrivatePhoto = true; loseFirstPublicationResponse = true;
+    render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：response lost/);
+    const receipt = [...receipts.values()][0]; receipt.listing!.status = 'SOLD'; receipt.listing!.version = 5;
+    fireEvent.click(screen.getByText('查核原刊登結果'));
+    await screen.findByText(/原刊登已確認；目前狀態：已售出/);
+    expect(screen.queryByText(/已公開/)).toBeNull();
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('keeps a missing receipt frozen until an explicit identical retry succeeds', async () => {
+    showUploadedPrivatePhoto = true; rejectPublicationAt = 1;
+    render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：商品資料需要重新確認/);
+    fireEvent.click(screen.getByText('查核原刊登結果'));
+    await screen.findByText(/這不代表延遲刊登不會完成/);
+    expect(screen.getByLabelText('縣市')).toBeDisabled();
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
+    rejectPublicationAt = 0; fireEvent.click(screen.getByText('重試同一刊登'));
+    await screen.findByText(/原刊登已確認；目前狀態：在售/);
+    const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(posts).toHaveLength(2); expect(posts[1].body).toBe(posts[0].body); expect(pending.size).toBe(0);
+  });
+
+  it('requires two-step terminal cancellation before a new reviewed operation can use a new ID', async () => {
+    showUploadedPrivatePhoto = true; rejectPublicationAt = 1;
+    render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：商品資料需要重新確認/);
+    fireEvent.click(screen.getByText('安全取消原操作'));
+    expect(calls.some(call => call.path.endsWith('/abandon'))).toBe(false);
+    fireEvent.click(screen.getByText('確認安全取消'));
+    await screen.findByText(/後台已安全取消原刊登/); await waitFor(() => expect(pending.size).toBe(0));
+    expect(screen.getByLabelText(/我已逐欄確認第 1 件/)).not.toBeChecked();
+    const cancel = calls.find(call => call.path.endsWith('/abandon'))!;
+    expect(Object.keys(JSON.parse(cancel.body!))).toEqual(['requestHash']); expect(calls.some(call => call.method === 'DELETE')).toBe(false);
+    rejectPublicationAt = 0; fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/)); fireEvent.click(screen.getByText('確認並刊登'));
+    await screen.findByText('商品刊登已確認。其他照片仍是私人草稿。');
+    const posts = calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST');
+    expect(posts).toHaveLength(2); expect(JSON.parse(posts[1].body!).clientListingId).not.toBe(JSON.parse(posts[0].body!).clientListingId);
+  });
+
+  it('uses cleanup-only after a confirmed ACK whose browser CAS cleanup failed', async () => {
+    showUploadedPrivatePhoto = true; vi.mocked(privatePendingStore.clear).mockResolvedValueOnce(false);
+    render(view()); await publishOne(); await screen.findByText(/瀏覽器紀錄未能安全清理/);
+    expect(screen.queryByText('重試同一刊登')).toBeNull(); expect(pending.size).toBe(1);
+    const before = calls.filter(call => call.path.includes('/listings')).length;
+    fireEvent.click(screen.getByText('重試安全清理紀錄'));
+    await waitFor(() => expect(pending.size).toBe(0));
+    expect(calls.filter(call => call.path.includes('/listings'))).toHaveLength(before);
+  });
+
+  it('quarantines a corrupted encrypted journal without falling back to plaintext or posting', async () => {
+    pending.set(await pendingRequestKey(API_URL, 19, 'listing'), '{corrupt');
+    render(view()); await screen.findByText(/無法讀取安全刊登紀錄/);
+    expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.some(call => call.path.includes('/listings'))).toBe(false); expect(pending.size).toBe(1);
+  });
+
+  it('quarantines an unscoped legacy record and never adopts, resends, cancels or erases it', async () => {
+    const old = JSON.stringify({ clientListingId: '33333333-3333-4333-8333-333333333333', title: '二手檯燈', description: '完整合成私人草稿。', condition: 'USED', category: 'home', currency: 'TWD', price: 350,
+      negotiable: false, publish: true, consentToMap: true, deliveryMethods: ['MEETUP'], mediaIds: [mediaId], location: { county: '臺北市', district: '中山區', latitude: 25.05, longitude: 121.53 } });
+    localStorage.setItem('wishlist:listing-pending:19', old); render(view());
+    await screen.findByText(/恢復仍待確認/);
+    expect(screen.getByLabelText('批次選擇商品照片')).toBeDisabled();
+    expect(calls.filter(call => call.path.includes('/creation-receipts/')).map(call => call.method)).toEqual(['GET']);
+    expect(pending.size).toBe(0); expect(localStorage.getItem('wishlist:listing-pending:19')).toBe(old);
+  });
+
+  it('checks a known legacy receipt read-only while preserving its unscoped original record', async () => {
+    showUploadedPrivatePhoto = true; loseFirstPublicationResponse = true;
+    const first = render(view()); await publishOne(); await screen.findByText(/刊登結果待確認：response lost/);
+    const old = calls.find(call => call.path.endsWith('/listings') && call.method === 'POST')!.body!;
+    first.unmount(); pending.clear(); localStorage.setItem('wishlist:listing-pending:19', old);
+    render(view()); await screen.findByText('舊版刊登紀錄已核對');
+    expect(calls.filter(call => call.path.endsWith('/listings') && call.method === 'POST')).toHaveLength(1);
+    expect(pending.size).toBe(0); expect(localStorage.getItem('wishlist:listing-pending:19')).toBe(old);
+  });
+
+  it('does not clear the old owner journal or populate a new account after a late POST ACK', async () => {
+    showUploadedPrivatePhoto = true; holdPublicationAck = true;
+    const mounted = render(view()); await publishOne(); await waitFor(() => expect(releasePublicationAck).toBeDefined());
+    const oldKey = await pendingRequestKey(API_URL, 19, 'listing'); expect(pending.has(oldKey)).toBe(true);
+    showUploadedPrivatePhoto = false; mounted.rerender(view({ ...auth, user: { id: 20, phoneNumber: 'other' }, token: 'other-session' }));
+    await screen.findByText(/還沒有私人商品照片/); await act(async () => releasePublicationAck!());
+    expect(screen.queryByText(/原刊登已確認/)).toBeNull(); expect(screen.queryByText(/刊登結果待確認/)).toBeNull();
+    expect(pending.has(oldKey)).toBe(true); expect(pending.has(await pendingRequestKey(API_URL, 20, 'listing'))).toBe(false);
+    expect(calls.filter(call => call.path.includes('/creation-receipts/'))).toHaveLength(0);
+  });
+
   it('recovers a committed photo after upload ACK loss and one stale private list', async () => {
     loseUploadResponse = true;
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     fireEvent.change(input, { target: { files: [new File(['photo'], 'lamp.jpg', { type: 'image/jpeg' })] } });
     await screen.findByText(/有 1 張照片的上傳結果待確認/);
     expect(input).toBeDisabled();
@@ -474,7 +616,7 @@ describe('web private batch listing flow', () => {
 
   it('keeps a confirmed private photo visible and stops the batch when clearing its browser journal fails', async () => {
     render(<MemoryRouter><AuthContext.Provider value={auth}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>);
-    const input = await screen.findByLabelText('批次選擇商品照片');
+    const input = await uploadInput();
     await waitFor(() => expect(input).not.toBeDisabled());
     showUploadedPrivatePhoto = true;
     const realRemoveItem = localStorage.removeItem.bind(localStorage);

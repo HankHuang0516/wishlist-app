@@ -13,6 +13,11 @@ if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error(
 
 const adminKey = 'synthetic-external-intake-integration-key-not-a-production-secret';
 const app = express(); app.set('trust proxy', 1); app.use(express.json());
+// Each test represents an independent synthetic public visitor. Preserve
+// explicit security/rate-limit test IPs and the production limiter unchanged.
+let publicVisitor = 0;
+beforeEach(() => { publicVisitor++; });
+app.use((req, _res, next) => { req.headers['x-forwarded-for'] ??= '192.0.2.' + publicVisitor; next(); });
 app.use('/api/external-intake', createExternalIntakeRoutes(() => adminKey));
 app.use('/api/external-listings', externalListingRoutes);
 const url = '/api/external-intake';
@@ -675,6 +680,7 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingCandidate.update({ where: { id }, data: { aiStatus: 'COMPLETED',
                 aiDraft: { title: 'AI 假建議不可公開', description: '模型私人文字' } } });
             const afterAi = await request(app).get('/api/external-listings');
+            expect(afterAi.status).toBe(200);
             expect(afterAi.body.items[0]).toMatchObject({ title: candidate().title, description: candidate().description,
                 priceTwd: '590', aiDerivedPublicFields: false });
             expect(JSON.stringify(afterAi.body)).not.toContain('AI 假建議不可公開');

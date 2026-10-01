@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
+import { createServer } from 'http';
 import prisma from '../../lib/prisma';
 import userRoutes from '../../routes/userRoutes';
 import { profileHash, profilePatch } from '../../lib/profileUpdate';
@@ -9,10 +10,14 @@ require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(proce
 if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL) throw new Error('Equal explicit isolated DB required');
 const oldSecret=process.env.JWT_SECRET,secret='profile-http-integration-only';process.env.JWT_SECRET=secret;
 const app=express();app.use(express.json());app.use('/api/users',userRoutes);
+const server = createServer(app);
 let owner:number,other:number,token:string,otherToken:string;
-const call=(method:'get'|'post'|'put',path:string,bearer=token)=>request(app)[method]('/api/users'+path).set('Authorization','Bearer '+bearer);
+const call=(method:'get'|'post'|'put',path:string,bearer=token)=>request(server)[method]('/api/users'+path).set('Authorization','Bearer '+bearer);
 const base=(id:string)=>'/me/profile-operations/'+id;
 beforeAll(async()=>{
+  // Concurrent retries must share one owned listener. Supertest's temporary
+  // app listeners can close/reuse a port while another retry is in flight.
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   owner=(await prisma.user.create({data:{phoneNumber:'profile-'+randomUUID(),password:'fixture-not-a-password',nicknames:'原暱稱',birthday:new Date('1993-05-16')}})).id;
   other=(await prisma.user.create({data:{phoneNumber:'profile-other-'+randomUUID(),password:'fixture'}})).id;
   token=jwt.sign({id:owner,authVersion:0},secret);otherToken=jwt.sign({id:other,authVersion:0},secret);
@@ -21,7 +26,7 @@ beforeEach(async()=>{
   await prisma.profileUpdateReceipt.deleteMany({where:{userId:owner}});
   await prisma.user.update({where:{id:owner},data:{profileVersion:0,authVersion:0,nicknames:'原暱稱',birthday:new Date('1993-05-16'),email:null}});
 });
-afterAll(async()=>{await prisma.user.deleteMany({where:{id:{in:[owner,other]}}});await prisma.$disconnect();if(oldSecret===undefined)delete process.env.JWT_SECRET;else process.env.JWT_SECRET=oldSecret;});
+afterAll(async()=>{try { if(server.listening) await new Promise<void>(resolve => server.close(() => resolve())); await prisma.user.deleteMany({where:{id:{in:[owner,other]}}}); } finally { await prisma.$disconnect();if(oldSecret===undefined)delete process.env.JWT_SECRET;else process.env.JWT_SECRET=oldSecret; } });
 describe('real profile handlers / PostgreSQL receipt transactions',()=>{
   it('clears birthday and acknowledges only the exact patch without secrets',async()=>{
     const id=randomUUID(),updates={birthday:'',nicknames:' 新暱稱 ',isBirthdayVisible:false};
@@ -60,7 +65,7 @@ describe('real profile handlers / PostgreSQL receipt transactions',()=>{
   });
   it('requires live owner authority, malformed input does not mutate, unknown GET does not create',async()=>{
     const id=randomUUID(),body={expectedVersion:0,updates:{nicknames:'本人'}};
-    expect((await request(app).get('/api/users'+base(id))).status).toBe(401);
+    expect((await request(server).get('/api/users'+base(id))).status).toBe(401);
     expect((await call('get',base(id))).status).toBe(404);expect(await prisma.profileUpdateReceipt.count({where:{userId:owner}})).toBe(0);
     await call('post',base(id)).send(body);expect((await call('get',base(id),otherToken)).status).toBe(404);
     for(const bad of [{expectedVersion:'1',updates:{nicknames:'x'}},{expectedVersion:1,updates:{isPremium:true}},{expectedVersion:1,updates:{isPhoneVisible:'true'}},{expectedVersion:1,updates:{birthday:'2025-02-29'}}])expect((await call('post',base(randomUUID())).send(bad)).status).toBe(400);

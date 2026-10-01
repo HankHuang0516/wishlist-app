@@ -5,6 +5,9 @@ import ListingBatchPage from '../pages/ListingBatchPage';
 import { AuthContext } from '../context/AuthContext';
 
 vi.mock('../config', () => ({ API_URL: 'https://wishlist.invalid/api' }));
+vi.mock('../lib/webPendingStore', async importOriginal => ({ ...await importOriginal<typeof import('../lib/webPendingStore')>(), privatePendingStore: {
+  get: vi.fn(async () => null), save: vi.fn(), clear: vi.fn(),
+} }));
 
 const auth = { token: 'synthetic-token', user: { id: 11, name: 'Synthetic Seller' },
   login: vi.fn(), logout: vi.fn(), register: vi.fn(), updateUser: vi.fn(), isAuthenticated: true, loading: false };

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { changeListingStatus, createListing, editListing, extendListingExpiry, getListing, myListings, publishListing, searchListings } from '../controllers/listingController';
+import { abandonListingCreation, getListingCreation, changeListingStatus, createListing, editListing, extendListingExpiry, getListing, myListings, publishListing, searchListings } from '../controllers/listingController';
 import { getMatchWishes, matchWishListings } from '../controllers/wishlistMatchController';
 
 const router = Router();
@@ -11,6 +11,8 @@ router.get('/', searchListings);
 router.get('/mine', authenticateToken, myListings);
 router.get('/match-wishes', authenticateToken, getMatchWishes);
 router.get('/matches', authenticateToken, matchWishListings);
+router.get('/creation-receipts/:clientListingId', authenticateToken, getListingCreation);
+router.post('/creation-receipts/:clientListingId/abandon', authenticateToken, writes, abandonListingCreation);
 router.get('/:id', optionalAuthenticateToken, getListing);
 router.post('/', authenticateToken, writes, createListing);
 router.post('/:id/status', authenticateToken, writes, changeListingStatus);

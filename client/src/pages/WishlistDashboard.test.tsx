@@ -17,6 +17,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('legacy wishlist read truth and account scope', () => {
+  it('renders the visible wishlist count in the selected English language',async()=>{
+    window.localStorage.setItem('user-locale','en-US');mount();await screen.findByText('合成舊清單');expect(screen.getByText('2 wishes')).toBeInTheDocument();expect(screen.queryByText('dashboard.items')).not.toBeInTheDocument();
+  });
   it('does not display zero totals or empty prompts after an HTTP failure, and supports a fresh retry', async () => {
     let fail = true; fetcher.mockImplementation(async (url: string) => response(url.endsWith('/wishlists') ? fail ? {} : [row] : { maxWishlistItems: 100 }, url.endsWith('/wishlists') && fail ? 503 : 200));
     mount(); await screen.findByRole('alert'); expect(screen.getByText('尚未確認')).toBeInTheDocument(); expect(screen.queryByText('還沒有願望清單')).not.toBeInTheDocument();

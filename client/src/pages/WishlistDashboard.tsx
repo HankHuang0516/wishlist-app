@@ -418,7 +418,7 @@ export function WishlistDashboardSession() {
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-sm text-gray-500">
-                                        {list._count?.items ?? list.items?.length ?? 0} 個願望
+                                        {list._count?.items ?? list.items?.length ?? 0} {t('dashboard.items')}
                                     </p>
                                 </CardContent>
                                 <CardFooter className="flex justify-between items-center">

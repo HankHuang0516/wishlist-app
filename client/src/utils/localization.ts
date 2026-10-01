@@ -188,6 +188,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Dashboard
         'dashboard.myWishlists': '我的願望清單',
+        'dashboard.items': '個願望',
         'dashboard.newWishlist': '新增清單',
         'dashboard.empty': '還沒有願望清單',
         'dashboard.createFirst': '建立你的第一個願望清單',
@@ -466,6 +467,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Dashboard
         'dashboard.myWishlists': 'My Wishlists',
+        'dashboard.items': 'wishes',
         'dashboard.newWishlist': 'New Wishlist',
         'dashboard.empty': 'No wishlists yet',
         'dashboard.createFirst': 'Create your first wishlist',

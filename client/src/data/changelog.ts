@@ -12,6 +12,9 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+    { version: "2.0.442", date: "2026-10-01", title: "公開願望清單隱私修補", type: "Backend", items: [
+        { type: "Security", content: "公開清單排除隱藏商品，僅回傳公開欄位，件數依可見商品計算並避免快取。" }
+    ] },
     { version: "2.0.441", date: "2026-09-30", title: "收件通知回覆窗口", type: "Backend", items: [
         { type: "Fix", content: "合作與匿名意見通知使用已驗證聯絡信箱作為 Reply-To，拒絕無效信箱與標頭注入。" }
     ] },

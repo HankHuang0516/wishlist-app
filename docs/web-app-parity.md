@@ -27,6 +27,17 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第二十八批：頭像未知回覆與只讀查核（仍未部署）
+
+- 原頭像API無原操作回執。網頁改為先保存API／帳號隔離的加密提醒（只含版本與隨機ID，不存照片、URL或token），再POST；未確認時鎖住再次上傳，重開讀取提醒與目前profile，不自動POST。持久保存失敗不送出；30秒期限、no-store／redirect拒絕、有效avatar URL驗證、同步防重點击與帳號生命週期隔離已加上。
+- 明確查核只GET目前profile，顯示目前大頭照且明示「此查核無法證明原上傳是否完成；原請求仍可能稍後完成」，不將目前值當成歷史回執。查核成功後才提供兩步清除本機提醒；清除不取消後台請求或撤回照片，再次上傳可能覆蓋目前值。已收到有效成功回覆但本機清理失敗仍顯示回覆成功，不倒退為未知。跨分頁CAS清理不能刪掉較新提醒；晚到舊帳號回覆不能改新帳號或清理舊紀錄。
+- Chrome接隔離真uploadAvatar handler及PostgreSQL：單次圖片上傳後DB提交即回502，畫面未知；reload保留提醒並顯示目前照片、上傳入口鎖住，明確GET後仍保留原上傳未知說明；取消清理保留提醒，再次確認只清除提醒，入口恢復。最終avatar POST1／提交後lost ACK1，不重送。fixture僅測試圖片，harness強制Flickr stub為null並以temp目錄提供本機照片；這不是Flickr或真照片品質驗收。第一輪Vite誤把`/api`放進base URL造成`/api/api`登入404，已修正QA環境後重新登入，未改產品config或沿用失敗結果。
+- SQL另回讀合成買家3頭像null／賣家4已保存本次本機URL，兩者profileVersion0，清理提醒不更改資料庫。
+- 手機390×844、documentWidth375、設定導航1個，正確捲動座標原尺寸截圖已檢視。證據：原outputs的`wishlist-web-avatar-current-20261002.png`、`wishlist-web-avatar-cleared-20261002.png`、`wishlist-web-avatar-evidence-20261002.json`。新增8項實質回歸：失聯重掛不重送、保存失敗、無效URL、跨帳號晚回覆、GET失敗、清理失敗、同一輪連點、較新分頁提醒不被清理。網頁72檔1165項与TypeScript／Vite build通過；完整pre-push與新提交CI結果另追加。
+- 完整pre-push第一輪後台913＋3skipped通過，但既有HTTP／DB照片隱私測試超時及追蹤測試socket hang up，421/423，不能稱通過；Jest未退出，停止的是本次自有驗證程序。未放寬15秒期限或斷言，兩個原suite focused25項均通過，根因未重現／未假稱已修。停止自有瀏覽器測試服務後完整重驗，保留兩份原紀錄。
+- 第二輪完整pre-push退出0：後台56檔913通過＋3skipped、41份migration／schema一致、真HTTP／DB29檔423項、網頁72檔1165項／build、原生42檔852項／TypeScript／Expo及QA安全檢查成功。自有loopback API／Vite已停止，viewport還原，QA tab關閉，合成DB／照片／截圖保留；其他人的刪檔與.gitignore不納入。
+- 不擴張旧API能力：頭像原操作結果仍無持久回執，不宣稱可安全重試同一上傳或取消原請求。其餘刊登未送出草稿、批次照片移除、真MiniMax／Flickr／跨端、舊願望／註冊／全站英文／政策客服／PWA效能與正式部署仍依完整矩陣驗收。APP程式／風格不改，首頁與設定各90%及功能100%條件不變；PR82仍draft，目標active。
+
 ## 2026-10-02 第二十七批：尚未送出的商品編輯草稿（仍未部署）
 
 - 商品管理編輯現在逐次保存名稱／說明／價格到API、帳號與商品範圍的加密IndexedDB草稿；空名稱與未完成價格如`1.`仍可恢復，送出時才依既有商品規則驗證。畫面明示本機草稿與後台保存的差別；關閉／切狀態／重開保留草稿，儲存中離開有提示。這不是跨裝置同步或硬體Keychain／XSS防護。
@@ -35,6 +46,7 @@
 - Chrome連隔離真handlers與PostgreSQL：未送出的名稱／兩行說明／`1.`在reload後恢復，POST0；兩分頁讀同一草稿後第一分頁更新，第二分頁修改被CAS拒絕，原文字留在畫面且不覆寫。改成有效NT$320後，一次管理EDIT後台提交即回502，reload恢復APPLIED v2；兩分頁分別GET確認，POST總數1／原回執GET2／lost ACK1，legacy PATCH0。SQL回讀單一商品ACTIVE／320／v2及單份EDIT APPLIED原版1→2，沒有重送。
 - 手機分頁實際`innerWidth390`、`scrollWidth375`、設定導航1個；原尺寸CDP截圖390×844已檢視。Browser viewport只套用當下作用分頁，早期第一分頁仍為1873px，沒有將該截圖當成手機證據；改用真正390px分頁与原尺寸截圖。證據在原outputs：`wishlist-web-edit-draft-conflict-20261002.png`、`wishlist-web-edit-draft-receipt-recovered-20261002.png`、`wishlist-web-edit-draft-recovered-mobile-20261002.png`與`wishlist-web-edit-draft-evidence-20261002.json`。此fixture縮圖是明示替代圖，並非商品照片來源、Flickr或AI正確率證據。
 - 帳號隔離首輪因重用QA API5183及已重設DB的user ID而讀到前批合成journal，未把它當成隔離通過。harness新增嚴格loopback測試port參數（預設相容），另用全新瀏覽器5184／API5185及UTF8 DB`wishlist_marketplace_test_edit_fresh_browser_20261002_27`重驗：seller1保存私人文字後登出，buyer2商品0且無賣家草稿／回執；切回seller1原草稿與提示恢復，管理POST0／回執0。手機390×844、documentWidth390，正確截圖`wishlist-web-edit-draft-account-isolation-20261002.png`及`wishlist-web-edit-draft-seller-restored-20261002.png`已檢視；先前錯誤捲動座標截圖已由正確原尺寸截圖覆寫，不列為證據。
+- 第二十七批精確提交`6c915cbe2b467f5bf18b4071075cff3f3c20a01e`的[CI36892597373](https://github.com/HankHuang0516/wishlist-app/actions/runs/36892597373)已回讀completed/success，Client／Server／Native 3/3，完整HTTP／DB及migration／schema檢查成功。這只證明本批提交，不能沿用到後續頭像修改或當正式部署證據。
 - 本機新增17項回歸，最新網頁72檔1157項通過，TypeScript與Vite建置通過。首輪原有兩項管理測試需等待編輯草稿讀取完成，未刪斷言；全套發現行銷元件在busy時被卸載，已修正掛載條件與重驗真父頁6項。一輪既有面交測試未等資料讀取失敗，focused19項及下一輪完整1157通過，未假稱已修根因。完整pre-push已成功；精確新提交CI仍須另回讀後追加證據。
 - 完整pre-push初次隔離PG因預設SQL_ASCII，NFKC配對查詢失敗，與正式或本批前端變更無關；改另建UTF8測試DB，保留原DB及失敗紀錄。新完整validation退出0：後台56檔913通過＋3skipped、41份migration／schema一致、真HTTP／DB29檔423項、網頁1157項及build、原生42檔852項／typecheck／Expo，原生QA／清理／iOS輸入白名單均通過。未把初次行銷取消單項未重現推定為已修正式缺陷。
 - 正式health回讀ok／2.1.0，唯一爬蟲紀錄是2026-02-24的Gemini暫時503，屬歷史記錄，保留未清除。本機隔離DB`wishlist_marketplace_test_edit_browser_20261002_27`與全套驗證DB`wishlist_marketplace_test_edit_20261002_27_utf8`使用55441／parity；正式資料與APP未改，其他人的刪檔／.gitignore不納入此提交。
@@ -83,7 +95,7 @@
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
 | 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；真AI、舊紀錄來源、照片移除、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
-| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
+| 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、原版／免費調整queue及不可變批准回執、加密原選圖／文案／版本紀錄已實作；實際批准commit後502→reload只GET恢復，child套用後root歷史證據不變且月次數1；能力關閉時仍可查看／批准既有結果，新生成及免費調整停用、明確只讀重查，Chrome暫停期間實測同樣成功恢復；上下文變更、舊紀錄及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
 | 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
@@ -103,7 +115,7 @@
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機補齊原子session、損壞恢復、跨帳號／分頁隔離與登入返回；註冊／驗證／忘記密碼仍待完整回歸 | 登入後回原功能、失效、切帳號清理 |
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。政策客服、完整英文／其他社交流程與正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
-| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應／其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
+| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 
 ## 平台替代策略
 

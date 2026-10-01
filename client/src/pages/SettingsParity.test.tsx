@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -158,5 +158,58 @@ describe('settings hub retains web-only functionality while adding app actions',
     fireEvent.click(screen.getByRole('button',{name:'安全取消原操作'}));fireEvent.click(screen.getByRole('button',{name:'確認停止原操作'}));
     await screen.findByText(/原操作已安全取消/);await vi.waitFor(()=>expect(input).not.toBeDisabled());expect(input).toHaveValue('取消但保留草稿');
     const body=JSON.parse(fetcher.mock.calls.find(call=>call[0].endsWith('/abandon'))![1]!.body as string);expect(Object.keys(body)).toEqual(['requestHash']);
+  });
+});
+
+describe('avatar upload recovery distinguishes current state from an original receipt',()=>{
+  const photo=()=>new File(['synthetic image'],'avatar.png',{type:'image/png'});
+  const choose=async()=>{ const button=await screen.findByRole('button',{name:'上傳大頭照'}); await waitFor(()=>expect(button).toHaveAttribute('aria-disabled','false')); return button.querySelector('input[type="file"]')!; };
+  it('persists before upload and restores an unknown reply without a second POST',async()=>{
+    const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='POST'){expect(pending.size).toBe(1);throw new Error('lost ACK');}return ok({...profile,avatarUrl:'/uploads/new.png'});});
+    vi.stubGlobal('fetch',fetcher);const mounted=render(view());fireEvent.change(await choose(),{target:{files:[photo()]}});
+    await screen.findByText(/後台可能已保存/);expect(screen.getByRole('button',{name:'上傳大頭照'})).toHaveAttribute('aria-disabled','true');
+    mounted.unmount();render(view());await screen.findByText(/上次大頭照上傳結果尚未確認/);
+    expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'查核目前大頭照'}));await screen.findByText(/此查核無法證明原上傳是否完成/);
+    expect(screen.getByAltText('大頭照')).toHaveAttribute('src',expect.stringContaining('/uploads/new.png'));expect(pending.size).toBe(1);
+    fireEvent.click(screen.getByRole('button',{name:'清除本機上傳提醒'}));expect(pending.size).toBe(1);
+    fireEvent.click(screen.getByRole('button',{name:'保留提醒'}));expect(pending.size).toBe(1);
+    fireEvent.click(screen.getByRole('button',{name:'清除本機上傳提醒'}));fireEvent.click(screen.getByRole('button',{name:'確認只清除提醒'}));
+    await screen.findByText(/這不會取消原請求/);expect(pending.size).toBe(0);expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+  });
+  it('unreadable persistence prevents upload',async()=>{
+    const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);render(view());const input=await choose();
+    vi.mocked(privatePendingStore.save).mockRejectedValueOnce(new PendingStoreError());fireEvent.change(input,{target:{files:[photo()]}});
+    await screen.findByText(/尚未上傳/);expect(fetcher.mock.calls.every(call=>call[1]?.method!=='POST')).toBe(true);
+  });
+  it('invalid acknowledgement URL stays unknown and is never rendered',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>ok(init?.method==='POST'?{avatarUrl:'javascript:alert(1)'}:profile)));
+    render(view());fireEvent.change(await choose(),{target:{files:[photo()]}});await screen.findByText(/後台可能已保存/);expect(screen.queryByAltText('大頭照')).not.toBeInTheDocument();expect(pending.size).toBe(1);
+  });
+  it('a late old-account upload reply cannot update the new account or erase old evidence',async()=>{
+    let ack!:(value:unknown)=>void;
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise(resolve=>{ack=resolve;}):ok({...profile,id:(init?.headers as Record<string,string>).Authorization==='Bearer other-session'?20:19})));
+    const mounted=render(view());fireEvent.change(await choose(),{target:{files:[photo()]}});await waitFor(()=>expect(ack).toBeTypeOf('function'));
+    mounted.rerender(view({...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}));await choose();
+    await act(async()=>ack(ok({avatarUrl:'/uploads/old-account.png'})));expect(screen.queryByAltText('大頭照')).not.toBeInTheDocument();expect(pending.size).toBe(1);
+  });
+  it('failed current-state GET cannot enable clearing or another upload',async()=>{
+    let failRead=false;
+    vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==='POST')throw new Error('no ACK');if(failRead&&url.endsWith('/users/me'))throw new Error('503');return ok(profile);}));
+    render(view());fireEvent.change(await choose(),{target:{files:[photo()]}});await screen.findByText(/後台可能已保存/);failRead=true;
+    fireEvent.click(screen.getByRole('button',{name:'查核目前大頭照'}));await screen.findByText(/無法查核目前大頭照/);expect(screen.queryByRole('button',{name:'清除本機上傳提醒'})).not.toBeInTheDocument();expect(pending.size).toBe(1);
+  });
+  it('cleanup failure retains a reminder and clearing never retransmits',async()=>{
+    const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>ok(init?.method==='POST'?{avatarUrl:'/uploads/accepted.png'}:profile));vi.stubGlobal('fetch',fetcher);render(view());
+    const input=await choose();vi.mocked(privatePendingStore.clear).mockRejectedValueOnce(new PendingStoreError());fireEvent.change(input,{target:{files:[photo()]}});await screen.findByText(/上傳已回覆成功，但本機提醒未清理/);
+    fireEvent.click(screen.getByRole('button',{name:'查核目前大頭照'}));await screen.findByText(/此查核無法證明原上傳/);fireEvent.click(screen.getByRole('button',{name:'清除本機上傳提醒'}));fireEvent.click(screen.getByRole('button',{name:'確認只清除提醒'}));await screen.findByText(/這不會取消原請求/);expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+  });
+  it('same-turn double selection sends only once',async()=>{
+    let ack!:(value:unknown)=>void;const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise(resolve=>{ack=resolve;}):ok(profile));vi.stubGlobal('fetch',fetcher);render(view());const input=await choose();
+    fireEvent.change(input,{target:{files:[photo()]}});fireEvent.change(input,{target:{files:[photo()]}});await waitFor(()=>expect(ack).toBeTypeOf('function'));expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);await act(async()=>ack(ok({avatarUrl:'/uploads/accepted.png'})));await screen.findByText('後台已回覆大頭照上傳成功。');expect(pending.size).toBe(0);
+  });
+  it('a newer tab marker is not cleared by the old acknowledgement',async()=>{
+    let ack!:(value:unknown)=>void;vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise(resolve=>{ack=resolve;}):ok(profile)));render(view());fireEvent.change(await choose(),{target:{files:[photo()]}});await waitFor(()=>expect(ack).toBeTypeOf('function'));
+    const key=[...pending.keys()][0], newer=JSON.stringify({version:1,id:crypto.randomUUID()});pending.set(key,newer);await act(async()=>ack(ok({avatarUrl:'/uploads/accepted.png'})));await screen.findByText(/本機提醒仍存在/);expect(pending.get(key)).toBe(newer);
   });
 });

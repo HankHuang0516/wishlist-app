@@ -33,7 +33,9 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const prisma = require('../dist/lib/prisma').default;
 const { login } = require('../dist/controllers/authController');
-const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userController');
+// Keep avatar fixtures local: the real handler may otherwise call Flickr.
+require('../dist/lib/flickr').flickrService.uploadAvatarImage = async () => null;
+const { getMe, updateMe, getAiUsage, uploadAvatar } = require('../dist/controllers/userController');
 const { getProfileOperation, submitProfileOperation, abandonProfileOperation } = require('../dist/controllers/profileUpdateController');
 const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
 const socialRoutes = require('../dist/routes/socialRoutes').default;
@@ -53,7 +55,7 @@ app.use(cors({ origin: `http://127.0.0.1:${browserPort}` }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
-for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow','followOperation']) { dropped[kind]=0; attempts[kind]=0; }
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow','followOperation','avatar']) { dropped[kind]=0; attempts[kind]=0; }
 attempts.followReceipt=0;attempts.followState=0;attempts.followAbandon=0;
 let rejectSocialRead = null;
 for (const kind of ['socialSearch','socialFollowing','socialProfile']) attempts[kind]=0;
@@ -87,7 +89,8 @@ app.use((req, res, next) => {
     attempts['social'+socialRead[0].toUpperCase()+socialRead.slice(1)]++;
     if (rejectSocialRead === socialRead) { rejectSocialRead=null;return res.status(503).json({errorCode:'TEST_SOCIAL_READ_UNAVAILABLE'}); }
   }
-  const kind = req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
+  const kind = req.method === 'POST' && req.path === '/api/users/me/avatar' ? 'avatar' :
+    req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method==='POST' && /^\/api\/users\/me\/follow-operations\/[^/]+$/.test(req.path) ? 'followOperation' :
     ['POST','DELETE'].includes(req.method) && /^\/api\/users\/[1-9]\d*\/follow$/.test(req.path) ? 'socialFollow' :
     req.method === 'POST' && /^\/api\/listings\/management-operations\/[^/]+$/.test(req.path) ? 'listingManagement' :
@@ -132,6 +135,11 @@ app.use((req, res, next) => {
 });
 app.post('/api/auth/login', login);
 app.get('/api/users/me', authenticateToken, getMe);
+const avatarDirectory = path.join(process.env.LISTING_MEDIA_STORAGE_ROOT,'avatars');
+fs.mkdirSync(avatarDirectory);
+const avatarUpload = require('multer')({dest:avatarDirectory,limits:{fileSize:10*1024*1024}});
+app.post('/api/users/me/avatar',authenticateToken,avatarUpload.single('avatar'),uploadAvatar);
+app.use('/uploads',express.static(avatarDirectory));
 app.put('/api/users/me', authenticateToken, updateMe);
 app.get('/api/users/me/profile-operations/:clientActionId', authenticateToken, getProfileOperation);
 app.post('/api/users/me/profile-operations/:clientActionId', authenticateToken, submitProfileOperation);

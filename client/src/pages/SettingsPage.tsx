@@ -12,6 +12,7 @@ import AccountSecurityPanel from '../components/AccountSecurityPanel';
 import AccountBenefits from '../components/AccountBenefits';
 import './SettingsPage.css';
 import { useSettingsProfile } from '../lib/useSettingsProfile';
+import { useAvatarUpload } from '../lib/useAvatarUpload';
 
 export default function SettingsPage() {
     const { token, user } = useAuth();
@@ -46,7 +47,9 @@ function SettingsSession() {
 
     const [changingLang, setChangingLang] = useState(false);
 
-    const [isUploading, setIsUploading] = useState(false);
+    const avatar = useAvatarUpload(token,user?.id,settings.patchDisplay);
+    const isUploading = avatar.busy;
+    const avatarLocked = settings.locked || avatar.locked;
 
     // PWA Install State
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -70,39 +73,9 @@ function SettingsSession() {
     };
 
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (settings.locked || isUploading) return;
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const formData = new FormData();
-            formData.append('avatar', file);
-
-            setIsUploading(true);
-            try {
-                const res = await fetch(`${API_URL}/users/me/avatar`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (!active.current) return;
-                    settings.patchDisplay({ avatarUrl: data.avatarUrl });
-                    setFeedback({ message: t('settings.uploaded') || 'Avatar updated successfully!', type: 'success' });
-                    setTimeout(() => setFeedback(null), 3000);
-                } else {
-                    throw new Error('Upload failed');
-                }
-            } catch (error) {
-                console.error(error);
-                setFeedback({ message: t('common.error') || 'Update failed, please try again.', type: 'error' });
-                setTimeout(() => setFeedback(null), 3000);
-            } finally {
-                setIsUploading(false);
-                // Reset input value to allow re-uploading the same file if needed in future, 
-                // though usually react handles this. Safest to clear it if we want to force change event next time.
-                if (fileInputRef.current) fileInputRef.current.value = '';
-            }
-        }
+        const file = e.target.files?.[0];
+        if (file) await avatar.upload(file,settings.locked);
+        if (active.current && fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handleGenerateApiKey = async () => {
@@ -217,12 +190,12 @@ function SettingsSession() {
                     <div
                         className="settings-avatar-upload relative group cursor-pointer w-16 h-16 shrink-0 rounded-full"
                         role="button"
-                        tabIndex={settings.locked || isUploading ? -1 : 0}
-                        aria-disabled={settings.locked || isUploading}
+                        tabIndex={avatarLocked ? -1 : 0}
+                        aria-disabled={avatarLocked}
                         aria-label="上傳大頭照"
                         title="點擊或按 Enter 選擇大頭照"
-                        onKeyDown={event => { if (!settings.locked && !isUploading && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInputRef.current?.click(); } }}
-                        onClick={() => { if (!settings.locked && !isUploading) fileInputRef.current?.click(); }}
+                        onKeyDown={event => { if (!avatarLocked && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInputRef.current?.click(); } }}
+                        onClick={() => { if (!avatarLocked) fileInputRef.current?.click(); }}
                     >
                         <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
                             {profile.avatarUrl ? (
@@ -248,6 +221,7 @@ function SettingsSession() {
                             ref={fileInputRef}
                             className="hidden"
                             accept="image/*"
+                            disabled={avatarLocked}
                             onClick={event => event.stopPropagation()}
                             onChange={handleAvatarUpload}
                         />
@@ -280,6 +254,14 @@ function SettingsSession() {
                     </div>
                 </CardContent>
             </Card></fieldset>
+
+            {avatar.notice && <section aria-label="大頭照上傳狀態" className="rounded-md border bg-white p-3 text-sm space-y-2">
+                <p role="status">{avatar.notice}</p>
+                {avatar.pending && <><Button disabled={avatar.busy || settings.loading} onClick={avatar.read}>查核目前大頭照</Button>
+                    {avatar.checked && <Button variant="outline" disabled={avatar.busy} onClick={()=>avatar.setClearConfirm(true)}>清除本機上傳提醒</Button>}</>}
+                {avatar.clearConfirm && <div className="rounded-md bg-amber-50 p-3 space-y-2"><p>僅清除本機提醒，不會取消原請求。原上傳仍可能稍後完成；再次上傳可能覆蓋目前大頭照。是否清除提醒？</p><Button disabled={avatar.busy} onClick={avatar.clear}>確認只清除提醒</Button><Button disabled={avatar.busy} variant="outline" onClick={()=>avatar.setClearConfirm(false)}>保留提醒</Button></div>}
+                {avatar.storageError && <Button disabled={avatar.busy} onClick={avatar.retryRead}>重試讀取上傳提醒</Button>}
+            </section>}
 
             {/* Notification Settings */}
             <Link to="/settings/notifications" className="block">

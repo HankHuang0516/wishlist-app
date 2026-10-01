@@ -87,7 +87,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
           initialTarget.current = item;
           bounds = clipBounds([item.location.publicLongitude - 0.06, item.location.publicLatitude - 0.06, item.location.publicLongitude + 0.06, item.location.publicLatitude + 0.06])!;
         }
-        if (active.current && !controller.signal.aborted) { viewport.current = bounds; setQuery({ filters: { ...emptySearchFilters }, bounds, wishId: intent.wishId, radius: '', serial: 1 }); }
+        if (active.current && !controller.signal.aborted) { const initialFilters = { ...emptySearchFilters, q: intent.q }; viewport.current = bounds; setFilters(initialFilters); setQuery({ filters: initialFilters, bounds, wishId: intent.wishId, radius: '', serial: 1 }); }
       } catch (error) { if (active.current && !controller.signal.aborted) setInitError(errorText(error)); }
     })();
     void readAllMatchWishes(read, controller.signal).then(rows => { if (active.current && !controller.signal.aborted) setWishes(rows); })

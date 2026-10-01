@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, Outlet } from "react-router-dom";
-import { Gift, House, Users, Map, MessageCircle, Settings as SettingsIcon, LogOut, LogIn, CircleHelp, Crown } from "lucide-react";
+import { Gift, LogOut, CircleHelp, Crown } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import FeedbackModal from "../components/FeedbackModal";
-import BottomNav from "../components/BottomNav";
+import WebNavigation from "../components/WebNavigation";
 
 import { useAuth } from "../context/AuthContext";
 import { t } from "../utils/localization";
@@ -18,11 +18,11 @@ export default function Layout() {
         <div className="min-h-screen bg-muji-bg font-sans text-muji-primary flex flex-col">
             {/* Navbar */}
             <header className="sticky top-0 z-50 w-full border-b border-muji-border bg-white/80 backdrop-blur-md">
-                <div className="container mx-auto flex h-16 items-center justify-between px-4">
+                <div className="container mx-auto flex min-h-16 flex-wrap items-center justify-between gap-x-4 px-4 py-2">
                     <div className="flex items-center gap-1">
                         <Link to="/" className="flex items-center space-x-2 font-bold text-xl tracking-tight text-muji-primary shrink-0">
                             <Gift className="h-6 w-6" />
-                            <span className="hidden sm:inline">Wishlist.ai</span>
+                            <span>Wishlist.ai</span>
                         </Link>
                         {isAuthenticated && isPremium && (
                             <div title="Premium Member" className="hidden sm:flex items-center gap-1.5 px-3 py-1 ml-2 rounded-full bg-amber-50 border border-amber-200 shadow-sm">
@@ -39,63 +39,11 @@ export default function Layout() {
                     </div>
 
 
-                    {/* Nav Icons */}
-                    <div className="hidden sm:flex items-center gap-3 sm:gap-6 md:gap-8 overflow-x-auto no-scrollbar py-2 px-2">
-                        <Link to="/">
-                            <Button variant="ghost" size="icon" title={t('nav.home')} className="shrink-0">
-                                <House className="h-6 w-6" />
-                            </Button>
-                        </Link>
-
-                        {isAuthenticated && (
-                            <>
-                                <Link to="/wishes" aria-label="我的願望與照片辨識">
-                                    <Button variant="ghost" size="icon" title={t('nav.dashboard')} className="shrink-0 flex items-center justify-center">
-                                        <Gift className="h-6 w-6" />
-                                    </Button>
-                                </Link>
-                                <Link to="/social">
-                                    <Button variant="ghost" size="icon" title={t('nav.social')} className="shrink-0 flex items-center justify-center">
-                                        <Users className="h-6 w-6" />
-                                    </Button>
-                                </Link>
-                                <Link to="/explore" aria-label="探索商品地圖" title="探索商品地圖" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-gray-100">
-                                    <Map className="h-6 w-6" aria-hidden="true" />
-                                </Link>
-                                <Link to="/chat" aria-label="聊天與面交" title="聊天與面交" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-gray-100">
-                                    <MessageCircle className="h-6 w-6" aria-hidden="true" />
-                                </Link>
-                                <Link to="/settings">
-                                    <Button variant="ghost" size="icon" title={t('nav.settings')} className="shrink-0 flex items-center justify-center">
-                                        <SettingsIcon className="h-6 w-6" />
-                                    </Button>
-                                </Link>
-                            </>
-                        )}
-
-                        <div className="w-px h-6 bg-gray-200 mx-2 shrink-0"></div>
-
-                        {isAuthenticated ? (
-                            <>
-                                <Button variant="ghost" size="icon" onClick={logout} title={t('nav.logout')} className="shrink-0 flex items-center justify-center">
-                                    <LogOut className="h-6 w-6 text-red-500" />
-                                </Button>
-                                <Button variant="ghost" size="icon" title="Feedback / Help" className="shrink-0 flex items-center justify-center" onClick={() => setIsFeedbackOpen(true)}>
-                                    <CircleHelp className="h-6 w-6" />
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Link to="/login">
-                                    <Button variant="ghost" size="icon" title={t('nav.login')} className="shrink-0 flex items-center justify-center">
-                                        <LogIn className="h-6 w-6" />
-                                    </Button>
-                                </Link>
-                                <Button variant="ghost" size="icon" title="Feedback / Help" className="shrink-0 flex items-center justify-center" onClick={() => setIsFeedbackOpen(true)}>
-                                    <CircleHelp className="h-6 w-6" />
-                                </Button>
-                            </>
-                        )}
+                    {isAuthenticated && <div className="order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation /></div>}
+                    <div className="flex items-center gap-1">
+                        {isAuthenticated ? <Button variant="ghost" size="icon" aria-label="登出" title={t('nav.logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
+                            : <Link to="/login" className="rounded-md px-3 py-2 text-sm hover:bg-gray-100">{t('nav.login')}</Link>}
+                        <Button variant="ghost" size="icon" aria-label="意見回饋與協助" onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
                     </div>
                 </div>
             </header>
@@ -103,17 +51,17 @@ export default function Layout() {
             <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
             {/* Main Content */}
-            <main className="flex-1 container mx-auto px-4 py-8 pb-24 sm:pb-8">
+            <main className="flex-1 container mx-auto px-4 py-8">
                 <Outlet />
             </main>
 
             {/* Footer */}
             {/* Footer */}
-            <footer className="border-t border-muji-border bg-white py-6 pb-20 sm:pb-6">
+            <footer className="border-t border-muji-border bg-white py-6">
                 <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-muji-secondary gap-4">
                     <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
                         <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
-                        <div className="flex gap-4">
+                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
                             <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
                             <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
                             <Link to="/support" className="hover:text-muji-primary transition-colors">支援與聯絡</Link>
@@ -127,7 +75,6 @@ export default function Layout() {
                 </div>
             </footer>
 
-            {isAuthenticated && <BottomNav />}
         </div>
     );
 }

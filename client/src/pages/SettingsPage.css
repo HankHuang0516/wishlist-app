@@ -1,0 +1,29 @@
+/* Settings-only layout: retain the original neutral web tokens, not native UI. */
+.settings-hub > .rounded-lg h3 { font-size: 1rem; line-height: 1.5; }
+.settings-language { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem; }
+.settings-language > div { padding: 0; }
+.settings-language > div:first-child p { display: none; }
+.settings-language > div:last-child { display: flex; flex-wrap: wrap; gap: .5rem; }
+.settings-language button { flex: none; min-width: 7rem; white-space: nowrap; }
+.settings-avatar > div { padding: 1.25rem; }
+.settings-avatar > div:first-child { padding-bottom: .75rem; }
+.settings-avatar > div:first-child > div:last-child { margin-top: .5rem; padding: .5rem .75rem; }
+.settings-avatar > div:last-child { padding-top: 0; }
+.settings-private { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1rem; }
+.settings-private > h2 { grid-column: 1 / -1; }
+.settings-private > div { grid-column: span 2; border: none; box-shadow: none; min-width: 0; }
+.settings-private > div:nth-last-child(-n+2) { grid-column: span 3; }
+.settings-private > div > div { padding: 0; }
+.settings-private .flex.items-end { gap: .25rem; }
+.settings-private .flex-1 { min-width: 0; }
+.settings-private label { font-size: .75rem; }
+.settings-private input { font-size: .8125rem; padding-left: .5rem; padding-right: .5rem; }
+.settings-private button { width: 2rem; flex-shrink: 0; }
+.settings-private button svg { width: 1rem; }
+.settings-advanced[open] > summary > svg:last-child { transform: rotate(90deg); }
+.settings-advanced > summary:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 4px; }
+@media (max-width: 639px) {
+  .settings-language { align-items: flex-start; }
+  .settings-private { grid-template-columns: minmax(0, 1fr); }
+  .settings-private > div, .settings-private > div:nth-last-child(-n+2) { grid-column: 1; }
+}

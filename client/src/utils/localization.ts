@@ -145,6 +145,7 @@ const translations: Record<string, Record<string, string>> = {
         // PWA
         'pwa.installTitle': '安裝 App',
         'pwa.android': 'Android',
+        'pwa.desktop': '電腦版',
         'pwa.noButton': "Don't see the button?",
         'pwa.manual': 'Manually install:',
         'pwa.step1': 'Tap the Menu icon (three dots)',

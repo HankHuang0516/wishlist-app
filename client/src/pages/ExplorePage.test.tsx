@@ -12,6 +12,12 @@ const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture', isAut
 const view = (path = '/explore', value = auth) => <MemoryRouter initialEntries={[path]}><AuthContext.Provider value={value}><ExplorePage /></AuthContext.Provider></MemoryRouter>;
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('APP-equivalent map and list exploration', () => {
+  it('applies the homepage search to the input and actual seller query on first read', async () => {
+    const fetch = vi.fn(async () => responseOk({ items: [], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    render(view('/explore?q=' + encodeURIComponent('三國演義 & 漫畫')));
+    await waitFor(() => expect(screen.getByLabelText('商品關鍵字')).toHaveValue('三國演義 & 漫畫'));
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/listings?') && new URL(url).searchParams.get('q') === '三國演義 & 漫畫')).toBe(true));
+  });
   it('requires login before requesting private wishlist matching data', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch); render(view('/explore', { ...auth, token: null, user: null } as unknown as typeof auth));
     expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login?next=%2Fexplore'); expect(fetch).not.toHaveBeenCalled();

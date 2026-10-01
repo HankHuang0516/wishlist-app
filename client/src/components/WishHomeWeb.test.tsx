@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WishHomeWeb from './WishHomeWeb';
 import { makeWish, makeMatch, makeMatchPage, makeListing, responseOk } from '../__tests__/fixtures/marketplace';
+vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect }: { items: { id: string }[]; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}</div> }));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key={token} token={token} userId={userId} /></MemoryRouter>;
 describe('APP-equivalent homepage match UX', () => {
@@ -15,7 +16,7 @@ describe('APP-equivalent homepage match UX', () => {
     const expand = screen.getByRole('button', { name: /共有2件吻合商品/ });
     expect(expand).toHaveAttribute('aria-expanded', 'false'); fireEvent.click(expand);
     expect(screen.getByRole('link', { name: new RegExp(first.listing.title) })).toBeInTheDocument();
-    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['讓願望更靠近。', '所有願望吻合的商品', '三國演義漫畫', '今天想找什麼？']);
+    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['Welcome Back.', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用', '今天想找什麼？']);
     expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
   });
   it('passes the single match ID for fresh lookup and automatic map framing', async () => {
@@ -37,5 +38,25 @@ describe('APP-equivalent homepage match UX', () => {
     await screen.findByText('先留下你的第一個願望');
     await act(async () => resolve(responseOk({ items: [makeWish()], nextCursor: null })));
     expect(screen.queryByRole('radio', { name: /三國演義/ })).not.toBeInTheDocument();
+  });
+  it('keeps photo shortcuts optional and sends a Unicode search to the real explore route', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk({ items: [], nextCursor: null })));
+    const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
+    render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
+    await screen.findByText('先留下你的第一個願望');
+    expect(screen.getByRole('link', { name: '拍照新增願望' })).toHaveAttribute('href', '/wishes');
+    expect(screen.getByRole('link', { name: '連拍刊登' })).toHaveAttribute('href', '/sell');
+    fireEvent.change(screen.getByLabelText('搜尋商品'), { target: { value: ' 三國演義 & 漫畫 ' } });
+    fireEvent.click(screen.getByRole('button', { name: '在地圖查看' }));
+    expect(screen.getByTestId('path')).toHaveTextContent('/explore?q=' + encodeURIComponent('三國演義 & 漫畫'));
+  });
+  it('deduplicates map photos shared by multiple wishes and preserves listing navigation', async () => {
+    const item = makeListing();
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish(1), makeWish(2)], nextCursor: null } : makeMatchPage([makeMatch(Number(new URL(url).searchParams.get('wishItemId')), item)]))));
+    const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
+    render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
+    const map = await screen.findByTestId('home-map'); expect(within(map).getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(within(map).getByRole('button'));
+    expect(screen.getByTestId('path')).toHaveTextContent('/explore?listing=' + item.id);
   });
 });

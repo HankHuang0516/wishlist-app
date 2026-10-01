@@ -36,20 +36,28 @@ export default function Home() {
 
     if (isAuthenticated) {
         return (
-            <div className="container mx-auto p-4 space-y-8">
-                {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id} />}
+            <div className="mx-auto max-w-6xl">
+                {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id}>
+                <div className="flex flex-wrap justify-center gap-3">
+                    <Link to="/wishes">
+                        <Button size="lg" className="w-full md:w-auto px-12">我的願望</Button>
+                    </Link>
+                    <Link to="/sell">
+                        <Button size="lg" variant="outline" className="w-full md:w-auto px-12">拍照刊登好物</Button>
+                    </Link>
+                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Holiday Card */}
                     <Card className="bg-pink-50 border-none shadow-sm h-full">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-lg font-medium text-pink-600">Upcoming Holiday</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-pink-700">
+                            <div className="text-xl font-bold text-pink-700">
                                 {nextHoliday.name}
                             </div>
-                            <p className="text-lg text-pink-500 mt-2">
+                            <p className="text-sm text-pink-500 mt-2">
                                 {nextHoliday.date.toLocaleDateString()}
                             </p>
                         </CardContent>
@@ -106,14 +114,7 @@ export default function Home() {
                     </Card>
                 </div>
 
-                <div className="flex flex-wrap justify-center gap-3 mt-12">
-                    <Link to="/dashboard">
-                        <Button size="lg" className="w-full md:w-auto px-12">Go to My Wishlists</Button>
-                    </Link>
-                    <Link to="/sell">
-                        <Button size="lg" variant="outline" className="w-full md:w-auto px-12">拍照刊登好物</Button>
-                    </Link>
-                </div>
+                </WishHomeWeb>}
             </div>
         );
     }

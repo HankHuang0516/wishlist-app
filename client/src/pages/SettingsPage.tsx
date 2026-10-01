@@ -5,11 +5,12 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Upload, User as UserIcon, Download, Camera, Loader2 } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t, getUserLocale } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
 import AccountBenefits from '../components/AccountBenefits';
+import './SettingsPage.css';
 
 interface UserProfile {
     id: number;
@@ -127,7 +128,9 @@ function SettingsSession() {
                 setFeedback({ message: "更新失敗", type: 'error' });
                 setTimeout(() => setFeedback(null), 3000);
             }
-        } catch (error) { console.error(error); }
+        } catch {
+            if (active.current) setFeedback({ message: '尚未確認儲存結果；請勿以畫面內容當作已儲存，重新載入核對後再操作。', type: 'error' });
+        }
     };
 
     const [isUploading, setIsUploading] = useState(false);
@@ -211,31 +214,16 @@ function SettingsSession() {
     const nicknameCount = profile.nicknames ? profile.nicknames.split(',').filter(s => s.trim()).length : 0;
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6 pb-24 relative">
+        <div className="settings-hub max-w-3xl mx-auto space-y-4 pb-8 relative">
             {feedback && (
                 <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full shadow-lg z-50 text-sm font-medium animate-fade-in-down ${feedback.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
                     {feedback.message}
                 </div>
             )}
-            <h1 className="text-3xl font-bold text-muji-primary">我的／設定</h1>
-            <Link to="/wishes" className="block rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">我的願望 · 拍照與 AI 辨識</span><span className="text-sm text-gray-600">與 APP 共用清單、照片、辨識狀態與最高預算</span></Link>
-            <Link to="/sell" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
-                <Camera aria-hidden className="h-6 w-6 text-blue-600" />
-                <span><span className="block font-semibold">刊登好物</span><span className="text-sm text-gray-600">連續拍照或批次選照片，由 AI 建議商品資訊</span></span>
-            </Link>
-            <Link to="/my-listings" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
-                <span><span className="block font-semibold">我的商品 · 閱覽與管理</span><span className="text-sm text-gray-600">查看、編輯、保留、售出或延長刊登</span></span>
-            </Link>
-            <Link to="/reports" className="flex items-center gap-3 rounded-2xl border bg-white p-5 shadow-sm">
-                <span><span className="block font-semibold">我的商品檢舉</span><span className="text-sm text-gray-600">查看處理狀態與恢復未確認操作</span></span>
-            </Link>
-            <div className="grid gap-3 sm:grid-cols-2"><Link to="/chat" className="rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">聊天與面交</span><span className="text-sm text-gray-600">聯繫買賣雙方、查核訊息及預約</span></Link>
-                <Link to="/social" className="rounded-2xl border bg-white p-5 shadow-sm"><span className="block font-semibold">好友與社交</span><span className="text-sm text-gray-600">保留原有朋友與送禮功能</span></Link></div>
-            <AccountSecurityPanel key={token} />
-            <AccountBenefits key={`benefits-${token}`} />
+            <div><h1 className="text-3xl font-bold text-muji-primary">個人資料</h1><p className="mt-1 text-sm text-gray-500">管理你的帳號與偏好設定</p></div>
 
             {/* Language Section */}
-            <Card>
+            <Card className="settings-language">
                 <CardHeader className="pb-3">
                     <CardTitle>{t('common.language')}</CardTitle>
                     <CardDescription>{t('common.languageDesc')}</CardDescription>
@@ -273,10 +261,19 @@ function SettingsSession() {
             </Card>
 
             {/* Avatar Section */}
-            <Card>
+            <section aria-labelledby="settings-actions" className="rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+                <h2 id="settings-actions" className="mb-3 font-semibold">我的功能</h2>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {[{ to: '/wishes', label: '我的願望', description: '拍照與 AI 辨識', icon: Gift },
+                        { to: '/my-listings', label: '我的商品', description: '閱覽與管理', icon: Package },
+                        { to: '/chat', label: '聊天與面交', description: '訊息與預約', icon: MessageCircle },
+                        { to: '/sell', label: '刊登好物', description: '連拍或批次上傳', icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
+                </div>
+            </section>
+            <Card className="settings-avatar">
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                        <span>{t('settings.avatar')}</span>
+                        <span>大頭照與暱稱</span>
                         <div className="flex items-center gap-2">
                             <label htmlFor="avatar-toggle" className="text-sm font-normal text-gray-600 cursor-pointer select-none">
                                 {profile.isAvatarVisible ? t('settings.public') : t('settings.hidden')}
@@ -290,28 +287,18 @@ function SettingsSession() {
                             />
                         </div>
                     </CardTitle>
-                    <CardDescription>
-                        {profile.isAvatarVisible
-                            ? t('settings.avatarVisible')
-                            : t('settings.avatarHidden')}
-                    </CardDescription>
-                    {/* Read-Only Name Display */}
-                    <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-100 flex flex-col gap-1">
-                        <span className="text-xs text-muji-secondary font-medium">{t('register.name')} ({t('settings.loginName')})</span>
-                        <span className="text-sm text-muji-primary font-semibold">{profile.name}</span>
-                    </div>
                 </CardHeader>
-                <CardContent className="flex flex-col md:flex-row items-center gap-6 pt-6">
+                <CardContent className="flex items-center gap-4">
                     {/* Avatar Image & Overlay */}
                     <div
-                        className="relative group cursor-pointer w-24 h-24"
+                        className="relative group cursor-pointer w-16 h-16 shrink-0"
                         role="button"
                         tabIndex={0}
                         aria-label="上傳大頭照"
                         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
+                        <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100 relative">
                             {profile.avatarUrl ? (
                                 <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />
                             ) : (
@@ -338,27 +325,20 @@ function SettingsSession() {
                         />
                     </div>
 
-                    <div className="flex-1 w-full space-y-4">
+                    <div className="min-w-0 flex-1 space-y-4">
                         <div className="space-y-2">
-                            <label htmlFor="nickname" className="text-sm font-medium leading-none">{t('settings.nicknamesPlaceholder')}</label>
+                            <label htmlFor="nickname" className="text-sm font-medium leading-none">暱稱</label>
                             <Input
                                 id="nickname"
                                 value={profile.nicknames || ""}
                                 onChange={(e) => setProfile({ ...profile, nicknames: e.target.value })}
-                                onBlur={(e) => {
-                                    handleUpdate({ nicknames: e.target.value });
-                                    const el = document.getElementById('nickname-saved');
-                                    if (el) {
-                                        el.style.opacity = '1';
-                                        setTimeout(() => el.style.opacity = '0', 2000);
-                                    }
-                                }}
+                                onBlur={(e) => handleUpdate({ nicknames: e.target.value })}
                                 placeholder={t('settings.nicknamesPlaceholder')}
                             />
                             <div className="flex justify-between items-center h-4">
                                 <p className="text-xs text-muji-secondary">{t('register.name')}: {profile.name}</p>
-                                <span id="nickname-saved" className="text-xs text-green-600 font-medium transition-opacity duration-500 opacity-0">
-                                    {t('common.saved')}
+                                <span id="nickname-saved" role="status" className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'nicknames' ? 'opacity-100' : 'opacity-0'}`}>
+                                    {savedField === 'nicknames' ? t('common.saved') : ''}
                                 </span>
                             </div>
                         </div>
@@ -390,8 +370,9 @@ function SettingsSession() {
             </Link>
 
             {/* Private Info Section */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.privacyTitle')}</h2>
+            <AccountSecurityPanel key={token} />
+            <div className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">{t('settings.privacyTitle')}</h2>
 
                 {/* Real Name */}
                 <Card>
@@ -423,7 +404,7 @@ function SettingsSession() {
                                 {profile.isRealNameVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                             </p>
                             <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'realName' ? 'opacity-100' : 'opacity-0'}`}>
-                                {t('common.saved')}
+                                {savedField === 'realName' ? t('common.saved') : ''}
                             </span>
                         </div>
                     </CardContent>
@@ -459,7 +440,7 @@ function SettingsSession() {
                                 {profile.isBirthdayVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                             </p>
                             <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'birthday' ? 'opacity-100' : 'opacity-0'}`}>
-                                {t('common.saved')}
+                                {savedField === 'birthday' ? t('common.saved') : ''}
                             </span>
                         </div>
                     </CardContent>
@@ -494,7 +475,7 @@ function SettingsSession() {
                                 {profile.isAddressVisible ? t('settings.statusPublic') : t('settings.statusHidden')}
                             </p>
                             <span className={`text-xs text-green-600 font-medium transition-opacity duration-500 ${savedField === 'address' ? 'opacity-100' : 'opacity-0'}`}>
-                                {t('common.saved')}
+                                {savedField === 'address' ? t('common.saved') : ''}
                             </span>
                         </div>
                     </CardContent>
@@ -569,6 +550,14 @@ function SettingsSession() {
 
 
 
+            <AccountBenefits key={`benefits-${token}`} />
+            <details className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+                <summary className="flex cursor-pointer list-none items-center gap-3"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block font-semibold">進階功能</span><span className="text-xs text-gray-500">AI 整合・交易紀錄・安裝網頁 App・好友與送禮</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
+                <div className="mt-4 space-y-3">
+                    <Link to="/dashboard" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">原願望清單 · 分享與送禮</Link>
+                    <Link to="/social" className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm text-blue-700"><Users className="h-4 w-4" aria-hidden="true" />好友與社交</Link>
+                    <Link to="/reports" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">我的商品檢舉 · 查看處理狀態</Link>
+                </div>
             {/* App Installation Section - Only visible if installable or on mobile not installed */}
 
             {/* 1. Native Install Button (Android/Desktop when event fires) */}
@@ -833,6 +822,7 @@ function SettingsSession() {
                 </div>
 
             </div>
+            </details>
         </div>
 
     );

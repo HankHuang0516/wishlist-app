@@ -23,7 +23,11 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const prisma = require('../dist/lib/prisma').default;
 const { login } = require('../dist/controllers/authController');
-const { getMe } = require('../dist/controllers/userController');
+const { getMe, updateMe, getAiUsage } = require('../dist/controllers/userController');
+const { getUpcomingBirthdays } = require('../dist/controllers/socialController');
+const { marketingAvailability } = require('../dist/controllers/marketingController');
+const { searchListings } = require('../dist/controllers/listingController');
+const { getMatchWishes, matchWishListings } = require('../dist/controllers/wishlistMatchController');
 const { authenticateToken } = require('../dist/middleware/auth');
 const { getListing } = require('../dist/controllers/listingController');
 const chatRoutes = require('../dist/routes/chatRoutes').default;
@@ -61,6 +65,13 @@ app.use((req, res, next) => {
 });
 app.post('/api/auth/login', login);
 app.get('/api/users/me', authenticateToken, getMe);
+app.put('/api/users/me', authenticateToken, updateMe);
+app.get('/api/users/me/ai-usage', authenticateToken, getAiUsage);
+app.get('/api/users/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
+app.get('/api/marketing/availability', authenticateToken, marketingAvailability);
+app.get('/api/listings', searchListings);
+app.get('/api/listings/match-wishes', authenticateToken, getMatchWishes);
+app.get('/api/listings/matches', authenticateToken, matchWishListings);
 app.get('/api/listings/:id', getListing);
 // A clearly synthetic placeholder only; this does not test Flickr transport.
 app.get('/api/listing-media/:id/:variant', (req, res, next) => {
@@ -95,6 +106,29 @@ async function main() {
   listing = await prisma.listing.create({ data: { ownerUserId: users[1].id, clientListingId: randomUUID(), requestHash: 'synthetic-web-parity-only', title: '合成測試漫畫（不可購買）', description: '僅供隔離驗收，不是真實刊登；圖片為合成測試替代圖。', category: 'books', price: 59, condition: 'USED', deliveryMethods: ['MEETUP'], status: 'ACTIVE', publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), location: { create: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 } } } });
   photoId = randomUUID();
   await prisma.listingMedia.create({ data: { id: photoId, ownerUserId: users[1].id, listingId: listing.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${photoId}/thumbnail`, contentHash: 'synthetic-placeholder-not-flickr', capturePurpose: 'MANUAL_PHOTO' } });
+  // Opt-in style review uses only this run's newly created synthetic owners.
+  // Real compiled search/matching/media/profile handlers; no AI completion.
+  if (process.env.WEB_PARITY_STYLE_FIXTURES === '1') {
+    const sharp = require('sharp');
+    const { ListingMediaStorage } = require('../dist/lib/listingMediaStorage');
+    const { createHash } = require('node:crypto');
+    const store = new ListingMediaStorage(); await store.ready();
+    const list = await prisma.wishlist.create({ data: { userId: users[0].id, title: '合成視覺驗收願望', isPublic: false } });
+    for (const name of ['桌上型檯燈', '藍色杯', '橘色檯燈']) await prisma.item.create({ data: { wishlistId: list.id, name, aiStatus: 'SKIPPED' } });
+    for (const [title, price, district, lng, lat, fixture] of [
+      ['橘色桌上型檯燈 · 合成甲', 350, '板橋區', 121.46, 25.01, 'synthetic-used-orange-desk-lamp.png'],
+      ['橘色桌上型檯燈 · 合成乙', 300, '中正區', 121.51, 25.05, 'synthetic-used-orange-desk-lamp.png'],
+      ['橘色桌上型檯燈 · 合成丙', 400, '大安區', 121.55, 25.03, 'synthetic-used-orange-desk-lamp.png'],
+      ['藍色杯 · 合成商品', 60, '大安區', 121.55, 25.03, 'synthetic-used-blue-mug.png'],
+    ]) {
+      const item = await prisma.listing.create({ data: { ownerUserId: users[1].id, clientListingId: randomUUID(), requestHash: 'synthetic-style-only', title, description: '合成測試商品，不可購買；非 AI 辨識結果。', category: 'other', price, condition: 'USED', deliveryMethods: ['MEETUP'], status: 'ACTIVE', publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400000), location: { create: { county: district === '板橋區' ? '新北市' : '臺北市', district, publicLatitude: lat, publicLongitude: lng, precisionMeters: 2200 } } } });
+      const id = randomUUID(), input = path.resolve(__dirname, '../../mobile/qa-fixtures', fixture);
+      const image = await sharp(input).rotate().webp({ quality: 80 }).toBuffer();
+      const thumb = await sharp(image).resize({ width: 320, height: 320, fit: 'inside' }).webp({ quality: 75 }).toBuffer();
+      await store.write(id, image, thumb);
+      await prisma.listingMedia.create({ data: { id, ownerUserId: users[1].id, listingId: item.id, imageUrl: `http://127.0.0.1:5183/api/listing-media/${id}/image`, thumbnailUrl: `http://127.0.0.1:5183/api/listing-media/${id}/thumbnail`, contentHash: createHash('sha256').update(image).digest('hex'), capturePurpose: 'MANUAL_PHOTO' } });
+    }
+  }
   await new Promise((resolve, reject) => { server = app.listen(5183, '127.0.0.1', resolve); server.once('error', reject); });
   console.log(JSON.stringify({ syntheticOnly: true, origin: 'http://127.0.0.1:5183', storageRoot: process.env.LISTING_MEDIA_STORAGE_ROOT, users, listingId: listing.id }));
 }

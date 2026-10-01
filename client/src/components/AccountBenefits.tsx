@@ -32,9 +32,9 @@ export default function AccountBenefits() {
     return () => { active = false; controller.abort(); };
   }, [token, retry]);
   const current = state?.token === token ? state : null;
-  return <section aria-labelledby="benefits-title" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+  return <section aria-labelledby="benefits-title" className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm space-y-4">
     <h2 id="benefits-title" className="text-xl font-semibold">贊助與升級</h2>
-    <div className="flex gap-3 rounded-xl bg-red-50 p-3 text-red-700"><Ban className="h-5 w-5 shrink-0" aria-hidden />
+    <div className="flex gap-3 rounded-md bg-gray-50 p-3 text-gray-600"><Ban className="h-5 w-5 shrink-0" aria-hidden />
       <div><p className="font-medium">購買與訂閱操作暫停</p><p className="text-sm">商店付款與後端驗單尚未開放；既有權益不受影響。</p></div></div>
     <div className="flex gap-3"><Heart className="h-5 w-5 shrink-0" aria-hidden /><div><h3 className="font-medium">贊助服務</h3><p className="text-sm text-gray-600">目前未開放收款，不會導向付款頁。</p></div></div>
     <div className="flex gap-3 border-t pt-4"><Award className="h-5 w-5 shrink-0" aria-hidden /><div><h3 className="font-medium">尊榮版訂閱 · NT$90／月</h3>

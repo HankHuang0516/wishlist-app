@@ -35,18 +35,19 @@ export async function parseSellerDraftJournal(raw:string):Promise<SellerDraftJou
 }
 export type SellerDraftMedia={id:string;ownerUserId:number;listingId:string|null;wishItemId:number|null;capturePurpose:string;sellerDraft:SellerDraft|null;sellerDraftVersion:number};
 export type SellerDraftResult={state:'APPLIED'|'CONFLICT'|'ABANDONED';appliedVersion:number|null;media:SellerDraftMedia|null;current:boolean};
+export function parseSellerDraftMedia(value:unknown,userId:number,mediaId:string):SellerDraftMedia|null {
+  if(value===null)return null;
+  const item=object(value);exact(item,['id','ownerUserId','listingId','wishItemId','capturePurpose','sellerDraft','sellerDraftVersion']);
+  if(item.id!==mediaId||item.ownerUserId!==userId||!integer(item.sellerDraftVersion)||!(item.listingId===null||uuid(item.listingId))||!(item.wishItemId===null||integer(item.wishItemId,1,2147483647))||!['BATCH_ITEM','MANUAL_PHOTO','LEGACY_UNKNOWN','AI_MARKETING'].includes(String(item.capturePurpose)))return fail();
+  return {...item,sellerDraft:item.sellerDraft===null?null:normalizedSellerDraft(item.sellerDraft)} as SellerDraftMedia;
+}
 export async function sellerDraftResult(value:unknown,raw:string,userId:number):Promise<SellerDraftResult>{
   const journal=await parseSellerDraftJournal(raw),row=object(value);exact(row,['receipt','media']);
   const receipt=object(row.receipt);exact(receipt,['clientActionId','mediaId','requestHash','state','appliedVersion','createdAt']);
   if(receipt.clientActionId!==journal.clientActionId||receipt.mediaId!==journal.mediaId||receipt.requestHash!==journal.requestHash||!['APPLIED','CONFLICT','ABANDONED'].includes(String(receipt.state))||typeof receipt.createdAt!=='string'||!Number.isFinite(Date.parse(receipt.createdAt))||new Date(receipt.createdAt).toISOString()!==receipt.createdAt||
     (receipt.state==='APPLIED'?receipt.appliedVersion!==journal.expectedVersion+1:receipt.appliedVersion!==null))return fail();
-  let media:SellerDraftMedia|null=null;
-  if(row.media!==null){const item=object(row.media);exact(item,['id','ownerUserId','listingId','wishItemId','capturePurpose','sellerDraft','sellerDraftVersion']);
-    if(item.id!==journal.mediaId||item.ownerUserId!==userId||!integer(item.sellerDraftVersion)||!(item.listingId===null||uuid(item.listingId))||!(item.wishItemId===null||integer(item.wishItemId,1,2147483647))||!['BATCH_ITEM','MANUAL_PHOTO','LEGACY_UNKNOWN','AI_MARKETING'].includes(String(item.capturePurpose)))return fail();
-    const draft=item.sellerDraft===null?null:normalizedSellerDraft(item.sellerDraft);
-    media={...item,sellerDraft:draft} as SellerDraftMedia;
-    if(receipt.state==='APPLIED'&&media.sellerDraftVersion<Number(receipt.appliedVersion))return fail();
-  }
+  const media=parseSellerDraftMedia(row.media,userId,journal.mediaId);
+  if(receipt.state==='APPLIED'&&media&&media.sellerDraftVersion<Number(receipt.appliedVersion))return fail();
   const current=receipt.state==='APPLIED'&&!!media&&media.sellerDraftVersion===receipt.appliedVersion&&media.listingId===null&&media.wishItemId===null&&media.capturePurpose==='BATCH_ITEM';
   if(current&&JSON.stringify(media!.sellerDraft)!==JSON.stringify(journal.draft))return fail();
   return {state:receipt.state as SellerDraftResult['state'],appliedVersion:receipt.appliedVersion as number|null,media,current};

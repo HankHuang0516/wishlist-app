@@ -55,7 +55,7 @@ app.use(cors({ origin: `http://127.0.0.1:${browserPort}` }));
 app.use(express.json({ limit: '32kb' }));
 app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 let drop = null, rejectRemoval = false, rejectPhotoReceipt = false, dropped = { listing: 0, profile: 0, message: 0, meetup: 0, photo: 0, wish: 0, photoRemoval: 0, draft: 0, marketingApprove: 0, marketingQueue: 0 }, attempts = { listing: 0, listingReceipt: 0, listingAbandon: 0, profile: 0, profileReceipt: 0, message: 0, meetup: 0, photo: 0, photoReceipt: 0, photoAbandon: 0, wish: 0, photoRemoval: 0, messageReceipt: 0, draft: 0, draftReceipt: 0, draftAbandon: 0, marketingApprove: 0, marketingApprovalReceipt: 0, marketingApprovalAbandon: 0, marketingQueue: 0, marketingQueueReceipt: 0 }, users, listing, photoId, server;
-for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow','followOperation','avatar']) { dropped[kind]=0; attempts[kind]=0; }
+for (const kind of ['listingEdit','listingStatus','listingExtend','listingPublish','listingManagement','socialFollow','followOperation','avatar','privatePhotoRemoval']) { dropped[kind]=0; attempts[kind]=0; }
 attempts.followReceipt=0;attempts.followState=0;attempts.followAbandon=0;
 let rejectSocialRead = null;
 for (const kind of ['socialSearch','socialFollowing','socialProfile']) attempts[kind]=0;
@@ -89,7 +89,11 @@ app.use((req, res, next) => {
     attempts['social'+socialRead[0].toUpperCase()+socialRead.slice(1)]++;
     if (rejectSocialRead === socialRead) { rejectSocialRead=null;return res.status(503).json({errorCode:'TEST_SOCIAL_READ_UNAVAILABLE'}); }
   }
-  const kind = req.method === 'POST' && req.path === '/api/users/me/avatar' ? 'avatar' :
+  if(req.method==='GET'&&/^\/api\/listing-media\/photo-removals\/[^/]+$/.test(req.path))attempts.privatePhotoRemovalRead=(attempts.privatePhotoRemovalRead??0)+1;
+  if(req.method==='POST'&&/^\/api\/listing-media\/photo-removals\/[^/]+\/abandon$/.test(req.path))attempts.privatePhotoRemovalAbandon=(attempts.privatePhotoRemovalAbandon??0)+1;
+  if(req.method==='DELETE'&&/^\/api\/listing-media\/[^/]+$/.test(req.path))attempts.legacyPhotoDelete=(attempts.legacyPhotoDelete??0)+1;
+  const kind = req.method === 'POST' && /^\/api\/listing-media\/photo-removals\/[^/]+$/.test(req.path) ? 'privatePhotoRemoval' :
+    req.method === 'POST' && req.path === '/api/users/me/avatar' ? 'avatar' :
     req.method === 'POST' && req.path === '/api/listings' ? 'listing' :
     req.method==='POST' && /^\/api\/users\/me\/follow-operations\/[^/]+$/.test(req.path) ? 'followOperation' :
     ['POST','DELETE'].includes(req.method) && /^\/api\/users\/[1-9]\d*\/follow$/.test(req.path) ? 'socialFollow' :
@@ -193,6 +197,7 @@ app.get('/__test/state', async (_req, res) => {
     createdListings: await prisma.listing.findMany({ where: { ownerUserId: users[0].id }, select: { id: true, title: true, status: true, clientListingId: true, expiryMode: true, expiresAt: true, media: { select: { id: true } } } }),
     listingCreationReceipts: await prisma.listingCreateReceipt.findMany({ where: { userId: users[0].id }, select: { clientListingId: true, state: true, listingId: true } }),
     listingManagementReceipts: await prisma.listingManagementReceipt.findMany({ where: { userId: { in: users.map(user=>user.id) } }, select: { clientActionId:true, listingId:true, kind:true, state:true, reason:true, appliedVersion:true, expectedVersion:true } }),
+    privatePhotoRemovalReceipts: await prisma.photoRemovalReceipt.findMany({where:{userId:{in:users.map(user=>user.id)}},select:{clientActionId:true,mediaId:true,expectedVersion:true,state:true}}),
     photoRemovalReceipts: await prisma.wishPhotoRemovalReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, removedAt: true } }),
     photoUploadReceipts: await prisma.photoUploadReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientUploadId: true, mediaId: true, state: true } }),
     sellerDraftReceipts: await prisma.sellerDraftReceipt.findMany({ where: { userId: { in: users.map(user => user.id) } }, select: { clientActionId: true, mediaId: true, state: true, appliedVersion: true } }),

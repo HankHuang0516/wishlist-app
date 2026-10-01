@@ -7,6 +7,8 @@ import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, PhotoInputError, PhotoUploadSlots } 
 import { abandonPhotoUpload, getPhotoUploadReceipt } from '../controllers/photoUploadReceiptController';
 import { abandonSellerDraftOperation, readSellerDraftOperation, submitSellerDraftOperation } from '../controllers/sellerDraftOperationController';
 
+import { readPrivatePhotoRemoval, submitPrivatePhotoRemoval, abandonPrivatePhotoRemoval } from '../controllers/privatePhotoRemovalController';
+
 const router = Router();
 const slots = new PhotoUploadSlots(1);
 const uploads = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false,
@@ -39,6 +41,9 @@ router.post('/', authenticateToken, uploads, async (req: AuthRequest, res) => {
         return mediaError(res, error);
     } finally { release(); }
 });
+router.get('/photo-removals/:clientActionId', authenticateToken, readPrivatePhotoRemoval);
+router.post('/photo-removals/:clientActionId', authenticateToken, submitPrivatePhotoRemoval);
+router.post('/photo-removals/:clientActionId/abandon', authenticateToken, uploads, abandonPrivatePhotoRemoval);
 router.get('/upload-receipts/:clientUploadId', authenticateToken, getPhotoUploadReceipt);
 router.get('/seller-draft-operations/:clientActionId', authenticateToken, readSellerDraftOperation);
 router.post('/:id/seller-draft-operations/:clientActionId', authenticateToken, submitSellerDraftOperation);

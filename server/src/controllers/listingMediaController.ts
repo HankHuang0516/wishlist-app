@@ -1,3 +1,4 @@
+import { removeUnusedMediaTx } from '../lib/privatePhotoRemoval';
 import { Response } from 'express';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -311,35 +312,17 @@ export async function deleteUnusedListingMedia(req: AuthRequest, res: Response) 
     try {
         const id = req.params.id;
         if (!isListingId(id)) return res.status(404).json({ error: '照片不存在或已用於商品' });
-        // Atomically prevent deleting an image that a concurrent listing has
-        // attached. Only this owner's still-unbound record may be removed.
         const removed = await prisma.$transaction(async tx => {
-            const media = await tx.listingMedia.findFirst({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null,
-                capturePurpose: { not: 'AI_MARKETING' }, marketingJobsAsSource: { none: { status: { in: ['PENDING', 'PROCESSING', 'REVIEW'] } } } },
-                select: { flickrPhotoId: true } });
-            if (!media) return null;
-            const jobs = await tx.marketingJob.findMany({ where: { sourceMediaId: id, ownerUserId: req.user!.id },
-                select: { id: true } });
-            const generated = jobs.length ? await tx.listingMedia.findMany({ where: { ownerUserId: req.user!.id,
-                marketingJobId: { in: jobs.map(job => job.id) }, listingId: null },
-                select: { id: true, flickrPhotoId: true } }) : [];
-            if (generated.length) {
-                await tx.listingMedia.deleteMany({ where: { id: { in: generated.map(item => item.id) }, ownerUserId: req.user!.id,
-                    listingId: null } });
-                await tx.mediaErasureTask.createMany({ data: generated.map(item => ({ mediaId: item.id,
-                    flickrPhotoId: item.flickrPhotoId })), skipDuplicates: true });
-            }
-            if (jobs.length) await tx.marketingJob.deleteMany({ where: { id: { in: jobs.map(job => job.id) },
-                ownerUserId: req.user!.id } });
-            const deleted = await tx.listingMedia.deleteMany({ where: { id, ownerUserId: req.user!.id, listingId: null, wishItemId: null,
-                capturePurpose: { not: 'AI_MARKETING' }, marketingJobsAsSource: { none: { status: { in: ['PENDING', 'PROCESSING', 'REVIEW'] } } } } });
-            if (!deleted.count) return null;
-            await tx.mediaErasureTask.create({ data: { mediaId: id, flickrPhotoId: media.flickrPhotoId } });
-            return media;
+            await listingCreationGate(tx,req,req.user!.id);
+            const result = await removeUnusedMediaTx(tx,req.user!.id,id.toLowerCase());
+            return result.state === 'REMOVED';
         });
         if (!removed) return res.status(404).json({ error: '照片不存在或已用於商品' });
-        if (!removed.flickrPhotoId) await storage.remove(id).then(() => prisma.mediaErasureTask.delete({ where: { mediaId: id } }))
+        // Keep legacy immediate local cleanup, while all provider tasks remain
+        // durable for the existing erasure worker.
+        const task = await prisma.mediaErasureTask.findUnique({where:{mediaId:id.toLowerCase()}});
+        if (task && !task.flickrPhotoId) await storage.remove(id.toLowerCase()).then(() => prisma.mediaErasureTask.deleteMany({where:{mediaId:id.toLowerCase()}}))
             .catch(() => console.error('Unused private photo cleanup needs retry; details withheld'));
         return res.status(204).send();
-    } catch { return res.status(500).json({ error: '暫時無法移除照片', errorCode: 'PHOTO_DELETE_ERROR' }); }
+    } catch(error) { return res.status(error instanceof ListingCreationError ? error.status : 500).json({ error: '暫時無法移除照片', errorCode: 'PHOTO_DELETE_ERROR' }); }
 }

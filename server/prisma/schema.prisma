@@ -67,6 +67,7 @@ model User {
   followOperationReceipts FollowOperationReceipt[]
   listingCreateReceipts ListingCreateReceipt[]
   listingManagementReceipts ListingManagementReceipt[]
+  photoRemovalReceipts PhotoRemovalReceipt[]
   photoUploadReceipts PhotoUploadReceipt[]
   sellerDraftReceipts SellerDraftReceipt[]
   listings        Listing[]
@@ -953,4 +954,20 @@ model SubmissionReceipt {
   notificationCheckedAt DateTime?
   createdAt DateTime @default(now())
   @@index([createdAt, id])
+}
+
+
+// Immutable history survives photo/job deletion; account erasure cascades it.
+model PhotoRemovalReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientActionId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(11)
+  mediaId String? @db.Uuid
+  expectedVersion Int?
+  removedIds String[] @db.Uuid
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientActionId])
 }

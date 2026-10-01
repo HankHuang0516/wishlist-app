@@ -27,6 +27,17 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第二十九批：私人批次照片移除的持久回執（仍未部署）
+
+- 新增第42份migration及`PhotoRemovalReceipt`，保存owner、原操作UUID、SHA-256、照片／草稿版本及REMOVED／CONFLICT／UNAVAILABLE／ABANDONED終態。照片與工作刪除不釋放原鍵，帳號刪除cascade；SQL CHECK拒絕空版本、錯誤終態／hash及非法移除ID。owner交易鎖內重新驗證JWT／API key，照片／使用中行銷檢查、刪除、清理outbox及回執同交易；寫回執失敗全部回滾。原生舊DELETE仍204／404，APP介面不改。
+- 網頁先保存API／帳號隔離AES-GCM原照片、版本、操作ID與hash，無法保存就不送HTTP；重開只GET原回執。明確重試原鍵、兩步hash-only安全停止、衝突比較與已確認僅清理分開。較新草稿、商品／願望綁定及PENDING／PROCESSING／REVIEW行銷照片均不能移除。已確認清單同步或本機清理失敗保留成功證據，沒有再次POST；跨帳號晚到及CAS較新journal保護保留。不可編輯照片的本頁文字可複製，不誤稱已刊登。
+- 新增21項真HTTP／PostgreSQL案例及16項前端契約／頁面回歸，涵蓋12並行同鍵只移除一次、晚到送出／停止競態、權限撤銷、綁定保護、原生相容、inactive生成圖清理、constraint、cascade、transaction rollback、重開GET-only、存儲故障、較新版比較及連續清單讀取失敗不倒退為未知。
+- Chrome／compiled真handler／獨立UTF8 DB驗證：實際上傳合成檯燈，透過可見的臨時QA頁使用產品library保存加密journal（不POST）；CLI對同一合成照片送原移除，交易提交後故意回502。瀏覽器reload只GET恢復REMOVED，原POST仍1、照片清單0；SQL確認清理task仍1，畫面如實顯示檔案清理待後台。這不是永久刪除確認按鈕的真UI證據，未宣稱點過該按鈕。
+- 再真UI上傳合成照片，GET404時透過兩步安全停止回ABANDONED；CLI晚到同鍵POST仍ABANDONED、照片保留。實際UI儲存草稿（blur及明確儲存共2次）成v2，再以原v0合成操作得到CONFLICT。重開顯示v2／原名稱、說明及350，按核對後關閉不增加POST。最終回執3份（REMOVED／ABANDONED／CONFLICT各1）、移除POST3（含晚到與衝突）、GET4、停止POST1、照片1、私人草稿v2、公開新商品0、legacy DELETE0。初診斷誤預期v1而失敗，保留紀錄；以實際v2及browser比較為證據，沒有改產品行為或放寬測試斷言。
+- 390×844 documentWidth375≤390、設定導航1個。已檢視原尺寸未後製截圖：`web-parity-private-removal-recovered-390-20261002.png`、`web-parity-private-removal-conflict-390-20261002.png`，以及`wishlist-web-private-removal-evidence-20261002.json`均在原outputs。僅本機合成圖片、無MiniMax／Flickr／正式資料變更；頁面未送出文字跨reload持久保存仍待補，不能以本批比較取代該項。
+- 完整pre-push首次既有照片公開／過期測試15秒HTTP逾時，443/444，保留失敗log並停止本次未退出Jest。該suite改用一個自有loopback listener並於結束關閉，原斷言／期限不改，focused19項通過；這是測試連線穩定修正，不推定正式服務根因。第二輪完整pre-push退出0：後台56檔913通過＋3skipped、42 migrations／schema一致、HTTP DB30檔444項、網頁74檔1180項與build、原生42檔852項／typecheck／Expo及QA安全檢查。追加1項連續清單失敗回歸後完整網頁74檔1181再次通過；產品程式未再改。
+- 主JS742.45KB、地圖1088.99KB／worker507.81KB及PWA5856.20KiB警告保留。新提交CI另精確回讀，不沿用6eb0061成功；PR82仍draft／未合併部署，完整目標active。剩餘刊登未送出草稿、日曆完整選日、新商品管理動作、真MiniMax／Flickr／跨端、舊願望／註冊／全站英文／政策客服／PWA效能、正式migration preflight及Railway正式回讀依矩陣完成。首頁／設定各90%、功能100%、原站風格／單一設定入口與APP不改條件維持。
+
 ## 2026-10-02 第二十八批：頭像未知回覆與只讀查核（仍未部署）
 
 - 原頭像API無原操作回執。網頁改為先保存API／帳號隔離的加密提醒（只含版本與隨機ID，不存照片、URL或token），再POST；未確認時鎖住再次上傳，重開讀取提醒與目前profile，不自動POST。持久保存失敗不送出；30秒期限、no-store／redirect拒絕、有效avatar URL驗證、同步防重點击與帳號生命週期隔離已加上。
@@ -94,7 +105,7 @@
 | 功能 | APP 基準／後台 | 網頁狀態 | 必要驗收 |
 |---|---|---|---|
 | 我的商品入口與完整閱覽管理 | MyListingsScreen；GET listings/mine | 本機實作；已用真實帳號唯讀核對3件商品 | 分頁、各狀態、私密縮圖、他人隔離 |
-| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；真AI、舊紀錄來源、照片移除、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
+| 刊登入口、連拍／批次選照、AI 草稿 | ListingBatchComposer；listing-media | 本機刊登、照片上傳及私人草稿均有持久回執、加密隔離紀錄、內容核對與重開只讀查核；實際commit後502恢復原草稿，較新版本比較不覆蓋；照片移除新增持久回執、真DB提交後502的GET恢復、安全停止與版本衝突真UI核對；永久移除確認按鈕、真AI、舊紀錄來源、未送出新編輯持久保存與行銷競態仍待補 | 逐張排隊、失敗重試、上傳恢復、公開確認 |
 | 手動商品欄位／失效日期 | ListingComposer、ListingBatchComposer | 本機欄位定位／高亮、逐件勾選、自訂日期清空及後台預設30天已驗證；管理頁日曆AX跨年／返回月份有部分證據，實際選日與刊登日曆仍待補 | 日期切月穩定、預設30天、未填欄定位高亮 |
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新回執協定的延長／移除／多頁真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 本機實作；真實漫畫商品編輯入口已唯讀核對 | 正確實拍來源圖、先儲存、人工確認、版號衝突 |

@@ -15,7 +15,9 @@ import { abandonListingCreation, listingCreationJournal, parseListingCreationJou
 import { abandonPhotoUpload, parsePhotoUploadJournal, photoUploadJournal, readPhotoUpload, sendPhotoUpload, type PhotoUploadResult } from '../lib/listingPhotoUploadWeb';
 import { abandonSellerDraftOperation, parseSellerDraftJournal, readSellerDraftOperation, sellerDraftJournal, sendSellerDraftOperation, type SellerDraftResult } from '../lib/sellerDraftWeb';
 
-type Card = { id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
+import { abandonPhotoRemoval, parsePhotoRemovalJournal, photoRemovalJournal, readPhotoRemoval, sendPhotoRemoval, type PhotoRemovalResult } from '../lib/privatePhotoRemovalWeb';
+
+type Card = { unavailable?: boolean; id: string; clientListingId: string; form: ListingDraftForm; touched: ListingTouched; version: number;
   ai: AiStatus; draft: AiDraft | null; dirty: boolean; saving: boolean; publishing: boolean; published: boolean;
   error: string; confirmed: boolean };
 const emptyDetails: PublishDetails = { county: '', district: '', latitude: '', longitude: '', meetup: true, shipping: false, negotiable: false, expiryDate: '', consent: false };
@@ -80,10 +82,16 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const draftOperation = useRef('');
   const draftConfirmed = useRef<SellerDraftResult | null>(null);
   const draftOutcomeApplied = useRef(false);
+  const [removalPending,setRemovalPending] = useState('');
+  const [removalCleanup,setRemovalCleanup] = useState(false);
+  const [removalDecision,setRemovalDecision] = useState(false);
+  const [removalCancel,setRemovalCancel] = useState(false);
+  const removalKey = useRef(''), removalOperation = useRef('');
+  const removalConfirmed = useRef<PhotoRemovalResult|null>(null);
   const journalKey = useRef('');
   const confirmedResult = useRef<ListingCreationResult | null>(null);
   const pendingRef = useRef(pending);
-  pendingRef.current = pending || photoPending || (!draftInFlight ? draftPending : '') || (photoLegacy ? 'legacy-photo' : '') || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
+  pendingRef.current = pending || photoPending || removalPending || (!draftInFlight ? draftPending : '') || (photoLegacy ? 'legacy-photo' : '') || (legacy && !legacyVerified ? legacy : '') || (storageError ? 'unavailable' : '');
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [invalid, setInvalid] = useState<{ cardId: string; field: ListingPublishField | 'review' } | null>(null);
   const fieldNodes = useRef(new Map<string, HTMLElement>());
@@ -94,8 +102,8 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
   const hasPendingAi = cards.some(card => card.ai === 'PENDING' || card.ai === 'PROCESSING');
-  const confirmedCards = cards.filter(card => card.confirmed && !card.published);
-  const locked = busy || !!pending || !!photoPending || !!draftPending && !draftInFlight || photoLegacy || !!legacy && !legacyVerified || storageError || !ready;
+  const confirmedCards = cards.filter(card => card.confirmed && !card.published && !card.unavailable);
+  const locked = busy || !!pending || !!photoPending || !!removalPending || !!draftPending && !draftInFlight || photoLegacy || !!legacy && !legacyVerified || storageError || !ready;
   const actionsLocked = locked || !!draftPending;
 
   useEffect(() => {
@@ -131,7 +139,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     const epoch = lifetime.current;
     let active = true;
     void (async () => {
-      let stored: string | null, previous: string, storedPhoto: string | null, storedDraft: string | null;
+      let stored: string | null, previous: string, storedPhoto: string | null, storedDraft: string | null, storedRemoval: string | null;
       try {
         const key = await pendingRequestKey(API_URL, userId, 'listing');
         stored = await privatePendingStore.get(key);
@@ -141,9 +149,14 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         const sellerKey = await pendingRequestKey(API_URL, userId, 'listing-draft');
         storedDraft = await privatePendingStore.get(sellerKey);
         if (storedDraft) await parseSellerDraftJournal(storedDraft);
+        const removeKey = await pendingRequestKey(API_URL,userId,'listing-photo-remove');
+        storedRemoval = await privatePendingStore.get(removeKey);
+        if(storedRemoval) await parsePhotoRemovalJournal(storedRemoval);
         previous = localStorage.getItem(pendingKey(userId)) ?? '';
         if (stored) await parseListingCreationJournal(stored);
         if (!active || epoch !== lifetime.current) return;
+        removalKey.current = removeKey; removalOperation.current = storedRemoval ?? ''; setRemovalPending(storedRemoval ?? '');
+        setRemovalCleanup(false); setRemovalDecision(false); setRemovalCancel(false); removalConfirmed.current = null;
         journalKey.current = key; setPending(stored ?? ''); setLegacy(previous); setLegacyVerified(false);
         photoJournalKey.current = photoKey; setPhotoPending(storedPhoto ?? '');
         draftKey.current = sellerKey; draftOperation.current = storedDraft ?? ''; setDraftPending(storedDraft ?? '');
@@ -157,6 +170,9 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       }
       try {
         await reload();
+        if(storedRemoval && active && epoch === lifetime.current) {
+          await finishPhotoRemoval(storedRemoval,await readPhotoRemoval(token,storedRemoval,userId),epoch);
+        }
         if (storedDraft && active && epoch === lifetime.current) {
           const journal = await parseSellerDraftJournal(storedDraft);
           if (readTick === 0) setCards(old => old.map(card => card.id === journal.mediaId ? { ...card, ...journal.draft, dirty: true, confirmed: false } : card));
@@ -186,13 +202,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     if (!token || !ready || !hasPendingAi) return;
     let active = true;
     const timer = window.setInterval(() => {
-      if (busyRef.current || draftOperation.current) return;
+      if (busyRef.current || draftOperation.current || removalOperation.current) return;
       for (const card of cardsRef.current.filter(item => item.ai === 'PENDING' || item.ai === 'PROCESSING')) {
         if (pollIds.current.has(card.id)) continue;
         pollIds.current.add(card.id);
         void api<unknown>(token, `/listing-media/${card.id}/ai-draft`).then(raw => {
           const ai = parseAiState(raw, card.id);
-          if (!active || busyRef.current || draftOperation.current) return;
+          if (!active || busyRef.current || draftOperation.current || removalOperation.current) return;
           setCards(current => current.map(item => item.id === card.id && !item.publishing && !item.published ? applyAi(item, ai) : item));
         }).catch(() => { /* Preserve queue state; seller may retry explicitly. */ }).finally(() => pollIds.current.delete(card.id));
       }
@@ -202,12 +218,12 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!busy && !pending && !photoPending && !draftPending && !photoLegacy && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
+      if (!busy && !pending && !photoPending && !removalPending && !draftPending && !photoLegacy && !(legacy && !legacyVerified) && !storageError && !cards.some(card => card.dirty)) return;
       event.preventDefault(); event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [busy, pending, photoPending, draftPending, photoLegacy, legacy, legacyVerified, storageError, cards]);
+  }, [busy, pending, photoPending, removalPending, draftPending, photoLegacy, legacy, legacyVerified, storageError, cards]);
 
   const replace = (id: string, change: (card: Card) => Card) => setCards(old => old.map(card => card.id === id ? change(card) : card));
   function updateField(id: string, field: ListingField, value: string) {
@@ -296,7 +312,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function save(card: Card): Promise<boolean> {
-    if (card.saving || card.published || savingIds.current.size || draftOperation.current) return false;
+    if (card.unavailable || card.saving || card.published || savingIds.current.size || draftOperation.current) return false;
     const epoch = lifetime.current;
     savingIds.current.add(card.id);
     replace(card.id, current => ({ ...current, saving: true, error: '' }));
@@ -499,11 +515,59 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
   }
 
   async function remove(id: string) {
-    if (busyRef.current || actionsLocked || draftOperation.current || savingIds.current.size || !window.confirm('確定刪除這張尚未刊登的私人商品照片？')) return;
-    busyRef.current = true; setBusy(true);
-    try { await api<void>(token!, `/listing-media/${id}`, { method: 'DELETE' }); setCards(old => old.filter(card => card.id !== id)); }
-    catch (error) { replace(id, card => ({ ...card, error: (error as Error).message })); }
-    finally { busyRef.current = false; setBusy(false); }
+    const card=cardsRef.current.find(item=>item.id===id);
+    if (!card || card.unavailable || busyRef.current || actionsLocked || removalOperation.current || draftOperation.current || savingIds.current.size || !window.confirm('確定刪除這張尚未刊登的私人商品照片及其私人草稿？若後台已有較新版本，會先阻止移除。')) return;
+    const epoch=lifetime.current; busyRef.current=true;setBusy(true);
+    let raw='',persisted=false;
+    try {
+      raw=await photoRemovalJournal(id,card.version);
+      await privatePendingStore.save(removalKey.current,raw);persisted=true;
+      if(epoch!==lifetime.current)return;
+      removalOperation.current=raw;setRemovalPending(raw);removalConfirmed.current=null;setRemovalDecision(false);setRemovalCleanup(false);
+      await finishPhotoRemoval(raw,await sendPhotoRemoval(token,raw,userId,privatePendingStore,removalKey.current,()=>epoch===lifetime.current),epoch);
+    } catch {
+      if(epoch!==lifetime.current)return;
+      if(persisted){removalOperation.current=raw;setRemovalPending(raw);if(removalConfirmed.current){setRemovalCleanup(true);setMessage('原移除回執已確認，但目前清單尚未同步；請只讀查核，不要重送。');}else setMessage('私人照片移除結果尚未確認；可能已移除，請查核原回執，不會自動重送。');}
+      else {setStorageError(true);setMessage('無法安全保存移除紀錄；尚未送出移除，請重試讀取安全紀錄。');}
+    } finally {if(epoch===lifetime.current){busyRef.current=false;setBusy(false);}}
+  }
+  async function finishPhotoRemoval(raw:string,result:PhotoRemovalResult,epoch:number,close=false) {
+    if(epoch!==lifetime.current)return;
+    const journal=await parsePhotoRemovalJournal(raw);if(epoch!==lifetime.current)return;
+    removalConfirmed.current=result;setRemovalCancel(false);
+    if(['CONFLICT','UNAVAILABLE'].includes(result.state)&&!close){setRemovalDecision(true);setMessage('原移除未套用；照片草稿已更新、使用中或不再可用。請比較目前狀態，沒有重新移除。');return;}
+    setRemovalDecision(false);setRemovalCleanup(true);
+    if(result.state==='REMOVED') {
+      setCards(old=>old.filter(card=>card.id!==journal.mediaId));
+      const current=await reload();if(epoch!==lifetime.current)return;
+      if(current.some(card=>card.id===journal.mediaId)){setMessage('原移除回執已確認，但私人清單仍包含該照片；請重讀查核，不會再次移除。');return;}
+      setMessage(result.cleanupPending?'私人照片與草稿已從使用清單移除；檔案清理仍待後台完成。':'私人照片移除已確認，檔案清理已完成。');
+    } else if(close) {
+      const usable=!!result.media&&result.media.listingId===null&&result.media.wishItemId===null&&result.media.capturePurpose==='BATCH_ITEM';
+      replace(journal.mediaId,card=>({...card,version:usable?result.media!.sellerDraftVersion:card.version,unavailable:!usable,confirmed:false,error:usable?'已核對目前版本，保留本頁修改；若要移除，須重新明確確認。':'照片已不在可編輯的私人清單；文字保留供複製，請到我的商品核對。'}));
+      setMessage('已關閉原移除，保留本頁文字；沒有再次送出移除。');
+    } else setMessage('原移除已安全停止；不會刪照片或撤回已完成的移除。');
+    try {
+      await privatePendingStore.clear(removalKey.current,raw);
+      const remaining=await privatePendingStore.get(removalKey.current);
+      if(epoch!==lifetime.current)return;
+      removalOperation.current=remaining??'';setRemovalPending(remaining??'');
+      setRemovalCleanup(false);removalConfirmed.current=null;
+      if(remaining)setMessage('原移除已確認；另一份移除紀錄仍待查核，不會自動重送。');
+    } catch {if(epoch===lifetime.current)setMessage('原移除結果已確認，但本機紀錄尚未清理；請只重試清理，不要重送。');}
+  }
+  async function reconcileRemoval(mode:'read'|'retry'|'abandon'|'cleanup'|'close') {
+    const raw=removalOperation.current;if(busyRef.current||!raw)return;
+    const epoch=lifetime.current;busyRef.current=true;setBusy(true);setRemovalCancel(false);
+    try{
+      const result=mode==='cleanup'||mode==='close'?removalConfirmed.current!:mode==='retry'?await sendPhotoRemoval(token,raw,userId,privatePendingStore,removalKey.current,()=>epoch===lifetime.current):mode==='abandon'?await abandonPhotoRemoval(token,raw,userId,()=>epoch===lifetime.current):await readPhotoRemoval(token,raw,userId);
+      if(!result)throw new Error();
+      await finishPhotoRemoval(raw,result,epoch,mode==='close'||mode==='cleanup');
+    }catch{if(epoch===lifetime.current){
+      if(removalConfirmed.current){setRemovalCleanup(true);setMessage('原移除回執已確認，但目前清單尚未同步；請只重試查核與清理，不要重送。');}
+      else setMessage('原移除結果仍待查核；不會刪除新照片、改用新識別碼或自動重送。');
+    }}
+    finally{if(epoch===lifetime.current){busyRef.current=false;setBusy(false);}}
   }
 
   async function finishPhotoUpload(raw: string, result: PhotoUploadResult, epoch: number) {
@@ -589,6 +653,15 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       </div>
       {draftCancel && !draftDecision && !draftCleanup && <div className="mt-3 rounded-xl border border-red-200 bg-white p-3"><p>只取消尚未完成的原儲存；若已完成就查回原結果，不刪照片、不撤銷已保存草稿。確定取消？</p><button disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4 py-2" onClick={() => void reconcileSellerDraft('abandon')}>確認安全取消草稿儲存</button><button disabled={busy} className="ml-3 min-h-11 rounded-xl border px-4 py-2" onClick={() => setDraftCancel(false)}>返回草稿查核</button></div>}
     </div>}
+    {removalPending && <section aria-label="私人照片移除恢復" role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm space-y-3">
+      <p className="font-semibold">{removalDecision?'原照片移除未套用，請核對目前狀態':removalCleanup?'照片移除已查核，本機紀錄待清理':'原私人照片移除結果待確認'}</p>
+      <p>重開只讀原回執，不會自動重送。已確認的移除不會撤回；檔案清理狀態與使用清單移除分開顯示。</p>
+      {removalDecision&&<div className="rounded-xl bg-white p-3 space-y-1"><p>目前草稿版本：{removalConfirmed.current?.media?.sellerDraftVersion??'照片已不在可讀取範圍'}</p><p>目前名稱：{removalConfirmed.current?.media?.sellerDraft?.form.title||'未填寫或不再可用'}</p><p className="whitespace-pre-wrap">目前說明：{removalConfirmed.current?.media?.sellerDraft?.form.description||'未填寫或不再可用'}</p><p>目前售價：{removalConfirmed.current?.media?.sellerDraft?.form.price||'未填寫'}</p><p>目前狀態：{removalConfirmed.current?.media?.listingId||removalConfirmed.current?.media?.wishItemId?'已用於其他內容':removalConfirmed.current?.media?'原移除未通過版本或用途檢查':'無法再讀取原照片'}。本頁未保存文字仍保留。</p></div>}
+      <div className="flex flex-wrap gap-3">
+        {removalCleanup?<button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('cleanup')}>重試移除紀錄清理</button>:removalDecision?<><button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('read')}>重新查核原移除</button><button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('close')}>已核對目前狀態，保留文字並關閉原移除</button></>:<><button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('read')}>查核原照片移除</button><button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('retry')}>重試同一照片移除</button><button className="min-h-11 rounded-xl border bg-white px-4 py-2" disabled={busy} onClick={()=>setRemovalCancel(true)}>安全停止原移除</button></>}
+      </div>
+      {removalCancel&&!removalDecision&&!removalCleanup&&<div className="rounded-xl border bg-white p-3"><p>只停止尚未完成的原移除；如果已移除會回報原結果，不會復原照片。確定停止？</p><button className="mt-3 min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={()=>void reconcileRemoval('abandon')}>確認安全停止移除</button><button className="ml-3 min-h-11 rounded-xl border px-4 py-2" disabled={busy} onClick={()=>setRemovalCancel(false)}>保留原移除</button></div>}
+    </section>}
     {message && <div role="status" className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">{message}</div>}
     {!ready && !message && <p className="text-sm text-stone-500">正在恢復私人草稿…</p>}
 
@@ -617,7 +690,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
     <section className="space-y-5" aria-label="私人商品草稿">
       {ready && !cards.length && <p className="rounded-3xl bg-white p-8 text-center text-stone-500">還沒有私人商品照片，現在就拍第一件吧。</p>}
       {cards.map((card, index) => <article key={card.id} className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-start gap-5"><PrivatePhoto id={card.id} token={token} label={card.published ? '已確認刊登的商品實拍照片' : '僅本人可見的商品照片'} />
+        <div className="flex flex-wrap items-start gap-5">{!card.unavailable && <PrivatePhoto id={card.id} token={token} label={card.published ? '已確認刊登的商品實拍照片' : '僅本人可見的商品照片'} />}
           <div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-widest text-stone-500">第 {index + 1} 件 · {card.published ? '刊登已確認' : '私人草稿'}</p>
             <h3 className="mt-2 text-lg font-semibold">{card.form.title || '等待辨識或手動填寫'}</h3>
             <p className="mt-2 text-sm text-stone-600">{card.published ? '原刊登已確認。最新狀態請前往我的商品查看。' : card.ai === 'PENDING' || card.ai === 'PROCESSING' ? 'AI 正在排隊辨識…' : card.ai === 'COMPLETED' ? 'AI 已提供建議，請核對商品實況' : card.ai === 'FAILED' ? 'AI 暫時無法辨識，可重試或手動填寫' : aiAvailable === false ? '可手動填寫私人草稿' : '可請 AI 辨識'}</p>
@@ -625,17 +698,17 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
           </div>
         </div>
         {!card.published && <><div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <label className="text-sm">商品名稱<input {...fieldProps(card.id, 'title')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} maxLength={100} value={card.form.title} onChange={event => updateField(card.id, 'title', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
-          <label className="text-sm">品牌（選填）<input {...fieldProps(card.id, 'brand')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} maxLength={60} value={card.form.brand} onChange={event => updateField(card.id, 'brand', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
-          <label className="text-sm">分類<select {...fieldProps(card.id, 'category')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} value={card.form.category} onChange={event => updateField(card.id, 'category', event.target.value)} onBlur={event => saveOnBlur(card, event)}>{listingCategories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          <label className="text-sm">新舊狀態<select {...fieldProps(card.id, 'condition')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} value={card.form.condition} onChange={event => updateField(card.id, 'condition', event.target.value)} onBlur={event => saveOnBlur(card, event)}><option value="USED">二手</option><option value="NEW">全新</option></select></label>
-          <div className="text-sm"><label>賣家售價（TWD）<input {...fieldProps(card.id, 'price')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} inputMode="decimal" value={card.form.price} onChange={event => updateField(card.id, 'price', event.target.value)} onBlur={event => saveOnBlur(card, event)} placeholder="請填寫或確認售價" /></label>
+          <label className="text-sm">商品名稱<input {...fieldProps(card.id, 'title')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} readOnly={card.unavailable} maxLength={100} value={card.form.title} onChange={event => updateField(card.id, 'title', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm">品牌（選填）<input {...fieldProps(card.id, 'brand')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} readOnly={card.unavailable} maxLength={60} value={card.form.brand} onChange={event => updateField(card.id, 'brand', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm">分類<select {...fieldProps(card.id, 'category')} className="mt-1 w-full rounded-xl border p-3" disabled={locked || card.unavailable} value={card.form.category} onChange={event => updateField(card.id, 'category', event.target.value)} onBlur={event => saveOnBlur(card, event)}>{listingCategories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label className="text-sm">新舊狀態<select {...fieldProps(card.id, 'condition')} className="mt-1 w-full rounded-xl border p-3" disabled={locked || card.unavailable} value={card.form.condition} onChange={event => updateField(card.id, 'condition', event.target.value)} onBlur={event => saveOnBlur(card, event)}><option value="USED">二手</option><option value="NEW">全新</option></select></label>
+          <div className="text-sm"><label>賣家售價（TWD）<input {...fieldProps(card.id, 'price')} className="mt-1 w-full rounded-xl border p-3" disabled={locked} readOnly={card.unavailable} inputMode="decimal" value={card.form.price} onChange={event => updateField(card.id, 'price', event.target.value)} onBlur={event => saveOnBlur(card, event)} placeholder="請填寫或確認售價" /></label>
             {card.draft && !card.touched.price && card.draft.estimatedPriceLowTwd !== null && <p className="mt-1 text-xs text-amber-800">此售價由 AI 參考區間中間值預填，不是已驗證行情；發布前請確認或修改。</p>}
           </div>
-          <label className="text-sm sm:col-span-2">商品說明<textarea {...fieldProps(card.id, 'description')} className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={locked} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
+          <label className="text-sm sm:col-span-2">商品說明<textarea {...fieldProps(card.id, 'description')} className="mt-1 min-h-32 w-full rounded-xl border p-3" disabled={locked} readOnly={card.unavailable} maxLength={3000} value={card.form.description} onChange={event => updateField(card.id, 'description', event.target.value)} onBlur={event => saveOnBlur(card, event)} /></label>
         </div>
           {card.draft && <details className="mt-4 text-sm text-stone-600"><summary className="cursor-pointer">查看 AI 辨識依據與不確定之處</summary><ul className="mt-2 list-disc pl-5">{card.draft.evidence.map((item, i) => <li key={`e${i}`}>{item}</li>)}{card.draft.uncertainties.map((item, i) => <li key={`u${i}`}>待確認：{item}</li>)}</ul></details>}
-          {card.ai === 'COMPLETED' && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={card.id} getExpectedVersion={()=>cardsRef.current.find(item=>item.id===card.id)?.version??-1}
+          {card.ai === 'COMPLETED' && !card.unavailable && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={card.id} getExpectedVersion={()=>cardsRef.current.find(item=>item.id===card.id)?.version??-1}
             beforeStart={async () => !busyRef.current && !actionsLocked && !draftOperation.current && !savingIds.current.size && card.form.title.trim().length >= 3 && card.form.description.trim().length >= 10 &&
               !!card.form.price.trim() && !card.saving && !card.publishing && (card.dirty ? await save(card) : true)}
             beforeApprove={async () => {
@@ -659,13 +732,13 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
               const restored = fromMedia(updated);
               replace(card.id, current => current.dirty ? current : restored);
             }} />}
-          <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={actionsLocked || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
+          <label data-batch-review className="mt-5 flex min-h-11 items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm"><input {...fieldProps(card.id, 'review')} type="checkbox" checked={card.confirmed} disabled={actionsLocked || card.unavailable || card.saving} onChange={() => confirmCard(card)} />我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</label>
           {card.error && <p id={`listing-error-${card.id}`} role="alert" className="mt-4 text-sm text-red-700">{card.error}</p>}
           <div className="mt-6 flex flex-wrap gap-3">
-            {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={actionsLocked || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
-            <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={actionsLocked} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
+            {aiAvailable !== false && (card.ai === 'SKIPPED' || card.ai === 'FAILED') && <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked || card.unavailable} onClick={() => void requestAi(card.id)}><RefreshCw size={16} />{card.ai === 'FAILED' ? '重新辨識' : 'AI 辨識'}</button>}
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm" disabled={actionsLocked || card.unavailable || card.saving} onClick={() => void save(card)}>{card.saving ? '儲存中…' : card.dirty ? '儲存私人草稿' : '已儲存'}</button>
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-semibold text-white" disabled={actionsLocked || card.unavailable || card.saving || card.publishing} onClick={() => void publishReviewed([card])}><Sparkles size={16} />{card.publishing ? '刊登中…' : '確認並刊登'}</button>
+            <button aria-label={`刪除第 ${index + 1} 件私人照片`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700" disabled={actionsLocked || card.unavailable} onClick={() => void remove(card.id)}><Trash2 size={16} />刪除</button>
           </div>
         </>}
       </article>)}

@@ -44,14 +44,16 @@ export function legacyDetail(value:unknown,id:number):LegacyDetailList {
     user:owner && typeof owner.name==='string'?{id:ownerId,name:owner.name,nicknames:text(owner.nicknames)}:undefined,
     maxItems:Number.isSafeInteger(row.maxItems) && Number(row.maxItems)>0 && Number(row.maxItems)<=10000?Number(row.maxItems):undefined};
 }
-export type DetailOperation={version:1;id:number;kind:'EDIT'|'PURCHASE'|'HIDE'|'ITEM_EDIT'|'DELETE_ITEM'|'DELETE_LIST'|'CLONE';itemId?:number;wanted?:boolean;targetWishlistId?:number;clientRequestId?:string;localOperationId:string};
+export type DetailOperation={version:1;id:number;kind:'EDIT'|'PURCHASE'|'HIDE'|'ITEM_EDIT'|'DELETE_ITEM'|'DELETE_LIST'|'CLONE'|'LINK_CREATE'|'PHOTO_CREATE';requestHash?:string;mediaId?:string;itemId?:number;wanted?:boolean;targetWishlistId?:number;clientRequestId?:string;localOperationId:string};
 export function detailOperation(raw:string):DetailOperation {
   if(raw.length>768)throw new Error('Invalid operation');
   const row=object(JSON.parse(raw));
-  if(row.version!==1 || !validWishId(row.id) || !isUuid(row.localOperationId) || !['EDIT','PURCHASE','HIDE','ITEM_EDIT','DELETE_ITEM','DELETE_LIST','CLONE'].includes(String(row.kind)) || Object.keys(row).some(key=>!['version','id','kind','itemId','wanted','targetWishlistId','clientRequestId','localOperationId'].includes(key)))throw new Error('Invalid operation');
-  if(['EDIT','DELETE_LIST'].includes(String(row.kind))?row.itemId!==undefined:!validWishId(row.itemId))throw new Error('Invalid item operation');
+  if(row.version!==1 || !validWishId(row.id) || !isUuid(row.localOperationId) || !['EDIT','PURCHASE','HIDE','ITEM_EDIT','DELETE_ITEM','DELETE_LIST','CLONE','LINK_CREATE','PHOTO_CREATE'].includes(String(row.kind)) || Object.keys(row).some(key=>!['version','id','kind','itemId','wanted','targetWishlistId','clientRequestId','requestHash','mediaId','localOperationId'].includes(key)))throw new Error('Invalid operation');
+  if(['EDIT','DELETE_LIST','LINK_CREATE','PHOTO_CREATE'].includes(String(row.kind))?row.itemId!==undefined:!validWishId(row.itemId))throw new Error('Invalid item operation');
   if(['PURCHASE','HIDE'].includes(String(row.kind))?typeof row.wanted!=='boolean':row.wanted!==undefined)throw new Error('Invalid operation value');
-  if(row.kind==='CLONE'?!validWishId(row.targetWishlistId) || !isUuid(row.clientRequestId):row.targetWishlistId!==undefined || row.clientRequestId!==undefined)throw new Error('Invalid clone operation');
+  if(row.kind==='CLONE'){if(!validWishId(row.targetWishlistId) || !isUuid(row.clientRequestId) || row.requestHash!==undefined || row.mediaId!==undefined)throw new Error('Invalid clone operation');}
+  else if(['LINK_CREATE','PHOTO_CREATE'].includes(String(row.kind))){if(row.targetWishlistId!==undefined || !isUuid(row.clientRequestId) || typeof row.requestHash!=='string' || !/^[a-f0-9]{64}$/.test(row.requestHash) || (row.kind==='PHOTO_CREATE'?!isUuid(row.mediaId):row.mediaId!==undefined))throw new Error('Invalid create operation');}
+  else if(row.targetWishlistId!==undefined || row.clientRequestId!==undefined || row.requestHash!==undefined || row.mediaId!==undefined)throw new Error('Invalid operation metadata');
   return row as DetailOperation;
 }
 export function detailEditAck(value:unknown,list:LegacyDetailList,userId:number,body:{title:string;description:string;isPublic:boolean}):LegacyDetailList {

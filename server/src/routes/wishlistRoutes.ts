@@ -9,6 +9,7 @@ import {
 } from '../controllers/wishlistController';
 
 const router = express.Router();
+import { createItemFromMedia,readLegacyWishCreate,abandonLegacyWishCreate } from '../controllers/legacyWishCreateController';
 
 // Item routes nested under wishlist
 import { createItem, createItemFromUrl } from '../controllers/itemController';
@@ -35,6 +36,9 @@ router.post('/:wishlistId/items/url', authenticateUserOrEclawAgent, createItemFr
 
 // Other routes still require user token for now
 router.use(authenticateToken);
+router.get('/create-receipts/:clientRequestId', readLegacyWishCreate);
+router.post('/create-receipts/:clientRequestId/abandon', abandonLegacyWishCreate);
+router.post('/:wishlistId/items/from-media', createItemFromMedia);
 
 router.get('/', getWishlists);
 router.post('/', createWishlist);

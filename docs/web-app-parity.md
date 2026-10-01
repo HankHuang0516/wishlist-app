@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第三十八批：舊網址／文字與受控照片新增（仍未部署）
+
+- 舊URL entry／201 row及無key相容保留，改為typed持久交易：名稱／notes／參考價格／幣別／獨立預算／幣別正規化、0與null明確保存；public named HTTP(S)來源驗證，HTTPS直接進既有持久辨識佇列，文字手動SKIPPED，HTTP保留參考且明示HTTPS／截圖替代。移除該URL路徑回覆後直接scrape／暫存圖片工作；不把已排隊冒稱辨識完成。驗證代理仍綁自己publicCode，foreign claim拒絕、驗證失聯fail closed，未改為merchant key。
+- 新LegacyWishCreateReceipt migration43，owner／UUID唯一、kind／parent／canonical hash驗證；actor NO KEY UPDATE、parent與media鎖後重讀owner／容量／unused歸屬，與native新增共用容量鎖。PHOTO只附本人未使用且非AI_MARKETING媒體，wish／媒體附加／receipt同交易。重送只回原item；原item／parent刪除仍有tombstone且410、不重建；GET原receipt，明確abandon先留下停止墓碑、晚到410，已建立時只回原歷史不刪。LINK／PHOTO共享新namespace；native／clone既有receipt表的namespace分開，不宣稱跨表UUID全域去重。
+- 原詳情兩個新增入口接同parent encrypted gate：具名／focus／44px dialog，來源type=text支持文字，獨立價格／預算欄位與notes；送前保存最小ID／hash marker，逐欄／原ID／parent／kind核對ACK，不先顯示未確認item。失聯reload只查原建立或安全停止，CAS明確清理後才恢復；storage failure不送出、account departure不接受晚回覆。照片沿現有listing-media受控上傳／原upload receipt，以明確MANUAL_PHOTO使用相同協定，batch預設仍嚴格BATCH_ITEM；上傳確認才允許願望保存，private preview、album／camera替代、metadata／resize與owner受控媒體生命週期沿現有後台。最小photo／removal envelope綁原list並分API／owner加密，不存bytes／filename／credential。重開不自動POST；可查／safe stop／同一照片明確重試，已附加不能再用，unused移除先保存原marker、回執與CAS防清新照片；已確認但清理失敗不降為未知。
+- 真Chrome／Vite DEV／compiled handlers／新UTF8 DB43 migrations：文字201保留0 USD與預算900.25 TWD；網址commit後502→reload GET原CREATED再清理；未接收請求502→GET404保留→safe stop→釋放原POST410。兩次明確合成PNG實際local upload／private preview；一份photo wish正常201、另一份commit後502→reload查原create／upload attachment，沒有替代上傳。最終4items／2LINK CREATED＋1LINK ABANDONED＋2PHOTO CREATED／2MANUAL_PHOTO media附item3／4／2STORED uploads，重啟後兩圖仍載入。unused photo移除框只取消，實際removal HTTP／React驗證沿既有contract；browser未送永久刪除。390×844／form document390／final375、設定1、focus／44px；11張原圖與outputs/wishlist-web-legacy-create-evidence-20261002.json保存。QA-only select owner field錯誤修正曾restart，保留journal僅重啟後GET，核心flow由UI／持久DB／工具410佐證，不宣稱完整pre-restart HTTP trace。
+- 新Web29項／HTTP31項。完整pre-push退出0：Server56檔913＋3skip／HTTP31檔495／Web87檔1368／Native42檔852／43 migrations schema一致；preview／已確認removal cleanup補驗後末次Web87檔1370＋build、verified agent case後末次HTTP31檔496。主JS330.97KB／PWA93entries5943.13KiB／map及worker警告保留，件數不是全功能覆蓋率。新commit精確CI另記JSON／roadmap。
+- 本批照片provider為本機，沒有外部AI／Flickr品質／跨端／正式部署證據。旧multipart相容API的capacity／limits／disk-upload lifecycle、clone圖片來源刪除後独立持久性、完整管理分頁／語系／政策／PWA／憑證／真provider與正式migration／合併Railway／首頁設定各90%仍接續。APP未改、其他工作區刪檔／.gitignore保留，自有QA／PG已停、DB與素材保留；PR82 draft／目標active／未部署、功能100%門檻不變。
+
 ## 2026-10-02 第三十七批：願望複製權限、回執與詳情操作（仍未部署）
 
 - 原POST /api/items/:id/clone保留舊row／201及無target的本人預設清單相容；新增明確target與可選clientRequestId。交易鎖actor、依ID排序來源／目標parent及source item，再讀公開／隱藏／本人權限與目標容量；他人私人／隱藏404、 他人目標403、容量或處理中來源409。與native新增共用容量鎖，保留參考價格／幣別、獨立預算／幣別、最初許願者、notes／link／image reference／priority及實際穩定AI狀態；不繼承認領、隱藏、proxy reference或provider診斷，不把processing工作複製成完成。

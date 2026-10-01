@@ -11,28 +11,29 @@ const uuid=(v:unknown)=>isUuid(v)&&v===v.toLowerCase();
 const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const iso=(v:unknown)=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
 const integer=(v:unknown,min:number,max:number)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=min&&v<=max;
-export type PhotoUploadJournal={version:1;clientUploadId:string;sourceHash:string;capturePurpose:'BATCH_ITEM';requestHash:string;createdAt:string};
+export type PhotoUploadJournal={version:1;clientUploadId:string;sourceHash:string;capturePurpose:'BATCH_ITEM'|'MANUAL_PHOTO';requestHash:string;createdAt:string};
 export async function uploadSourceHash(file:File){
   if(!file.size||file.size>5*1024*1024||!['image/jpeg','image/png','image/webp'].includes(file.type))return fail();
   const bytes=await new Promise<ArrayBuffer>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>reader.result instanceof ArrayBuffer?resolve(reader.result):reject(new PhotoUploadWebError());reader.onerror=reader.onabort=()=>reject(new PhotoUploadWebError());reader.readAsArrayBuffer(file);});
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
 }
-export async function photoUploadJournal(file:File,clientUploadId:string=crypto.randomUUID()){
+export async function photoUploadJournal(file:File,clientUploadId:string=crypto.randomUUID(),purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
   if(!uuid(clientUploadId))return fail();
-  const sourceHash=await uploadSourceHash(file),capturePurpose='BATCH_ITEM';
+  if(!['BATCH_ITEM','MANUAL_PHOTO'].includes(purpose))return fail();
+  const sourceHash=await uploadSourceHash(file),capturePurpose=purpose;
   return JSON.stringify({version:1,clientUploadId,sourceHash,capturePurpose,requestHash:await sha256(JSON.stringify({sourceHash,capturePurpose})),createdAt:new Date().toISOString()});
 }
-export async function parsePhotoUploadJournal(raw:string):Promise<PhotoUploadJournal>{
+export async function parsePhotoUploadJournal(raw:string,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'):Promise<PhotoUploadJournal>{
   let row;try{row=object(JSON.parse(raw));}catch{return fail();}
   exact(row,['version','clientUploadId','sourceHash','capturePurpose','requestHash','createdAt']);
-  if(row.version!==1||!uuid(row.clientUploadId)||!hash(row.sourceHash)||row.capturePurpose!=='BATCH_ITEM'||!iso(row.createdAt)||Date.parse(row.createdAt as string)>Date.now()+60_000
+  if(row.version!==1||!uuid(row.clientUploadId)||!hash(row.sourceHash)||row.capturePurpose!==purpose||!iso(row.createdAt)||Date.parse(row.createdAt as string)>Date.now()+60_000
     ||row.requestHash!==await sha256(JSON.stringify({sourceHash:row.sourceHash,capturePurpose:row.capturePurpose})))return fail();
   return row as PhotoUploadJournal;
 }
 export type UploadedPhoto={id:string;listingId:string|null;wishItemId:number|null};
 export type PhotoUploadResult={state:'STORED'|'ABANDONED';mediaId:string|null;media:UploadedPhoto|null};
-export async function photoUploadResult(value:unknown,raw:string,userId:number):Promise<PhotoUploadResult>{
-  const journal=await parsePhotoUploadJournal(raw),row=object(value);exact(row,['receipt','media']);
+export async function photoUploadResult(value:unknown,raw:string,userId:number,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'):Promise<PhotoUploadResult>{
+  const journal=await parsePhotoUploadJournal(raw,purpose),row=object(value);exact(row,['receipt','media']);
   const receipt=object(row.receipt);exact(receipt,['clientUploadId','requestHash','state','mediaId','createdAt']);
   if(receipt.clientUploadId!==journal.clientUploadId||receipt.requestHash!==journal.requestHash||!iso(receipt.createdAt)||!['STORED','ABANDONED'].includes(String(receipt.state)))return fail();
   if(receipt.state==='ABANDONED'){if(receipt.mediaId!==null||row.media!==null)return fail();return {state:'ABANDONED',mediaId:null,media:null};}
@@ -48,12 +49,12 @@ export async function photoUploadResult(value:unknown,raw:string,userId:number):
   }
   return {state:'STORED',mediaId:receipt.mediaId as string,media};
 }
-export async function readPhotoUpload(token:string,raw:string,userId:number){
-  const journal=await parsePhotoUploadJournal(raw);
-  return photoUploadResult(await api(token,'/listing-media/upload-receipts/'+journal.clientUploadId),raw,userId);
+export async function readPhotoUpload(token:string,raw:string,userId:number,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
+  const journal=await parsePhotoUploadJournal(raw,purpose);
+  return photoUploadResult(await api(token,'/listing-media/upload-receipts/'+journal.clientUploadId),raw,userId,purpose);
 }
-export async function sendPhotoUpload(token:string,raw:string,userId:number,file:File,store:PendingStore,key:string,active:()=>boolean){
-  const journal=await parsePhotoUploadJournal(raw);
+export async function sendPhotoUpload(token:string,raw:string,userId:number,file:File,store:PendingStore,key:string,active:()=>boolean,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
+  const journal=await parsePhotoUploadJournal(raw,purpose);
   if(await uploadSourceHash(file)!==journal.sourceHash)return fail();
   await store.save(key,raw);if(!active())return fail();
   const body=new FormData();body.append('clientUploadId',journal.clientUploadId);body.append('capturePurpose',journal.capturePurpose);body.append('image',file);
@@ -63,11 +64,11 @@ export async function sendPhotoUpload(token:string,raw:string,userId:number,file
   try{ack=object(await api(token,'/listing-media',{method:'POST',body}));exact(ack,['id','imageUrl','thumbnailUrl','width','height','byteSize','createdAt']);if(!uuid(ack.id))return fail();}catch(error){failure=error;}
   if(!active())return fail();
   let result:PhotoUploadResult;
-  try{result=await readPhotoUpload(token,raw,userId);}catch(error){throw failure??error;}
+  try{result=await readPhotoUpload(token,raw,userId,purpose);}catch(error){throw failure??error;}
   if(ack&&(result.state!=='STORED'||result.mediaId!==ack.id))return fail();
   return result;
 }
-export async function abandonPhotoUpload(token:string,raw:string,userId:number,active:()=>boolean){
-  const journal=await parsePhotoUploadJournal(raw);if(!active())return fail();
-  return photoUploadResult(await api(token,'/listing-media/upload-receipts/'+journal.clientUploadId+'/abandon',{method:'POST',body:JSON.stringify({requestHash:journal.requestHash})}),raw,userId);
+export async function abandonPhotoUpload(token:string,raw:string,userId:number,active:()=>boolean,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
+  const journal=await parsePhotoUploadJournal(raw,purpose);if(!active())return fail();
+  return photoUploadResult(await api(token,'/listing-media/upload-receipts/'+journal.clientUploadId+'/abandon',{method:'POST',body:JSON.stringify({requestHash:journal.requestHash})}),raw,userId,purpose);
 }

@@ -62,6 +62,7 @@ model User {
   purchases       Purchase[]
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
+  legacyWishCreateReceipts LegacyWishCreateReceipt[]
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   profileUpdateReceipts ProfileUpdateReceipt[]
   followOperationReceipts FollowOperationReceipt[]
@@ -760,6 +761,21 @@ model AccountErasureReceipt {
 // Not a relation to the created resource: deleting a wish/list must retain the
 // request tombstone so delayed retries cannot resurrect it. Erasing the owning
 // account cascades these receipts. No payload or credential is stored here.
+// A resource/parent may later be deleted; retain original history until account erasure.
+model LegacyWishCreateReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientRequestId String @db.VarChar(36)
+  kind String @db.VarChar(8)
+  wishlistId Int
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  resourceId Int?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientRequestId])
+}
+
 model WishCreateReceipt {
   id              String   @id @default(uuid())
   userId          Int

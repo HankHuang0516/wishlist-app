@@ -3,12 +3,16 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "../components/ui/Card";
+import { Card, CardContent } from "../components/ui/Card";
 import MarketplaceDialog from "../components/MarketplaceDialog";
-import { legacyDetail, detailEditAck, detailItemAck, detailText, detailItemBody, detailItemEditAck, detailDeletedAck, detailCloneAck, detailCloneTargets, detailItemText, type LegacyDetailItem as Item, type LegacyDetailList as Wishlist } from '../lib/legacyDetailWeb';
+import { legacyDetail, detailEditAck, detailItemAck, detailText, detailItemBody, detailItemEditAck, detailDeletedAck, detailCloneAck, detailCloneTargets, detailItemText, type DetailItemDraft, type LegacyDetailItem as Item, type LegacyDetailList as Wishlist } from '../lib/legacyDetailWeb';
 import { useLegacyDetailOperation } from '../lib/useLegacyDetailOperation';
+import { prepareLegacyCreate,legacyCreateAck,createText } from '../lib/legacyWishCreateWeb';
+import { useLegacyWishPhoto } from '../lib/useLegacyWishPhoto';
+import LegacyWishPhotoRecovery from '../components/LegacyWishPhotoRecovery';
+import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import { legacyListText } from '../lib/legacyWishlistWeb';
-import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon, Gift, AlertCircle, UserPlus, Check, Share2 } from "lucide-react";
+import { Trash2, Edit2, Plus, Info, EyeOff, Eye, Link as LinkIcon, Image as ImageIcon, Gift, UserPlus, Check, Share2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ItemDetailModal from "../components/ItemDetailModal";
 import { API_URL } from '../config';
@@ -33,7 +37,9 @@ export function WishlistDetailSession() {
     const active=useRef(true),readSequence=useRef(0),lifetime=useRef(0);
     const operation=useLegacyDetailOperation(user?.id,token);
     useEffect(()=>{active.current=true;return()=>{active.current=false;lifetime.current++;readSequence.current++;};},[]);
-    const canMutate=()=>active.current && !readError && operation.allowed();
+    const photo=useLegacyWishPhoto(user?.id,token,Number(id));
+    const preparing=useRef(false);
+    const canMutate=()=>active.current && !readError && !preparing.current && operation.allowed() && photo.allowed();
     const [isEditing, setIsEditing] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editTitle, setEditTitle] = useState("");
@@ -85,6 +91,13 @@ export function WishlistDetailSession() {
     const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
     const [urlInput, setUrlInput] = useState("");
     const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
+    const [createKind,setCreateKind]=useState<'LINK'|'PHOTO'>('LINK');
+    const emptyDraft:DetailItemDraft={name:'',notes:'',link:'',price:'',currency:'TWD',budget:'',budgetCurrency:'TWD'};
+    const [createDraft,setCreateDraft]=useState<DetailItemDraft>(emptyDraft);
+    const [createIssue,setCreateIssue]=useState('');
+    const cameraInputRef=useRef<HTMLInputElement>(null);
+    const canCreate=()=>active.current && !readError && !preparing.current && operation.allowed() && (createKind==='PHOTO'?photo.usable():photo.allowed());
+    const openCreate=(kind:'LINK'|'PHOTO')=>{if(!active.current || readError || !operation.allowed() || preparing.current || !(kind==='PHOTO'?photo.allowed() || photo.usable():photo.allowed()))return;setIsFabOpen(false);setCreateKind(kind);setCreateIssue('');setIsUrlModalOpen(true);};
 
     // Item Detail Modal State
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -108,7 +121,7 @@ export function WishlistDetailSession() {
             i.aiStatus === 'PENDING' ||
             i.aiStatus === 'PROCESSING'
         );
-        if (!hasPending || operation.busy || operation.pending || isEditModalOpen || isDetailOpen || readError) return;
+        if (!hasPending || operation.busy || operation.pending || isEditModalOpen || isDetailOpen || isUrlModalOpen || photo.busy || photo.raw || readError) return;
 
         // Polling for upload & AI status - only when there are pending items
         const interval = setInterval(() => {
@@ -116,7 +129,7 @@ export function WishlistDetailSession() {
         }, 3000); // 3 seconds for faster feedback during upload
 
         return () => clearInterval(interval);
-    }, [pendingItemSignature, id, operation.busy, operation.pending, isEditModalOpen, isDetailOpen, readError]);
+    }, [pendingItemSignature, id, operation.busy, operation.pending, isEditModalOpen, isDetailOpen, isUrlModalOpen, photo.busy, photo.raw, readError]);
 
     const fetchWishlist = async (silent = false,allowMissing=false):Promise<boolean> => {
         const sequence=++readSequence.current,version=lifetime.current;
@@ -150,51 +163,27 @@ export function WishlistDetailSession() {
 
     // Item Actions
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if(!canMutate())return;
-        setIsFabOpen(false);
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('language', navigator.language || 'en-US'); // Send client language
-
-            try {
-                const res = await fetch(`${API_URL}/wishlists/${id}/items`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData
-                });
-                if (res.ok) {
-                    fetchWishlist();
-                    Analytics.logAddToWishlist('TWD', 0, [{ item_id: 'new_image_item', item_name: 'Image Upload Item' }]);
-                }
-            } catch (err) { console.error(err); }
-        }
+        const file=e.target.files?.[0];e.target.value='';
+        if(!file || !operation.allowed() || readError || !active.current)return;
+        await photo.upload(file);
     };
-
-
-
     const handleUrlSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!canMutate() || isSubmittingUrl) return;
-        setIsSubmittingUrl(true);
+        if(!canCreate() || !wishlist || user?.id!==wishlist.userId)return;
+        preparing.current=true;setIsSubmittingUrl(true);setCreateIssue('');
+        const version=lifetime.current,current=()=>active.current && version===lifetime.current;
         try {
-            const res = await fetch(`${API_URL}/wishlists/${id}/items/url`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ url: urlInput })
-            });
-            if (res.ok) {
-                fetchWishlist();
-                Analytics.logAddToWishlist('TWD', 0, [{ item_id: 'new_url_item', item_name: urlInput }]);
-                setIsUrlModalOpen(false);
-                setUrlInput("");
-            } else {
-                setFeedbackMessage(t('common.error'));
-                setTimeout(() => setFeedbackMessage(null), 3000);
-            }
-        } catch (err) { console.error(err); }
-        finally { setIsSubmittingUrl(false); }
+            const prepared=await prepareLegacyCreate(createKind,wishlist.id,createDraft,urlInput,createKind==='PHOTO'?photo.mediaId:null);
+            if(!current())return;readSequence.current++;
+            const intent={id:wishlist.id,kind:createKind==='PHOTO'?'PHOTO_CREATE' as const:'LINK_CREATE' as const,clientRequestId:prepared.clientRequestId,requestHash:prepared.requestHash,...(createKind==='PHOTO'?{mediaId:photo.mediaId!}:{})};
+            await operation.run(intent,'/wishlists/'+wishlist.id+'/items/'+(createKind==='PHOTO'?'from-media':'url'),prepared.payload,ack=>{
+                const created=legacyCreateAck(ack,intent,prepared.data);
+                setWishlist(old=>old?{...old,items:[...old.items.filter(row=>row.id!==created.id),created]}:old);
+                setIsUrlModalOpen(false);setUrlInput('');setCreateDraft(emptyDraft);setFeedbackMessage(createText('created'));
+                if(createKind==='PHOTO')void photo.check('read');
+            },'POST');
+        }catch{if(current())setCreateIssue(createText('invalid'));}
+        finally{preparing.current=false;if(current())setIsSubmittingUrl(false);}
     };
 
     const handleDeleteWishlist = () => {
@@ -284,7 +273,7 @@ export function WishlistDetailSession() {
     };
 
     const openDetail = (item: Item) => {
-        if(operation.busy || operation.pending)return;
+        if(operation.busy || operation.pending || photo.busy || isUrlModalOpen)return;
         operation.resetFeedback();setFeedbackMessage(null);
         setSelectedItem(item);
         setIsDetailOpen(true);
@@ -300,9 +289,14 @@ export function WishlistDetailSession() {
                 <Button className="min-h-11" onClick={()=>void operation.checkClone('read')} disabled={operation.busy || operation.known}>{detailItemText('read')}</Button>
                 <Button className="min-h-11" onClick={()=>void operation.checkClone('stop')} disabled={operation.busy || operation.known}>{detailItemText('stop')}</Button>
                 {operation.known && <Link className="inline-flex min-h-11 items-center underline" to={'/wishlists/'+operation.pending.targetWishlistId}>{detailItemText('target')}</Link>}
+            </>:['LINK_CREATE','PHOTO_CREATE'].includes(operation.pending.kind)?<>
+                <Button className="min-h-11" onClick={()=>void operation.checkCreate('read')} disabled={operation.busy || operation.known}>{createText('read')}</Button>
+                <Button className="min-h-11" onClick={()=>void operation.checkCreate('stop')} disabled={operation.busy || operation.known}>{createText('stop')}</Button>
+                {operation.known && <Button className="min-h-11" disabled={operation.busy} onClick={()=>void fetchWishlist()}>{detailText('retry')}</Button>}
             </>:<Button className="min-h-11" onClick={()=>void operation.check(()=>fetchWishlist(false,operation.pending?.kind==='DELETE_LIST'))} disabled={operation.busy || operation.known}>{legacyListText('read')}</Button>}
             <Button className="min-h-11" onClick={()=>void operation.acknowledge()} disabled={operation.busy || !operation.checked && !operation.known}>{legacyListText(operation.known?'clean':'resume')}</Button>
         </>}
+        {token && <LegacyWishPhotoRecovery photo={photo} listId={Number(id)} locked={operation.busy || !!operation.pending || isSubmittingUrl} />}
         {!operation.ready && token && <Button onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
     </section>;
     if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
@@ -442,7 +436,7 @@ export function WishlistDetailSession() {
                                 <div className="col-span-2 flex gap-1 items-center justify-end border-t pt-2">
                                     {isOwner ? (
                                         <>
-                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)}>
+                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending || photo.busy || isUrlModalOpen} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)}>
                                                 <Info className="w-5 h-5" />
                                             </Button>
                                             <Button variant="ghost" size="icon" aria-label={detailText(item.isHidden?'show':'hide')+' '+item.name} disabled={!canMutate()} className="h-11 w-11 text-gray-500 hover:bg-gray-100" onClick={() => handleToggleHide(item)}>
@@ -461,7 +455,7 @@ export function WishlistDetailSession() {
                                             <Button variant="ghost" size="icon" aria-label={detailText('clone')+' '+item.name} disabled={!!token && !canMutate()} className="h-11 w-11 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)}>
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
+                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending || photo.busy || isUrlModalOpen} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
                                                 <Info className="w-5 h-5" />
                                             </Button>
                                         </>
@@ -493,7 +487,8 @@ export function WishlistDetailSession() {
                                     <Button
                                         aria-label={t('detail.addUrl')}
                                         className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700 text-white p-0"
-                                        onClick={() => { setIsFabOpen(false); setIsUrlModalOpen(true); }}
+                                        disabled={!canMutate()}
+                                        onClick={() => openCreate('LINK')}
                                     >
                                         <LinkIcon className="w-5 h-5" />
                                     </Button>
@@ -503,7 +498,8 @@ export function WishlistDetailSession() {
                                     <Button
                                         aria-label={t('detail.uploadImg')}
                                         className="rounded-full w-12 h-12 shadow-lg bg-green-600 hover:bg-green-700 text-white p-0"
-                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={!canMutate()}
+                                        onClick={() => openCreate('PHOTO')}
                                     >
                                         <ImageIcon className="w-5 h-5" />
                                     </Button>
@@ -521,62 +517,27 @@ export function WishlistDetailSession() {
                             <Plus className="w-8 h-8" />
                         </Button>
 
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            hidden
-                            accept="image/*"
-                            onChange={handleFileUpload}
-                        />
                     </div>
                 )
             }
 
-            {/* URL Input Modal */}
-            {
-                isUrlModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <Card className="w-full max-w-md bg-white">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="flex items-center gap-2">
-                                    <LinkIcon className="w-5 h-5 text-muji-primary" />
-                                    {t('detail.addItemTitle')}
-                                </CardTitle>
-                            </CardHeader>
-                            <form onSubmit={handleUrlSubmit}>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">{t('detail.itemLabel')}</label>
-                                        <Input
-                                            placeholder={t('detail.itemPlaceholder')}
-                                            value={urlInput}
-                                            onChange={e => setUrlInput(e.target.value)}
-                                            required
-                                            autoFocus
-                                            className="h-11"
-                                            type="url"
-                                            inputMode="url"
-                                        />
-                                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex gap-3 items-start">
-                                            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                                            <div className="text-sm text-blue-800">
-                                                <p className="font-semibold mb-0.5">Tip</p>
-                                                {t('detail.smartInputTip')}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                                <CardFooter className="flex justify-end gap-2 bg-gray-50 pt-4 pb-4 px-6 rounded-b-xl">
-                                    <Button variant="secondary" type="button" onClick={() => setIsUrlModalOpen(false)} disabled={isSubmittingUrl}>{t('common.cancel')}</Button>
-                                    <Button type="submit" disabled={isSubmittingUrl}>
-                                        {isSubmittingUrl ? t('common.loading') : t('common.add')}
-                                    </Button>
-                                </CardFooter>
-                            </form>
-                        </Card>
-                    </div>
-                )
-            }
+            {photo.usable() && !isUrlModalOpen && isOwner && <Button className="min-h-11" disabled={!operation.allowed() || !!readError} onClick={()=>openCreate('PHOTO')}>{createText('photoTitle')}</Button>}
+            {isUrlModalOpen && <MarketplaceDialog title={createText(createKind==='PHOTO'?'photoTitle':'title')} onClose={()=>setIsUrlModalOpen(false)} closeDisabled={isSubmittingUrl || operation.busy || photo.busy} closeLabel={t('common.close')}>
+                <form onSubmit={handleUrlSubmit} className="space-y-4">
+                    {createKind==='LINK'?<div className="space-y-1"><label htmlFor="legacy-create-source">{createText('input')}</label><Input id="legacy-create-source" aria-describedby="legacy-create-tip" type="text" maxLength={2000} value={urlInput} onChange={e=>setUrlInput(e.target.value)} required disabled={!canCreate()}/><p id="legacy-create-tip" className="text-sm text-muji-secondary">{createText('tip')}</p></div>:<>
+                        <p className="text-sm text-muji-secondary">{createText('photoHelp')}</p>
+                        {photo.mediaId && token && <PrivatePhoto id={photo.mediaId} token={token} label={createText('photoNew')} />}
+                        <div className="flex flex-wrap gap-3"><Button className="min-h-11" type="button" disabled={!operation.allowed() || photo.busy || photo.removing || !!photo.result} onClick={()=>fileInputRef.current?.click()}>{createText(photo.raw?'photoRetry':'photoNew')}</Button><Button className="min-h-11" type="button" disabled={!operation.allowed() || photo.busy || photo.removing || !!photo.result} onClick={()=>cameraInputRef.current?.click()}>{createText('photoCamera')}</Button></div>
+                        <input type="file" ref={fileInputRef} hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={handleFileUpload}/>
+                        <input type="file" ref={cameraInputRef} hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={handleFileUpload}/>
+                    </>}
+                    <label className="block space-y-1"><span>{createText('name')}</span><Input value={createDraft.name} maxLength={200} onChange={e=>setCreateDraft(old=>({...old,name:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{(['price','currency','budget','budgetCurrency'] as const).map(field=><label key={field} className="block space-y-1"><span>{detailItemText(field)}</span><Input value={createDraft[field]} inputMode={field==='price' || field==='budget'?'decimal':'text'} maxLength={field==='currency' || field==='budgetCurrency'?3:64} onChange={e=>setCreateDraft(old=>({...old,[field]:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>)}</div>
+                    <label className="block space-y-1"><span>{detailItemText('notes')}</span><textarea className="min-h-24 w-full rounded-xl border p-3" value={createDraft.notes} maxLength={1000} onChange={e=>setCreateDraft(old=>({...old,notes:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>
+                    {createIssue && <p role="alert">{createIssue}</p>}{operation.issue && <p role="alert">{operation.issue}</p>}{photo.issue && <p role="alert">{photo.issue}</p>}{photo.notice && createKind==='PHOTO' && <p role="status">{photo.notice}</p>}
+                    <div className="flex flex-wrap justify-end gap-3"><Button className="min-h-11" variant="secondary" type="button" disabled={isSubmittingUrl || operation.busy || photo.busy} onClick={()=>setIsUrlModalOpen(false)}>{t('common.cancel')}</Button><Button className="min-h-11" type="submit" disabled={!canCreate() || isSubmittingUrl}>{createText('submit')}</Button></div>
+                </form>
+            </MarketplaceDialog>}
 
             {/* Detail Modal — all writes use the parent operation gate */}
             {selectedItem && isDetailOpen && <ItemDetailModal

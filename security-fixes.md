@@ -4,6 +4,14 @@
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
 
+## 2026-10-02 Legacy wish create receipt and controlled-photo follow-up
+
+Legacy link/text creation validates the exact source and field schema, preserves the original unkeyed entry, and writes durable owner/UUID/kind/parent/content-hash receipts atomically under actor and parent locks shared with native capacity enforcement. The new owned-media photo entry additionally locks and rechecks unused media ownership and rejects marketing-only media. Stops serialize with creates, preserve existing resources, and fence late requests; deleted-resource tombstones survive parent deletion, while account deletion cascades the receipt. Migration43 adds a distinct legacy receipt namespace; it does not imply global UUID uniqueness across native and legacy tables.
+
+The browser stores only minimal encrypted creation identities and list-bound photo/removal journals before dispatch. It performs original-receipt reads on recovery, does not automatically upload/create/remove again, validates exact acknowledgements, and uses CAS to protect newer photos. Explicit MANUAL_PHOTO use does not broaden the default BATCH_ITEM upload validator. Existing metadata stripping, bounded image processing, controlled storage and provider erasure/removal contracts are reused; preview uses an authenticated no-store thumbnail. Confirmation survives cleanup failure. Verified-agent proxy binding and verifier outage are exercised through the real middleware with an isolated verifier stub.
+
+PostgreSQL and Chrome evidence covers capacity contention, duplicate/changed requests, foreign/used/marketing photos, native attachment races, original-resource deletion, stop/create races, commit-then-502 recovery and stopped late POST410. Chrome used local synthetic photos; removal was opened and cancelled in the browser. The legacy multipart disk path, independently durable clone images, real external provider/device/PWA and final production checks remain pending. Native APP source was not changed.
+
 ## 2026-10-02 Permission-aware wish clone and detail follow-up
 
 Legacy cloning now locks the actor, sorted source/destination parents and source item before rechecking source visibility, destination ownership and native list capacity. Private/hidden outsider sources cannot be enumerated; in-flight jobs are rejected. Separate budgets/reference prices, original wisher and actual stable processing states are retained, while purchase/hide/proxy state and provider diagnostics are not copied. Item deletion rechecks ownership under transactional locks, retains the erasure queue and returns additive exact identity/deletion acknowledgement after commit.

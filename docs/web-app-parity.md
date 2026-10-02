@@ -12,7 +12,22 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式v2.0.577已發布。探索地圖／8筆商品清單照片、聊天收件匣／空聊天室與面交視窗皆以正常574→577更新核對。第74批只讀原面交回執成功：隔離真commit後502、reload保留原操作、查核僅GET，原提案POST始終1，不同意新版本。完整Web1823、HTTP634及精確三CI通過。第75批正式首頁／設定736×952重新人工評分各90，390×844兩頁無水平溢出、唯一設定入口。APP2.0.12現來源183檔保持，fresh iOS QA建置／安裝／啟動與Android來源核對完成，但原生畫面入口不可操作，實際native跨端仍待。正式外部來源仍未開放；真provider、OS PWA、不可逆操作與完整矩陣仍active。
+目前狀態：正式v2.0.580已發布，公開商品新增手動分享文字與明確重新讀取；原577分頁經更新就緒／保存確認升級580，正式探索地圖／商品清單與聊天收件匣／空QA聊天室均回讀。完整Web1832、Server930＋3略過、真HTTP634、APP852及精確三CI成功。最近正式首頁／設定577各人工90，沒有580新評分聲明。APP2.0.12未改；原生QA現來源建置／安裝／啟動完成，實際native跨端、真provider、OS PWA、不可逆操作與完整矩陣仍active。
+
+## 第七十六批正式發布與分享恢復驗收
+
+- 正式v2.0.580，PR107精確head 5f86c3d15bbd52e9facc021565e1c979747c15d3、CI37065159456三項成功；正常merge826e2c4035dfcea3f2ef03c76958255b7f2379db、空trigger4c449ffda5d22320f0b3ce6dc53f51617261a060。原Git部署c58c46cf-47af-4955-9b80-50feccb2d48c等待；原服務同一乾淨checkout直接上傳67d63307-fa73-48d8-8209-21cc1f73c7a5 SUCCESS，client／server／mobile樹與CI一致、原uploads掛載保留，無APP／migration／正式變數變更。
+- 本機完整Web113檔1832項、SSR12項與兩端build成功；精確CI再次Web1832／Server930＋3略過／真HTTP634／原APP852及其他發布檢查通過。九新增分享／refresh／期限／session案例及真handler／PG瀏覽器v3→v4／v6、503恢復、SOLD／private404、390px分享readonly證據保留；受控navigator失敗不是實際OS拒絕，fixture控制不是原生管理。
+- 原577正式分頁經ready／保存確認正常升級580，不清storage／cache或操作worker。正式探索map／清單照片、聊天收件匣／空合成非販售QA聊天室、公開商品的手動分享文字與重新GET全部1280×720真UI／DOM／原JPEG回讀；圖片實載、設定入口1、無水平溢出。沒有送出訊息／提案、呼叫自動分享或產品寫入，商品保持v1，不冒稱正式改版或故障注入。公開version／index／主bundle／chunks與health200、匿名私有API401、worker activation1／claim1、legacy bootstrap200核對。
+- 初次QA CORS漏標頭與label測試失敗完整保留，未弱化斷言。兩張短狀態fullpage輸出排版不可靠已排除；真正viewport與DOM量測是置中576px面板、512×28標題且視覺正常；沒有為截圖問題修改product CSS。全部自有本機API／Vite／PG停止、資料保留、QA分頁關閉、原129其他工作區改動hash保持，正式分頁保留供後續。
+- 完整證據wishlist-web-audit76-evidence-20261003.json及artifact index。完整目標active；最近首頁／設定577各90、沒有580視覺重新評分；英文新增行為是自動測試，原生／Web跨端、真MiniMax／Flickr／mail、OS PWA與完整矩陣仍待。
+
+## 2026-10-03 第七十七批：探索限流等待與明確恢復
+
+- 正式580實際操作遇到transport429，探索原文要求依等待提示重試，但沒有實際等待時間且搜尋按鈕仍可按；願望選單失敗只提供回首頁，商品詳情亦無原商品重讀入口。正式原始畫面／DOM保留，不把失敗的0載入數當全站0商品。
+- 候選Web2.0.583依HEAD提交數582＋1。探索使用原ApiFailure.retryAfterMs建立此session的記憶體deadline，兩來源同時失敗採較晚期限；每秒更新等待秒數，期限後僅開放明確操作，沒有自動搜尋或重播。搜尋／套用／清除／範圍／擴大／更多／新detail均有UIdisabled及同步deadline防重入，讀取既有商品／手動移動地圖／列表／調整文字仍可用。
+- 願望選單新增明確原GET重讀，不重查商品也不清除輸入；同步gate、signal及帳號session清理保留。商品詳情以原kind/id重讀，等待提示放入modal供實際操作；開始重讀移除舊detail、取消／舊scope與過期檢查保留。非transport產品429不虛構全站等待deadline，原error內容不外露。未調高後台限額、未變更全球cooldown、APP2.0.12／server／45migration不改。
+- 新6項Web案例：較晚並行期限及手動條件保留、分頁429保留舊商品與同cursor單GET、英文detail原id明確重讀、願望單GET恢復、產品429無假倒數、StrictMode首次abort後正常讀取。新增前5項實際失敗及原raw log保留；初次focused42項通過後補modal／StrictMode清理，完整Web114檔1838項與兩端build通過。真browser與原Railway583／精確CI回讀接續，不提前宣告通過；完整目標仍active。
 
 ## 2026-10-03 第七十六批：公開商品分享替代與重新讀取
 

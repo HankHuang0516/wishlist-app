@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Website build and data request budgets — 2026-10-03
+
+Published build GET/HEAD resources and all other requests use separate server counters, each retaining500/IP/15minutes. PWA downloads no longer spend account/chat request slots; saturated data reads cannot block the recovery shell. Only actual allowlisted build files qualify, with missing/private/encoded paths and writes still in the original data budget. Route-specific authentication, security, chat and upload limits stay in force. Both counters are process-local, as before;429 and Retry-After remain possible.
+
 ## Account recovery and shared request limits — 2026-10-03
 
 Account rechecks use the same in-memory Retry-After cooldown as chat and meetups. Expiry alone sends no request; a new explicit recheck is required. Confirmed current401/404 or mismatched identity expires the session, while transport failures keep the last verified identity and original pending operations. Existing abort and account/request generation fences remain in force. Account notices and recheck controls follow Chinese/English with English storage-fault fallback; original names and session/journal data are unchanged.

@@ -12,7 +12,24 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行。第六十六批v2.0.550已正式發布，原登入Chrome547頁實際提示550，明確確認後載入550；探索地圖／8件列表、聊天收件匣／同一QA空聊天室／面交詳情正常讀取，手機390×844收件匣實際畫布通過。前批541→547取消保留合成未傳送文字、英文Chat／未提交Meetup原文保留及IAB534兩次正常reload到547證據保持。v547手機429錯誤與IAB手機圖／DOM矛盾保留，不宣稱所有瀏覽器／所有限流現場都已通過。第六十二批736×952首頁／設定90/90保留為534歷史證據，不冒稱550重評；真訊息／面交異動、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+目前狀態：正式v553已發布，IAB550經明確確認更新到553，最新版首頁與設定各90/100人工審查、探索8件與手機Chat已驗證。隨後正式限流／Settings安全讀取失敗保留，第68批v557拆分更新檔與資料額度；完整矩陣、真provider／跨端／PWA與不可逆GUI待驗收仍active。APP2.0.12不改。
+
+## 2026-10-03 第六十八批：網站更新與資料讀取各自計算額度
+
+- v553實際Chat限流／Settings安全讀取失败證據保留；server原global limiter在靜態檔之前，因此本版PWA約95個預快取資源的實際下載也會消耗500/IP/15分鐘的同份資料額度。這是程式確認的共用額度設計，沒有推定所有既有失敗都由更新造成或GUI與CLI共用出口。
+- 改為兩個獨立process-local stores，每個仍500/IP/15分鐘。只有實際published build檔的GET／HEAD進入build額度；其餘全部維持data額度，原auth／security／chat／upload各細項限制不改。data用完仍可下載恢復shell；build用完也不能堵住本人資料讀取。各自仍會回429與Retry-After，不移除限制。
+- allowlist於啟動讀取實際client/dist，僅明確root檔／workbox及assets／icons／images；不跟symlink、不收missing／encoded／private uploads／API／non-read。build目錄讀取失败fail-closed，所有请求仍受data限制；沒有新增公開資料路由／權限／APP或migration改動。
+- 真loopback HTTP依原500額度驗證：95個更新GET後仍有完整500筆data，501拒絕；data拒絕時index仍可讀，build到501亦拒絕。POST／private／API query／missing／encoded仍扣data，HEAD扣build；fixture及伺服器都為合成local，非正式大量請求。
+- v557完整Server首輪1項saturation fixture收到非預期401而非合成200，925項通過／3skipped，失敗log保留。fixture改為整個測試持有同一明確127.0.0.1 listener，finally關閉，避免逐請求重建短命server；原500／501、全部HTTP status與header斷言保持。不推定此為正式429根因；產品runtime未因401改動，完整Server重新驗收。
+- 初候選依HEAD555＋1為v556；實際worker95預快取清單驗出9項未分類路徑（logo重複一次），补明確logo／feature插圖及analytics bridge的既有public檔，未擴大到API或private。保留初次失敗並強化fixture；最终依HEAD556＋1為v557，完整Web111檔1765項、Server58檔926項＋3skipped與兩端build通過；精確CI、正式新版／資料恢復接續；原失敗与未完矩陣保留，目標active。
+
+## 第六十七批正式發布與目前驗收
+
+- v553 PR99 exact head a47783dcabecd43607068f7729e37468ece824b7，CI37031346501三項全部success；正常merge5231268e8ddb8ca8dbf19c60ff3c907c8b409687、空觸發c265d6feb39b87a836217a5dbcd83e20ee7bbed0。Git2a5f161a-7ff1-41a6-b3b6-0ac95633e02d WAITING後同乾淨checkout直接發布原service，7a8929a9-3aba-44b7-abc9-809f5885a281 SUCCESS。client／server／mobile樹與精確CI一致，uploads mount保持；原129workspace變更逐檔hash保留。
+- 正式metadata／index／bundle553、四feature chunks200，健康200、私有API401；public worker實際activation1／claim1及legacy bootstrap200核對。原IAB550進階check實際ready553，明確已保存確認後同tab553，帳號／Settings／永久額度0正常；沒有清storage／cache或強制worker訊息。先前547→550 fresh-proof失敗仍為歷史，不推定原因已確定。
+- 最新736×952 raw Home／Settings與核准concept重新人工審查：Home31＋24＋18＋12＋5＝90；Settings33＋24＋18＋10＋5＝90。單一Settings、header44px以上、docWidth721≤736；原商品件數／照片／金額／個資不計入，原願望metadata、地圖來源與私人權限／頁長差異保留扣分。這是553本批人工review，不冒稱pixel similarity或全部手機頁通過。
+- Explore同8件map／list、Chat同QA對象／空history／disabled傳送、面交无預約均實際讀取，沒有傳訊／提約／封鎖／帳號或刊登異動。390×844 Chat inbox原图實際可讀、docWidth390、Settings入口1；viewport reset／繁中保持。兩張IAB desktop Chat截圖仍窄列且與DOM geometry矛盾，raw保留並排除視覺通過；面交dialog與mobile可讀，不能因此抹除矛盾。
+- 後續持續唯讀遇正式Chat限流提示，原room保留且自動讀取停止；Settings轉為安全讀取失败，原圖／DOM保存。這是新增的正式限流情境，不將先前正常畫面當最後所有data皆正常。已讀到server global500／15分鐘套用所有請求，網站更新檔也耗用同份資料額度；第68批將分開兩份各500額度。原失敗原因與GUI／CLI出口IP仍不猜測。完整provider／跨端／不可逆GUI及矩陣未完項保持active。
 
 ## 2026-10-03 第六十七批：帳號重讀與全站限流一致、雙語恢復
 

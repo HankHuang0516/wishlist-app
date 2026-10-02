@@ -69,6 +69,12 @@ const english = {
   "站內商品查詢未完成：": "In-app item query is incomplete: ",
   "外部商品查詢未完成：": "External item query is incomplete: ",
   "重新搜尋": "Search again",
+  "搜尋等待時間": "Search wait time",
+  "查詢暫時受限，請等待 {seconds} 秒後再試。等待期間可調整地圖與條件，不會自動搜尋。": "Queries are temporarily limited. Wait {seconds} seconds before retrying. You can adjust the map and filters while waiting; searches do not run automatically.",
+  "等待已結束；請明確重試搜尋、載入更多或重新核對商品，不會自動執行。": "The wait has ended. Explicitly retry searching, loading more, or checking the item; nothing runs automatically.",
+  "重新讀取願望選單": "Read the wish menu again",
+  "重新核對此商品": "Check this item again",
+  "本次查詢暫時無法完成，請稍後明確重試。": "This query could not be completed. Retry explicitly later.",
   "目前地圖範圍沒有符合條件的商品，不代表全站沒有商品。可擴大範圍或清除條件。": "No matching items in the current map area. This does not mean the whole site has no items. Expand the area or clear filters.",
   "此群聚的商品": "Items in this cluster",
   "顯示全部已載入結果": "Show all loaded results",
@@ -150,7 +156,9 @@ export function exploreMessage(value: string) {
 const errorKeys: readonly string[] = ["所選商品已失效，請回首頁重新選擇。", "商品分頁重複或未前進，請重新搜尋。", "外部商品分頁重複或未前進，請重新搜尋。", "請將地圖移回台灣範圍，或擴大搜尋。", "商品已失效，請重新搜尋。", "來源商品識別不符。", "探索連結參數不正確。", "搜尋文字不正確。", "商品分頁識別碼不正確。", "外部商品分頁識別碼不正確。", "請將地圖移回台灣範圍", "搜尋文字或品牌過長", "分類不正確", "篩選條件不正確", "價格須為非負數，最多兩位小數", "最高價不可小於最低價", "距離須為0.5至200公里", "商品資料回應不正確", "商品照片來源不正確", "商品照片重複", "商品分頁回應不正確", "外部商品資料不正確", "外部商品連結不正確", "外部商品已失效或資料不正確", "來源縮圖與原圖不可相同", "外部商品分頁不正確", "願望配對資料不正確"];
 export function exploreFailureKey(error: unknown): ExploreCopyKey {
   if (error instanceof ApiFailure && error.status === 401) return '登入狀態無法確認，請重新核對帳號後明確重試商品查詢。';
-  if (error instanceof ApiFailure && error.status === 429) return '請求暫時受限；請依畫面等待提示，再明確重試，不會自動重新搜尋。';
+  if (error instanceof ApiFailure && error.status === 429) return error.retryAfterMs > 0
+    ? '請求暫時受限；請依畫面等待提示，再明確重試，不會自動重新搜尋。'
+    : '本次查詢暫時無法完成，請稍後明確重試。';
   return error instanceof Error && errorKeys.includes(error.message) ? error.message as ExploreCopyKey : '無法讀取商品資料，請重試。';
 }
 const notices: readonly string[] = ['已包含自己刊登的配對預覽；自己的商品不能向自己購買。圖片不直接比對，文字吻合不保證同一型號或真偽。', '先依新近刊登分頁，每頁按吻合度排序；文字吻合不保證同一型號或商品真偽', '願望名稱資訊不足，請補充名稱或型號後再比對'];

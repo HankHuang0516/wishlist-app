@@ -24,7 +24,10 @@ export default function BirthdayReminders({ token }: { token: string }) {
   }, [token, attempt]);
   return <Card className="bg-blue-50 border-none shadow-sm h-full">
     <CardHeader className="p-4 pb-1"><CardTitle className="text-xs font-medium text-blue-600">{homeText('birthdays')}</CardTitle></CardHeader>
-    <CardContent className="space-y-3 px-4 pb-4 max-h-[300px] overflow-y-auto">
+    <CardContent role={state.kind === 'ready' && state.items.length ? 'region' : undefined}
+      aria-label={state.kind === 'ready' && state.items.length ? homeText('birthdays') : undefined}
+      tabIndex={state.kind === 'ready' && state.items.length ? 0 : undefined}
+      className={`space-y-2 px-4 pb-4 ${state.kind === 'ready' && state.items.length ? 'max-h-32 overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2' : ''}`}>
       {state.kind === 'loading' && <p role="status" className="text-xs text-blue-600">{homeText('birthdayLoading')}</p>}
       {state.kind === 'failed' && <div><p role="alert" className="text-sm text-blue-900">{homeText('birthdayFailed')}</p>
         <button type="button" className="mt-2 min-h-11 rounded-md border border-blue-300 bg-white px-3 text-sm text-blue-900" onClick={() => {
@@ -34,15 +37,15 @@ export default function BirthdayReminders({ token }: { token: string }) {
       {state.kind === 'ready' && state.items.map(friend => {
         const name = friend.name?.trim() || friend.nicknames?.trim() || homeText('anonymous');
         const photo = socialAvatar(friend.avatarUrl);
-        return <div key={friend.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-3 shadow-sm">
-          <div aria-hidden="true" className="h-10 w-10 flex-none overflow-hidden rounded-full border border-gray-100 bg-gray-200">
+        return <div key={friend.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg bg-white p-2 shadow-sm">
+          <div aria-hidden="true" className="h-8 w-8 overflow-hidden rounded-full border border-gray-100 bg-gray-200">
             {photo ? <img src={photo} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center font-bold text-gray-500">{Array.from(name)[0]}</div>}
           </div>
-          <div className="min-w-0 flex-1 basis-24"><p className="break-words text-sm font-bold text-gray-900">{name}</p>
+          <div className="min-w-0"><p className="break-words text-sm font-bold text-gray-900">{name}</p>
             {friend.nicknames && <p className="break-words text-xs text-gray-600">{friend.nicknames}</p>}
             <p className="mt-1 text-xs font-medium text-pink-600">{homeText('birthdayDate', { date: homeDate(friend.nextBirthday) })}</p>
           </div>
-          <div className="ml-auto flex flex-none gap-1">
+          <div className="ml-auto flex flex-col gap-1">
             <Link to={`/users/${friend.id}/profile`} aria-label={homeText('profile', { name })} className="inline-flex h-11 w-11 items-center justify-center rounded-md text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2"><Info className="h-4 w-4" aria-hidden="true" /></Link>
             <Link to={`/users/${friend.id}/wishlists`} aria-label={homeText('gifts', { name })} className="inline-flex h-11 w-11 items-center justify-center rounded-md text-pink-700 hover:bg-pink-50 focus-visible:outline focus-visible:outline-2"><Gift className="h-4 w-4" aria-hidden="true" /></Link>
           </div>

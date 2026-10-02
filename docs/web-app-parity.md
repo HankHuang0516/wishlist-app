@@ -10,7 +10,7 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第三輪同畫布人工設計審查為首頁90/100、設定90/100，兩頁的本機視覺門檻通過，但不是獨立或像素級相似度結果。第一輪84／87及第二輪90／89留作歷史證據。完整功能、CI與正式部署門檻仍全部保留。
+目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第三輪首頁90/100、設定90/100僅為當時版本的歷史人工審查，不能沿用到目前累積變更後的畫面。第五十七批重新核對同畫布，調整首頁生日區與頁尾；最終兩頁、手機與鍵盤操作驗收尚未齊全，尚無新版90/90結果。第一輪84／87及第二輪90／89保留作歷史證據。完整功能、CI與正式部署門檻全部保留。
 
 ## 最新目標修正：僅網頁、核准示意圖相似度至少90%（2026-10-01）
 
@@ -26,6 +26,15 @@
 - 視覺達90%不替代完整功能、錯誤／恢復、權限、CI與正式站回讀門檻；所有未完成項目繼續保留。不得以一張示意圖核准或本機截圖宣稱網站已部署或全功能對齊。
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
+
+## 2026-10-02 第五十七批：首頁生日區與保留完整入口的頁尾（仍未部署）
+
+- 重新用核准概念板與Chrome同736×952 CSS畫布檢查；原完整首頁1552px、設定1228px，舊90/90不能代表現版。生日資料僅在ready且非空時進入有名稱、可聚焦的128px捲動區，loading／failed／empty不裁切；全部朋友原name／nickname／日期及個人頁／願望兩入口保留。卡片grid為長名稱留空間，兩個44px圖示按鈕改直排，原生日不再因橫排按鈕擠出孤立「日」。不刪朋友、隱藏名稱或改查詢、owner／UTC契約。
+- 頁尾保留6原policy／support／deletion／partner／changelog links及feedback按鈕，各自原44px最小target；一般畫布導覽一列、copyright與版本下一列，xl三欄同列。單一有標籤設定入口與原navbar保留；不改shared元件預設、APP／server／schema。
+- 新增1項Web實測20位原名與40個正確目的地、region可focus且只GET一次；focused15／3檔通過。第一輪完整gate新test誤用標題大寫，修成原實際label；第二輪有5個既有刊登等待assert失败，原檔未改，focused78／2檔全過；停止自有browser listeners後第三輪完整gate退出0，沒有延长timeout或刪斷言：Server56檔913＋既有3skip、HTTP40檔630、Web105檔1696＋build、Native42檔852＋typecheck／Expo、45migrations／schema difference0及required cleanup0。主JS351.00KB、PWA95entries6088.29KiB，原map／worker warnings保留；全部attempt logs保留，系統load高不能單獨證明失敗原因。
+- 新獨立UTF8 DB與真compiled handlers、6合成users／3follows／3wishes／4listings；native Chrome自有無痕在736×952／DPR2保存原PNG及完整AX，不加工照片或截圖。中間版首頁完整高度1356px，較原1552px少196px；該圖仍是生日按鈕橫排的中間版本，不當作最終日期或90分證明。最終直排生日只有原native window screenshot與AX，核對日期完整；最終純viewport／完整Settings／390×844／實際鍵盤捲動尚未完成，DOM focus測試不當成真browser捲動或geometry證據。地图最後有載入失敗替代提示，沒有正式provider品質聲明。
+- 重啟後listener的39產品GET皆200，product writes0／external mutations0；最終fixture仍6／3／3／4。初listener在使用者中斷後消失，該trace未保存，故39次不宣稱涵蓋重啟前。照片為repo公開插圖fixtures、非真商品provider，real credentials false。原圖、完整AX、state-final與visual57 evidence保存；最終兩個自有incognito仍在，DevTools／736×952尚未還原，因native input回讀無效果，未冒稱GUI清理完成。自有API／Vite／PG已停，DB／原素材／他人改動保留。
+- 本批完整gate通過，精確新HEAD CI另回讀；PR82 draft／goal active、未部署。main後續source-lead提交另待整合驗證；全feature／逐欄權限、真provider跨端、PWA／效能、credentials／permanent browser、最終Home／Settings各90與正式migration／merge／Railway／live仍待。
 
 ## 2026-10-02 第五十六批：保留朋友功能的原生日與照片恢復（仍未部署）
 

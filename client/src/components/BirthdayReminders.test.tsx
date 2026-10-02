@@ -8,6 +8,19 @@ const view = (token = 'synthetic-a') => <MemoryRouter><BirthdayReminders key={to
 beforeEach(() => localStorage.setItem('user-locale', 'en-US'));
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('private homepage birthday reads', () => {
+  it('keeps every public friend and both destinations reachable in the named keyboard region', async () => {
+    const friends = Array.from({ length: 20 }, (_, index) => ({ ...friend, id: index + 1, name: `Original public friend ${index + 1}` }));
+    const fetcher = vi.fn(async () => ok(friends)); vi.stubGlobal('fetch', fetcher);
+    render(view());
+    const region = await screen.findByRole('region', { name: 'Upcoming friend birthdays' });
+    region.focus(); expect(region).toHaveFocus();
+    for (const entry of friends) {
+      expect(screen.getByText(entry.name)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: `View the public profile of ${entry.name}` })).toHaveAttribute('href', `/users/${entry.id}/profile`);
+      expect(screen.getByRole('link', { name: `View the public wishes of ${entry.name}` })).toHaveAttribute('href', `/users/${entry.id}/wishlists`);
+    }
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
   it('does not claim empty while loading; uses the private redirect-rejecting GET contract', async () => {
     let finish!: (value: unknown) => void;
     const fetcher = vi.fn(() => new Promise(resolve => { finish = resolve; })); vi.stubGlobal('fetch', fetcher);

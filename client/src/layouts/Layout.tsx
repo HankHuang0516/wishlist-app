@@ -56,12 +56,10 @@ export default function Layout() {
             </main>
 
             {/* Footer */}
-            {/* Footer */}
-            <footer className="border-t border-muji-border bg-white py-3">
-                <div className="mx-auto px-4 flex flex-col sm:flex-row justify-between items-center text-xs text-muji-secondary gap-3">
-                    <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-                        <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
-                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-2">
+            <footer className="border-t border-muji-border bg-white py-2">
+                <div className="mx-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 text-xs text-muji-secondary xl:grid-cols-[auto_minmax(0,1fr)_auto]">
+                        <span className="row-start-2 min-w-0 xl:row-start-1">&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
+                        <div className="col-span-2 col-start-1 row-start-1 flex flex-wrap justify-center gap-x-3 xl:col-span-1 xl:col-start-2">
                             <Link to="/terms" className="inline-flex min-h-11 min-w-11 items-center hover:text-muji-primary transition-colors">{webShellText('terms')}</Link>
                             <Link to="/privacy" className="inline-flex min-h-11 min-w-11 items-center hover:text-muji-primary transition-colors">{webShellText('privacy')}</Link>
                             <Link to="/support" className="inline-flex min-h-11 min-w-11 items-center hover:text-muji-primary transition-colors">{webShellText('support')}</Link>
@@ -70,8 +68,7 @@ export default function Layout() {
                             <Link to="/changelog" className="inline-flex min-h-11 min-w-11 items-center hover:text-muji-primary transition-colors">{webShellText('changelog')}</Link>
                             <button onClick={() => setIsFeedbackOpen(true)} className="inline-flex min-h-11 min-w-11 items-center hover:text-muji-primary transition-colors text-left">{webShellText('feedback')}</button>
                         </div>
-                    </div>
-                    <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>
+                    <span className="col-start-2 row-start-2 text-xs text-gray-400 font-mono xl:col-start-3 xl:row-start-1">v{__APP_VERSION__}</span>
                 </div>
             </footer>
 

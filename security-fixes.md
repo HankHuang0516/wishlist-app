@@ -1,3 +1,9 @@
+## 2026-10-02 Durable public partner form recovery
+
+Partner form dispatch now requires the original encrypted API-scoped journal before POST and strict matching receipt identity/hash/status. Public partner evidence is separate from feedback and owners and stores no token. Unknown responses retain the original body/ID, reopening only GETs and explicit retry uses the original. Synchronous gates, departure fences, safe rereading after storage/CAS faults and exact cleanup protect old/new operations; verified cleanup failure never resends. Bounded bilingual notices hide raw provider/storage diagnostics. Original contact consent and non-authorization terms are preserved; successful cleanup opens a blank new form with consent unchecked.
+
+34 new Web cases and full gates pass. Real Chrome/compiled handler/PostgreSQL proves original commit502 followed by GET-only receipt and one record/stub notification, then encrypted cleanup and blank Chinese form. No external mail, APP or migration change. The server error class uses an equivalent explicit field declaration for direct parser compatibility; normalization/authority unchanged. Shared guest header/footer targets and landing localization remain pending alongside production/full parity.
+
 ## 2026-10-02 Original partner receipt capability read
 
 The public partner inquiry API now exposes private no-store original receipt recovery using the original random client ID and canonical request hash in a header. It projects only five receipt fields, never contact/content/provider diagnostics; wrong kind/hash/missing/deleted record is uniformly unconfirmed, and malformed or URL-query credentials are rejected. POST retains legacy201 fields with additive original ID/hash and rejects an optional false hash before writing. Existing immutable transaction/mail-only-winner, three-per-hour POST limit, honeypot202 and admin listing/status authority stay intact.

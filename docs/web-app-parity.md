@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十七批：合作表單持久恢復與語系（仍未部署）
+
+- 既有PartnerInquiryPage在POST前以public API-isolated AES-GCM保存原表單／UUID／canonical hash／language，與feedback及owner feature分開；不存token。Strict receipt核對原ID/hash／receipt UUID／status，不呈現raw errors/provider details。Unknown重開只GET，明確retry原body；storage失敗保留可複製文字／freeze、sync gate防duplicate、departure fencing不處理late ACK／不clear原證據，newer CAS後先reread，confirmed cleanup failure只清理。聯絡同意是原operation內的原提交意圖；success後新表單unchecked，不自動再次送出。
+- 表單／receipt／recovery提供繁中English，保留原「不構成商品圖文或AI授權」文案／欄位及honeypot；補實際後台optional active count、0/null分明。文字與原journal language不隨display翻譯；44px inputs／48px send，網址／email／長度及consent在persistence前驗證。後台Error僅等效field宣告以便direct actual server parser cross-check，不改normalization或authority、無migration／APP改動。
+- 新Web34（protocol22／page14含原2擴充）、focused64及final full0：Server56檔913＋3skip／HTTP35檔577／Web92檔1523＋build／Native42檔852＋typecheck-Expo，44migrations schema一致／required cleanup0。涵蓋actual server canonical/hash、原Unicode／0/null、多類別order、real public IndexedDB crypto/CAS隔離、ACK mismatches／invalid inputs、persist-before-POST、初read、unknown/retry、store faults、新journal／late response/unmount、cleanup-only、locale failure／StrictMode。初64 tests pass但server parameter-property與client erasable compiler不合；兩次dynamic import失敗logs保留，改等效field/direct import後tests＋types全通過；首次full提早停止，最後完整重跑通過。JS350.07KB／PWA91entries6013.17KiB，原map/worker warnings保留。
+- 真Chrome390×844、新5214 origin／獨立UTF8 DB／compiled partner handler，明確synthetic contact及mail stub：原b82cda0c-fbfe-4ad5-9a47-19f13f9d83f6 real record commit後QA502，unknown原文字保留，reload只有GET原receipt b125fc66-3cb1-4ff0-b819-e642230f8022、FAILED通知如實、不稱inbox delivery；POST1／GET1／record1／receipt1／stub mail1／external0。中文原內容、BOOKS／CSV／active0及HTTPS normalization真DB一致；clear後繁中空表單／unchecked consent、無再GET/POST。4原JPEG／DOM／HTTP journal及wishlist-web-partner-form-evidence-20261002.json保存，英文receipt document390、中文form375。Guest header feedback40px／footer feedback16px仍是shared既有控制，未冒稱全站44px；landing語系及shared touch-target review另待。
+- 自有API／Vite／PG停、tab關及viewport reset，DB／他人worktree保留。矩陣更新已驗證表單項；partner landing、全matrix／feature-social、shared touch targets、mixed-version PWA／provider-cross端／credential-permanent browser／正式migration-merge-Railway與Home-Settings各90正式回讀仍待，PR82 draft／goal active／未部署，新commit精確CI另回讀。
+
 ## 2026-10-02 第四十六批：合作意向原收件查核後台（仍未部署）
 
 - 保留既有Web合作表單，APP沒有此表單；新增private no-store GET partner-inquiries/submissions/:clientSubmissionId，以原隨機ID＋header canonical hash查原receipt，僅回received／clientSubmissionId／requestHash／inquiryId／notificationStatus，不回organization／聯絡email／內容／provider ID或診斷。Missing／wrong hash-kind-record／deleted record均unconfirmed；malformed query／URL hash拒絕。POST201保留既有fields並加original ID／hash，optional false claimed hash在write前拒絕；global transactional winner／mail-only-winner、3次每小時POST limit、honeypot202、原admin listing／status authority保留。
@@ -279,7 +287,7 @@
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；真mail、其他社交流程／feature英文／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
-| 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash original receipt GET、legacy201／canonical hash及real HTTP15已本機驗證；frontend仍in-memory ID／弱ACK | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
+| 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；landing語系仍待 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
 | 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 
 ## 平台替代策略

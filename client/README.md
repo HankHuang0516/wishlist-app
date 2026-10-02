@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Durable partnership inquiries — 2026-10-02
+
+The retained public partner form saves original input, ID, canonical hash and language in an API-isolated AES-GCM journal before POST. Receipt identity is strict; reopening only GETs, explicit retry uses the same body, storage/unknown results preserve text, and confirmed cleanup failures retry only cleanup. Synchronous gates and departure generations protect duplicate/late operations, while newer journals must be reread. Chinese/English controls preserve original input and the non-authorization notice. Optional active count distinguishes0/null; new forms never restore cleared consent. Shared header/footer touch targets and the partner landing page still need separate review.
+
+34 new Web cases pass (focused64); full gates pass Web1523/build, HTTP577, Server913 plus3 skips, Native852/typecheck/Expo,44 migrations/schema/cleanup. Direct real-server parser comparison is enabled by an equivalent explicit error-field declaration. Chrome390×844 with compiled handlers proves synthetic original POST commit→QA502→reload GET-only same receipt, one record and one stub mail attempt, FAILED notice and encrypted cleanup→blank Chinese form. No external mail, APP or migration change; production/full parity remain pending.
+
 ## Encrypted original deletion recovery — 2026-10-02
 
 The original deletion journal now lives in a purpose-specific AES-GCM IndexedDB vault with immutable transactional publication and exact cleanup CAS. This separate vault retains the original session through owner-data cleanup until receipt verification and final recovery cleanup. Ordinary feature journals still never store tokens. Legacy plaintext migrates only after strict parsing, encrypted round-trip and an exact original-record check; conflicts and storage faults preserve evidence and block new deletion. Initial safe reading gates form/network; explicit rereading restores a competing winner. Password and typed confirmation never persist. Old already-running PWA bundles cannot join the new IndexedDB CAS and need separate upgrade acceptance; no hardware or XSS protection claim.

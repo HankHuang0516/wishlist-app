@@ -33,8 +33,13 @@ export async function feedbackPendingKey(apiUrl: string, userId: number | null) 
   const absolute=apiUrl==='/api'&&typeof window!=='undefined'?new URL('/api',window.location.origin).href:apiUrl;
   return `wishlist.pending.public.v1.${await sha256(validateApiUrl(absolute,import.meta.env.DEV))}.feedback`;
 }
+/** Public partner contact belongs to its original submission, never a login. */
+export async function partnerInquiryPendingKey(apiUrl:string){
+  const absolute=apiUrl==='/api'&&typeof window!=='undefined'?new URL('/api',window.location.origin).href:apiUrl;
+  return `wishlist.pending.public.v1.${await sha256(validateApiUrl(absolute,import.meta.env.DEV))}.partner-inquiry`;
+}
 function scopeOf(key: string) {
-  const publicFeedback=/^(wishlist\.pending\.public\.v1\.[a-f0-9]{64})\.feedback$/.exec(key);
+  const publicFeedback=/^(wishlist\.pending\.public\.v1\.[a-f0-9]{64})\.(feedback|partner-inquiry)$/.exec(key);
   if(publicFeedback)return publicFeedback[1];
   const match = keyPattern.exec(key);
   if (!match || Number(match[1].split('.').at(-1)) > 2147483647) throw new PendingStoreError();

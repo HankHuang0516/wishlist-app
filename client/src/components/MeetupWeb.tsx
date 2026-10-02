@@ -7,9 +7,10 @@ import type { ChatRoomRecord } from '../lib/chatData';
 import { meetupRequest, parseMeetup, type MeetupAction, type MeetupRecord } from '../lib/meetupData';
 import { fromTaipeiInput, meetupActionLabels, meetupLabels, submitMeetupAction, taipeiInput } from '../lib/chatWeb';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
+import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 const input = 'mt-2 min-h-11 w-full rounded-xl border p-3';
-export default function MeetupWeb({ token, userId, room, onClose }: { token: string; userId: number; room: ChatRoomRecord; onClose: () => void }) {
+export default function MeetupWeb({ token, userId, room, onClose, onReadPause }: { token: string; userId: number; room: ChatRoomRecord; onClose: () => void; onReadPause?: () => void }) {
   const [appointment, setAppointment] = useState<MeetupRecord | null>(null), [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false);
   const [pending, setPending] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [editing, setEditing] = useState(false), [editVersion, setEditVersion] = useState(0), [date, setDate] = useState('');
@@ -17,16 +18,17 @@ export default function MeetupWeb({ token, userId, room, onClose }: { token: str
   const [confirmFence, setConfirmFence] = useState(false), [clock, setClock] = useState(Date.now());
   const [restoreIssue, setRestoreIssue] = useState('');
   const active = useRef(true), gate = useRef(false), reading = useRef(false), sequence = useRef(0), key = useRef<string | null>(null), saved = useRef<string | null>(null);
+  const autoPause = useChatReadPause();
   const current = useRef(appointment); current.current = appointment;
   const latestRoom = useRef(room); latestRoom.current = room;
-  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已關閉')); return api<unknown>(token, path, init); };
-  async function refresh() {
-    if (reading.current || gate.current || !active.current || latestRoom.current.archived) return;
-    reading.current = true; const seq = ++sequence.current;
+  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已關閉')); return api<unknown>(token, path, init).catch(failure => { if (active.current && shouldPauseChatReads(failure)) { autoPause.pause(); onReadPause?.(); } throw failure; }); };
+  async function refresh(automatic = false) {
+    if (reading.current || gate.current || !active.current || latestRoom.current.archived || automatic && autoPause.control.current.paused) return;
+    reading.current = true; const seq = ++sequence.current; const pauseGeneration = autoPause.control.current.generation;
     try {
       const result = await read(`/chat/conversations/${room.id}/meetup`) as { appointment: unknown };
       const next = parseMeetup(result.appointment, latestRoom.current);
-      if (active.current && seq === sequence.current) { current.current = next; setAppointment(next); setLoaded(true); setError(''); }
+      if (active.current && seq === sequence.current) { current.current = next; setAppointment(next); setLoaded(true); setError(''); if (!automatic) autoPause.resume(pauseGeneration); }
     } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : '無法更新面交預約；不代表尚無預約或已確認，請重試。'); }
     finally { reading.current = false; }
   }
@@ -41,7 +43,7 @@ export default function MeetupWeb({ token, userId, room, onClose }: { token: str
   }
   useEffect(() => {
     active.current = true; void restore();
-    const tick = () => { setClock(Date.now()); if (document.visibilityState === 'visible') void refresh(); };
+    const tick = () => { setClock(Date.now()); if (document.visibilityState === 'visible') void refresh(true); };
     const timer = window.setInterval(tick, 15_000); document.addEventListener('visibilitychange', tick); window.addEventListener('online', tick);
     return () => { active.current = false; sequence.current++; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); window.removeEventListener('online', tick); };
   }, []);
@@ -83,6 +85,7 @@ export default function MeetupWeb({ token, userId, room, onClose }: { token: str
     <p className="text-sm text-gray-600">{chatText("僅買賣雙方可見。預約不代表付款、交易保障或自動保留商品；請優先選擇安全的公共場所。")}</p>
     {room.archived && <p role="alert">{chatText("聊天室已封存，無法新增或調整面交。")}</p>}{!room.listingAvailable && !room.archived && <p>{chatText("商品已停止刊登，請先與賣家確認；仍可取消既有預約。")}</p>}{room.blocked && <p>{chatText("已封鎖，不能新增或確認面交；仍可取消既有預約。")}</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{notice && <p role="status" className="rounded-xl bg-green-50 p-3">{chatMessage(notice)}</p>}
+    {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
     {restoreIssue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(restoreIssue)}</p>}
     {appointment ? <section aria-label={chatText("目前面交預約")} className="space-y-2 rounded-xl border p-4"><h3 className="font-semibold">{chatMessage(meetupLabels[appointment.status])} {chatText("· 第")}{appointment.version}{chatText("版")}</h3><p>{chatTime(appointment.startsAt)} {chatText("至")} {chatTime(appointment.endsAt)}{chatText("（台灣時間）")}</p><p className="break-words">{appointment.placeName}</p>
       {appointment.latitude !== null && <p className="text-sm">{chatText("雙方私密座標：")}{appointment.latitude}, {appointment.longitude}</p>}{appointment.notes && <p className="whitespace-pre-wrap break-words">{appointment.notes}</p>}

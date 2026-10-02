@@ -1,6 +1,7 @@
 import { getDisplayLocale } from '../utils/localization';
 import type { ChatRoomRecord } from './chatData';
 const english = {
+  "自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。": "Automatic reads are paused. Use this page's update button to verify the latest state; reads resume only after success. If your session expired, first sign in to the same account.",
   "請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。": "Requests are temporarily limited. Automatic reads are paused; try again later. Your original content and pending operations remain.",
   "售價未提供": "Price unavailable",
   "免費贈送": "Free",

@@ -11,6 +11,7 @@ import { parseMeetup, type MeetupRecord } from '../lib/meetupData';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import MeetupWeb from '../components/MeetupWeb';
+import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
   const id = privateChatPhotoId(room, getFullApiUrl());
@@ -27,20 +28,22 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
   const activeRoom = invalidIntent ? null : params.get('room')?.toLowerCase() ?? null;
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]), [cursor, setCursor] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [loaded, setLoaded] = useState(false);
   const active = useRef(true), gate = useRef(false), seq = useRef(0), seen = useRef(new Set<string>());
+  const autoPause = useChatReadPause();
   const roomIntent = useRef(activeRoom); roomIntent.current = activeRoom;
-  async function load(next?: string) {
-    if (gate.current) return; gate.current = true; const current = ++seq.current; setBusy(true); setError('');
+  async function load(next?: string, automatic = false) {
+    if (gate.current || automatic && autoPause.control.current.paused) return; gate.current = true; const current = ++seq.current; const pauseGeneration = autoPause.control.current.generation; setBusy(true); setError('');
     try {
       if (next && seen.current.has(next)) throw new ChatDataError('聊天分頁重複，請重新載入收件匣。');
       const page = parseChatInbox(await api<unknown>(token, '/chat/conversations?limit=25' + (next ? '&cursor=' + next : '')), userId);
       if (!active.current || current !== seq.current) return;
       if (next) seen.current.add(next); else seen.current.clear();
       setRooms(old => next ? [...new Map([...old, ...page.items].map(room => [room.id, room])).values()] : page.items); setCursor(page.nextCursor); setLoaded(true);
-    } catch (failure) { if (active.current && current === seq.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；請重新登入原帳號，待確認操作會保留。' : '暫時無法載入聊天；不代表沒有對話，請重試。'); }
+      if (!automatic) autoPause.resume(pauseGeneration);
+    } catch (failure) { if (active.current && current === seq.current) { if (shouldPauseChatReads(failure)) autoPause.pause(); setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；請重新登入原帳號，待確認操作會保留。' : '暫時無法載入聊天；不代表沒有對話，請重試。'); } }
     finally { gate.current = false; if (active.current && current === seq.current) setBusy(false); }
   }
   useEffect(() => {
-    active.current = true; void load(); const tick = () => { if (document.visibilityState === 'visible' && !roomIntent.current) void load(); };
+    active.current = true; void load(); const tick = () => { if (document.visibilityState === 'visible' && !roomIntent.current) void load(undefined, true); };
     const timer = window.setInterval(tick, 30_000); document.addEventListener('visibilitychange', tick); window.addEventListener('online', tick);
     return () => { active.current = false; seq.current++; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); window.removeEventListener('online', tick); };
   }, []);
@@ -49,6 +52,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
     {invalidIntent && <div role="alert" className="rounded-xl bg-red-50 p-3">{chatText("聊天連結無效，不會使用不明識別碼查詢。")}<button className={button} onClick={() => navigate('/chat', { replace: true })}>{chatText("返回收件匣")}</button></div>}
     {activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
+      {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
       <div className="space-y-3">{rooms.map(room => <button key={room.id} type="button" className="flex w-full min-w-0 items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm" onClick={() => navigate('/chat?room=' + room.id)} aria-label={chatText('{title}，與{name}聊天{unread}', { title: chatRoomTitle(room), name: (room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText('商品聯絡人'), unread: room.unreadCount ? chatText('，{count} 則未讀', { count: room.unreadCount }) : '' })}>
         <span className="w-16 flex-none overflow-hidden rounded-xl"><RoomPhoto room={room} token={token} /></span><span className="min-w-0 flex-1"><span className="block break-words font-semibold">{chatRoomTitle(room)}</span><span className="block text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || (room.archived ? chatText("已移除的帳號") : chatText("商品聯絡人"))} · {chatRoomPrice(room)}</span>
           <span className="mt-1 block break-words text-sm text-gray-600">{room.archived ? chatText("已封存 · 僅供查看") : room.blocked ? chatText("已封鎖 · 歷史仍可查看") : !room.listingAvailable ? chatText("商品已停止刊登 · 歷史仍可查看") : room.lastMessageText || chatText("開始討論這件商品")}</span><span className="mt-1 block text-xs text-gray-500">{chatTime(room.lastMessageAt)}{chatText("（台灣時間）")}</span></span>
@@ -65,11 +69,12 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
   const [restoreIssue, setRestoreIssue] = useState('');
   const [meetup, setMeetup] = useState<MeetupRecord | null>(null), [meetupIssue, setMeetupIssue] = useState(''), [showMeetup, setShowMeetup] = useState(false), [blockUnknown, setBlockUnknown] = useState(false);
   const active = useRef(true), mutation = useRef(false), reading = useRef(false), restoring = useRef(false), sequence = useRef(0), meetupSequence = useRef(0);
+  const autoPause = useChatReadPause();
   const roomRef = useRef<ChatRoomRecord | null>(null), messageRef = useRef<ChatMessage[]>([]), saved = useRef<string | null>(null), key = useRef<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null), viewed = useRef(0), marking = useRef(false), readTimer = useRef<number | undefined>(undefined), shownMeetup = useRef(showMeetup); shownMeetup.current = showMeetup;
   const following = useRef(true), scrollBefore = useRef<{ height: number; top: number } | null>(null);
   const markRef = useRef<() => Promise<void>>(async () => {});
-  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已離開')); return api<unknown>(token, path, init); };
+  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已離開')); return api<unknown>(token, path, init).catch(failure => { if (active.current && shouldPauseChatReads(failure)) autoPause.pause(); throw failure; }); };
   function admit(next: ChatRoomRecord) {
     if (next.id !== roomId) throw new ChatDataError();
     roomRef.current = next; setRoom(next); messageRef.current = retainMemberMessages(messageRef.current, next); setMessages(messageRef.current);
@@ -95,8 +100,8 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
       if (active.current && seq === meetupSequence.current && !roomRef.current?.archived) { setMeetup(appointment); setMeetupIssue(''); }
     } catch { if (active.current && seq === meetupSequence.current) { setMeetup(null); setMeetupIssue('面交狀態暫時無法確認；請開啟預約詳情重試。'); } }
   }
-  async function refresh(older?: number) {
-    if (reading.current || mutation.current || !active.current) return; reading.current = true; setUpdating(true); setError(''); const seq = ++sequence.current;
+  async function refresh(older?: number, automatic = false) {
+    if (reading.current || mutation.current || !active.current || automatic && autoPause.control.current.paused) return; reading.current = true; setUpdating(true); setError(''); const seq = ++sequence.current; const pauseGeneration = autoPause.control.current.generation;
     try {
       const next = parseChatRoom(await read('/chat/conversations/' + roomId), userId);
       if (!active.current || seq !== sequence.current) return; admit(next); setBlockUnknown(false); if (!older && !shownMeetup.current) void refreshMeetup(next);
@@ -113,7 +118,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
         if (!active.current || seq !== sequence.current) return;
         if (page.items.some(m => m.sequence <= after)) throw new ChatDataError('聊天分頁重複。'); await admitMessages(page.items);
       }
-      if (active.current && seq === sequence.current) setCatchup(!older && page.nextAfterSequence !== null);
+      if (active.current && seq === sequence.current) { setCatchup(!older && page.nextAfterSequence !== null); if (!automatic) autoPause.resume(pauseGeneration); }
     } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；原訊息保留，請重新登入原帳號後查核。' : '無法更新聊天；歷史可能不完整，待確認訊息仍保留，請重試。'); }
     finally { reading.current = false; if (active.current) setUpdating(false); }
   }
@@ -130,13 +135,13 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
       const requestKey = await pendingRequestKey(getFullApiUrl(), userId, 'message.' + roomId), body = await privatePendingStore.get(requestKey);
       const request = body ? parsePendingMessage(body) : null;
       if (!active.current) return; key.current = requestKey; saved.current = body; setPending(body); if (request) setText(request.text); setReady(true);
-      await refresh(); if (active.current && saved.current) await checkPending();
+      await refresh(); if (active.current && saved.current && !autoPause.control.current.paused) await checkPending();
     } catch { if (active.current) setRestoreIssue('無法安全恢復待確認訊息；請重試恢復，不會丟棄原識別碼重複傳送。'); }
     finally { restoring.current = false; }
   }
   markRef.current = async () => {
     const current = roomRef.current, through = viewed.current;
-    if (!current || marking.current || document.visibilityState !== 'visible' || shownMeetup.current || through <= current.lastReadSequence) return;
+    if (!active.current || !current || marking.current || reading.current || autoPause.control.current.paused || document.visibilityState !== 'visible' || shownMeetup.current || through <= current.lastReadSequence) return;
     marking.current = true;
     try {
       const updated = parseChatRoom(await read(`/chat/conversations/${roomId}/read`, { method: 'POST', body: JSON.stringify({ throughSequence: through }) }), userId);
@@ -150,7 +155,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     finally { marking.current = false; }
   };
   useEffect(() => {
-    active.current = true; void restore(); const tick = () => { if (document.visibilityState === 'visible') { void refresh(); if (!shownMeetup.current) void markRef.current(); } };
+    active.current = true; void restore(); const tick = () => { if (document.visibilityState === 'visible') void refresh(undefined, true).then(() => { if (active.current && !shownMeetup.current) void markRef.current(); }); };
     const timer = window.setInterval(tick, 15_000); document.addEventListener('visibilitychange', tick); window.addEventListener('online', tick);
     return () => { active.current = false; sequence.current++; meetupSequence.current++; window.clearInterval(timer); window.clearTimeout(readTimer.current); document.removeEventListener('visibilitychange', tick); window.removeEventListener('online', tick); };
   }, []);
@@ -185,7 +190,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
       await accept(await submitChatMessage(read, current, userId, privatePendingStore, requestKey, body), body);
       confirmed = true;
     } catch (failure) { if (active.current) { if (failure instanceof PendingStoreError) { setReady(false); setRestoreIssue(failure.message); } setError(failure instanceof PendingStoreError ? failure.message : saved.current ? '尚未確認訊息送出；重試會使用相同識別碼與文字，也可只查核原回執。' : failure instanceof Error ? failure.message : '尚未送出訊息。'); } }
-    finally { mutation.current = false; if (active.current) { setBusy(false); if (confirmed && !saved.current) void refresh(); } }
+    finally { mutation.current = false; if (active.current) { setBusy(false); if (confirmed && !saved.current) void refresh(undefined, true); } }
   }
   async function block() {
     const current = roomRef.current; if (!current || current.archived || mutation.current || blockUnknown) return;
@@ -202,6 +207,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     {room ? <section aria-label={chatText("聊天商品")} className="flex min-w-0 items-start gap-3 rounded-2xl border bg-white p-4"><span className="w-16 flex-none"><RoomPhoto room={room} token={token} /></span><div className="min-w-0"><h2 className="break-words text-xl font-semibold">{chatRoomTitle(room)}</h2><p className="font-semibold">{chatRoomPrice(room)}</p><p className="text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText("已移除的帳號")}</p></div></section> : !error && <p role="status">{chatText("正在讀取聊天室…")}</p>}
     {room?.archived && <p className="rounded-xl bg-gray-100 p-3">{chatText("聊天室已封存，僅可查看保留歷史；對方刪除帳號時其訊息及私密預約會移除。")}</p>}{room?.blocked && !room.archived && <p>{chatText("已封鎖，停止傳送新訊息；歷史仍可查看，原訊息可查核回執。")}</p>}{room && !room.listingAvailable && !room.archived && <p>{chatText("商品已停止刊登；請與對方確認交易狀態。")}</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{readIssue && <p role="status" className="text-sm text-gray-600">{chatMessage(readIssue)}</p>}{notice && <p role="status" className="text-sm text-green-800">{chatMessage(notice)}</p>}
+    {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
     {restoreIssue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(restoreIssue)}</p>}
     <div ref={scroll} onScroll={() => { const el = scroll.current!; following.current = el.scrollHeight - el.clientHeight - el.scrollTop < 40; }} tabIndex={0} role="region" aria-label={chatText("商品聊天訊息紀錄")} className="max-h-[50dvh] min-h-40 space-y-3 overflow-y-auto rounded-2xl border bg-gray-50 p-4 focus:outline-green-800">
       {before && <button className={button} disabled={updating || busy} onClick={() => void refresh(before)}>{chatText("載入較早訊息")}</button>}
@@ -215,8 +221,8 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
       <label className="block">{chatText("商品聊天訊息（最多2000字元）")}<textarea disabled={!ready || busy || !!pending || !room || room.blocked || room.archived || blockUnknown} maxLength={2000} value={text} onChange={event => setText(event.target.value)} className="mt-2 min-h-24 w-full rounded-xl border p-3" placeholder={chatText("輸入訊息，預約前請確認商品狀態")} /></label>
       <div className="flex flex-wrap gap-2"><button type="submit" className={`${button} bg-green-800 text-white`} disabled={busy || !ready || !room || room.archived || blockUnknown || !pending && (!text.trim() || room.blocked)}>{pending ? chatText("明確重試相同訊息") : chatText("傳送訊息")}</button>
         {pending && <button type="button" className={button} disabled={busy || !room} onClick={() => void checkPending()}>{chatText("只查核原訊息回執")}</button>}
-        {room && !('IntersectionObserver' in window) && <><p className="text-sm">{chatText("此瀏覽器無法偵測訊息可見範圍，不會自動標記已讀；可由你明確確認。")}</p><button type="button" className={button} disabled={!messages.length} onClick={() => { viewed.current = Math.max(viewed.current, ...messages.map(m => m.sequence)); void markRef.current(); }}>{chatText("將目前已載入訊息標記為已讀")}</button></>}
+        {room && !('IntersectionObserver' in window) && <><p className="text-sm">{chatText("此瀏覽器無法偵測訊息可見範圍，不會自動標記已讀；可由你明確確認。")}</p><button type="button" className={button} disabled={!messages.length || autoPause.paused} onClick={() => { viewed.current = Math.max(viewed.current, ...messages.map(m => m.sequence)); void markRef.current(); }}>{chatText("將目前已載入訊息標記為已讀")}</button></>}
       </div>
-    </form>{showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onClose={() => { setShowMeetup(false); void refresh(); }} />}
+    </form>{showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onReadPause={() => { if (active.current) autoPause.pause(); }} onClose={() => { setShowMeetup(false); void refresh(undefined, true); }} />}
   </div>;
 }

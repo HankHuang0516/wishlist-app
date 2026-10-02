@@ -29,6 +29,36 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private meetup web parity', () => {
+  it('requires manual appointment recovery after rate limiting and preserves the original unsent fields', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    localStorage.setItem('user-locale', 'en-US'); const base = api.getMockImplementation()!;
+    render(<MeetupWeb {...props} />); fireEvent.click(await screen.findByRole('button', { name: 'Propose meetup' }));
+    fireEvent.change(screen.getByLabelText('Private meetup place'), { target: { value: '原集合點 250.7500 USD' } });
+    fireEvent.change(screen.getByLabelText('Meetup notes (optional, up to 1000 characters)'), { target: { value: '原備註 {version}' } });
+    api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: 'Update appointment status only' })); await screen.findByText(/Requests are temporarily limited/);
+    const pausedCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls);
+    api.mockRejectedValue(new Error('offline')); fireEvent.click(screen.getByRole('button', { name: 'Update appointment status only' })); await screen.findByText(/The appointment could not be updated/);
+    const failedRetryCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); }); expect(api).toHaveBeenCalledTimes(failedRetryCalls);
+    fireEvent.click(screen.getByRole('button', { name: 'Update appointment status only' })); await waitFor(() => expect(api).toHaveBeenCalledTimes(failedRetryCalls + 1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); }); expect(api).toHaveBeenCalledTimes(failedRetryCalls + 2);
+    expect(screen.getByLabelText('Private meetup place')).toHaveValue('原集合點 250.7500 USD');
+    expect(screen.getByLabelText('Meetup notes (optional, up to 1000 characters)')).toHaveValue('原備註 {version}');
+    expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
+  it('pauses expired-session appointment reads without clearing the original pending consent', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const body = JSON.stringify({ clientActionId: crypto.randomUUID(), action: 'CONFIRM', expectedVersion: 1 }); data.set(key, body);
+    api.mockRejectedValue(new ApiFailure('expired private diagnostic', 401));
+    render(<MeetupWeb {...props} />); await screen.findByText(/無法更新面交預約/);
+    const pausedCalls = api.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls); expect(data.get(key)).toBe(body); expect(posts()).toHaveLength(0);
+    expect(screen.queryByText('expired private diagnostic')).not.toBeInTheDocument();
+  });
   it('preserves unsent English terms after a rate-limited refresh without writing an appointment', async () => {
     localStorage.setItem('user-locale', 'en-US'); render(<MeetupWeb {...props} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Propose meetup' }));

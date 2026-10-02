@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+    {version:"2.0.443",date:"2026-10-02",title:"來源線索地圖與可撤回詢問",type:"Fullstack",items:[{type:"New",content:"公共地點来源線索獨立於商品與結帳，支援同意後人工轉交詢問；不代表庫存或授權已核實。"}]},
     { version: "2.0.442", date: "2026-10-01", title: "公開願望清單隱私修補", type: "Backend", items: [
         { type: "Security", content: "公開清單排除隱藏商品，僅回傳公開欄位，件數依可見商品計算並避免快取。" }
     ] },

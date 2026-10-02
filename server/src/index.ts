@@ -1,3 +1,4 @@
+import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
 import express, { Express, Request, Response } from 'express';
 import { getApiUrl, getClientUrl } from './config/constants';
 import { imageSources } from './config/imageSources';
@@ -96,6 +97,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/source-leads', createSourceLeadRoutes());
+app.use('/api/source-lead-admin', createSourceLeadAdmin());
 app.use('/api/listings', listingRoutes);
 app.use('/api/listing-media', listingMediaRoutes);
 app.use('/api/marketing', marketingRoutes);

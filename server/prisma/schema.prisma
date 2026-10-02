@@ -8,6 +8,7 @@ datasource db {
 }
 
 model User {
+  sourceLeadInquiries SourceLeadInquiry[]
   id                Int       @id @default(autoincrement())
   phoneNumber       String    @unique
   password          String
@@ -799,4 +800,48 @@ model SubmissionReceipt {
   notificationCheckedAt DateTime?
   createdAt DateTime @default(now())
   @@index([createdAt, id])
+}
+
+// Research leads are never Listings or verified available inventory.
+model ExternalSourceLead {
+  id String @id @default(uuid())
+  archiveItemId String @unique
+  libraryFileId String
+  archiveVersion Int
+  archiveSha256 String
+  contentHash String
+  title String
+  summary String
+  canonicalUrl String
+  county String
+  district String
+  publicPlaceName String
+  publicAddress String
+  latitude Float
+  longitude Float
+  postedEarliestAt DateTime
+  postedLatestAt DateTime
+  checkedAt DateTime
+  status String @default("PUBLISHED")
+  evidence Json
+  sellerRoute Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  inquiries SourceLeadInquiry[]
+  @@index([status, id])
+}
+model SourceLeadInquiry {
+  id String @id @default(uuid())
+  leadId String
+  buyerUserId Int
+  state String @default("INQUIRY")
+  leadContentHash String
+  events Json @default("[]")
+  consentHash String?
+  delivery Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lead ExternalSourceLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  buyer User @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  @@unique([leadId, buyerUserId])
 }

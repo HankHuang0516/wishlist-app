@@ -242,6 +242,15 @@ export function createSourceLeadRoutes() {
     catch (e) {
         return fail(res, e);
     } });
+    // Reading an inquiry must never allocate a receipt or mutate its events.
+    router.get('/:id/inquiry', authenticateToken, async (req: AuthRequest, res) => { try {
+        if (!req.user || !isListingId(req.params.id)) return res.sendStatus(404);
+        const row = await prisma.sourceLeadInquiry.findUnique({
+            where: { leadId_buyerUserId: { leadId: String(req.params.id), buyerUserId: req.user.id } },
+            include: { lead: true }
+        });
+        return res.json(row ? dto(row, row.lead) : null);
+    } catch (e) { return fail(res, e); } });
     router.post('/:id/inquiry', authenticateToken, async (req: AuthRequest, res) => { try {
         if (!req.user || !isListingId(req.params.id))
             return res.sendStatus(404);

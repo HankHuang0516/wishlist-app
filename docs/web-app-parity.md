@@ -22,6 +22,8 @@
 - 原runtime四個timer恢復測試真正失敗，API次數：inbox預期2但9、room預期4但43、meetup預期2但15。修正後新增9項跨timer／foreground／online、401／429、失敗手動恢復、平行預覽、父子視窗、可見已讀及pending保留案例。已讀新案例最初在render後才啟用fake timer，原interval仍是真timer；改在render前建立完整fake clock，斷言與80%／500ms規則不放寬。集中四檔88項、完整Web113檔1805項與Server58套930項＋3略過及兩端建置已通過；精確三CI、隔離真handler瀏覽器與正式573更新接續。
 - 正式外部來源仍未開放，沒有新增真實訊息、面交提案、商品或帳號寫入。完整provider／跨端／OS PWA／不可逆GUI及矩陣仍active；最新首頁／設定相似度仍553各90，APP及migration不改。
 
+- 第73批初次精確CI37051885630：Server／Native成功，Web1804通過／1失敗；既有英文面交測試在「Reading meetup appointment」及disabled Propose狀態就fireEvent點擊，編輯器尚未開啟。八處測試改為等待真正enabled後再點，不增加逾時或減少payload／權限斷言；單檔19通過。原產品runtime不因CI測試同步修正而改動，隔離573的成功／失敗／恢復證據可對應同四個runtime檔hash；最終候選依現HEAD573＋1改為574，完整Web及新精確三CI另驗。所有初始失敗原log保留。
+
 ## 第七十二批正式發布與照片驗收
 
 - v2.0.570：PR104精確head 35f45573a906b73b020ad96299dae4f27c930683，CI 37048886814 三項成功；正常合併 4d52b8fbc13184a378ff587650b56947781ca12d，空觸發 ae01e2f696640f50c4c15dfd1fdb6a513ecb0045。Git部署 eeb2e1de-63a0-4816-8175-53149c9b1d0d 等待後，以同一乾淨checkout上傳既有服務，部署 4e1dd9cf-2d20-403a-93ae-8018ecd5ee78 SUCCESS。正式client/server/mobile樹符合精確CI；uploads掛載、正式環境設定與資料庫服務保持，APP與migration未修改。

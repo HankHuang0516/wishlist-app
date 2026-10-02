@@ -262,6 +262,6 @@ Seven regressions run the actual classic script. Synthetic Chrome upgrades to th
 
 Fresh external details now load the verified original and thumbnail, promote only after an actual image load, retain a successful thumbnail if the original fails, and explain failure when both fail. Changing the verified photo pair resets the presentation; language changes preserve it. Only fresh detail loads the original; list/map thumbnails and source-only actions remain. Production external-source enablement is unchanged.
 
-### Chat and meetup manual read recovery (v573)
+### Chat and meetup manual read recovery (v574)
 
 A 401 or 429 pauses inbox, conversation and appointment automatic reads and automatic read acknowledgements. Timers, foreground/online events and cooldown expiry cannot resume them. An explicit successful update on the current page resumes reads; a failed update keeps the pause. A later parallel preview failure cannot be cleared by an earlier successful read, and a limited appointment pauses its parent room. Original message journals, unsent text and private appointment terms remain. APP and backend contracts are unchanged.

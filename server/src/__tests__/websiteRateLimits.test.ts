@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { once } from 'node:events';
 import express from 'express';
 import request from 'supertest';
 import { publicBuildPaths, websiteRateLimits } from '../middleware/websiteRateLimits';
@@ -8,8 +9,8 @@ import { publicBuildPaths, websiteRateLimits } from '../middleware/websiteRateLi
 let buildRoot: string;
 beforeEach(() => {
   buildRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wishlist-build-budget-test-'));
-  for (const directory of ['assets', 'icons', 'uploads', 'api']) fs.mkdirSync(path.join(buildRoot, directory));
-  for (const file of ['index.html', 'web-version.json', 'sw.js', 'workbox-abc.js', 'assets/app-abc.js', 'icons/logo.png', 'uploads/private.png', 'api/profile.json', '.env', 'secret.txt']) fs.writeFileSync(path.join(buildRoot, file), 'synthetic fixture');
+  for (const directory of ['assets', 'icons', 'features', 'uploads', 'api']) fs.mkdirSync(path.join(buildRoot, directory));
+  for (const file of ['index.html', 'web-version.json', 'sw.js', 'workbox-abc.js', 'assets/app-abc.js', 'icons/logo.png', 'features/feature1.png', 'logo.png', 'analytics-frame.js', 'uploads/private.png', 'api/profile.json', '.env', 'secret.txt']) fs.writeFileSync(path.join(buildRoot, file), 'synthetic fixture');
 });
 afterEach(() => fs.rmSync(buildRoot, { recursive: true, force: true }));
 function app() {
@@ -23,11 +24,14 @@ describe('published build and data request budgets', () => {
   it('admits only actual public build files, without following links or inventing missing assets', () => {
     fs.symlinkSync(path.join(buildRoot, '.env'), path.join(buildRoot, 'assets', 'linked.js'));
     const paths = publicBuildPaths(buildRoot);
-    expect([...paths].sort()).toEqual(['/', '/assets/app-abc.js', '/icons/logo.png', '/index.html', '/sw.js', '/web-version.json', '/workbox-abc.js']);
+    expect([...paths].sort()).toEqual(['/', '/analytics-frame.js', '/assets/app-abc.js', '/features/feature1.png', '/icons/logo.png', '/index.html', '/logo.png', '/sw.js', '/web-version.json', '/workbox-abc.js']);
     expect(publicBuildPaths(path.join(buildRoot, 'missing')).size).toBe(0);
   });
   it('keeps both original500/IP/15min budgets independent through actual HTTP saturation', async () => {
-    const instance = app();
+    const server = app().listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+    const instance = server;
     for (let i = 0; i < 95; i++) expect((await request(instance).get('/assets/app-abc.js')).status).toBe(200);
     const firstRead = await request(instance).get('/api/users/me');
     expect(firstRead.headers['ratelimit-limit']).toBe('500'); expect(firstRead.headers['ratelimit-remaining']).toBe('499');
@@ -39,6 +43,7 @@ describe('published build and data request budgets', () => {
     for (let i = 96; i < 500; i++) expect((await request(instance).get('/assets/app-abc.js')).status).toBe(200);
     expect((await request(instance).get('/sw.js')).status).toBe(429);
     expect((await request(instance).get('/api/users/me')).status).toBe(429);
+    } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   }, 15000);
   it('counts POST, private paths, unknown and encoded assets against data while allowing build HEAD', async () => {
     const instance = app();

@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Bilingual chat and meetups — 2026-10-02
+
+Chat and meetup controls, statuses, accessibility labels and recovery notices follow the existing Chinese/English preference, with English fallback when locale storage is unavailable. Item titles, contact names, messages, place names, notes, amounts and immutable recovery bodies retain their original content. Only the generated archived-item placeholder is translated. Dates keep explicit Taiwan time in either language; prices remain TWD.
+
+Known recovery messages use a closed dictionary and the original operation/current version notice has a strict template. Unknown diagnostics receive bounded copy. Pre-dispatch message validation now remains visible instead of being immediately erased by a refresh; invalid input creates neither a journal nor a POST. Successful confirmed messages still refresh normally. See the parity record for exact tests, deployment and live browser evidence; native APP and server contracts are unchanged.
+
 ## Explicit website updates — 2026-10-02
 
 The UI owns native worker registration with updateViaCache none; existing autoUpdate worker activation stays compatible with older clients, but no virtual module reloads an active form. Settings More features exposes a bilingual update check. The public build version JSON is excluded from precaching, while the version meta in the worker-served index proves which shell is actually ready. Two bounded, credential-free no-store GETs must agree before readiness; malformed/redirected/foreign responses fail closed, legacy markers remain preparing, and the actual Workbox revision query is admitted only for the index.

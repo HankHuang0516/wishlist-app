@@ -11,6 +11,7 @@ const props = { token: 'fixture', userId: 42, roomId, onBack: vi.fn() }, key = `
 const auth = { token: 'fixture', user: { id: 42, phoneNumber: 'synthetic-only' }, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
 let room = makeRoom(), rows: ReturnType<typeof makeMessage>[] = [];
 beforeEach(() => {
+  localStorage.setItem('user-locale', 'zh-TW');
   data.clear(); api.mockReset(); room = makeRoom(); rows = [];
   store.get.mockReset().mockImplementation(async (key: string) => data.get(key) ?? null);
   store.save.mockReset().mockImplementation(async (key: string, body: string) => { if (data.has(key) && data.get(key) !== body) throw new Error('conflict'); data.set(key, body); });
@@ -30,9 +31,47 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <ChatRoomWeb {...value} />;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('uses English inbox labels while preserving original listing/contact names and unread count', async () => {
+    localStorage.setItem('user-locale', 'en-US'); room = makeRoom({ lastMessageSequence: 2, unreadCount: 2 });
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: `${room.listing.title}, chat with 合成賣家, 2 unread` })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Chat and meetups' })).toBeInTheDocument();
+    expect(screen.getByText('With 合成賣家 · NT$ 59')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Friends and social features' })).toHaveAttribute('href', '/social');
+    expect(posts()).toHaveLength(0);
+  });
+  it('recovers an English lost reply in Chinese with GET only and unchanged original Unicode message identity', async () => {
+    localStorage.setItem('user-locale', 'en-US'); const base = api.getMockImplementation()!;
+    api.mockImplementation(async (...args) => { const result = await base(...args); if (args[1].endsWith('/messages') && args[2]?.method === 'POST') throw new Error('lost ACK'); return result; });
+    const view = render(roomView()); await screen.findByText('No messages yet. Say hello.');
+    const original = '中文原訊息 250.7500 USD {version}';
+    fireEvent.change(screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' }), { target: { value: original } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' })); await screen.findByText(/Message delivery is unconfirmed/);
+    const body = data.get(key)!; expect(JSON.parse(body)).toEqual({ clientMessageId: rows[0].clientMessageId, text: original });
+    expect(posts()).toHaveLength(1); view.unmount(); localStorage.setItem('user-locale', 'zh-TW');
+    render(roomView()); await screen.findByText('原訊息已確認送出。');
+    expect(screen.getByText(original)).toBeInTheDocument(); expect(posts()).toHaveLength(1); expect(data.has(key)).toBe(false);
+    expect(posts()[0][2].body).toBe(body);
+  });
+  it('keeps chat usable in English when locale storage fails and localizes validation without sending', async () => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('locale unavailable'); });
+    render(roomView()); await screen.findByText('No messages yet. Say hello.');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' }), { target: { value: 'invalid\u0000text' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByText('Enter 1–2000 characters without invalid control characters.'); expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
   it('shows authenticated inbox identity, price, unread count and keeps legacy friends reachable', async () => {
     room = makeRoom({ lastMessageSequence: 2, unreadCount: 2 }); render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
     expect(await screen.findByRole('button', { name: /合成測試漫畫.*2 則未讀/ })).toBeInTheDocument(); expect(screen.getByText(/合成賣家 · NT\$ 59/)).toBeInTheDocument(); expect(screen.getByRole('link', { name: '好友與原有社交功能' })).toHaveAttribute('href', '/social');
+  });
+  it('retains the Chinese pre-dispatch validation error and original invalid input without POST or journal', async () => {
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const original = '合成無效\u0000訊息';
+    fireEvent.change(screen.getByRole('textbox', { name: '商品聊天訊息（最多2000字元）' }), { target: { value: original } });
+    fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    await screen.findByText('請輸入1至2000字訊息，不含無效控制字元');
+    expect(screen.getByRole('textbox', { name: '商品聊天訊息（最多2000字元）' })).toHaveValue(original);
+    expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
   });
   it('requires login before any private read, preserving a validated room return intention', () => {
     render(<MemoryRouter initialEntries={['/chat?room=' + roomId]}><AuthContext.Provider value={{ ...auth, token: null, user: null, isAuthenticated: false }}><ChatPage /></AuthContext.Provider></MemoryRouter>);

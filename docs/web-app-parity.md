@@ -12,9 +12,23 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行。第六十二批v2.0.534已正式發布及回讀，736×952真實尊榮會員狀態的首頁與設定依核准概念圖重新人工加權審查，各90/100；這是單一agent設計評分，非獨立／像素相似度。手機390與中英文導覽、來源輸入、探索／既有QA聊天讀取已核對；真訊息／面交異動、PWA自動升級與安全更新流程、跨端／provider及完整矩陣未完項仍active。APP2.0.12不改。
+目前狀態：目標持續進行。第六十三批v2.0.541已正式發布，原登入Chrome538頁面實際顯示541更新提示，取消後保留未傳送的合成草稿，明確確認後同一QA聊天室載入541；探索地圖／8件商品列表及設定的目前可用版本檢查通過。IAB舊534分頁仍未升級，不能推定所有舊瀏覽器通過。第六十二批736×952首頁／設定的單一agent人工90/90保留為534歷史證據，不冒稱541重新評分；真訊息／面交異動、手機／英文更新、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+
+## 2026-10-02 第六十四批：聊天與面交雙語介面
+
+- Chat收件匣／商品對象／訊息與面交詳情、預約表單、同意／改期／完成／取消及原操作恢復控制使用既有繁中／英文偏好，locale storage失敗仍可用英文。時間固定Asia/Taipei並明示台灣時間，價格保留NT$／TWD，不作匯率轉換。
+- 原商品／姓名／訊息／地點／備註與不可變journal／wire body不翻譯；只有listingId為null的generated封存標題翻譯。固定closed dictionary與strict雙版本模板不把原使用者內容當模板，未知diagnostics顯示bounded查核提示。APP／server／migration／API權限不改。
+- 新驗收確認英文原訊息POST回覆遺失後，切繁中GET-only恢復同一原文及ID；英文舊版面交原操作explicit retry保留原expectedVersion／body，不把現在v2當舊v1同意；更新時未提交地點不覆蓋，須明確載入新版。訊息pre-dispatch validation原會被finally refresh立即清掉，現只在confirmed成功後更新，繁中／英文錯誤與原輸入保留且zero POST／journal。
+- 初輪新增fixture有完整商品標題後綴不符、錯spy Storage prototype；更正實際原標題與測試storage instance。第二輪仍抓到產品validation被refresh清空，修正runtime且保留原嚴格assertions，不放寬timeout／skip。完整Web／build、精確三項CI與v544正式雙語手機／桌面驗收待發布後回讀；全目標仍active。
+- 發布候選依HEAD count543＋1進版v2.0.544，focused6檔179項、完整Web110檔1745項及TypeScript／Vite正式build全退出0，metadata與index／bundle版本一致；version JSON不precache，原worker cache policy／legacy bridge保留。既有map1088.52KB及PWA96entries6120.51KiB警告記錄。精確CI／正式部署／畫面回讀尚待完成，不把本機通過當正式驗收。
 
 ## 第六十三批正式更新驗收：兩個真實正式版本
+
+- v541最終發布回讀：PR95精確head `ac24645f0d7804d9bed49a9f1a0ab3414514ffa3` 的CI37017333955三項全部success，Web109檔1736項及build通過。正常合併 `32975099f8cddf397d7d72dee7350ac2c113883a`，空觸發 `1e953b37dfff15b147598ac993aededc6bf9e33d`；Git WAITING後以同一乾淨checkout直接部署原production，deployment `6c57c8ff-555c-4f62-ad3a-cf6cc0f87f05` SUCCESS。原uploads mount、環境、DB service、APP與runtime migration保持，public metadata／index／bundle541一致，四個feature chunks200，私有API401。
+- 正式registerSW.js現在200 JavaScript，原bytes SHA256核對，沒有HTML fallback；它是相容入口可取用的證明，不能單獨推出所有舊分頁已啟用。原IAB534頁正常reload後仍534，不清storage／cache／登入資料強制達標。
+- 真Chrome538→541：原QA空聊天室保留合成未傳送文字，回到前景後提示ready538→541；取消回原頁仍538且文字不變。只清除本agent合成文字，明確按已保存重新載入；同一room載入541、空歷史與disabled傳送保持，無產品訊息、預約、封鎖、帳號或商品異動。新版設定手動檢查顯示目前已是可用版本，探索原地圖與8件商品列表可切換。
+- 原始Chrome JPEG／完整AX保存：ready-draft-v538-to-v541、cancel-kept-draft-v538、confirmed-chat-v541、explore-map-v541、explore-list-v541、settings-current-v541，各以 `wishlist-web-live63-chrome-` 前綴與20261002日期保存。總證據 `wishlist-web-live63-evidence-20261002.json`、transition proof與SHA256 artifact index在既有outputs。自有單分頁Chrome視窗關閉，原使用者多分頁視窗未操作；129份原workspace變更逐檔hash保留。
+- 這輪正式驗收限桌面Chrome的真版本更新及探索／聊天讀取；没有541新手機／英文升級、全install／offline／mixed-version、正式注入已保存journal、真傳訊／雙方預約／provider品質或新Home／Settings90評分聲明。以下未完成／待另回讀文字是當時歷史，已完成項以上面正式證據為準；完整目標仍active。
 
 - PR94精確head `6b9cedfa981b12318a580fad6b16a8187afd4a54` 的CI37014922457三項全success；完整Web1730及build通過。v2.0.538正常合併後空提交觸發，Git部署WAITING改用相同乾淨checkout／既有wishlist-app production直接部署，deployment `bb55de96-5308-4e59-b686-81115fbe3f20` 為SUCCESS，原uploads volume保留、環境／DB service未改。
 - 正式HTTP538已回讀：version JSON、index meta與main bundle一致，Explore／Chat／Settings／SourceLead資源200，原cache policy保留，私有API未登入401。自有Chrome新視窗載入538並查核目前已是可用版本，首次同版沒有banner。IAB舊534分頁三次reload及新分頁仍534，實際DOM仍引用registerSW.js，而538不生成此舊入口；此相容缺口待修，沒有把Chrome新開成功當IAB舊頁已升級。
@@ -31,7 +45,7 @@
 - 參考已安裝vite-plugin-pwa1.2.0來源及[官方自動更新說明](https://vite-pwa-org.netlify.app/guide/auto-update)；不引入新依賴或強制關閉使用者分頁。原完整目標仍active，每個完成增量通過必要檢查後直接部署既有Railway。
 - 首輪精確CI37014216631（head ae83fac44af01ed24c3a02a62a146372741f442d）Web1728通過／1個既有MyListings到期案例失敗，原DOM有上一例的待查核STATUS journal，沒有放寬timeout或重跑同提交。上一例曾只等比較區出現就結束，現在等待原回執流程完成且GET恢復可用，另確認POST1／journal1；runtime sendManagement補上非同步journal核對後、storage保存前的active fence，離開後不再發起晚到保存。新增控制hash晚到的回歸確定零保存／清除／POST，focused51通過；版本依新HEAD count更新為538，完整Web108檔1730項及正式build退出0、metadata checks通過；新的精確CI與發布另回讀。原失敗log `/tmp/wishlist-live63-ci-first-web-failure-20261002.log` 保留。
 
-## 最新正式發布：v2.0.534 導覽與來源输入修正（2026-10-02）
+## 前次正式發布：v2.0.534 導覽與來源输入修正（2026-10-02）
 
 - PR93正常合併，精確head `c054a2084dfc57de45639a64583cc506f20d5820` 的CI37010038047三項全部成功。Web1708及build通過；原Auth返回路徑與SourceLead初始化失敗log保留，沒有skip／重試／放寬timeout。合併 `e81dc3f9796f24ff6639791dcea0cd613bc3df4d`，空觸發提交 `735db4ee3049faf7489383dc719609d5a85ed100`；Git部署WAITING後由相同乾淨checkout直接部署，deployment `d365d8cd-fc0e-4387-9844-b56d5ab93153` 為SUCCESS。原uploads volume保留，環境變數／資料庫服務未改；server、mobile、migration樹與前版一致，沒有冒稱本輪重新查核所有生產DB件數。
 - 正式ZH736原圖：header由101→57px，首頁全高1280→1236、設定1228→1184；原style／單一Settings及全部功能保留。重新查看核准concept及原始實際圖後，Home90＝31＋24＋18＋12＋5，Settings90＝33＋24＋18＋10＋5，權重35／25／20／15／5。原願望metadata、聯絡公開權限、地圖controls／來源與頁長差異保留扣分；動態商品件數／照片／個資／範例餘額不計入。不宣稱像素90%或獨立評分。

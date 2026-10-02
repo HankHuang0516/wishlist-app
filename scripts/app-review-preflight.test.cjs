@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {assertDemoReady,assertNativeEvidence} = require('./app-review-preflight.cjs');
+const {assertDemoReady,assertNativeEvidence,selectedBuildId} = require('./app-review-preflight.cjs');
 const now = Date.parse('2026-10-02T12:00:00Z');
 function ready() {
     const room = (buyerUserId, sellerUserId, status) => ({buyerUserId, sellerUserId, archived:false, blocked:false, listingAvailable:true,
@@ -38,3 +38,8 @@ test('rejects missing App Review screenshots for the existing binary baseline',(
     const r=unchangedBinary();r.appleScreenshotProofs=[];
     assert.throws(()=>assertNativeEvidence(r,{versionId:'version',demoUserId:946},'build12','known-native-tree'));
 });
+test('verifies the selected build from the asc summary and JSON API relationship formats',()=>{
+    assert.equal(selectedBuildId({id:'version',state:'REJECTED',buildId:'build12',buildVersion:'12'}),'build12');
+    assert.equal(selectedBuildId({data:{relationships:{build:{data:{id:'build12'}}}}}),'build12');
+});
+test('refuses to submit when the selected build cannot be verified',()=>assert.throws(()=>selectedBuildId({id:'version'})));

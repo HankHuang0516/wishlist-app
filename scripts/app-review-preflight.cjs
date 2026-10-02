@@ -47,6 +47,11 @@ function asc(...args) {
     return JSON.parse(execFileSync('asc', ['--profile', 'Hank App Store Release', ...args],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
 }
+function selectedBuildId(version) {
+    const id = version.buildId ?? version.data?.relationships?.build?.data?.id;
+    assert(typeof id === 'string' && id.length > 0, 'Cannot verify the selected App Store build');
+    return id;
+}
 async function checkLive(versionId, expectedUserId) {
     const { APP_CONSTANTS } = require('../server/dist/config/constants.js');
     const details = asc('review', 'details-for-version', '--version-id', versionId, '--include-sensitive').data.attributes;
@@ -90,7 +95,7 @@ async function main() {
         const receipt = JSON.parse(fs.readFileSync(get('--ui-receipt'), 'utf8'));
         const version = asc('versions', 'view', '--version-id', result.versionId, '--include-build');
         const nativeTree = execFileSync('git', ['rev-parse', 'HEAD:mobile'], { encoding: 'utf8' }).trim();
-        assertNativeEvidence(receipt, result, version.data.relationships.build.data.id, nativeTree);
+        assertNativeEvidence(receipt, result, selectedBuildId(version), nativeTree);
         const hashFile = path => createHash('sha256').update(fs.readFileSync(path)).digest('hex');
         assert.equal(hashFile(receipt.artifactPath), receipt.artifactSha256, 'Submitted artifact changed');
         for (const proof of receipt.appleScreenshotProofs || []) assert.equal(hashFile(proof.path), proof.sha256, 'Review baseline changed');
@@ -101,7 +106,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, assertNativeEvidence, checkLive };
+module.exports = { assertDemoReady, assertNativeEvidence, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

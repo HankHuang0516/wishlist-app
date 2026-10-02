@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import MyListingsPage from './MyListingsPage';
 import { marketplaceOrigin } from '../lib/managedListingWeb';
 import { webcrypto } from 'node:crypto';
+import { StrictMode } from 'react';
 import { privatePendingStore, sha256 } from '../lib/webPendingStore';
 const journals = vi.hoisted(() => new Map<string,string>());
 vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),privatePendingStore:{
@@ -25,8 +26,8 @@ async function openEditor() { fireEvent.click(screen.getByRole('button', { name:
 async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?:number){
   const body=JSON.parse(String(init.body));return ok({receipt:{clientActionId:url.split('/').at(-1),listingId:body.listingId,kind:body.kind,expectedVersion:body.expectedVersion,requestHash:await sha256(JSON.stringify(body)),state,reason:state==='CONFLICT'?'LISTING_CONFLICT':null,appliedVersion:state==='APPLIED'?appliedVersion??body.expectedVersion+1:null,createdAt:'2026-10-01T12:00:00.000Z'}});
 }
-beforeEach(() => {journals.clear();vi.clearAllMocks();vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => {localStorage.setItem('user-locale','zh-TW');journals.clear();vi.clearAllMocks();vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
+afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('native-equivalent owner management', () => {
   it('provides a login return path without requesting private data before login', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
@@ -316,5 +317,100 @@ describe('native-equivalent owner management', () => {
     mounted.rerender(view({...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}));await screen.findByText('這個狀態目前沒有已載入商品。');
     await act(async()=>finish());expect(screen.queryByRole('region',{name:'原商品操作與最新資料比較'})).not.toBeInTheDocument();expect(screen.queryByText(/原商品操作已確認完成/)).not.toBeInTheDocument();expect(privatePendingStore.clear).not.toHaveBeenCalled();expect(journals.size).toBe(1);
     expect(fetch.mock.calls.filter(([url])=>url.endsWith(`/listings/${id}`))).toHaveLength(0);
+  });
+});
+
+
+describe('complete owner paging and English recovery', () => {
+  it('ignores a superseded editor restoration failure in StrictMode', async () => {
+    vi.stubGlobal('fetch',vi.fn(async()=>ok({items:[row],nextCursor:null})));
+    render(<StrictMode>{view()}</StrictMode>);await ready();
+    let reject!:(error:Error)=>void;
+    const old=new Promise<string|null>((_resolve,no)=>{reject=no;});
+    vi.mocked(privatePendingStore.get).mockImplementationOnce(()=>old);
+    fireEvent.click(screen.getByRole('button',{name:'編輯資訊'}));await waitFor(()=>expect(screen.getByLabelText('商品名稱')).toBeEnabled());
+    await act(async()=>{reject(Error('superseded restoration'));await old.catch(()=>null);});
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();expect(screen.getByLabelText('商品名稱')).toHaveValue(row.title);expect(screen.getByRole('button',{name:'儲存修改'})).toBeEnabled();
+  });
+  it('loads 107 records across all six tabs without claiming partial counts are totals', async () => {
+    localStorage.setItem('user-locale','en-US');
+    const states=['ACTIVE','RESERVED','DRAFT','SOLD','EXPIRED','REMOVED'];
+    const items=Array.from({length:107},(_,i)=>({...row,id:'50000000-0000-4000-8000-'+String(i+1).padStart(12,'0'),title:'Fixture listing '+i,status:states[i%6]}));
+    const fetch=vi.fn(async(url:string)=>{const cursor=new URL(url).searchParams.get('cursor'),start=cursor?items.findIndex(item=>item.id===cursor)+1:0,page=items.slice(start,start+50);return ok({items:page,nextCursor:start+50<items.length?page.at(-1)!.id:null});});
+    vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('tab',{name:'For sale (9)'});
+    expect(screen.getByText(/50 loaded across all statuses/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Load more listings'}));await screen.findByText(/100 loaded across all statuses/);
+    fireEvent.click(screen.getByRole('button',{name:'Load more listings'}));await screen.findByRole('tab',{name:'For sale (18)'});
+    const names=['For sale','Reserved','Drafts','Sold','Expired','Removed'];
+    for(let i=0;i<names.length;i++){const count=i===5?17:18;const tab=screen.getByRole('tab',{name:names[i]+' ('+count+')'});fireEvent.click(tab);expect(screen.getAllByRole('article')).toHaveLength(count);}
+    expect(screen.queryByRole('button',{name:'Load more listings'})).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+  it('retains loaded rows and their cursor after an invalid boundary, then reloads from the start', async () => {
+    localStorage.setItem('user-locale','en-US');let reset=false;
+    const fetch=vi.fn(async(url:string)=>url.includes('cursor=')?{ok:false,status:400,json:async()=>({error:'private implementation details'})}:ok({items:[reset?{...row,title:'Reloaded listing'}:row],nextCursor:reset?null:id}));
+    vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('heading',{name:row.title});
+    fireEvent.click(screen.getByRole('button',{name:'Load more listings'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('cursor is no longer valid');expect(screen.getByRole('heading',{name:row.title})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Load more listings'})).toBeEnabled();expect(screen.queryByText('private implementation details')).not.toBeInTheDocument();
+    reset=true;fireEvent.click(screen.getByRole('button',{name:'Reload'}));await screen.findByRole('heading',{name:'Reloaded listing'});
+    expect(screen.queryByRole('button',{name:'Load more listings'})).not.toBeInTheDocument();expect(fetch.mock.calls.at(-1)![0]).not.toContain('cursor=');
+  });
+  it('rejects a cursor cycle beyond the immediately previous cursor without discarding successful pages', async () => {
+    const third='66666666-6666-4666-8666-666666666666';
+    const fetch=vi.fn(async(url:string)=>ok(url.includes('cursor='+second)?{items:[{...row,id:third,title:'Third'},row],nextCursor:id}:url.includes('cursor=')?{items:[{...row,id:second,title:'Second'}],nextCursor:second}:{items:[row],nextCursor:id}));
+    vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('heading',{name:row.title});
+    fireEvent.click(screen.getByRole('button',{name:'載入更多我的商品'}));await screen.findByRole('heading',{name:'Second'});
+    fireEvent.click(screen.getByRole('button',{name:'載入更多我的商品'}));expect(await screen.findByRole('alert')).toHaveTextContent('分頁未前進');
+    expect(screen.getAllByRole('article')).toHaveLength(2);expect(screen.queryByRole('heading',{name:'Third'})).not.toBeInTheDocument();
+  });
+  it('deduplicates overlapping pages and preserves the higher verified listing version', async () => {
+    const fetch=vi.fn(async(url:string)=>ok(url.includes('cursor=')?{items:[{...row,title:'Stale overlap',version:1},{...row,id:second,title:'Second'}],nextCursor:null}:{items:[{...row,title:'Verified version',version:3}],nextCursor:id}));
+    vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('heading',{name:'Verified version'});
+    fireEvent.click(screen.getByRole('button',{name:'載入更多我的商品'}));await screen.findByRole('heading',{name:'Second'});
+    expect(screen.getAllByRole('article')).toHaveLength(2);expect(screen.getByRole('heading',{name:'Verified version'})).toBeInTheDocument();expect(screen.queryByRole('heading',{name:'Stale overlap'})).not.toBeInTheDocument();
+  });
+  it('ignores a superseded StrictMode request instead of accepting its rows or unlocking an active request', async () => {
+    let release!:(value:unknown)=>void;const old=new Promise<unknown>(resolve=>{release=resolve;});
+    const fetch=vi.fn().mockImplementationOnce(()=>old).mockResolvedValue(ok({items:[{...row,title:'Current mount',version:2}],nextCursor:null}));
+    vi.stubGlobal('fetch',fetch);render(<StrictMode>{view()}</StrictMode>);await screen.findByRole('heading',{name:'Current mount'});await ready();
+    await act(async()=>{release(ok({items:[{...row,title:'Superseded private response'}],nextCursor:id}));await old;});
+    expect(screen.queryByRole('heading',{name:'Superseded private response'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'載入更多我的商品'})).not.toBeInTheDocument();expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('supports English edit, lost reply, remount receipt verification and exact local cleanup without a second POST', async () => {
+    localStorage.setItem('user-locale','en-US');let receipt:unknown;
+    const current={...row,title:'English edited title',price:'0',version:2};
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method==='POST'){receipt=await(await proof(url,init)).json();throw Error('lost reply');}
+      if(url.includes('/management-operations/'))return ok(receipt);
+      if(url.endsWith('/listings/'+id))return ok(current);
+      return ok({items:[receipt?current:row],nextCursor:null});
+    });vi.stubGlobal('fetch',fetch);const first=render(view());await screen.findByRole('heading',{name:row.title});
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
+    fireEvent.change(screen.getByLabelText('Listing title'),{target:{value:current.title}});fireEvent.change(screen.getByLabelText('Price (TWD; 0 means free giveaway)'),{target:{value:'0'}});
+    fireEvent.click(screen.getByRole('button',{name:'Save changes'}));await screen.findByRole('button',{name:'Read original receipt and latest listing'});
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Read original receipt and latest listing'})).toBeEnabled());first.unmount();render(view());
+    await screen.findByText('The original listing operation is confirmed complete. It will not be applied again.');await screen.findByText('Version: 2');
+    const region=screen.getByRole('region',{name:'Compare original operation with latest listing'});expect(within(region).getByText('Your original operation (saved)')).toBeInTheDocument();expect(within(region).getByText('Status: For sale')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Acknowledge result and clear local journal'}));await screen.findByText(/original result was acknowledged/);
+    expect(journals.size).toBe(0);const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0][1]?.body))).toEqual({kind:'EDIT',listingId:id,expectedVersion:1,changes:{title:current.title,description:row.description,price:0}});
+    expect(screen.getByText('Free giveaway')).toBeInTheDocument();
+  });
+  it('selects and confirms an English expiry date with Taiwan semantics and the original version', async () => {
+    localStorage.setItem('user-locale','en-US');const current={...row,expiresAt:'2100-10-31T15:59:59.999Z',version:2};
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith('/listings/'+id)?ok(current):ok({items:[row],nextCursor:null}));
+    vi.stubGlobal('fetch',fetch);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Extend expiry'}));
+    fireEvent.click(screen.getByRole('button',{name:'Open calendar for New expiry date (Taiwan time)'}));expect(screen.getByRole('heading',{name:'October 2100'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Select 2100-10-31'}));fireEvent.click(screen.getByRole('button',{name:'Confirm extension'}));
+    await screen.findByText('Version: 2');expect(window.confirm).toHaveBeenCalledWith('Extend expiry to 2100-10-31? ');
+    const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'EXTEND',expectedVersion:1,changes:{expiryDate:'2100-10-31'}});
+  });
+  it('retains English unsaved text and blocks submission when local persistence fails', async () => {
+    localStorage.setItem('user-locale','en-US');const fetch=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);render(view());
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
+    vi.mocked(privatePendingStore.replaceDraft).mockRejectedValueOnce(Error('private disk details'));
+    fireEvent.change(screen.getByLabelText('Listing title'),{target:{value:'Retain this text'}});expect(await screen.findByRole('alert')).toHaveTextContent('Copy it before closing');
+    expect(screen.getByLabelText('Listing title')).toHaveValue('Retain this text');expect(screen.getByRole('button',{name:'Save changes'})).toBeDisabled();expect(fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);expect(screen.queryByText('private disk details')).not.toBeInTheDocument();
   });
 });

@@ -171,13 +171,26 @@ export async function searchListings(req: AuthRequest, res: Response) {
 }
 
 export async function myListings(req: AuthRequest, res: Response) {
+    res.setHeader('Cache-Control', 'private, no-store');
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     try {
         const search = parseListingSearch(req.query);
         if (Object.keys(req.query).some(k => k !== 'limit' && k !== 'cursor')) throw new ListingInputError('query');
-    const rows = await prisma.listing.findMany({ where: { ownerUserId: req.user.id }, select: publicListingSelect,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: search.limit + 1,
-            ...(search.cursor ? { cursor: { id: search.cursor }, skip: 1 } : {}) });
+        const ownerUserId = req.user.id;
+        // Resolve only an owned cursor in the same snapshot as its page. A
+        // foreign or deleted ID must not silently move this owner's boundary.
+        const rows = await prisma.$transaction(async tx => {
+            const boundary = search.cursor ? await tx.listing.findFirst({
+                where: { id: search.cursor, ownerUserId }, select: { id: true, createdAt: true },
+            }) : null;
+            if (search.cursor && !boundary) throw new ListingInputError('cursor');
+            return tx.listing.findMany({ where: { ownerUserId,
+                ...(boundary ? { OR: [
+                    { createdAt: { lt: boundary.createdAt } },
+                    { createdAt: boundary.createdAt, id: { lt: boundary.id } },
+                ] } : {}),
+            }, select: publicListingSelect, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: search.limit + 1 });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
         const items = rows.slice(0, search.limit);
         return res.json({ items, nextCursor: rows.length > search.limit ? items[items.length - 1].id : null });
     } catch (error) { return fail(res, error); }

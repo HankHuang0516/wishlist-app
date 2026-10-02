@@ -9,7 +9,7 @@ import { marketplaceOrigin } from '../lib/managedListingWeb';
 
 const drafts = vi.hoisted(() => new Map<string, string>());
 vi.mock('../lib/webPendingStore',async original=>({...await original<typeof import('../lib/webPendingStore')>(),privatePendingStore:{get:async(key:string)=>drafts.get(key)??null,composerDraftKeys:async(scope:string)=>[...drafts.keys()].filter(key=>key.startsWith(scope+'.listing-compose.')),clearComposerDraft:async(key:string,body:string)=>drafts.get(key)===body?drafts.delete(key):false,replaceDraft:async(key:string,expected:string|null,raw:string)=>{if((drafts.get(key)??null)!==expected)throw Error('CAS');drafts.set(key,raw);}}}));
-beforeEach(() => drafts.clear());
+beforeEach(() => { localStorage.setItem('user-locale','zh-TW'); drafts.clear(); });
 vi.mock('../components/PrivateMarketplacePhoto',()=>({default:()=> <span>合成私人照片</span>}));
 // This contract probe tests the real parent gate and refresh, independently of
 // the actual assistant component's own HTTP/drag/drop/recovery tests.

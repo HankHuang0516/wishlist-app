@@ -1,3 +1,4 @@
+import { managementText as t } from './listingManagementCopy';
 import { getFullApiUrl } from '../config';
 import { isUuid as uuid } from './listingBatch';
 function taiwanDate(now = new Date()) {
@@ -8,12 +9,12 @@ function validateApiUrl(value: string, local = false) {
   const url = new URL(value);
   if (url.username || url.password || url.search || url.hash ||
     url.protocol !== 'https:' && !(local && url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
-    throw new ManagedListingError('商品服務網址不正確。');
+    throw new ManagedListingError(t("商品服務網址不正確。"));
   return url.href.replace(/\/$/, '').replace(/\/api$/, '');
 }
 export const marketplaceOrigin = () => new URL(getFullApiUrl()).origin;
 
-export class ManagedListingError extends Error { constructor(message = '我的商品資料不正確，請重新載入。') { super(message); } }
+export class ManagedListingError extends Error { constructor(message = t("我的商品資料不正確，請重新載入。")) { super(message); } }
 export type ManagedStatus = 'DRAFT' | 'PENDING_CONFIRMATION' | 'ACTIVE' | 'RESERVED' | 'SOLD' | 'REMOVED' | 'EXPIRED';
 export type ManagedListing = {
   id: string; ownerUserId: number; version: number; title: string; description: string | null;
@@ -94,7 +95,7 @@ export function listingEditBody(item: ManagedListing, title: string, description
       (item.status !== 'DRAFT' && (!details || !amount)) ||
       (item.description !== null && !details) || (item.price !== null && !amount) ||
       (amount && (!/^\d{1,10}(?:\.\d{1,2})?$/.test(amount) || Number(amount) > 9_999_999_999.99)))
-    throw new ManagedListingError('請確認名稱、3000 字內說明及有效售價；在售商品不可清空說明或價格。');
+    throw new ManagedListingError(t("請確認名稱、3000 字內說明及有效售價；在售商品不可清空說明或價格。"));
   return { expectedVersion: item.version, title: name, ...(details ? { description: details } : {}),
     ...(amount ? { price: Number(amount) } : {}) };
 }

@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十批：完整商品管理分頁與英文核心操作（仍未部署）
+
+- 原 `/listings/mine` 的 items／nextCursor、預設50及原生limit100保留；游標須屬於登入帳號，foreign／missing／deleted同一400、不默默移動本人分頁邊界。owned cursor lookup與createdAt／id keyset在同一RepeatableRead snapshot，全狀態可讀，owned REMOVED亦可當boundary；查詢、驗證失敗及成功均private,no-store。跨頁新增的front row需reload才顯示，不承諾多個請求具有同一永久snapshot。無新migration或APP修改。
+- 原50件／載入更多 UI 加all-seen cursor cycle及無新row防護、overlap去重並保留較高已核對version；分頁400／失聯保留已載入資料與原cursor，提供明確reload。mount generation保護management reads、receipts、mutations／finally與editor restoration，StrictMode舊回覆不覆蓋新畫面或釋放新請求gate。原encrypted owner/API journal、CAS、original receipt、禁止自動POST及conflict比較保留。
+- 商品頁、六種狀態、卡片、編輯／本機草稿、expiry、confirmation、分享、錯誤與原操作比較提供繁中／英文；未知Error不直接顯示provider／storage details。DateField依相同locale顯示英文month／weekday／controls，ISO及Taiwan min、只選擇後套用、keyboard/focus不變。這只涵蓋核心商品管理；Header／Footer、nested Marketing Beta與其他頁面的全語系／政策仍待逐項驗收，未宣稱全站英文完成。
+- 新Web10項：107 records／all tabs、失效cursor保留並reload、A→B→A、overlap最高version、StrictMode舊頁面與editor回覆、English edit失聯remount只GET／exact draft cleanup、Taiwan expiry calendar及storage failure保留文字。新8 real HTTP／PostgreSQL cases覆蓋107件50／50／7及100／7、同createdAt排序、全七種server狀態、foreign／missing／deletedcursor、owned removed、insert／delete跨頁、revoked JWT及malformed query。完整pre-push退出0：Server56檔913＋3skip、HTTP33檔547、Web87檔1380、Native42檔852、44 migrations schema一致、typecheck／Expo／QA cleanup gate全0。首輪新server test修ES target／typed response；舊CJK test fixtures明確固定zh-TW、原斷言不放寬，首輪失敗log保留。主JS330.97KB、PWA93entries5955.71KiB，map／worker既有警告保留。
+- 真Chrome DEV／compiled handlers／獨立UTF8 DB44：107件實際50→100→107，六tabs18／18／18／18／18／17，partial提示消失；English local draft close／reload恢復時POST0。初始合成published fixture缺必要photo等欄位，真handler回CONFLICT且原修改保留；用本機合成320px physical image補齊fixture，不放寬production policy，明確Keep my changes再保存才新operation。EDIT commit後502→reload只GET原APPLIED v2、CAS清理、price0／title一致；此原operation POST1。API因補fixture重啟，conflict前journal及後EDIT／EXTEND journal分開保留，無完整單一trace宣稱。
+- 英文calendar實際Oct2100→Jan2101、min2100-10-31，選2101-01-15後confirm；browser dialog transport停住時native CUA可見同一英文confirm才按確定，後台EXTEND APPLIED v3與UTC15:59:59.999一致。最終107listings、1CONFLICT＋2APPLIED receipts、target TWD0／ACTIVE／v3，post-restart POST2（EDIT失聯1＋EXTEND正常1）、無DELETE／外部AI／mail／Flickr。最終390×844 document375、單一設定navigation、private thumbnail真loaded320×320；初期proof viewport390×1050另列，不冒稱全為844。原截圖、DOM、journal及`outputs/wishlist-web-management-evidence-20261002.json`保留；僅自有API／Vite／PG停止、tab關／viewport還原，DB照片保留。
+- 全矩陣、Header／Footer與nested Beta等語系政策、真MiniMax／Flickr／mail／跨端、Flickr unknown-response reconciliation、PWA／效能、正式migration audit／合併Railway與首頁設定各90%正式回讀繼續。APP與其他工作區刪檔／.gitignore未納入；PR82 draft／未部署、目標active、完整功能100%門檻保持。新提交精確CI記錄於JSON／roadmap。
+
 ## 2026-10-02 第三十九批：舊相容照片入口與複製圖片所有權（仍未部署）
 
 - 原 multipart／JSON entry、201 row、無 key text、verified agent 自己的 publicCode 及 user tagging live verification 保留。改 memory parser，JPEG／PNG／WebP、5MB／單檔／7欄／欄位位元組與12秒界限、20次每分鐘及 bounded decoder；已dispatch後client disconnect仍保留decoder slot直到原handler完成，避免提前釋放；拒絕 forged bytes／重複或額外欄位／物件proxy／不安全價格。共用 typed name／notes／參考價與幣別／獨立預算及幣別，0明確保留，optional image不再假造外部placeholder。已驗證身份才處理照片；actor／parent鎖後再讀owner／capacity，與native新增共用容量鎖；user JWT／APIkey在最後交易重驗，避免上傳期間撤銷仍寫入。原無keyAPI沒有歷史create receipt，不冒稱可安全自動重送。

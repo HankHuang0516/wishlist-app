@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type InputHTMLAttributes, type KeyboardEvent } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { getUserLocale } from '../utils/localization';
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type' | 'min'> & {
   label: string; value: string; onChange: (value: string) => void; min?: string;
@@ -20,6 +21,7 @@ const shiftedMonth = (month: string, step: number) => {
 /** Controlled ISO date input with a stable, accessible web calendar. Month
  * navigation never dispatches a value change; only selection or clearing does. */
 export default function DateField({ label, value, onChange, min, disabled, className = '', ...inputProps }: Props) {
+  let english = true; try { english = !getUserLocale().startsWith('zh'); } catch { /* Calendar remains usable without locale storage. */ }
   const generatedId = useId(), id = inputProps.id ?? generatedId, headingId = useId();
   const trigger = useRef<HTMLButtonElement>(null), dialog = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [month, setMonth] = useState(today().slice(0, 7)), [focusDay, setFocusDay] = useState('');
@@ -64,31 +66,31 @@ export default function DateField({ label, value, onChange, min, disabled, class
       <input {...inputProps} id={id} type="date" min={min} value={value} disabled={disabled}
         className={`min-w-0 flex-1 rounded-xl border p-3 [&::-webkit-calendar-picker-indicator]:hidden ${className}`}
         onChange={event => onChange(event.target.value)} />
-      <button ref={trigger} type="button" disabled={disabled} aria-label={`開啟「${label}」日曆`} aria-haspopup="dialog" aria-expanded={open}
+      <button ref={trigger} type="button" disabled={disabled} aria-label={english ? `Open calendar for ${label}` : `開啟「${label}」日曆`} aria-haspopup="dialog" aria-expanded={open}
         className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border bg-white" onClick={show}><CalendarDays size={18} /></button>
     </div>
     {open && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={headingId} onKeyDown={onCalendarKey}
         className="max-h-[90dvh] w-full max-w-[348px] overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl">
         <div className="flex items-center justify-between gap-2">
-          <button type="button" aria-label="上一個月" disabled={previous === month || !!minimum && previous < minimum.slice(0, 7)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40" onClick={() => navigate(-1)}><ChevronLeft size={18} /></button>
-          <h2 id={headingId} aria-live="polite" className="font-semibold">{Number(month.slice(0, 4))} 年 {Number(month.slice(5))} 月</h2>
-          <button type="button" aria-label="下一個月" disabled={next === month} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40" onClick={() => navigate(1)}><ChevronRight size={18} /></button>
+          <button type="button" aria-label={english ? 'Previous month' : '上一個月'} disabled={previous === month || !!minimum && previous < minimum.slice(0, 7)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40" onClick={() => navigate(-1)}><ChevronLeft size={18} /></button>
+          <h2 id={headingId} aria-live="polite" className="font-semibold">{english ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}-01T12:00:00Z`)) : `${Number(month.slice(0, 4))} 年 ${Number(month.slice(5))} 月`}</h2>
+          <button type="button" aria-label={english ? 'Next month' : '下一個月'} disabled={next === month} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40" onClick={() => navigate(1)}><ChevronRight size={18} /></button>
         </div>
-        <p className="my-2 text-xs text-stone-500">台灣日期 · 選擇後才會套用{minimum ? ` · 最早 ${minimum}` : ''}</p>
+        <p className="my-2 text-xs text-stone-500">{english ? 'Taiwan date · Applied only after selection' : '台灣日期 · 選擇後才會套用'}{minimum ? english ? ` · Earliest ${minimum}` : ` · 最早 ${minimum}` : ''}</p>
         <div className="grid grid-cols-7 text-center">
-          {['日', '一', '二', '三', '四', '五', '六'].map(day => <span key={day} className="py-2 text-xs text-stone-500">{day}</span>)}
+          {(english ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['日', '一', '二', '三', '四', '五', '六']).map(day => <span key={day} className="py-2 text-xs text-stone-500">{day}</span>)}
           {Array.from({ length: offset }, (_, i) => <span key={`empty-${i}`} />)}
           {Array.from({ length: count }, (_, i) => {
             const iso = `${month}-${String(i + 1).padStart(2, '0')}`, selected = iso === value;
-            return <button key={iso} type="button" data-calendar-date={iso} aria-label={`選擇 ${iso}`} aria-pressed={selected} disabled={!!minimum && iso < minimum}
+            return <button key={iso} type="button" data-calendar-date={iso} aria-label={`${english ? 'Select' : '選擇'} ${iso}`} aria-pressed={selected} disabled={!!minimum && iso < minimum}
               className={`min-h-11 rounded-xl disabled:opacity-30 ${selected ? 'bg-stone-900 text-white' : 'hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-stone-500'}`}
               onClick={() => { onChange(iso); close(); }}>{i + 1}</button>;
           })}
         </div>
         <div className="mt-3 flex justify-between gap-2">
-          <button type="button" className="min-h-11 rounded-xl border px-3" onClick={() => { onChange(''); close(); }}>清除日期</button>
-          <button type="button" className="inline-flex min-h-11 items-center gap-1 rounded-xl border px-3" onClick={close}><X size={16} />關閉日曆</button>
+          <button type="button" className="min-h-11 rounded-xl border px-3" onClick={() => { onChange(''); close(); }}>{english ? 'Clear date' : '清除日期'}</button>
+          <button type="button" className="inline-flex min-h-11 items-center gap-1 rounded-xl border px-3" onClick={close}><X size={16} />{english ? 'Close calendar' : '關閉日曆'}</button>
         </div>
       </div>
     </div>}

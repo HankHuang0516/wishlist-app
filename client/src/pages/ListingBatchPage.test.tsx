@@ -75,6 +75,7 @@ describe('web private batch listing flow', () => {
     releaseOldAccountList = undefined;
     holdPublicationAck = false; releasePublicationAck = undefined;
     localStorage.clear();
+    localStorage.setItem('user-locale','zh-TW');
     pending.clear();compose.clear(); receipts.clear(); photoReceipts.clear(); draftReceipts.clear(); savedDrafts.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     URL.createObjectURL = vi.fn(() => 'blob:private-test');
@@ -176,7 +177,7 @@ describe('web private batch listing flow', () => {
       throw new Error(`Unexpected ${method} ${path}`);
     }));
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); });
 
   function fillSharedDetails() {
     fireEvent.change(screen.getByLabelText('縣市'), { target: { value: '臺北市' } });

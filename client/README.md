@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Owner management parity verification — 2026-10-02
+
+`MyListingsPage` loads owned inventory in pages of 50 and labels partial status counts as loaded counts. Repeated/cyclic cursors are rejected, successful pages survive a failed continuation, and overlapping rows retain the higher verified version. Lifecycle generations fence superseded page/editor responses. Core management, edit-draft recovery, original-operation comparison, sharing and Taiwan expiry controls support Chinese and English using the saved locale; the nested marketing assistant and global navigation are separate pending localization work.
+
+Validation: 107 synthetic rows in real PostgreSQL and Chrome, English draft reload without POST, committed edit with a lost reply recovered by GET-only receipt verification, and explicitly selected cross-year expiry. Full pre-push: Web1380, HTTP547, Server913 plus3 skipped and Native852; 44 migrations have no schema difference. Exact evidence and remaining gates are in `docs/web-app-parity.md`. Native APP was not changed; production deployment and complete parity remain pending.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

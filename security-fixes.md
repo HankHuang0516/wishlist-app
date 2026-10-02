@@ -1,3 +1,9 @@
+## 2026-10-02 Owned management cursor and stale-response follow-up
+
+The private management endpoint resolves a cursor only among the authenticated owner's listings and reads its keyset page in the same RepeatableRead snapshot. Foreign, missing and deleted IDs receive the same bounded input error; they cannot silently skip the owner's inventory. Private no-store headers precede authentication, including rejected sessions. Existing item projections, native limit100 and items/nextCursor contracts remain intact; no migration or native change was added.
+
+The Web management page rejects repeated/cyclic or nonadvancing cursors, retains successful pages after failures, deduplicates overlaps without downgrading verified versions, and fences superseded mount replies and cleanup gates. Core English/Chinese UI and calendar controls reuse the original encrypted journal, receipt verification and CAS recovery semantics. Unknown edit errors do not surface raw provider/storage details. Actual 107-row PostgreSQL/Chrome paging, lost edit acknowledgement and original receipt recovery are recorded in docs/web-app-parity.md. Global navigation, nested marketing translations, provider/device/PWA and production acceptance remain pending.
+
 ## 2026-10-02 Legacy multipart and managed clone-photo lifecycle follow-up
 
 Legacy multipart now uses a bounded memory parser and the controlled photo encoders/providers, preserving user/verified-agent authorization and the existing unkeyed 201 contract. Typed fields reject coerced proxy identities, invalid prices and unknown shapes. Owner/parent locks recheck capacity and final user-session validity. Provider work runs outside these short transactions; an exact independent cleanup task precedes allocation, with a five-minute lease and locked commit check. Expired preparations and late rejected writes retain cleanup targets. In-flight preparations participate in account erasure's original cleanup receipt under the owner lock.

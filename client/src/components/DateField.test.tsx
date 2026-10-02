@@ -6,10 +6,22 @@ function Form({ min, disabled = false }: { min?: string; disabled?: boolean }) {
   const [value, setValue] = useState('2026-11-20');
   return <DateField label="失效日期" value={value} onChange={setValue} min={min} disabled={disabled} />;
 }
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-02T00:00:00Z')); });
-afterEach(() => vi.useRealTimers());
+beforeEach(() => { localStorage.setItem('user-locale','zh-TW'); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-02T00:00:00Z')); });
+afterEach(() => { localStorage.removeItem('user-locale'); vi.useRealTimers(); });
 const show = () => fireEvent.click(screen.getByRole('button', { name: '開啟「失效日期」日曆' }));
 describe('stable web calendar date selection', () => {
+  it('uses English calendar controls and Taiwan date bounds without applying month navigation', () => {
+    localStorage.setItem('user-locale','en-US'); render(<Form min="2026-11-21" />);
+    fireEvent.click(screen.getByRole('button',{name:'Open calendar for 失效日期'}));
+    expect(screen.getByRole('heading',{name:'November 2026'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Select 2026-11-20'})).toBeDisabled();
+    expect(screen.getByText(/Taiwan date.*Earliest 2026-11-21/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Next month'}));
+    expect(screen.getByLabelText('失效日期')).toHaveValue('2026-11-20');
+    fireEvent.click(screen.getByRole('button',{name:'Select 2026-12-01'}));
+    expect(screen.getByLabelText('失效日期')).toHaveValue('2026-12-01');
+    expect(screen.getByRole('button',{name:'Open calendar for 失效日期'})).toHaveFocus();
+  });
   it('navigates across years and back without changing the form or resetting on a parent rerender', () => {
     const view = render(<Form />); show();
     fireEvent.click(screen.getByRole('button', { name: '下一個月' }));

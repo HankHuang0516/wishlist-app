@@ -1,11 +1,12 @@
 {
   "name": "client",
   "private": true,
-  "version": "2.0.544",
+  "version": "2.0.547",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "postbuild": "node scripts/verify-web-worker.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest"

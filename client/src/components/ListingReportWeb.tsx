@@ -3,8 +3,10 @@ import MarketplaceDialog from './MarketplaceDialog';
 import { getFullApiUrl } from '../config';
 import { api } from '../lib/marketplaceApi';
 import { privatePendingStore, pendingRequestKey, PendingStoreError, sha256 } from '../lib/webPendingStore';
-import { abandonReport, buildReportRequest, lookupReport, parseReportPage, parseReportRequest, REPORT_REASONS, REPORT_STATUS_LABELS,
+import { abandonReport, buildReportRequest, lookupReport, parseReportPage, parseReportRequest, REPORT_REASONS,
   reportPagePath, submitReport, type ListingReport, type ReportReason, type ReportResult } from '../lib/listingReports';
+
+import { reportText as text, reportMessageKey, reportFailureKey, reportReasonLabel, reportStatusLabel, reportTime, type ReportCopyKey } from '../lib/listingReportCopy';
 
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 export default function ListingReportWeb({ token, userId, listing, onClose }: {
@@ -13,14 +15,14 @@ export default function ListingReportWeb({ token, userId, listing, onClose }: {
   const [reason, setReason] = useState<ReportReason>('FRAUD'), [details, setDetails] = useState('');
   const [pending, setPending] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const [items, setItems] = useState<ListingReport[]>([]), [cursor, setCursor] = useState<string | null>(null), [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(''), [historyError, setHistoryError] = useState(''), [notice, setNotice] = useState('');
+  const [error, setError] = useState<ReportCopyKey | ''>(''), [historyError, setHistoryError] = useState<ReportCopyKey | ''>(''), [notice, setNotice] = useState<ReportCopyKey | ''>('');
   const [submitted, setSubmitted] = useState(false), [confirmFence, setConfirmFence] = useState(false);
   const active = useRef(true), gate = useRef(false), reading = useRef(false), key = useRef<string | null>(null), pendingRef = useRef<string | null>(null);
   const cursors = useRef(new Set<string>());
   const read = async (path: string, init?: RequestInit) => { if (!active.current) throw new Error('已關閉'); return api<unknown>(token, path, init); };
   function accept(result: ReportResult, body: string) {
     if (!active.current) return;
-    if (result.kind === 'unconfirmed') { setError(result.message); return; }
+    if (result.kind === 'unconfirmed') { setError(reportMessageKey(result.message)); return; }
     const request = parseReportRequest(JSON.parse(body));
     if (result.kind === 'confirmed') {
       setItems(old => [result.report, ...old.filter(item => item.id !== result.report.id)].map(item => {
@@ -74,30 +76,30 @@ export default function ListingReportWeb({ token, userId, listing, onClose }: {
         await lookupReport(read, privatePendingStore, requestKey, request, sha256) : await abandonReport(read, privatePendingStore, requestKey, request, sha256);
       accept(result, body);
     } catch (failure) {
-      if (active.current) { if (failure instanceof PendingStoreError) setReady(false); setError(failure instanceof Error ? failure.message : '尚未確認結果，原操作仍保留。'); }
+      if (active.current) { if (failure instanceof PendingStoreError) setReady(false); setError(reportFailureKey(failure)); }
     } finally { gate.current = false; if (active.current) setBusy(false); }
   }
   const request = pending ? parseReportRequest(JSON.parse(pending)) : null;
-  return <MarketplaceDialog title={listing ? `檢舉商品：${listing.title}` : '我的商品檢舉'} onClose={onClose}>
-    <div className="space-y-4"><p className="text-sm text-gray-600">只有本人及平台審核人員可見。送出不會立即下架；請勿填入密碼、證件或完整住址。</p>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded-xl bg-green-50 p-3">{notice}</p>}
-      {!ready && <button type="button" disabled={busy} className={button} onClick={() => void restore()}>重試恢復原檢舉</button>}
-      {request ? <section aria-label="待確認檢舉" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-        <h3 className="font-semibold">有一件尚未確認結果的檢舉</h3><p className="break-all text-sm">商品：{request.listingId}</p><p>{REPORT_REASONS.find(([id]) => id === request.reason)![1]}</p>{request.details && <p className="whitespace-pre-wrap break-words">{request.details}</p>}
-        <p className="text-sm">查核只讀取回執；重新送出會沿用原識別碼與原內容，不會新增另一件。</p>
-        <div className="flex flex-wrap gap-2"><button className={button} disabled={busy || !ready} onClick={() => void run('lookup')}>只查核原回執</button><button className={button} disabled={busy || !ready} onClick={() => void run('send')}>明確重新送出原檢舉</button>
-          <button className={button} disabled={busy || !ready} onClick={() => setConfirmFence(true)}>安全放棄未收件操作</button></div>
-        {confirmFence && <div role="group" aria-label="確認安全放棄" className="space-y-2"><p>只封存尚未收件的操作；已收件檢舉不會被撤回，也不會刪除商品。</p><button className={button} disabled={busy || !ready} onClick={() => void run('abandon')}>確認安全放棄</button><button className={button} disabled={busy} onClick={() => setConfirmFence(false)}>返回查核</button></div>}
+  return <MarketplaceDialog title={listing ? text('檢舉商品：') + listing.title : text('我的商品檢舉')} closeLabel={text('關閉')} onClose={onClose}>
+    <div className="space-y-4"><p className="text-sm text-gray-600">{text('只有本人及平台審核人員可見。送出不會立即下架；請勿填入密碼、證件或完整住址。')}</p>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{text(error)}</p>}{notice && <p role="status" className="rounded-xl bg-green-50 p-3">{text(notice)}</p>}
+      {!ready && <button type="button" disabled={busy} className={button} onClick={() => void restore()}>{text('重試恢復原檢舉')}</button>}
+      {request ? <section aria-label={text('待確認檢舉')} className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <h3 className="font-semibold">{text('有一件尚未確認結果的檢舉')}</h3><p className="break-all text-sm">{text('商品：')}{request.listingId}</p><p>{reportReasonLabel(request.reason)}</p>{request.details && <p className="whitespace-pre-wrap break-words">{request.details}</p>}
+        <p className="text-sm">{text('查核只讀取回執；重新送出會沿用原識別碼與原內容，不會新增另一件。')}</p>
+        <div className="flex flex-wrap gap-2"><button className={button} disabled={busy || !ready} onClick={() => void run('lookup')}>{text('只查核原回執')}</button><button className={button} disabled={busy || !ready} onClick={() => void run('send')}>{text('明確重新送出原檢舉')}</button>
+          <button className={button} disabled={busy || !ready} onClick={() => setConfirmFence(true)}>{text('安全放棄未收件操作')}</button></div>
+        {confirmFence && <div role="group" aria-label={text('確認安全放棄')} className="space-y-2"><p>{text('只封存尚未收件的操作；已收件檢舉不會被撤回，也不會刪除商品。')}</p><button className={button} disabled={busy || !ready} onClick={() => void run('abandon')}>{text('確認安全放棄')}</button><button className={button} disabled={busy} onClick={() => setConfirmFence(false)}>{text('返回查核')}</button></div>}
       </section> : listing && !submitted && <form className="space-y-3" onSubmit={event => { event.preventDefault(); void run('send'); }}>
-        {!listing.available && <p role="alert">商品已停止刊登，不能送出新檢舉。</p>}
-        <fieldset disabled={!ready || busy || !listing.available} className="space-y-2"><legend className="mb-2 font-semibold">檢舉原因</legend>{REPORT_REASONS.map(([id, label]) => <label key={id} className="flex min-h-11 items-center gap-3"><input type="radio" name="report-reason" value={id} checked={reason === id} onChange={() => setReason(id)} />{label}</label>)}</fieldset>
-        <label className="block">補充說明（選填，最多1000字元）<textarea disabled={!ready || busy || !listing.available} value={details} maxLength={1000} onChange={event => setDetails(event.target.value)} className="mt-2 min-h-28 w-full rounded-xl border p-3" /></label>
-        <button type="submit" disabled={!ready || busy || !listing.available} className={`${button} bg-green-800 text-white`}>{busy ? '正在確認…' : '送出檢舉'}</button>
+        {!listing.available && <p role="alert">{text('商品已停止刊登，不能送出新檢舉。')}</p>}
+        <fieldset disabled={!ready || busy || !listing.available} className="space-y-2"><legend className="mb-2 font-semibold">{text('檢舉原因')}</legend>{REPORT_REASONS.map(([id]) => <label key={id} className="flex min-h-11 items-center gap-3"><input type="radio" name="report-reason" value={id} checked={reason === id} onChange={() => setReason(id)} />{reportReasonLabel(id)}</label>)}</fieldset>
+        <label className="block">{text('補充說明（選填，最多1000字元）')}<textarea disabled={!ready || busy || !listing.available} value={details} maxLength={1000} onChange={event => setDetails(event.target.value)} className="mt-2 min-h-28 w-full rounded-xl border p-3" /></label>
+        <button type="submit" disabled={!ready || busy || !listing.available} className={`${button} bg-green-800 text-white`}>{text(busy ? '正在確認…' : '送出檢舉')}</button>
       </form>}
-      <section aria-label="我的檢舉紀錄" className="space-y-3 border-t pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">我的檢舉紀錄</h3><button className={button} disabled={busy} onClick={() => void history()}>更新紀錄</button></div>
-        {historyError && <p role="alert" className="text-red-800">{historyError}</p>}{!loaded && !historyError && <p role="status">正在讀取紀錄…</p>}{loaded && !items.length && !historyError && <p>尚無已收件紀錄。</p>}
-        {items.map(item => <article key={item.id} className="space-y-1 rounded-xl bg-gray-50 p-3"><p className="font-semibold">{REPORT_STATUS_LABELS[item.status]}</p><p>{REPORT_REASONS.find(([id]) => id === item.reason)![1]}</p><p className="break-all text-xs">商品：{item.listingId}</p>{item.details && <p className="whitespace-pre-wrap break-words text-sm">{item.details}</p>}<p className="text-xs text-gray-600">更新：{new Date(item.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}（台灣時間）</p></article>)}
-        {cursor && <button className={button} disabled={busy} onClick={() => void history(cursor)}>載入更多紀錄</button>}
+      <section aria-label={text('我的檢舉紀錄')} className="space-y-3 border-t pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{text('我的檢舉紀錄')}</h3><button className={button} disabled={busy} onClick={() => void history()}>{text('更新紀錄')}</button></div>
+        {historyError && <p role="alert" className="text-red-800">{text(historyError)}</p>}{!loaded && !historyError && <p role="status">{text('正在讀取紀錄…')}</p>}{loaded && !items.length && !historyError && <p>{text('尚無已收件紀錄。')}</p>}
+        {items.map(item => <article key={item.id} className="space-y-1 rounded-xl bg-gray-50 p-3"><p className="font-semibold">{reportStatusLabel(item.status)}</p><p>{reportReasonLabel(item.reason)}</p><p className="break-all text-xs">{text('商品：')}{item.listingId}</p>{item.details && <p className="whitespace-pre-wrap break-words text-sm">{item.details}</p>}<p className="text-xs text-gray-600">{text('更新：')}{reportTime(item.updatedAt)}{text('（台灣時間）')}</p></article>)}
+        {cursor && <button className={button} disabled={busy} onClick={() => void history(cursor)}>{text('載入更多紀錄')}</button>}
       </section>
     </div>
   </MarketplaceDialog>;

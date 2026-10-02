@@ -1,8 +1,14 @@
 # React + TypeScript + Vite
 
+## Bilingual private listing reports — 2026-10-03
+
+The item report dialog and original report-history route follow the saved Chinese/English preference, including reasons, review states, local recovery, explicit replay and hash-only safe abandonment. Original item titles, evidence, IDs and immutable request bodies are preserved; dates retain Taiwan time. Display language changes do not dispatch or replace a pending operation. Known messages use a closed dictionary and unknown diagnostics receive bounded recovery copy, without claiming a failed local save persisted a report.
+
+The existing private receipt, storage CAS, account/departure fences and explicit abandonment confirmation remain unchanged. A received report is distinct from item removal and cannot be described as withdrawn by the abandonment flow. Guest history retains the login return path without private reads. No APP, server, permission or migration changes are introduced. Exact CI and production read-only browser acceptance are recorded in the parity matrix; real report submission is not performed as browser QA.
+
 ## Public item destinations and versioned previews — 2026-10-03
 
-Public item pages and contact/share controls follow Chinese/English, including bounded loading, unavailable, rate-limit and retry notices. Original titles, descriptions, seller names, areas and share payloads remain unchanged; prices stay in TWD and dates keep Taiwan time. A pending native share accepts one action, and cancellation does not become failure. The nested report workflow still has its separately tracked Chinese-only copy.
+Public item pages and contact/share controls follow Chinese/English, including bounded loading, unavailable, rate-limit and retry notices. Original titles, descriptions, seller names, areas and share payloads remain unchanged; prices stay in TWD and dates keep Taiwan time. A pending native share accepts one action, and cancellation does not become failure. The subsequently updated report workflow is documented above; its production acceptance is tracked separately.
 
 Public API reads use the existing data cooldown with credentials omitted. They cannot carry Authorization, a write method or a body; expiration of Retry-After does not trigger a read or mutation. The public parser, account/departure fences and current expiry checks remain in force. Server-rendered Open Graph and Twitter URLs carry the current stored item version, matching the native share URL convention without trusting the request's query version. Original seller thumbnails, no-store and exclusion of private/unavailable goods are retained. Native APP, permissions, payment and migrations are unchanged; exact production preview and browser proof are recorded in the parity matrix.
 

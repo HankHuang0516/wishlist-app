@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./layouts/Layout";
+import SourceLeadMapPage from "./pages/SourceLeadMapPage";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -69,6 +70,7 @@ function App() {
             <Route path="verify-email" element={<EmailVerification />} />
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
+            <Route path="source-leads" element={<SourceLeadMapPage />} />
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="listings/:id" element={<PublicListingPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />

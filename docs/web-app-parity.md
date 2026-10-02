@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十一批：AI 指令與金鑰復原、API 文件契約（仍未部署）
+
+- 原POST/GET apikey與POST ai-prompt的個人金鑰／JWT能力、原prompt/apiKey/userName回覆及既有JSON指令保留。以User FOR NO KEY UPDATE同一gate序列化首次建立、明確輪替及密碼／撤銷操作；middleware後重新核對實際憑證與authVersion／owner存在。12並行首次請求只取得同一有效key；明確rotation才換key，也能修復舊格式錯誤key。新增GET ai-prompt只讀目前指令，無key時精確available:false，不建立、不冒充歷史回執。private no-store在auth前設定，錯誤只bounded code；配置先驗證credential-free /api base並保留loopback HTTP。
+- Settings advanced展開才讀本機marker，不自動POST或copy。既有AES-GCM／owner/API隔離／immutable CAS只保存version、local UUID與時間，不存JWT／key／prompt。送前保存核對，strict完整prompt schema／固定role、API methods/paths/descriptions、key/header/base一致，取回後再核對原marker。sync gate、owner/token generation及每個await fence防晚到copy／清理較新操作；busy凍結語言reload。剪貼簿失敗保留提醒並只GET目前指令；明確手動顯示readonly文字且不冒稱已複製，切帳號／隱藏／離頁不持久保存秘密。已確認清理失敗只清理；未知清理需勾選理解不取消原request。已開始的clipboard write無法撤回，不宣稱atomic logout／clipboard。
+- 原API showcase卡片風格與入口保留，繁中／English、安全locale fallback、原URL包含實際scheme、不補假https；copy失敗可選取原網址、sync busy及departure guards。CTA／返回Settings只有單一≥44px Link，無nested Button。API docs校正必填email、verify/resend、email reset token/newPassword及base+relative path避免double/api；逐端點JWT／personal-key與owner／visibility／mutual-follow約束，不假稱所有server API同權限。付款/UCP自動購買與配送未開通，保留送禮使用場景與原商家連結替代，不承諾付款或送達。
+- 新actual HTTP/PostgreSQL12與Web36，focused72／4檔；final完整隔離pre-push退出0：Server56檔913＋既有3skip、HTTP38檔615、Web99檔1616＋build、Native42檔852＋typecheck／Expo、44migration schema diff0／required cleanup0。第二完整gate包含明確輪替修復malformed舊key，未降權限或弱化斷言；主JS350.54KB、PWA92entries6047.32KiB及既有map/worker warnings保留，APP／migration未改。
+- Chrome新5223、獨立UTF8 DB44migrations、兩syntheticowners既有key、真compiled handlers：POST成功後QA502→reload同marker不POST→GET目前指令／clipboard stub failure→GET verified copy cleanup；A第二unknown跨B帳號與B中文manual recovery後返回仍同40235bf5-c508-431b-9856-f879fa4d8a50。B無A內容，明確手動GET顯示readonly structured prompt，僅保存布林驗證、不序列化或截图key，隨即Hide。final39API requests：36GET200、3POST（2QA502＋1×200），8次AI操作中5GET；keys unchanged／other writes0／external0。剪貼簿為明示QA stub，不碰OS clipboard／不保存prompt，非真OS複製證據。
+- 手機390×844 doc375≤390，integration三controls各44px／Settings1；API copy44px、CTA48/50px；docs mobile/desktop1024×900 doc1009無overflow。保存13原JPEG、3geometry＋manual-proof、journal及wishlist-web-ai-integration-evidence-20261002.json，已實際檢視恢復與docs截圖。暫時Vite proxy誤攔api-showcase direct reload已只修harness，重驗成功；初supertest null型別失敗修JSON literal fixture。Browser compiled在最後malformed-key explicit-rotation例外前載入；browser未操作rotation，valid-key標準流程沒改，最終rotation只由第二full HTTP證明，不冒稱browser rotation完成。
+- 自有API／Vite／PG停止、tab關閉及viewport還原；DB、fixtures與他人worktree保留。最新精確提交CI另回讀。仍須全feature/social/Home語系、逐欄權限、avatar/unknownFlickr/真provider跨端、PWA/private cache/效能、真credential/permanent browser、diagnostics production IDs核對、fresh Home/Settings各90及正式preflight/merge/Railway/live驗收；PR82 draft、goal active、未部署，本批不代替全功能完成。
+
 ## 2026-10-02 第五十批：保留交易與送禮紀錄的權限及獨立讀取（仍未部署）
 
 - 原GET users/me/transaction-history與purchases、array路由及personal API-key capability保留；帳號交易只select原display欄位，原amount／currency／status／同時刻ID排序不改。送禮認領依目前purchasedById、repeatable-read snapshot投影；本人仍可看自己的私人／隱藏願望，他人目前private／hidden則僅id／updatedAt／unavailable提醒，不因過去認領取得持續權限。保留筆數但不洩漏notes／AI error／proxy／private parent／隱藏avatar。清單刪除或取消認領可能不再列出，不冒稱durable ledger／付款／送達。private no-store在auth前設定、故障bounded。
@@ -319,7 +329,7 @@
 | 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
 | 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |
 | 既有帳號交易與送禮認領紀錄 | Web既有功能；APP沒有此頁 | 第50批actual HTTP11／Web23與Chrome populated／empty／single-read503→retry／guest；105筆完整、private current claim minimal reminder、原amount／0／refund／status、雙語mobile／desktop及single44px Settings entry核對 | Current claims不是付款／送達或durable history；對方私人／隱藏立即依新讀取遮蔽；正式端待驗 |
-| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／文件與PWA仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
+| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／key lifecycle與雙語文件已第51批實際回歸；PWA與真OS/credential仍待 | autosave真實回執、隱私切換；個人指令含金鑰僅明確複製／手動顯示，不寫入持久journal／log／artifact |
 
 ## 平台替代策略
 

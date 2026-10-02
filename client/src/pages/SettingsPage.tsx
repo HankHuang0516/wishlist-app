@@ -11,6 +11,7 @@ import { t } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
 import AccountBenefits from '../components/AccountBenefits';
 import EmailDiagnostics from '../components/EmailDiagnostics';
+import AiIntegrationInstructions from '../components/AiIntegrationInstructions';
 import './SettingsPage.css';
 import { settingsText as st, settingsMessage, settingsChinese } from '../lib/settingsCopy';
 import { useSettingsProfile } from '../lib/useSettingsProfile';
@@ -52,6 +53,9 @@ function SettingsSession() {
     const [securityBusy, setSecurityBusy] = useState(false);
     const securityBusyRef = useRef(false);
     const diagnosticsBusyRef = useRef(false);
+    const integrationBusyRef = useRef(false);
+    const [integrationBusy, setIntegrationBusy] = useState(false);
+    const onIntegrationBusy = useCallback((value: boolean) => { integrationBusyRef.current = value; setIntegrationBusy(value); }, []);
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
     const onDiagnosticsBusy = useCallback((value: boolean) => { diagnosticsBusyRef.current = value; setDiagnosticsBusy(value); }, []);
@@ -62,7 +66,7 @@ function SettingsSession() {
     const avatarLocked = settings.locked || avatar.locked || changingLang;
     const changeLocale = (next: string) => {
         if (changingLang) return;
-        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current || diagnosticsBusyRef.current) {
+        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current || diagnosticsBusyRef.current || integrationBusyRef.current) {
             setFeedback({ message: st('請先完成保存或保留此頁文字；未保存的修改不會因切換語言而丟失。'), type: 'error' });
             return;
         }
@@ -103,25 +107,6 @@ function SettingsSession() {
         if (active.current && fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const handleGenerateApiKey = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/me/apikey`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (!active.current) return;
-                settings.patchDisplay({ apiKey: data.apiKey });
-                setFeedback({ message: 'API Key Generated!', type: 'success' });
-                setTimeout(() => setFeedback(null), 3000);
-            }
-        } catch (error) {
-            console.error(error);
-            setFeedback({ message: 'Failed to generate key', type: 'error' });
-        }
-    };
-
     if (loading) return <div className="p-8 text-center">{t('common.loading')}</div>;
     if (!profile) return <div className="p-8 text-center"><p role="alert">{settingsMessage(settings.notice) || t('common.error')}</p><Button onClick={settings.retryRead}>{st("重試讀取設定")}</Button> <Link to="/login?next=%2Fsettings" className="text-blue-500 underline">{t('nav.login')}</Link></div>;
 
@@ -155,7 +140,7 @@ function SettingsSession() {
                         variant={settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('zh-TW')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy}
                     >
                         {changingLang && settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         繁體中文
@@ -164,7 +149,7 @@ function SettingsSession() {
                         variant={!settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('en-US')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy}
                     >
                         {changingLang && !settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         English
@@ -566,53 +551,7 @@ function SettingsSession() {
 
 
             {/* AI Integration */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold mt-8 mb-4">{st("AI 整合")}</h2>
-                <Card>
-                    <CardContent className="pt-6 space-y-4">
-                        <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100">
-                            <p className="text-sm text-blue-800 font-medium mb-2">
-                                {st("🤖 讓 AI 幫你管理願望清單")}
-                            </p>
-                            <p className="text-sm text-blue-700">
-                                {st("點擊下方按鈕複製指令，然後貼到 ChatGPT 或 Claude 即可開始！")}
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <Button
-                                onClick={async () => {
-                                    try {
-                                        const response = await fetch(`${API_URL}/users/me/ai-prompt`, {
-                                            method: 'POST',
-                                            headers: {
-                                                'Authorization': `Bearer ${token}`,
-                                                'Content-Type': 'application/json'
-                                            }
-                                        });
-                                        if (!response.ok) throw new Error('Failed to generate prompt');
-                                        const data = await response.json();
-                                        await navigator.clipboard.writeText(data.prompt);
-                                        setFeedback({ message: st("✅ 已複製！請貼到 ChatGPT 或 Claude"), type: 'success' });
-                                        setTimeout(() => setFeedback(null), 3000);
-                                    } catch (error) {
-                                        console.error('Copy AI prompt error:', error);
-                                        setFeedback({ message: st("複製失敗，請重試"), type: 'error' });
-                                        setTimeout(() => setFeedback(null), 3000);
-                                    }
-                                }}
-                                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-medium"
-                            >
-                                <span className="mr-2">📋</span>
-                                {st("一鍵複製 AI 指令")}
-                            </Button>
-                            <Link to="/api-showcase" className="flex min-h-11 flex-1 items-center justify-center rounded-md border border-muji-border px-4 py-2 text-sm text-muji-primary hover:bg-muji-bg">
-                                <span className="mr-2">📖</span>
-                                {st("查看 API 文件")}
-                            </Link>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            {advancedOpen && token && user?.id && <AiIntegrationInstructions token={token} userId={user.id} onBusy={onIntegrationBusy} />}
 
             {/* Monetization Section */}
             <div className="space-y-4 pb-12">

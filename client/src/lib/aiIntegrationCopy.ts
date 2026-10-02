@@ -1,0 +1,27 @@
+import { getDisplayLocale } from '../utils/localization';
+const english = {
+  'AI 整合':'AI integration',
+  '🤖 讓 AI 幫你管理願望清單':'🤖 Let AI help manage your wishlists',
+  '指令含您的個人 API 金鑰，只貼給信任的工具；工具可存取您有權限的願望資料。':'Instructions contain your personal API key. Share only with a trusted tool, which can access wish data permitted to your account.',
+  '一鍵複製 AI 指令':'Copy AI instructions',
+  '查看 API 文件':'View API docs',
+  '正在處理…':'Working…',
+  '已複製目前指令，請貼到信任的工具。':'Current instructions copied. Paste into a trusted tool.',
+  '結果未確認；重開不會自動建立或複製。':'The result is unconfirmed. Reopening never creates or copies automatically.',
+  '查詢只反映目前金鑰，不是原操作回執；原請求仍可能稍後完成。':'Reading reflects the current key, not a receipt for the original operation. The original request may still finish later.',
+  '剪貼簿無法使用，請讀取目前指令或顯示可選取的文字。':'Clipboard unavailable. Read current instructions or show selectable text.',
+  '目前沒有可用金鑰；保留原提醒，查詢不會建立。':'No current key is available. The original reminder remains; reading does not create a key.',
+  '無法安全讀取或保存提醒，請重試讀取；尚未複製。':'The reminder could not be read or saved safely. Retry reading; nothing was copied.',
+  '另一份本機操作存在，請重新讀取。':'Another local operation exists. Read the reminder again.',
+  '指令已取得；提醒尚未清理，只需重試清理。':'Instructions obtained. The reminder needs cleanup; retry cleanup only.',
+  '讀取目前指令並複製':'Read and copy current instructions',
+  '顯示可選取的指令':'Show selectable instructions',
+  '已取得目前指令，請自行選取複製。':'Current instructions obtained. Select and copy the text yourself.',
+  '隱藏指令':'Hide instructions',
+  '目前 AI 指令':'Current AI instructions',
+  '重試讀取本機提醒':'Retry reading local reminder',
+  '本機操作標記':'Local operation marker',
+  '我了解清理不會取消原請求，且查詢不是原操作回執':'I understand cleanup does not cancel the original request and reading is not an original operation receipt',
+  '只清理本機提醒':'Clear local reminder only',
+} as const;
+export const integrationText = (key: keyof typeof english) => getDisplayLocale().startsWith('zh') ? key : english[key];

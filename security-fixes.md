@@ -152,3 +152,9 @@ Regression tests exercise the real public bridge, malformed messages, privacy fl
 ---
 **Summary:**
 The most critical issue is the `start` script command. Please fix it immediately to prevent accidental data deletion.
+
+## 2026-10-02 AI instructions and API-key lifecycle
+
+Original API-key reads/rotation and instruction get-or-create are private/no-store before auth. User row gates serialize allocation, explicit rotation and account-security updates; actual JWT/authVersion or original personal key is rechecked under the gate. Concurrent allocation reuses the winning key. Current-instruction GET never creates and is not a durable receipt. Strict configured base validation precedes allocation; bounded errors omit raw credentials.
+
+Web journals hold only version/local UUID/time, never token/key/prompt. Complete prompt proof and pre/post request marker checks precede clipboard or explicit manual display, with account/token/departure fencing and CAS cleanup. Manual secrets are ephemeral. An already-started clipboard write cannot be revoked. Actual HTTP/PG12 and Web36 new regressions pass; final full615/1616/913 plus3 skips/Native852, no APP/migration or production credential/provider changes. See canonical parity evidence for browser stub and source-timing limits.

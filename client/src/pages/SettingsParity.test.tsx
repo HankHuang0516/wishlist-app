@@ -15,6 +15,10 @@ const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 
   isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
+it('freezes language reload during AI instruction acquisition without dispatching when advanced is closed',async()=>{
+  let finish!:(value:unknown)=>void;const fetcher=vi.fn(async(url:string,init?:RequestInit)=>url.endsWith('/ai-prompt')?new Promise(resolve=>{finish=resolve;}):ok(url.endsWith('/feedback/test')?{userId:19,canSend:false}:profile));vi.stubGlobal('fetch',fetcher);
+  render(view());await screen.findByLabelText('暱稱');expect(fetcher.mock.calls.some(([url])=>url.endsWith('/ai-prompt'))).toBe(false);const advanced=screen.getByText('進階功能').closest('details')!;advanced.open=true;fireEvent(advanced,new Event('toggle'));fireEvent.click(await screen.findByRole('button',{name:'一鍵複製 AI 指令'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'English'})).toBeDisabled();await act(async()=>finish({ok:false,status:503,json:async()=>({errorCode:'API_INTEGRATION_UNAVAILABLE'})}));await screen.findByText('結果未確認；重開不會自動建立或複製。');expect(screen.getByRole('button',{name:'English'})).toBeEnabled();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+});
 it('opens diagnostics from backend admission and blocks language reload during the actual mail dispatch', async () => {
   let finish!: (value: unknown) => void;
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
@@ -159,11 +163,11 @@ describe('settings hub retains web-only functionality while adding app actions',
     expect(screen.getByRole('link', { name: /刊登好物/ })).toHaveAttribute('href', '/sell');
     expect(screen.getByRole('link', { name: /通知設定/ })).toHaveAttribute('href', '/settings/notifications');
     const advanced = screen.getByText('進階功能').closest('details')!;
-    expect(advanced).not.toHaveAttribute('open'); advanced.setAttribute('open', '');
+    expect(advanced).not.toHaveAttribute('open'); advanced.open = true; fireEvent(advanced, new Event('toggle'));
     expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ })).toHaveAttribute('href', '/purchase-history');
     expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ }).querySelector('button')).toBeNull();
-    expect(screen.getByRole('link', { name: /查看 API 文件/ }).querySelector('button')).toBeNull();
-    expect(screen.getByRole('button', { name: /一鍵複製 AI 指令/ })).toBeInTheDocument();
+    expect((await screen.findByRole('link', { name: /查看 API 文件/ })).querySelector('button')).toBeNull();
+    expect(await screen.findByRole('button', { name: /一鍵複製 AI 指令/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上傳大頭照' })).toHaveAttribute('tabindex', '0');
   });
   it('keeps a visible camera affordance and opens the photo chooser from Enter and Space, not from focus', async () => {

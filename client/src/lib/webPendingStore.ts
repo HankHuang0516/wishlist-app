@@ -9,8 +9,8 @@ export type PendingStore = {
   clear(key: string, expectedBody: string): Promise<boolean>;
 };
 type Entry = { revision: string; iv: Uint8Array<ArrayBuffer>; cipher: ArrayBuffer };
-const resource = /^(profile|avatar|feedback|email-diagnostics|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/i;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|feedback|email-diagnostics|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/;
+const resource = /^(profile|avatar|feedback|email-diagnostics|api-integration|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|feedback|email-diagnostics|api-integration|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/;
 export async function sha256(value: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');

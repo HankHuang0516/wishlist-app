@@ -4,12 +4,10 @@ import prisma from '../lib/prisma';
 import { flickrService } from '../lib/flickr';
 import fs from 'fs';
 import { getAiUsageInfo } from '../lib/usageService';
-import { generateApiKey } from '../lib/apiKey';
 import { ownProfileSelect } from '../lib/ownProfile';
 import { updateLegacyProfile } from './profileUpdateController';
 import { followUserId } from '../lib/followOperation';
 
-import { APP_CONSTANTS, getApiUrl } from '../config/constants';
 // import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
 // Actually, let's wait for list_dir. But I can fix the content based on what I see.
 import { API_ERROR_CODES } from '../lib/errorCodes';
@@ -286,44 +284,7 @@ export const getAiUsage = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// Generate API Key
-export const generateUserApiKey = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const newApiKey = generateApiKey();
-
-        // Check if user already has one? We will overwrite it (regenerate).
-        // Since it's unique, we just update.
-
-        await prisma.user.update({
-            where: { id: userId },
-            data: { apiKey: newApiKey }
-        });
-
-        res.json({ apiKey: newApiKey });
-    } catch (error) {
-        console.error('Generate API Key Error:', error);
-        res.status(500).json({ error: 'Failed to generate API Key', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
-
-// Get API Key
-export const getUserApiKey = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { apiKey: true }
-        });
-
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        res.json({ apiKey: user.apiKey });
-    } catch (error) {
-        console.error('Get API Key Error:', error);
-        res.status(500).json({ error: 'Failed to fetch API Key', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { generateUserApiKey, getUserApiKey, generateAiPrompt } from './apiIntegrationController';
 
 // Get Delivery Info (Mutual Friends Only - for Gift Sending)
 export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
@@ -385,76 +346,5 @@ export const getDeliveryInfo = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Get Delivery Info Error:', error);
         res.status(500).json({ error: 'Failed to fetch delivery info', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
-
-// Generate AI Prompt with API Key for one-click copy
-export const generateAiPrompt = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-
-        // Get user and their API key
-        let user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { name: true, apiKey: true }
-        });
-
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        // Auto-generate API key if not exists
-        let apiKey = user.apiKey;
-        if (!apiKey) {
-            apiKey = generateApiKey();
-            await prisma.user.update({
-                where: { id: userId },
-                data: { apiKey }
-            });
-        }
-
-        const promptData = {
-            role: "You are a Wishlist.ai assistant helping users manage their wishlists.",
-            authentication: {
-                api_key: apiKey,
-                header: `x-api-key: ${apiKey}`,
-                base_url: getApiUrl()
-            },
-            available_apis: {
-                wishlists: {
-                    list_all: { method: "GET", path: "/wishlists", description: "Get all wishlists" },
-                    create: { method: "POST", path: "/wishlists", body: { title: "string" }, description: "Create new wishlist" },
-                    get_one: { method: "GET", path: "/wishlists/{id}", description: "Get single wishlist" },
-                    update: { method: "PUT", path: "/wishlists/{id}", description: "Update wishlist" },
-                    delete: { method: "DELETE", path: "/wishlists/{id}", description: "Delete wishlist" }
-                },
-                items: {
-                    create: { method: "POST", path: "/wishlists/{id}/items", body: { name: "string", price: "string?", notes: "string?" }, description: "Add item to wishlist" },
-                    create_from_url: { method: "POST", path: "/wishlists/{id}/items/url", body: { url: "string" }, description: "Auto-fetch item from URL" },
-                    get: { method: "GET", path: "/items/{id}", description: "Get item details" },
-                    update: { method: "PUT", path: "/items/{id}", description: "Update item" },
-                    delete: { method: "DELETE", path: "/items/{id}", description: "Delete item" }
-                },
-                user: {
-                    get_profile: { method: "GET", path: "/users/me", description: "Get my profile" },
-                    update_profile: { method: "PUT", path: "/users/me", description: "Update my profile" }
-                },
-                social: {
-                    search_users: { method: "GET", path: "/users/search?q={keyword}", description: "Search users" },
-                    follow: { method: "POST", path: "/users/{id}/follow", description: "Follow user" },
-                    unfollow: { method: "DELETE", path: "/users/{id}/follow", description: "Unfollow user" },
-                    get_user_wishlists: { method: "GET", path: "/users/{id}/wishlists", description: "Get user public wishlists" },
-                    get_delivery_info: { method: "GET", path: "/users/{id}/delivery-info", description: "Get delivery info (mutual follow required)" }
-                }
-            },
-            instructions: "Start helping me manage my wishlists now!"
-        };
-
-        res.json({
-            prompt: JSON.stringify(promptData, null, 2),
-            apiKey,
-            userName: user.name || 'User'
-        });
-    } catch (error) {
-        console.error('Generate AI Prompt Error:', error);
-        res.status(500).json({ error: 'Failed to generate AI prompt', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
     }
 };

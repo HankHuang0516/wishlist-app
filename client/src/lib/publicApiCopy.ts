@@ -1,0 +1,30 @@
+import { getDisplayLocale } from '../utils/localization';
+const english = {
+  "你想要什麼禮物？": "What gift would you like?",
+  "直接跟 AI Agent 溝通": "Tell your AI agent",
+  "願望可存到帳號清單；朋友或工具只能讀取權限允許的內容。": "Save wishes to your account. Friends and tools can read only content allowed by its permissions.",
+  "情人節送禮困擾？": "Looking for a Valentine’s gift?",
+  "不知道要送什麼禮物？": "Unsure what to give?",
+  "提供個人金鑰的工具可協助讀取公開清單；私人資料仍受帳號與公開權限限制。": "A tool given your personal key can help read public wishlists. Private data remains subject to account and visibility permissions.",
+  "買禮物給朋友？": "Buying a gift for a friend?",
+  "先查看朋友公開的願望清單": "Start with your friend’s public wishlist",
+  "站內付款與自動配送尚未開通。可使用商品原連結自行到商家購買，並另行確認配送。": "Platform payment and automatic delivery are unavailable. Use the original product link to buy from the merchant and confirm delivery separately.",
+  "API 整合與權限控管": "API integration with access controls",
+  "讓 AI Agent 管理你的": "Let an AI agent manage your",
+  "願望清單": "wishlists",
+  "複製 API 連結，再到設定取得個人指令以授權信任的工具。": "Copy the API link, then get your personal instructions in Settings to authorize a trusted tool.",
+  "🔗 API 端點": "🔗 API endpoint",
+  "已複製": "Copied",
+  "複製": "Copy",
+  "連結不含登入權限；私有操作需要有效憑證與各端點權限。": "This link grants no login access. Private operations require valid credentials and the permissions of each endpoint.",
+  "三種使用場景": "Three ways to use the API",
+  "在權限允許時可使用": "Available with the required permissions",
+  "站內付款與自動配送未開通": "Platform payment and delivery unavailable",
+  "準備好開始了嗎？": "Ready to get started?",
+  "建立帳號後，可在設定取得含個人金鑰的指令，只交給信任的工具。": "Create an account and get instructions containing your personal key in Settings. Share only with a trusted tool.",
+  "免費註冊": "Register free",
+  "查看完整 API 文件": "View full API docs",
+  "無法複製連結，請選取上方網址自行複製。": "The link could not be copied. Select the URL above and copy it yourself.",
+  "API 網址目前無法使用。": "The API URL is currently unavailable."
+} as const;
+export const apiText = (key: keyof typeof english) => getDisplayLocale().startsWith('zh') ? key : english[key];

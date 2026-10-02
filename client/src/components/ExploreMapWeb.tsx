@@ -17,6 +17,7 @@ export type MapFrame = { serial: number; camera: ResultCamera };
 type Props = {
   items: PublicListing[]; external: ExternalListing[]; frame: MapFrame | null; visible: boolean;
   preview?: boolean;
+  previewNotice?: string;
   onViewport: (bounds: Bounds) => void; onSelect: (item: MapSelection) => void;
   onCluster: (kind: MapSelection['kind'], ids: string[]) => void;
 };
@@ -186,7 +187,7 @@ export default function ExploreMapWeb(props: Props) {
   useEffect(() => { if (props.visible) mapRef.current?.resize(); }, [props.visible]);
   return <div className={props.visible ? 'space-y-2' : 'hidden'}>
     {(error || photoError) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{error || photoError}</p>}
-    <div ref={container} role="region" aria-label={mapText('region')} className={`wishlist-map ${props.preview ? 'h-40 rounded-md' : 'h-[480px] rounded-2xl'} w-full overflow-hidden border bg-gray-100`} />
-    <p className="text-xs text-gray-500">{mapText('notice')}</p>
+    <div ref={container} role="region" aria-label={mapText('region')} className={`wishlist-map ${props.preview ? 'h-56 rounded-md sm:h-40' : 'h-[480px] rounded-2xl'} w-full overflow-hidden border bg-gray-100`} />
+    <p className="text-xs text-gray-500">{props.preview && props.previewNotice ? props.previewNotice : mapText('notice')}</p>
   </div>;
 }

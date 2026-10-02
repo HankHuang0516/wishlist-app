@@ -13,3 +13,8 @@
   background-repeat: no-repeat;
   background-position: center;
 }
+.wishlist-map .maplibregl-ctrl-attrib-inner a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}

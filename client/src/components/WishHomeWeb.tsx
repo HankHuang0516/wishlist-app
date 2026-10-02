@@ -9,6 +9,7 @@ import { listingPrice } from '../lib/listingSearch';
 import { resultCamera } from '../lib/exploreMapView';
 import MapFallbackBoundary from './MapFallbackBoundary';
 import { homeText } from '../lib/homeText';
+import { mapText } from '../lib/mapText';
 const HomeMap = lazy(() => import('./ExploreMapWeb'));
 
 export const exploreLink = (wishId?: number, listingId?: string) => '/explore' +
@@ -115,8 +116,10 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" aria-hidden="true" /><label htmlFor="home-search" className="sr-only">{homeText('search')}</label><input id="home-search" maxLength={100} value={query} onChange={event => setQuery(event.target.value)} placeholder={homeText('searchPlaceholder')} className="h-11 w-full rounded-md border border-gray-200 pl-10 pr-3 focus-visible:outline-muji-primary" /></div>
         <button type="submit" className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-blue-700 hover:bg-gray-50"><MapPin className="h-5 w-5" aria-hidden="true" />{homeText('map')}</button>
       </form>
-      {mapItems.length > 0 && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">{homeText('mapFailed')}</p>}><Suspense fallback={<p role="status">{homeText('mapLoading')}</p>}><div aria-label={homeText('mapPreview')}><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
-      {wishes.length > 0 && <details className="group border-t pt-2"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm focus-visible:outline-muji-primary"><span className="font-semibold">{homeText('question')}</span><span className="text-xs text-gray-500">{homeText('choose')}</span><ChevronDown className="ml-auto h-4 w-4 group-open:rotate-180" aria-hidden="true" /></summary><div role="radiogroup" aria-label={homeText('chooseLabel')} className="mt-2 flex gap-3 overflow-x-auto pb-2">
+      {mapItems.length > 0 && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">{homeText('mapFailed')}</p>}><Suspense fallback={<p role="status">{homeText('mapLoading')}</p>}><div aria-label={homeText('mapPreview')}><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview previewNotice={homeText('mapPosition')} onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
+      {wishes.length > 0 && <details className="group border-t pt-2"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm focus-visible:outline-muji-primary"><span className="font-semibold">{homeText('question')}</span><span className="text-xs text-gray-500">{homeText('choose')}</span><ChevronDown className="ml-auto h-4 w-4 group-open:rotate-180" aria-hidden="true" /></summary>
+      {mapItems.length > 0 && <p className="mt-2 text-xs text-gray-500">{mapText('notice')}</p>}
+      <div role="radiogroup" aria-label={homeText('chooseLabel')} className="mt-2 flex gap-3 overflow-x-auto pb-2">
         {wishes.map((item, index) => <button type="button" role="radio" key={item.id} aria-checked={selected === item.id} tabIndex={selected === item.id ? 0 : -1} onClick={() => setSelected(item.id)} onKeyDown={event => {
           if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
@@ -126,8 +129,9 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         }} className={`min-h-14 min-w-36 max-w-60 flex-none rounded-md border p-3 text-left ${selected === item.id ? 'border-muji-primary bg-gray-50' : 'bg-white'}`}>
           <span className="block break-words font-medium">{item.name}</span><span className="text-xs text-gray-500">{item.wishlist.title}</span></button>)}</div>
       {wish && <Link to={exploreLink(wish.id, matches.length === 1 ? matches[0].listing.id : undefined)} aria-label={homeText('compareLabel', { name: wish.name })} className="flex min-h-11 items-center gap-2 text-sm font-medium text-blue-700 underline"><MapPin className="h-5 w-5" aria-hidden="true" />{homeText('compare')}</Link>}
-      </details>}
       <Link to="/explore" className="inline-flex min-h-11 items-center text-xs text-blue-700 underline">{homeText('browse')}</Link>
+      </details>}
+      {!wishes.length && <Link to="/explore" className="inline-flex min-h-11 items-center text-xs text-blue-700 underline">{homeText('browse')}</Link>}
     </div>
   </section>;
 }

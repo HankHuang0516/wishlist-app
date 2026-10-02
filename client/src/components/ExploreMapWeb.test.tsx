@@ -37,12 +37,12 @@ describe('real web map lifecycle and photo isolation', () => {
   it('sizes the actual preview canvas rather than clipping the full map and its attribution', () => {
     const mounted = render(<ExploreMapWeb {...props()} preview />);
     const map = screen.getByRole('region', { name: '商品探索地圖，亦可切換商品列表使用鍵盤操作' });
-    expect(map).toHaveClass('h-40');
+    expect(map).toHaveClass('h-56', 'sm:h-40');
     expect(map.parentElement).not.toHaveClass('overflow-hidden');
     expect(screen.getByText(/底圖：OpenFreeMap／OpenStreetMap/)).toBeVisible();
     mounted.rerender(<ExploreMapWeb {...props()} />);
     expect(map).toHaveClass('h-[480px]');
-    expect(map).not.toHaveClass('h-40');
+    expect(map).not.toHaveClass('h-56', 'sm:h-40');
   });
   it('keeps search/list available when the browser cannot start WebGL', () => {
     mocks.fail = true; render(<ExploreMapWeb {...props()} />);
@@ -98,7 +98,7 @@ describe('real web map lifecycle and photo isolation', () => {
   it('localizes live controls, attribution and resource failure without changing map data', () => {
     localStorage.setItem('user-locale', 'en-US'); render(<ExploreMapWeb {...props()} preview />);
     expect(mocks.maps[0].options.locale).toMatchObject({ 'NavigationControl.ZoomIn': 'Zoom in', 'NavigationControl.ZoomOut': 'Zoom out', 'AttributionControl.ToggleAttribution': 'Toggle map attribution' });
-    expect(screen.getByRole('region', { name: /Item exploration map/ })).toHaveClass('wishlist-map', 'h-40');
+    expect(screen.getByRole('region', { name: /Item exploration map/ })).toHaveClass('wishlist-map', 'h-56', 'sm:h-40');
     act(() => mocks.maps[0].handlers.error()); expect(screen.getByRole('status')).toHaveTextContent('Item data is unaffected');
     expect(screen.getByText(/Basemap: OpenFreeMap\/OpenStreetMap/)).toBeInTheDocument();
   });

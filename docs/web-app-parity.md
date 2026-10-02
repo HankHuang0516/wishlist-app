@@ -10,7 +10,7 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第三輪90/90僅為當時版本的歷史人工審查，不能沿用到現版。第五十七批後續以內建瀏覽器736×952及原完整截圖重驗，現版人工評分首頁88/100、設定90/100，首頁尚未達標；390×844無橫向溢出，生日region實際PageDown捲動0→112px，手機部分Settings欄位／語言按鈕40px及地圖attribution14px另待處理，不宣稱全controls≥44px。原Chrome兩自有視窗與DevTools清理未完成。完整功能、CI及正式部署门檻保留。
+目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第五十九批以內建瀏覽器736×952及原完整截圖重新人工加權審查，首頁90/100、設定90/100；這是單一agent設計評分，非獨立／像素相似度，正式網站尚未驗收。首頁完整高度1284、設定1184，仍高於概念圖；保留原願望metadata、生日／權限與實際功能差異。390×844沒有橫向溢出，手機Settings目標欄位／語言／頭像關聯label及地圖來源links44px，地圖224px避免來源與縮放重疊，不宣稱全站controls44px。原Chrome兩自有視窗與DevTools清理仍未完成。完整功能、CI及正式部署門檻保留。
 
 ## 最新目標修正：僅網頁、核准示意圖相似度至少90%（2026-10-01）
 
@@ -27,13 +27,22 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十九批：首頁比例與手機操作尺寸重驗（仍未部署）
+
+- 首頁地圖caption縮成中英文約略位置提示；完整原綠／橘來源、群聚、列表及底圖說明保留在既有願望交叉比對details。原無願望filter的browse入口也保留在details，空願望時仍在外顯示。真鍵盤Enter展開中英文、ArrowRight選原漫畫並維持原listing深連結；商品匹配／radio／分頁／搜尋／原資料不變。桌面完整ready首頁1356→1284px，縮短72px。
+- Settings只在手機提升nickname／private inputs、語言buttons與avatar-toggle關聯label至44px；原checkbox本體20px、隱藏file不算可見尺寸，desktop compact32px保留。地圖來源links44px後實際手機160px出現與zoom重疊42px，原counterexample截圖／geometry保留；preview手機改224px、desktop仍160px，最終來源與zoom22px間距，完整Explore480px未改。縮小按鈕實際click後的原畫面亦保存，不把DOM截圖當地圖內部zoom值證據。
+- 同核准concept逐頁人工加權審查：Home90＝31/35版面＋24/25配色字體＋18/20卡片按鈕＋12/15間距＋5/5導航；Settings90＝33＋24＋18＋10＋5。原ready完整截圖同736×952 viewport、document721×1284／721×1184；保留原功能造成高度與concept差異，不宣稱像素／獨立review。手機390×844的Home375×2550／Settings375×1824，無橫向溢出，沒有不存在的手機concept分數。兩張最早map-loading attempt與原160pxoverlap圖排除評分、原bytes保留。
+- 重用第57批原6users／3follows／3wishes／4listings合成DB，未reseed；compiled真handlers／loopback API與Vite，70 product GET全部200、product writes0／external mutations0，原資料件數不變。英文完整map notice／browse、空owner第一願望提示與browse實際核對，沒有真credential或provider品質聲明。26 raw JPEG／DOM／geometry／state artifacts及sha256 index保留於wishlist-web-visual59-evidence-20261002.json；檔名.jpg與實際JPEG一致，無加工。原native Chrome兩視窗與DevTools仍未清理；本批自有IAB tab關、viewport reset，API／Vite／PG停，DB與證據保留。
+- 既有focused67／6檔及調整後map8全部通過。第一完整gate抓到兩個仍要求所有preview h-40的舊尺寸斷言；改為手機h-56／sm:h-40並保留原map生命週期／資源及full480px斷言，未移除測試。第二完整gate退出0：Server56檔913＋既有3skip、HTTP40檔631、Web105檔1703＋build、Native42檔852＋typecheck／Expo、45migration schema difference0與required cleanup0。原依賴／bundle warnings保留；件數不代表功能覆蓋率。沒有APP／server／migration修改，原129他人workspace改動完整保留。
+- 本機視覺兩頁各90不代表full goal完成；功能矩陣其餘逐欄／權限／流程、來源正常ASK／CONSENT與English／觸控、provider／跨端、PWA安裝／正式升級／mixed-version、credential／permanent browser及最終migration preflight／merge／Railway／live仍待，PR82維持draft／goal active。精確新HEAD CI另回讀。
+
 ## 2026-10-02 第五十八批：最新來源詢問整合與原目標恢復（仍未部署）
 
 - 獨立乾淨integration55工作區先fast-forward第五十六／五十七批，再整合main7db05da原GET inquiry／不配置新receipt／跨裝置問題變更後重新確認的修正；client版本2.0.445及changelog／lock原更新保留，沒有APP或新migration修改。整合原版完整gate1699Web／631HTTP通過；本批另修正原網址id不在public items時錯誤fallback第一筆、public refresh可能失去原selected的缺口。
 - 明確id與初始目標維持同scope／journal key；來源撤回、expired或public read failed時顯示原選擇目前不在公開清單，沒有推測原公開資料、沒自動改選另一筆。保留owner實際GET原inquiry與撤回；新增問題／同意轉交在原來源不在清單時disabled。初選也記入網址供reload保留；仍公開的另一筆只能明確選擇。未知空收件GET不配置receipt、不清除原marker；另一筆／晚到回覆仍依scope隔離。
 - 新Web4：撤回deep link另有public lead不誤選、empty public list的unknown原marker保留、初選refresh後原撤回、late private reply不污染明確新選擇；focused15全過。第一個新refresh反例抓到query更新前仍可瞬間fallback，修正同步保留初始目標後通過，未放寬斷言。最後完整隔離gate退出0：Server56檔913＋既有3skip、HTTP40檔631、Web105檔1703＋build、Native42檔852＋typecheck／Expo、45migrations／schema difference0與required cleanup0；主JS351.00KB、PWA95entries6089.56KiB，原warnings保留。
 - 內建瀏覽器／新5239與API5240／獨立UTF8 DB／compiled real handlers：2合成owner、1public與2withdrawn leads、A原問題1receipt。撤回deep link保持原id，A GET原問題、ASK／CONSENT disabled；B GET同lead為null，不見A問題或配置receipt；A unknown empty marker讀兩次含reload仍未知、無POST。最後明確CANCEL原room真commit後QA502，reload明確GET原room回CANCELLED且原問題仍在、不重送。20product requests＝19GET200＋1原CANCEL POST502；真DB仍2users／3leads／1room、2events原ASK＋77b8639d-9e7e-4e15-a954-b7cda728ff60 CANCEL、inventory0／orders0／external mutations0。Source inquiry元件仍只存最小request marker，不冒稱原body encrypted歷史或immutable history。
-- 6原browser full PNG／DOM與state-final保留；trace為mounted router相對path，沒token／headers。QA Vite初config直接import套件版本不合，改沿原base config後啟動，失敗log保留；未放寬Vite限制或重建seed。自有IAB tab關／viewport reset，自有API／Vite／PG停，DB／原素材保留；原Chrome兩無痕視窗與DevTools仍未清理，未宣稱全GUI關閉。
+- 6原browser完整截圖／DOM與state-final保留；檔名為.png但capture原bytes實為JPEG，metadata明示，未轉檔或加工。trace為mounted router相對path，沒token／headers。QA Vite初config直接import套件版本不合，改沿原base config後啟動，失敗log保留；未放寬Vite限制或重建seed。自有IAB tab關／viewport reset，自有API／Vite／PG停，DB／原素材保留；原Chrome兩無痕視窗與DevTools仍未清理，未宣稱全GUI關閉。
 - 同輪第五十七批後續IAB：桌面736×952／DPR1、手機390×844原full PNG及DOM geometry；首頁1356px、設定1184px（與較早native raw不同時點），手機document width375≤390，生日128px region的240px完整內容PageDown由0→112。Header/footer及4生日links符合44px，Settings手機部分inputs／語言buttons40px、map attribution14px保留待處理；geometry可能含closed-details children，不當成全visible-target審計。人工加權Home88＝30/35＋24/25＋18/20＋11/15＋5/5，Settings90＝33/35＋24/25＋18/20＋10/15＋5/5；原圖／產品與人名／日期／餘額排除，homepage map附加操作與頁長差異仍扣分。這是本agent設計審查，非獨立或像素相似度；仍無兩頁90/90，未部署。57精確CI36999460113三項success及body/head已回讀。
 - 全native欄位／permissions／功能、source-lead English／觸控與正常ASK／CONSENT真UI、完整來源與人工送達證據、provider跨端、PWA／效能、credential及permanent browser、Home≥90与Settings持續回歸、migration／merge／既有Railway／live仍待；PR82 draft／goal active、精確本批HEAD CI另回讀。
 

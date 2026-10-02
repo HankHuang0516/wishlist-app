@@ -59,6 +59,8 @@
   .settings-hub .account-benefits summary { min-height: 2rem; font-size: .75rem; }
 }
 @media (max-width: 639px) {
+  .settings-language button, .settings-avatar input:not([type="checkbox"]), .settings-private input { min-height: 2.75rem; }
+  .settings-avatar label[for="avatar-toggle"] { display: inline-flex; min-height: 2.75rem; align-items: center; }
   .settings-language { align-items: flex-start; }
   .settings-private { grid-template-columns: minmax(0, 1fr); }
   .settings-private > div { grid-column: 1; }

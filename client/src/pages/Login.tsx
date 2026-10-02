@@ -13,6 +13,7 @@ import { authSession } from '../lib/authSession';
 import { AuthFlowError,authIssue,authText,emailPayload,emailRequestAck } from '../lib/authFlowWeb';
 import { useAuthRequest } from '../lib/useAuthRequest';
 import { AuthRecoveryLinks } from '../components/AuthRecovery';
+import ProductNoticeWeb from '../components/ProductNoticeWeb';
 
 export default function Login() {
   const [identifier,setIdentifier]=useState(''),[password,setPassword]=useState(''),[showPassword,setShowPassword]=useState(false);
@@ -41,6 +42,7 @@ export default function Login() {
   return <div className="flex items-center justify-center min-h-[60vh] p-4"><Card className="w-full max-w-md">
     <CardHeader className="text-center"><CardTitle className="text-2xl">{t('login.title')}</CardTitle><p className="text-sm text-muji-secondary">{t('login.subtitle')}</p></CardHeader>
     <form onSubmit={submit}><CardContent className="space-y-4">
+      <ProductNoticeWeb disabled={busy}/>
       {securityNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{securityNotice}</p>}
       {error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
       {resendSuccess&&<p role="status" className="rounded-lg bg-green-50 p-3 text-green-800">{resendSuccess}</p>}

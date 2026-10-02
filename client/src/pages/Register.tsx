@@ -9,6 +9,7 @@ import { AuthFlowError,authIssue,authText,registrationPayload,registrationAck,to
 import { useAuthRequest } from '../lib/useAuthRequest';
 import { t } from '../utils/localization';
 import { Analytics } from '../utils/analytics';
+import ProductNoticeWeb from '../components/ProductNoticeWeb';
 
 export default function Register() {
   const [name,setName]=useState(''),[email,setEmail]=useState(''),[phoneNumber,setPhone]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[birthday,setBirthday]=useState('');
@@ -23,6 +24,7 @@ export default function Register() {
   return <div className="flex items-center justify-center min-h-[60vh] p-4"><Card className="w-full max-w-md">
     <CardHeader className="text-center"><CardTitle className="text-2xl">{created?authText('verifyRegistration'):t('register.title')}</CardTitle><p className="text-sm text-muji-secondary">{t('register.subtitle')}</p></CardHeader>
     <CardContent className="space-y-4">
+      <ProductNoticeWeb disabled={busy}/>
       {issue&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{issue}</p>}
       {uncertain&&<p className="text-sm text-muji-secondary">{authText('registrationUnknown')}</p>}
       {created?<div role="status" className="space-y-3"><p>{authText(created.sent?'registrationSent':'registrationNotSent')}</p><p className="break-all font-medium">{created.email}</p></div>:!uncertain&&<form onSubmit={submit} className="space-y-4">

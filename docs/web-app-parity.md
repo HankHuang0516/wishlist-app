@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第六十一批：改版帳號／資料說明的網頁替代（仍未部署）
+
+- 補齊 `ProductNoticeScreen` 的 Weesh → Wishlist.ai、獨立帳號系統與舊資料不自動匯入說明。登入／註冊共用繁中／English、可鍵盤重新展開的說明；既有 Wishlist.ai 帳號與願望不需重建。確認不建立帳號、不匯入資料、不接受條款。Web 保留原登入／註冊操作，以可收合說明替代 native 安裝啟動 gate，未新增全站阻擋或改動 APP。
+- 只有明確確認才保存版本／revision／credential-free service 三個 metadata 欄位，獨立 notice key 不含帳號／token／私密 journal。服務、版本或多餘欄位不相符時重顯示；HTTP 只允許明確 DEV loopback，含 credentials／query／hash 或非標準 API path 在保存前拒絕。寫入後必須讀回同一份 metadata 才收合；儲存失敗或讀回不符顯示未確認提示及「這次繼續，不記住」。寫入已成功但讀回失敗時，下一次依實際儲存紀錄核對，不虛稱紀錄一定不存在。
+- 新 Web 4 個案例涵蓋跨登入／註冊記住、原輸入／auth record 保留、零提交、寫入失敗、visit-only、讀回失敗及服務隔離；focused 13 全過。初次兩個 fault case 對 `Storage.prototype` 注入，而本測試環境使用 own-object storage，故沒有觸發；改為對實際 storage 注入，不移除斷言。第一完整 gate 僅既有 BirthdayReminders 一案 5 秒逾時，單獨 7 案全過，第二完整 gate 退出0：Server56檔913＋既有3skip、HTTP40檔631、Web106檔1708＋build、Native42檔852＋typecheck／Expo、45migration schema diff0／required cleanup0。既有 warnings 保留。
+- 真 IAB 隔離訪客頁：英文確認／reload 收合、鍵盤 Enter 重開、切 Register 共用同 metadata；寫入失敗保留合成名稱與可用表單，visit-only 後下一頁重新展開、原 metadata null／guest auth 未改。繁中確認、讀回故障時實際 metadata 已寫但 UI 不冒稱成功、恢復讀回後收合及繁中 Register 共用確認均已核對。沒有輸入新 credentials、註冊提交、真 mail 或產品 API 請求；API trace 是0筆，不把此證據當註冊成功。測試入口最初誤把 `/api` 同時加在 VITE base 與 config suffix，造成 scope warning；僅修隔離入口後重驗，產品 config 未改。
+- 390×844 的英文初展開、失敗及 visit-only，繁中初展開／讀回故障，document width375無橫向溢出；展開的 summary／確認／visit-only controls44px。桌面736×952的繁中 document721×1368。7組原 JPEG／DOM／geometry、1張早期 sticky-header 歷史圖、storage proofs／request state及sha256 index在 `wishlist-web-notice61-evidence-20261002.json`；最終 capture 真點標題回 scrollY0。早期 geometry 的 identifier selector 錯誤且 value API 有 redaction，不能把 false 當輸入遺失；原合成 identifier 由確認後截圖核對、合成名稱由前後 DOM 核對。自有 IAB／viewport、API／Vite／PG 已清理，證據保留；舊 native Chrome 視窗未冒稱已關。
+- 新增 [逐欄來源對照](web-app-field-audit.md)，整理 native 原欄位、Web 入口／替代、權限約束及尚待驗收；來源比對不代替全功能成功證據。首頁／設定未改，本機最新人工各90仍採第59批；正式端、cross-device／provider、credential／permanent UI及完整矩陣門檻保留，goal active／PR82 draft。精確本批 HEAD CI 另回讀。
+
 ## 2026-10-02 第六十批：來源詢問双語與正常保存／同意恢复（仍未部署）
 
 - 保留main原來源線索功能，頁面固定labels、地圖說明、count、詢問／未知／錯誤與delivery描述繁中／English；原來源title／summary／公共地址／public facts／問題與receipt state bytes不翻寫，stock／rights／transaction待確認及未送賣家仍明示。原inquiry GET-only、scope／minimal marker、同意問題hash重新核對及withdrawn target規則保留；未新增來源資料模型、native商品達成率或outbound sender。
@@ -400,7 +409,7 @@
 | 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 本機實作；繁中底圖／照片實際顯示；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
 | 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批原target／撤回／unknown／late scope保留；第60批中英文與native44px point／Space真UI、空GET不配置、ASK與CONSENT各真commit502→reload GET同room／原中文問題／WAITING_ROUTE、B null不建room，35requests只有原配置／ASK／CONSENT3POST；新Web1／focused16／HTTP9通過、45migration diff0 | 完整來源／核實原賣家路由／人工delivery證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
-| 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
+| 商品檢舉與聊天入口 | ExploreScreen、ListingReportSheet | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
 | 保留既有Web朋友搜尋／追蹤／公開資料 | Social／public-profile／follow-operations；APP社交以ChatInbox為基準 | 第25／26批server privacy及原回執保留；第56批雙語原生日／photo failure-retry／公開與mask欄位、真取消commit502→reload及換帳號返回GET同回執／CAS清理、profile503恢復已Chrome本機驗證，原users逐欄不變 | 原HTTPS照片provider／跨端及正式站仍待；null不提供隱藏個資，calendar原值不依browser timezone換日 |
@@ -411,6 +420,7 @@
 | 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 原刪除路徑保留；本機中英文影響／回執／cleanup與account/token departure fence、原GET404及ABANDONED真browser核對；加密deletion vault／新分頁immutable CAS／legacy round-trip與GET-only真browser核對；第53批真production-order HTTP修正Social全域驗證攔截，原JWT after-delete回執／retry／abandon及十個Social端點401已通過；mixed-version PWA／credential及permanent browser submit仍待驗 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
+| Weesh 改版／帳號與資料說明 | App.tsx、ProductNoticeScreen／productNotice；非條款確認 | 第61批登入／註冊可重開雙語說明、明確三欄 service metadata／寫入讀回、failure／visit-only與跨頁記住真 IAB 核對；0產品 API，APP不改。Web以可收合提示替代安裝 gate，原auth表單仍可用 | 既有Wishlist帳號／願望不重建；不冒稱已匯入Weesh、不接受條款；正式端待驗 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；第53批生日六欄privacy／UTC calendar及Home語系真HTTP／Chrome已核對；第54批friend legacy WishlistDashboard英文搜尋排序與訪客清單核對；真mail、其他社交流程／feature／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；第48批landing中英文／安全locale讀取／原form入口真browser已核對 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |

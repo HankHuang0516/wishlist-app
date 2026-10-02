@@ -1,3 +1,9 @@
+## 2026-10-02 Deletion page authority and departure fencing
+
+Account/token keyed sessions discard old password and typed-confirmation state on authority change. Lifecycle generations stop dispatch after a late current-account proof and fence late mutation/lookup/abandon replies from new-account UI or cleanup. Busy fields lock through proof and the synchronous gate prevents duplicate confirmation. Only bounded proof/storage/unknown notices render. Existing global journals are checked before publication and compared to the exact original before removal; this is not a cross-tab atomic lock, and journal storage/races require further audit. The original deletion journal/session recovery contract is preserved.
+
+Fourteen new Web cases and full isolated gates pass. A new-origin Chrome fixture performs only real impact/receipt GETs with blank credentials, confirms unknown404 does not prove erasure and ABANDONED means account retained. No APP/backend source change, browser DELETE, new credential entry or external calls. Full browser permanent deletion and credential handoff acceptance remain pending.
+
 ## 2026-10-02 Feedback original receipt and recovery isolation
 
 Feedback journals are encrypted before sending and bound to API plus the actual owner or a distinct anonymous feedback scope. No token or plaintext fallback. Exact receipt identity/hash and minimal projections prevent malformed HTTP success or raw provider details from becoming a success claim. Original read-only restoration, immutable retries, synchronous dispatch gates, account/departure generations and compare-and-swap cleanup preserve unknown operations. Newer tab journals freeze controls until reread; confirmed account erasure fences late signed-in feedback writes without clearing anonymous or another owner.

@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十四批：刪除頁語系與登入離開保護（仍未部署）
+
+- AccountDeletionPage提供繁中／English：公共登入與恢復、影響盤點／時間、原operation receipt、unknown／abandon／ERASED、外部asset與backup限制、scope cleanup及controls。English確認文字為DELETE ACCOUNT、繁中保留刪除帳號；phrase在session初始固定，backend confirmation仍DELETE_MY_ACCOUNT，不保存password／typed confirmation，也不新增自動DELETE。
+- Page用實際user／token作session邊界，mount/departure generation在fresh profile／JSON完成後、DELETE回覆及manual check／abandon回覆再次核對。切帳號／token rotation／unmount於proof等待期間，沒有journal／DELETE；已dispatch的late ACK不更新新帳號、不清除原未確認journal。Busy時credentials／confirmation鎖定且同步gate防double submit／confirm。Unknown proof／storage errors採fixed notice，避免raw診斷或憑證回顯。已在其他分頁publish的journal不覆寫，finish exact original比對防移除newer journal；這個localStorage檢查不是跨分頁atomic lock，儲存設計與race仍另審，沒有宣稱完成全部刪除安全窗口。
+- 新Web14，focused26；full isolated gate退出0：Server56檔913＋3skip／HTTP34檔562／Web90檔1465＋build／Native42檔852＋typecheck／Expo，44migrations schema一致及required cleanup0。測試包含EN typed phrase／original wire contract、locale failure／corrupt journal／GET404不冒成功、3個departure時點、late DELETE fencing、newer publication／finish preservation、raw fault、duplicate/input lock與StrictMode取消。Full後English punctuation／spacing微調，最後完整Web1465＋build再驗；JS349.35KB／PWA91entries5999.09KiB，原map／worker warnings保留。APP／backend source未改。
+- Chrome390×844／document375／唯一Settings1，新5210 origin避免碰前批browser storage，獨立UTF8 DB44、compiled真user/deletion handlers。公共English routes、本人real impact counts0及46px空白password／confirmation、disabled DELETE核對；未知4bd2b6fc-2c7a-448c-ac67-2dd84e1b0c29開／reload只GET404共2次，不顯示成功；actual safe-abandonment fixture197b9677-1c2f-44f5-ba5f-22cb51eb84c2只GET200，顯示帳號未刪除。原own帳號仍存在、receipt abandoned true／erasedAt null；browser所有11 API requests均GET、POST/DELETE0、credential entry0、external0。6原JPEG／DOM／HTTP journal及wishlist-web-deletion-language-evidence-20261002.json保留；初public圖CJK full stop留，final圖已修正。不以這次readonly驗收代替實際永久刪除或credential handoff。
+- 自有API／Vite／PG停、tab關與viewport reset，DB及他人worktree保留。矩陣刪除列更新局部證據；剩餘全功能／social／partner語系流程、刪除journal atomic concurrency/storage audit、avatar server/provider／unknownFlickr、真provider-mail與跨端、PWA/private cache/效能、credential／permanent deletion browser acceptance、正式migration／merge／Railway及首頁／Settings各90%正式回讀仍續作。PR82 draft／goal active／未部署、100%可適用功能門檻不變；新提交精確CI另回讀。
+
 ## 2026-10-02 第四十三批：支援回饋持久回執與政策導覽（仍未部署）
 
 - Feedback送出前以AES-GCM保存原UUID／內容／回覆email／userId／原language／canonical hash；匿名feedback使用獨立API scope，登入者沿用本人scope，無token／無plaintext fallback。同步gate防double submit，storage failure保留可複製文字且不POST；回覆未知重開只GET原receipt。明確retry只送原body／ID／hash，不因顯示語言切換生成新操作。嚴格核對received／ID／hash／receipt UUID／notification enum；不呈現raw message、AI或provider diagnostics。已確認但cleanup失敗僅清理；CAS發現另一分頁journal先凍結並安全重讀其內容，不能盲目送新journal。Auth／unmount generations阻止舊回覆污染新帳號／清除未知原journal，StrictMode只有目前GET。
@@ -252,7 +260,7 @@
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
-| 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 既有刪除；本機合併入口 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
+| 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 原刪除路徑保留；本機中英文影響／回執／cleanup與account/token departure fence、原GET404及ABANDONED真browser核對；credential／permanent browser submit及journal atomic/storage audit仍待驗 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |

@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Account deletion session boundaries — 2026-10-02
+
+Deletion preview, original receipt and cleanup controls support Chinese/English. English typed confirmation uses DELETE ACCOUNT; the server wire confirmation and original operation journal remain unchanged. User/token session boundaries and departure generations stop late proof dispatch and prevent late results from entering another account. Errors are bounded, busy credential fields lock and the synchronous gate prevents duplicate confirmation. Existing journals are checked before publication and compared exactly before finish; this localStorage check is not an atomic cross-tab lock, and deletion storage/concurrency remain under audit.
+
+Batch44 adds14 Web cases. Full isolated checks pass Web1465, HTTP562, Server913 plus3 skipped and Native852/typecheck/Expo with44 migrations/schema/cleanup; final presentation refinements pass another full Web test/build. Chrome390×844 proves real own read-only impact with blank46px credentials, unknown original GET404 after reload and real ABANDONED GET200, all11 API calls GET. No browser permanent deletion or credential entry; APP/backend unchanged, complete production acceptance remains pending.
+
 ## Feedback recovery and support — 2026-10-02
 
 Feedback saves an encrypted original operation before dispatch, validates the exact server receipt and reopens with GET only. Anonymous feedback has its own API scope; signed-in feedback follows owner isolation and confirmed scope erasure. Explicit retry retains the original body, UUID, hash and language. Storage faults stop dispatch; verified cleanup retries never resend, and a newer tab journal must be reread before use. Saved feedback is distinct from mail acceptance or inbox delivery.

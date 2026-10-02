@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
@@ -20,12 +21,72 @@ const mount = (value = auth) => render(<MemoryRouter><AuthContext.Provider value
 beforeEach(() => {
   erasePrivatePendingData.mockReset().mockResolvedValue(undefined); auth.logout.mockClear();
   localStorage.clear();
+  localStorage.setItem('user-locale','zh-TW');
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.stubGlobal('crypto', { randomUUID: () => actionId });
 });
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('public browser account deletion path', () => {
+  it('offers readable English sign-in and recovery without a mutation',()=>{
+    localStorage.setItem('user-locale','en-US');const fetch=vi.fn();vi.stubGlobal('fetch',fetch);mount({...auth,user:null,token:null,isAuthenticated:false});
+    expect(screen.getByRole('heading',{name:'Delete your Weesh (Wishlist.ai) account and related data'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'Sign in to continue'})).toHaveAttribute('href','/login?next=%2Faccount-deletion');expect(screen.getByRole('link',{name:'Reset password'})).toHaveAttribute('href','/forgot-password');expect(fetch).not.toHaveBeenCalled();
+  });
+  it('reopens an unknown English original operation by GET only and never treats 404 as success',async()=>{
+    localStorage.setItem('user-locale','en-US');localStorage.setItem(PENDING_DELETION_KEY,JSON.stringify({version:1,apiUrl:API_URL,userId:19,clientActionId:actionId,originalToken:'old-session'}));const fetch=vi.fn(async()=>({ok:false,status:404}));vi.stubGlobal('fetch',fetch);mount();
+    await screen.findByText('The original deletion result is unconfirmed. Deletion will not be resent automatically.');expect(screen.getByRole('button',{name:'Check original result only'})).toBeEnabled();expect(fetch.mock.calls).toHaveLength(1);expect(screen.queryByText('The server confirmed account deletion.')).not.toBeInTheDocument();expect(localStorage.getItem(PENDING_DELETION_KEY)).toContain(actionId);expect(erasePrivatePendingData).not.toHaveBeenCalled();
+  });
+  it('holds its duplicate gate and input lock through proof and persistence faults, exposing no raw storage details',async()=>{
+    let resolve:(value:ReturnType<typeof ok>)=>void=()=>{};const fetch=vi.fn((input:RequestInfo|URL,_init?:RequestInit)=>String(input).endsWith('/deletion-impact')?Promise.resolve(ok(preview)):new Promise<ReturnType<typeof ok>>(done=>{resolve=done;}));vi.stubGlobal('fetch',fetch);mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});const form=screen.getByLabelText('刪除帳號的目前密碼').closest('form')!;fireEvent.submit(form);fireEvent.submit(form);
+    expect(window.confirm).toHaveBeenCalledTimes(1);expect(fetch).toHaveBeenCalledTimes(2);expect(screen.getByLabelText('刪除帳號的目前密碼')).toBeDisabled();expect(screen.getByLabelText('輸入刪除帳號以確認')).toBeDisabled();
+    vi.spyOn(localStorage,'setItem').mockImplementation(()=>{throw Error('raw-private-storage-value');});await act(async()=>resolve(ok({id:19})));await screen.findByText('無法安全保存原刪除操作；沒有送出刪除。請保留本頁並重試。');expect(localStorage.getItem(PENDING_DELETION_KEY)).toBeNull();expect(screen.queryByText(/raw-private-storage/)).not.toBeInTheDocument();expect(screen.getByLabelText('刪除帳號的目前密碼')).toHaveValue('fixture-password');expect(fetch.mock.calls.some(([,init])=>init?.method==='DELETE')).toBe(false);
+  });
+  it('uses English typed confirmation while preserving the exact server deletion contract',async()=>{
+    localStorage.setItem('user-locale','en-US');const fetch=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>String(input).endsWith('/deletion-impact')?ok(preview):init?.method==='DELETE'?ok(ack):ok({id:19}));vi.stubGlobal('fetch',fetch);mount();
+    await screen.findByText(/Wishlists 1, wishes 2, listings 3/);expect(screen.getByText('Type “DELETE ACCOUNT” to confirm')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Current password for account deletion'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('Account deletion confirmation'),{target:{value:'刪除帳號'}});expect(screen.getByRole('button',{name:'Permanently delete my account'})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Account deletion confirmation'),{target:{value:'DELETE ACCOUNT'}});fireEvent.click(screen.getByRole('button',{name:'Permanently delete my account'}));await screen.findByText('The server confirmed account deletion.');
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Permanently delete your currently signed-in account?'));
+    expect(JSON.parse(String(fetch.mock.calls.find(([,init])=>init?.method==='DELETE')![1]?.body))).toEqual({currentPassword:'fixture-password',clientActionId:actionId,confirmation:'DELETE_MY_ACCOUNT'});expect(localStorage.getItem(PENDING_DELETION_KEY)).not.toContain('fixture-password');
+  });
+  it('falls back to English when reading the optional locale fails, preserving deletion journal checks',()=>{
+    vi.spyOn(localStorage,'getItem').mockImplementation(key=>{if(key==='user-locale')throw Error('locale read failed');return null;});vi.stubGlobal('fetch',vi.fn());mount({...auth,user:null,token:null,isAuthenticated:false});expect(screen.getByRole('link',{name:'Sign in to continue'})).toBeInTheDocument();
+  });
+  it('keeps corrupt journal recovery closed in English',()=>{
+    localStorage.setItem('user-locale','en-US');localStorage.setItem(PENDING_DELETION_KEY,'{invalid');const fetch=vi.fn();vi.stubGlobal('fetch',fetch);mount();expect(screen.getByRole('alert')).toHaveTextContent('original deletion journal could not be read safely');expect(screen.queryByRole('button',{name:'Permanently delete my account'})).not.toBeInTheDocument();expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each(['account-change','token-rotation','unmount'])('stops before journal publication and DELETE when departure occurs during proof: %s',async mode=>{
+    let resolve:(value:ReturnType<typeof ok>)=>void=()=>{};const fetch=vi.fn((input:RequestInfo|URL,_init?:RequestInit)=>String(input).endsWith('/deletion-impact')?Promise.resolve(ok(preview)):new Promise<ReturnType<typeof ok>>(done=>{resolve=done;}));vi.stubGlobal('fetch',fetch);const view=mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+    if(mode==='unmount')view.unmount();else view.rerender(<MemoryRouter><AuthContext.Provider value={{...auth,user:{id:mode==='account-change'?20:19,phoneNumber:'fixture'},token:'new-session'}}><AccountDeletionPage/></AuthContext.Provider></MemoryRouter>);
+    await act(async()=>resolve(ok({id:19})));expect(fetch.mock.calls.some(([,init])=>(init as RequestInit|undefined)?.method==='DELETE')).toBe(false);expect(localStorage.getItem(PENDING_DELETION_KEY)).toBeNull();expect(erasePrivatePendingData).not.toHaveBeenCalled();
+    if(mode!=='unmount'){await screen.findByText(/願望清單 1、願望 2、刊登 3/);expect(screen.getByLabelText('刪除帳號的目前密碼')).toHaveValue('');expect(screen.getByLabelText('輸入刪除帳號以確認')).toHaveValue('');}
+  });
+  it('ignores a late DELETE reply after account change, retaining original proof without cleaning new or old scope',async()=>{
+    let resolve:(value:ReturnType<typeof ok>)=>void=()=>{};const fetch=vi.fn((input:RequestInfo|URL,init?:RequestInit)=>String(input).endsWith('/deletion-impact')?Promise.resolve(ok(preview)):init?.method==='DELETE'?new Promise<ReturnType<typeof ok>>(done=>{resolve=done;}):Promise.resolve(ok({id:19})));vi.stubGlobal('fetch',fetch);const view=mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));await waitFor(()=>expect(fetch.mock.calls.some(([,init])=>init?.method==='DELETE')).toBe(true));
+    view.rerender(<MemoryRouter><AuthContext.Provider value={{...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}}><AccountDeletionPage/></AuthContext.Provider></MemoryRouter>);await act(async()=>resolve(ok(ack)));
+    expect(screen.getByRole('alert')).toHaveTextContent('另一帳號的未確認刪除操作');expect(screen.queryByText('伺服器已確認帳號刪除。')).not.toBeInTheDocument();expect(erasePrivatePendingData).not.toHaveBeenCalled();expect(localStorage.getItem(PENDING_DELETION_KEY)).toContain(actionId);expect(auth.logout).not.toHaveBeenCalled();
+  });
+  it('retains a newer journal published during current-account proof and sends nothing',async()=>{
+    let resolve:(value:ReturnType<typeof ok>)=>void=()=>{};const fetch=vi.fn((input:RequestInfo|URL,_init?:RequestInit)=>String(input).endsWith('/deletion-impact')?Promise.resolve(ok(preview)):new Promise<ReturnType<typeof ok>>(done=>{resolve=done;}));vi.stubGlobal('fetch',fetch);mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));
+    const newer=JSON.stringify({version:1,apiUrl:API_URL,userId:19,clientActionId:'22222222-2222-4222-8222-222222222222',originalToken:'original-other-tab'});localStorage.setItem(PENDING_DELETION_KEY,newer);await act(async()=>resolve(ok({id:19})));
+    expect(screen.getByRole('alert')).toHaveTextContent('無法安全保存原刪除操作');expect(localStorage.getItem(PENDING_DELETION_KEY)).toBe(newer);expect(fetch.mock.calls.some(([,init])=>(init as RequestInit|undefined)?.method==='DELETE')).toBe(false);expect(screen.getByLabelText('刪除帳號的目前密碼')).toHaveValue('fixture-password');
+  });
+  it('never removes a newer journal when finishing an already confirmed original result',async()=>{
+    localStorage.setItem(PENDING_DELETION_KEY,JSON.stringify({version:1,apiUrl:API_URL,userId:19,clientActionId:actionId,originalToken:'old-session'}));vi.stubGlobal('fetch',vi.fn(async()=>ok(ack)));mount();await screen.findByText(/此瀏覽器的本人待確認資料已清理/);
+    const newer=JSON.stringify({version:1,apiUrl:API_URL,userId:19,clientActionId:'22222222-2222-4222-8222-222222222222',originalToken:'newer-session'});localStorage.setItem(PENDING_DELETION_KEY,newer);fireEvent.click(screen.getByRole('button',{name:'完成並登出'}));expect(screen.getByRole('alert')).toHaveTextContent('較新的恢復資料已保留');expect(localStorage.getItem(PENDING_DELETION_KEY)).toBe(newer);expect(auth.logout).not.toHaveBeenCalled();
+  });
+  it('renders bounded proof errors rather than raw diagnostics or a credential echo',async()=>{
+    const fetch=vi.fn(async(input:RequestInfo|URL)=>{if(String(input).endsWith('/deletion-impact'))return ok(preview);throw Error('raw-secret-database-password');});vi.stubGlobal('fetch',fetch);mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));await screen.findByText('登入帳號已改變；沒有送出刪除。');expect(screen.queryByText(/raw-secret/)).not.toBeInTheDocument();expect(localStorage.getItem(PENDING_DELETION_KEY)).toBeNull();
+  });
+  it('retains a usable guarded form under StrictMode and honors cancellation without proof or DELETE',async()=>{
+    vi.spyOn(window,'confirm').mockReturnValue(false);const fetch=vi.fn(async()=>ok(preview));vi.stubGlobal('fetch',fetch);render(<StrictMode><MemoryRouter><AuthContext.Provider value={auth}><AccountDeletionPage/></AuthContext.Provider></MemoryRouter></StrictMode>);await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));expect(window.confirm).toHaveBeenCalledTimes(1);expect(fetch.mock.calls.every(([input])=>String(input).endsWith('/deletion-impact'))).toBe(true);expect(localStorage.getItem(PENDING_DELETION_KEY)).toBeNull();
+  });
   it('is usable without an installed app or an existing web login', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     mount({ ...auth, user: null, token: null, isAuthenticated: false });

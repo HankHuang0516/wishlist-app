@@ -10,7 +10,7 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第三輪首頁90/100、設定90/100僅為當時版本的歷史人工審查，不能沿用到目前累積變更後的畫面。第五十七批重新核對同畫布，調整首頁生日區與頁尾；最終兩頁、手機與鍵盤操作驗收尚未齊全，尚無新版90/90結果。第一輪84／87及第二輪90／89保留作歷史證據。完整功能、CI與正式部署門檻全部保留。
+目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第三輪90/90僅為當時版本的歷史人工審查，不能沿用到現版。第五十七批後續以內建瀏覽器736×952及原完整截圖重驗，現版人工評分首頁88/100、設定90/100，首頁尚未達標；390×844無橫向溢出，生日region實際PageDown捲動0→112px，手機部分Settings欄位／語言按鈕40px及地圖attribution14px另待處理，不宣稱全controls≥44px。原Chrome兩自有視窗與DevTools清理未完成。完整功能、CI及正式部署门檻保留。
 
 ## 最新目標修正：僅網頁、核准示意圖相似度至少90%（2026-10-01）
 
@@ -26,6 +26,16 @@
 - 視覺達90%不替代完整功能、錯誤／恢復、權限、CI與正式站回讀門檻；所有未完成項目繼續保留。不得以一張示意圖核准或本機截圖宣稱網站已部署或全功能對齊。
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
+
+## 2026-10-02 第五十八批：最新來源詢問整合與原目標恢復（仍未部署）
+
+- 獨立乾淨integration55工作區先fast-forward第五十六／五十七批，再整合main7db05da原GET inquiry／不配置新receipt／跨裝置問題變更後重新確認的修正；client版本2.0.445及changelog／lock原更新保留，沒有APP或新migration修改。整合原版完整gate1699Web／631HTTP通過；本批另修正原網址id不在public items時錯誤fallback第一筆、public refresh可能失去原selected的缺口。
+- 明確id與初始目標維持同scope／journal key；來源撤回、expired或public read failed時顯示原選擇目前不在公開清單，沒有推測原公開資料、沒自動改選另一筆。保留owner實際GET原inquiry與撤回；新增問題／同意轉交在原來源不在清單時disabled。初選也記入網址供reload保留；仍公開的另一筆只能明確選擇。未知空收件GET不配置receipt、不清除原marker；另一筆／晚到回覆仍依scope隔離。
+- 新Web4：撤回deep link另有public lead不誤選、empty public list的unknown原marker保留、初選refresh後原撤回、late private reply不污染明確新選擇；focused15全過。第一個新refresh反例抓到query更新前仍可瞬間fallback，修正同步保留初始目標後通過，未放寬斷言。最後完整隔離gate退出0：Server56檔913＋既有3skip、HTTP40檔631、Web105檔1703＋build、Native42檔852＋typecheck／Expo、45migrations／schema difference0與required cleanup0；主JS351.00KB、PWA95entries6089.56KiB，原warnings保留。
+- 內建瀏覽器／新5239與API5240／獨立UTF8 DB／compiled real handlers：2合成owner、1public與2withdrawn leads、A原問題1receipt。撤回deep link保持原id，A GET原問題、ASK／CONSENT disabled；B GET同lead為null，不見A問題或配置receipt；A unknown empty marker讀兩次含reload仍未知、無POST。最後明確CANCEL原room真commit後QA502，reload明確GET原room回CANCELLED且原問題仍在、不重送。20product requests＝19GET200＋1原CANCEL POST502；真DB仍2users／3leads／1room、2events原ASK＋77b8639d-9e7e-4e15-a954-b7cda728ff60 CANCEL、inventory0／orders0／external mutations0。Source inquiry元件仍只存最小request marker，不冒稱原body encrypted歷史或immutable history。
+- 6原browser full PNG／DOM與state-final保留；trace為mounted router相對path，沒token／headers。QA Vite初config直接import套件版本不合，改沿原base config後啟動，失敗log保留；未放寬Vite限制或重建seed。自有IAB tab關／viewport reset，自有API／Vite／PG停，DB／原素材保留；原Chrome兩無痕視窗與DevTools仍未清理，未宣稱全GUI關閉。
+- 同輪第五十七批後續IAB：桌面736×952／DPR1、手機390×844原full PNG及DOM geometry；首頁1356px、設定1184px（與較早native raw不同時點），手機document width375≤390，生日128px region的240px完整內容PageDown由0→112。Header/footer及4生日links符合44px，Settings手機部分inputs／語言buttons40px、map attribution14px保留待處理；geometry可能含closed-details children，不當成全visible-target審計。人工加權Home88＝30/35＋24/25＋18/20＋11/15＋5/5，Settings90＝33/35＋24/25＋18/20＋10/15＋5/5；原圖／產品與人名／日期／餘額排除，homepage map附加操作與頁長差異仍扣分。這是本agent設計審查，非獨立或像素相似度；仍無兩頁90/90，未部署。57精確CI36999460113三項success及body/head已回讀。
+- 全native欄位／permissions／功能、source-lead English／觸控與正常ASK／CONSENT真UI、完整來源與人工送達證據、provider跨端、PWA／效能、credential及permanent browser、Home≥90与Settings持續回歸、migration／merge／既有Railway／live仍待；PR82 draft／goal active、精確本批HEAD CI另回讀。
 
 ## 2026-10-02 第五十七批：首頁生日區與保留完整入口的頁尾（仍未部署）
 
@@ -370,7 +380,7 @@
 | 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 本機實作；真實帳號6個願望、漫畫3件第三方匹配已唯讀核對；第53批繁中English／expanded group／mobile／guest及生日獨立503→單GET恢復真Chrome核對 | 全願望／匹配分頁、最多3個並行、跨頁排序、失敗明示、不混入自己商品 |
 | 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 本機實作；單件zoom13、窄屏與漫畫詳情已驗證 | 同願望漫畫正反例、单件深連結最新狀態核對、鍵盤願望選擇 |
 | 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 本機實作；繁中底圖／照片實際顯示；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
-| 保留既有Web來源線索地圖／委託詢問 | main66191f9獨立Web功能；不冒稱APP已驗證商品或付款 | 整合保留公共日期／地點及帳號隔離詢問、原未知request查核、撤回與人工轉交邊界；既有8Web及8HTTP全通過，加1真App深連結／返回首頁回歸，45migration整合diff0 | 真browser、來源／人工轉交送達證據及正式端仍待；English與觸控另audit，不把來源線索算已驗證商品達成率 |
+| 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批整合GET不配置receipt与變更內容重新同意；撤回deep link不誤選、初選refresh／unknown空收件／late reply4新Web，15 focused及HTTP9均通過；新Chrome-independent IAB真A讀原／B null／unknown reload無POST、CANCEL真commit502→reload只GET原CANCELLED，DB仍1receipt、45migration diff0 | English與觸控、正常ASK／CONSENT真UI及完整來源／人工送達證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |

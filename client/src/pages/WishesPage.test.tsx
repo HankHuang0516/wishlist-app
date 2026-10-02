@@ -12,6 +12,7 @@ const clientRequestId='b5abf861-a66d-4072-876b-4f0ab3172dac',raw=JSON.stringify(
 let items:unknown[]=[];
 const mount=(id:number|null=null)=>render(<MemoryRouter><WishesSession token="fixture" userId={42} initialListId={id}/></MemoryRouter>);
 beforeEach(()=>{
+  localStorage.setItem('user-locale','zh-TW');
   data.clear();items=[];api.mockReset();store.get.mockReset().mockImplementation(async(key:string)=>data.get(key)??null);store.save.mockReset().mockImplementation(async(key:string,body:string)=>{if(data.has(key)&&data.get(key)!==body)throw new Error('CAS');data.set(key,body);});store.clear.mockReset().mockImplementation(async(key:string,body:string)=>{if(data.get(key)!==body)return false;data.delete(key);return true;});
   api.mockImplementation(async(_token:string,path:string,init?:RequestInit)=>{
     if(path.includes('/receipts/'))throw new Error('not found');
@@ -25,6 +26,67 @@ beforeEach(()=>{
 });
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 const posts=()=>api.mock.calls.filter(c=>c[2]?.method==='POST');
+describe('English wish UI preserves the original workflow and content',()=>{
+  beforeEach(()=>localStorage.setItem('user-locale','en-US'));
+  it('shows private counts and preserves original titles, notes, zero budgets and reference cents',async()=>{
+    items=[{...wish,price:'250.7500',maxPrice:0,link:'https://example.invalid/product'}];
+    mount();await screen.findByText('Private · 0 wishes · Limit 100 per list');
+    fireEvent.click(screen.getByRole('button',{name:'View “合成清單”'}));
+    await screen.findByText('合成願望');
+    expect(screen.getByText('AI reference price TWD 250.7500')).toBeInTheDocument();
+    expect(screen.getByText('Maximum budget TWD 0')).toBeInTheDocument();
+    expect(screen.getByText('合成詳細說明')).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Sharing, gifts and wish details'})).toHaveAttribute('href','/wishlists/1');
+    expect(screen.getByRole('link',{name:'Reference product link'})).toHaveAttribute('href','https://example.invalid/product');
+  });
+  it.each(['PENDING','PROCESSING','FAILED','SKIPPED'])('does not display an AI price before completion: %s',async aiStatus=>{
+    items=[{...wish,aiStatus}];mount(1);await screen.findByText('合成願望');
+    expect(screen.queryByText(/AI reference price/)).not.toBeInTheDocument();
+  });
+  it('translates validation without sending an invalid draft or changing original user content',async()=>{
+    mount(1);await screen.findByRole('button',{name:'Add wish · camera, upload or manual'});
+    fireEvent.click(screen.getByRole('button',{name:'Add wish · camera, upload or manual'}));
+    fireEvent.change(screen.getByLabelText('Wish name · optional with a photo'),{target:{value:'中文原名'}});
+    fireEvent.change(screen.getByLabelText('Maximum budget · optional · TWD'),{target:{value:'1.234'}});
+    fireEvent.click(screen.getByRole('button',{name:'Save wish data'}));
+    await screen.findByText('Use a non-negative budget with at most two decimal places.');
+    expect(posts()).toHaveLength(0);expect(data.size).toBe(0);
+    expect(screen.getByLabelText('Wish name · optional with a photo')).toHaveValue('中文原名');
+    expect(screen.getByRole('button',{name:'Close'})).toBeEnabled();
+  });
+  it('checks a reopened create with GET only and explicitly retries its identical original bytes',async()=>{
+    data.set('42.wish-create',raw);mount(1);
+    await screen.findByText('The original creation receipt is unavailable. This does not prove creation failed. Only an explicit retry resends the original content.');
+    expect(posts()).toHaveLength(0);expect(data.get('42.wish-create')).toBe(raw);
+    expect(screen.getByRole('button',{name:'Add wish · camera, upload or manual'})).toBeDisabled();
+    const retry=screen.getByRole('button',{name:'Explicitly retry the same creation'});
+    await waitFor(()=>expect(retry).toBeEnabled());fireEvent.click(retry);fireEvent.click(retry);
+    await screen.findByText('Creation is confirmed. Read the current data for the latest AI status.');
+    expect(posts()).toHaveLength(1);expect(posts()[0][2].body).toBe(JSON.parse(raw).body);
+    expect(data.has('42.wish-create')).toBe(false);expect(screen.getByText('合成願望')).toBeInTheDocument();
+  });
+  it('does not expose unknown diagnostics or describe read failure as an empty list',async()=>{
+    api.mockRejectedValue(new Error('private-provider-diagnostic-secret'));mount();await screen.findByRole('alert');
+    expect(screen.getByRole('alert')).toHaveTextContent('Safe recovery or data reading is unavailable.');
+    expect(screen.queryByText(/private-provider-diagnostic-secret/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No wishlists yet/)).not.toBeInTheDocument();
+  });
+  it('blocks a legacy reference URL containing credentials while retaining the original editor value',async()=>{
+    items=[{...wish,link:'https://user:private@example.invalid/product'}];mount(1);await screen.findByText('合成願望');
+    expect(screen.getByText('The reference product link cannot be opened safely.')).toBeInTheDocument();
+    expect(screen.queryByRole('link',{name:'Reference product link'})).not.toBeInTheDocument();
+    const edit=screen.getByRole('button',{name:'Edit wish'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    expect(screen.getByLabelText('Reference product link · optional')).toHaveValue('https://user:private@example.invalid/product');
+    expect(posts()).toHaveLength(0);
+  });
+  it('uses an English permanent-deletion warning with the original title and a working close control',async()=>{
+    items=[wish];mount(1);await screen.findByText('合成願望');
+    const remove=screen.getByRole('button',{name:'Delete wish'});await waitFor(()=>expect(remove).toBeEnabled());fireEvent.click(remove);
+    expect(screen.getByRole('dialog')).toHaveTextContent('Permanently delete “合成願望”? This cannot be undone.');
+    fireEvent.click(screen.getByRole('button',{name:'Close'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.mock.calls.filter(c=>c[2]?.method==='DELETE')).toHaveLength(0);
+  });
+});
 describe('native-parity wish web workflows',()=>{
   it('confirms the edited values and clears an old success notice before opening another editor',async()=>{
     items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{
@@ -49,7 +111,7 @@ describe('native-parity wish web workflows',()=>{
   });
   it('shows private list, accurate item count and legacy share/gift navigation',async()=>{
     mount();await screen.findByText('合成清單');expect(screen.getByText('私人 · 0 個願望 · 每份上限 100')).toBeInTheDocument();expect(screen.getByRole('link',{name:'原有清單分享、送禮與社交功能'})).toHaveAttribute('href','/dashboard');
-    fireEvent.click(screen.getByRole('button',{name:'查看「合成清單」'}));await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});expect(screen.getByRole('link',{name:'分享／送禮與標籤'})).toHaveAttribute('href','/wishlists/1');
+    fireEvent.click(screen.getByRole('button',{name:'查看「合成清單」'}));await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});expect(screen.getByRole('link',{name:'分享／送禮與願望詳情'})).toHaveAttribute('href','/wishlists/1');
   });
   it('does not describe a failed initial read as no lists or zero wishes',async()=>{
     api.mockRejectedValue(new Error('offline'));mount();await screen.findByRole('alert');expect(screen.queryByText(/尚無願望清單/)).not.toBeInTheDocument();expect(screen.queryByText('這個清單還沒有願望。')).not.toBeInTheDocument();

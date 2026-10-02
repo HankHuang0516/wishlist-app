@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十五批：願望介面雙語與原始價格精度（仍未部署）
+
+- `/wishes` 的清單、表單、照片、AI狀態、pending／local-cleanup／未知更新及刪除警示提供繁中／English，157項typed display copy；固定已知errors翻譯，未知診斷採bounded fallback。原name／notes／photo bytes／request ID-body／placeholder及原API契約不翻譯，分享入口正名願望詳情，沒有新增APP不存在的editable tags。原valid HTTP/HTTPS商品link保留，帶帳密或不安全link不建立可點連結但editor原值仍保留；主要details／links／checkbox label44px、dialog close明確語系及busy gate，name排序依目前display locale。
+- 原網站currency formatter保留原decimal string及trailing zeroes，250.7500不再變251；零與超過Number精度的字串原值保留。估算使用既有固定rates，繁中English明示2026-01-02日期，不冒稱即時；localCurrency參數確實使用目標rates，prototype keys／malformed partial price／nonfinite／conversion overflow拒收，unknown currency只顯示原價。APP／後台／schema未改。
+- 新Web21，focused47／2檔及原26全部通過；完整隔離gate退出0：Server56檔913＋既有3skip、HTTP39檔622、Web103檔1679＋build、Native42檔852＋typecheck／Expo、44migration schema diff0／required cleanup0。主JS350.63KB、PWA94entries6077.62KiB與既有warnings保留。AST重複摘要翻譯在新build前修正，原中文assertions保留，beforeEach明確zh-TW，不降斷言。
+- 新loopback5233／API5234／獨立UTF8 DB、真compiled GET與兩合成owner，native CUA Chrome獨立無痕：English private default、照片／手動表單與invalid1.234保留中文原輸入且無HTTP write；503不稱空清單→explicit GET恢复；原create8919639b-763f-4515-b61e-9d464b6aeb47加密保存後English reload／繁中／另一帳號返回共4GET404，無autoPOST且新建立disabled。B只有自己的私人清單，原notes標籤及budget0不變，FAILED不露raw403；原網站中英文250.7500 USD／approx8024TWD日期與native AI原价／budget500.5核對。全部29product GET：23×200、2注入503、4原receipt404；product writes0／external mutation0、2users／1follow／4lists／4items不變。首次503已在HTTP trace但未保存error screenshot，第二次有failure/recovery完整proof；沒有lost-create真commit或provider／clipboard聲明。
+- 原PNG／完整native AX及wishlist-web-wish-language-price-evidence-20261002.json保存；DevTools visibly390×844後還原1301×627、device mode解除／DevTools關、只關自有incognito，bookmark bar未變。fixture無viewport metadata使nativeAX click有未完成attempt，以新screen coordinate／Space和可見session feedback核對；繼承clipboard QA文字未操作，本批未inject clipboard stub。沒有DOM geometry、新90/90或全controls44px實測声明。自有API／Vite／PG已停，DB／證據／他人worktree保留。
+- 全feature／social／逐欄權限、avatar／unknownFlickr／真provider-mail跨端、PWA install／production upgrade／mixed-version CAS／效能、真credential／permanent browser、diagnostics IDs及fresh Home／Settings各90、正式preflight／merge／Railway／live仍待。PR82 draft、goal active、未部署；精確新HEAD CI另回讀。
+
 ## 2026-10-02 第五十四批：舊願望清單雙語與分享恢復（仍未部署）
 
 - WishlistDashboard／WishlistDetail的搜尋排序、建立欄位、private captions、未知原操作、照片／AI狀態與guest註冊CTA繁中／English，安全locale read fallback；原路由、payload、容量、visibility／送禮／clone及encrypted原操作協定保留。長清單標題完整換行；主要buttons／搜尋排序／inputs含portal及原操作links設44px，checkbox label44px，guest註冊只保留單一Link，未改全站Button預設。
@@ -346,7 +355,7 @@
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
-| 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
+| 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；第55批native-contract願望UI雙語／GET-only跨語言恢復／原decimal及dated fixed-rate estimate真Chrome核對；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |

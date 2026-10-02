@@ -12,7 +12,21 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式v561已發布並精確三CI／Runtime樹驗證，商品預覽og:url及twitter:url帶後台當前版號、stale query回目前值，公開照片200／invalid404保持。原IAB557經明確已保存確認更新561，公開商品繁中／英文原內容及探索／聊天入口回讀；語系偏好經原瀏覽器端Settings切换／恢复，源碼確認不涉及帳號API寫入。nested檢舉dialog英文仍待下一批。最近正式首頁／設定相似度評分仍553各90，完整provider／跨端／PWA與不可逆GUI及矩陣仍active；APP2.0.12不改。
+目前狀態：正式v564已發布；檢舉視窗與私人紀錄繁中／英文及390px畫面實際核對，原561分頁經已保存確認更新564，精確三CI與正式Runtime樹一致。探索／聊天入口持續可用；Explore主要控制英文仍為下一批。首頁／設定最近評分仍553各90；完整provider／跨端／PWA與不可逆GUI及矩陣仍active，APP2.0.12不改。
+
+## 2026-10-03 第七十一批：探索控制、詳情與已知恢復雙語
+
+- 正式v564及原ExplorePage證實English preference下主要搜尋／篩選／map/list／詳情正文仍中文。現在補齊原124個控制與已知copy key、7個分類、配對score／reason／own preview／currency unknown／台灣時間及地圖失敗的清單提示；原商品／願望／品牌／來源內容、UUID、NT$與category／condition／delivery原enum不翻譯。配對keyword文字只插入一次，不解讀其中模板；原server match code及限制如實對照。
+- 顯示語言換讀與地圖/list移動不查詢；定位只動原視野，須Search this area才查詢。原fresh details identity／expiry／account-key／abort fences、private願望選單、cursor loop／MAX_LOADED及optional外部開關不改；未知底層diagnostic受限、已知validation／401／429可恢復，不把失聯當empty。原報告destination／ProductActions及owner不能自己購買保持。
+- focused3files37passed，含9個新增：原文字與四種filter值切語系後不dispatch、explicit apply同query；真match原因的currency／distance／seller-verification限制；未知讀取失敗与explicit recovery；invalid價格／距離0HTTP；fresh details／NT$／原文／Escape與report原入口；external host／canonical URL只導原來源；定位拒絕與成功均不查詢；真render failure仍可用list；locale inaccessible English且guest private reads0。初輪34passed／3個新增fixture失敗（測試價格寫590而原fixture為250、jsdom無geolocation、共用storage為自訂object非Storage.prototype），修正fixture後原HTTP／權限／payload斷言保持，產品未因fixture失敗改動。transform的兩次assert在寫出ExplorePage前停止，原頁不曾半寫。
+- v567依HEAD566＋1；完整Web／Server build、精確三CI及正式雙語Explore實際操作另驗。APP ExternalDetailPhoto原圖／thumbnail與failure提示在Web目前只有縮圖，是此次源碼對照新增且尚未處理的真缺口，列為下一項；外部正式开關本批維持原狀，不能用mock宣稱真实外部供應或delivery。首頁／設定最近正式評分仍553各90；完整provider／兩方跨端／OS PWA／不可逆GUI與完整矩陣保持active。
+
+## 第七十批正式發布與檢舉雙語驗收
+
+- v564 PR102精確head9f4e805d95c0d633a83f95f11d8dad6c3a9ebf9e、CI37043462754三項通過；normal merge4471b0bf3d35fe5d87b0373ff6ec2e199ef3e2e2、empty trigger50c83158d213e3ffda8ad154253dd9ce66cc5ed3。Git0efd9c40-a2a0-4ba2-8846-555d9e5a7092 WAITING後同乾淨checkout上傳原service，部署60a4331a-8c8a-44bc-aba0-f34f5671e90c SUCCESS，uploads及client/server/mobile Runtime樹符合通過CI的版本。原129其他workspace改動保留；APP沒有修改。
+- Web112files1780passed／Server58files930passed+3skipped及兩端build通過。原5個reason enums、3個review states、UUID、exact-body replay、encrypted pending store、CAS清理、401回復、lookup-only與hash-only明確放棄規則保持。未知診斷受封閉字典限制，真正PendingStoreError禁止新送出並可明確恢復；檢查保存文字／不自動POST及切語言不改待確認內容。focused4files82passed後補真PendingStoreError案例由完整1780檢查涵蓋，不冒稱focused83。
+- 原IAB561经原ready控制與明確已保存確認更新564；本人原QA商品檢舉表單及私人紀錄英文、390px窄畫面、還原繁中與Chat收件匣原照片實際查看，保存raw DOM／geometry／viewport screenshots並檢視圖片。只切原瀏覽器端偏好，5個reason values及預設FRAUD保持，補充欄空白／1000限制保持；沒有新增訊息、檢舉、放棄或面交提案。真收件／審核結果和儲存失敗以單元檢查為證，本批沒有冒称正式送出或刻意破壞正式儲存。
+- /reports當前頁及chunk200，未登入mine／receipt／operation三個GET均401；首頁版本metadata／主bundle／Explore與Chat等原chunk200及worker bytes核對。不用公開HTTP401證據代替已登入GUI工作流。最新首頁／設定相似度仍553各90；Explore正文英文另批完成，真provider／兩方跨端／OS PWA／不可逆GUI及完整矩陣仍active。
 
 ## 2026-10-03 第七十批：商品檢舉與私人紀錄雙語恢復
 

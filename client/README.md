@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Bilingual item exploration — 2026-10-03
+
+The Explore search, map/list controls, filters, wish comparison, pagination, item/source details and recovery notices follow the saved Chinese/English preference. Original keywords, brand text, category/condition/delivery values, wish names, product/source content, prices and IDs remain unchanged. Taiwan time and approximate-location disclaimers are retained. Known match reasons retain budget-currency and authenticity limitations; generated keyword text is inserted literally, not treated as a second translation template.
+
+Language rendering and map/list movement do not dispatch searches. Location results only move the original approximate viewport; Search this area remains explicit. Unknown read diagnostics receive bounded copy, failed reads remain distinct from empty results, and existing account/abort, strict identity, cursor and 500-item gates remain. The original optional external-source rollout and source-only destination stay separate from in-app contact/report controls. Native APP and server contracts are unchanged. Tests and actual deployment/browser acceptance are recorded in the parity matrix. The APP external-detail original-image/thumbnail fallback is a separately tracked remaining gap.
+
 ## Bilingual private listing reports — 2026-10-03
 
 The item report dialog and original report-history route follow the saved Chinese/English preference, including reasons, review states, local recovery, explicit replay and hash-only safe abandonment. Original item titles, evidence, IDs and immutable request bodies are preserved; dates retain Taiwan time. Display language changes do not dispatch or replace a pending operation. Known messages use a closed dictionary and unknown diagnostics receive bounded recovery copy, without claiming a failed local save persisted a report.

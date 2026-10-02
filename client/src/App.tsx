@@ -6,6 +6,7 @@ import OfflineBanner from "./components/OfflineBanner";
 import { createLazyPage } from "./components/LazyPage";
 import { Analytics } from "./utils/analytics";
 
+const SourceLeadMapPage = createLazyPage(() => import('./pages/SourceLeadMapPage'));
 const Home = createLazyPage(() => import('./pages/Home'));
 const Login = createLazyPage(() => import('./pages/Login'));
 const Register = createLazyPage(() => import('./pages/Register'));
@@ -73,6 +74,7 @@ function App() {
             <Route path="reset-password" element={<ResetPassword />} />
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="wishes" element={<WishesPage />} />
+            <Route path="source-leads" element={<SourceLeadMapPage />} />
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
             <Route path="explore" element={<ExplorePage />} />

@@ -209,3 +209,8 @@ The generated worker imports `public/pwa-cache-policy.js`. Activation and naviga
 An already-running retired worker may recreate its old cache after cleanup; the next navigation rechecks it, and the current worker never serves it. Activation notification is not proof that asynchronous cleanup finished. Previously decoded images can remain visible in an existing document. This is not atomic erasure, HTTP-cache cleanup or a guarantee that old clients join current journal CAS.
 
 Seven regressions run the actual classic script. Synthetic Chrome upgrades to the real built worker, preserves encrypted pending/vault markers and unsent text, loads public docs/artwork offline and fails fresh private requests. A QA-only inert analytics frame avoids external providers; the deletion marker verifies storage preservation, not a complete deletion receipt. Batch52 full local gates: Web1623/build, HTTP615, Server913 plus3 existing skips, Native852/typecheck/Expo and44 migrations without drift. Installation, production updates, mixed-version journals and whole-site performance still require the canonical parity gates.
+
+
+## 2026-10-02 來源線索限定發布
+來源線索與商品/結帳分離，公開網址 `/source-leads?id=<UUID>`。座標指向公開公共地點，不代表現貨所在地；原始日期須近兩月且來源核對在48小時內。私有證據與聯絡路由不進公开 DTO。询问先保存，再逐次明確同意；無已核原賣家路由維持 WAITING_ROUTE，撤回不宣稱已送。
+回滾：關閉 SOURCE_LEADS_PUBLIC_ENABLED 或回退應用版本，保留新增兩表與收件歷史；不刪除正式資料。既有外部商品公開開關維持關閉。手機舊版需另更新新圖層，網頁可獨立查看。

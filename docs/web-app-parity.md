@@ -35,6 +35,7 @@
 - 新loopback5233／API5234／獨立UTF8 DB、真compiled GET與兩合成owner，native CUA Chrome獨立無痕：English private default、照片／手動表單與invalid1.234保留中文原輸入且無HTTP write；503不稱空清單→explicit GET恢复；原create8919639b-763f-4515-b61e-9d464b6aeb47加密保存後English reload／繁中／另一帳號返回共4GET404，無autoPOST且新建立disabled。B只有自己的私人清單，原notes標籤及budget0不變，FAILED不露raw403；原網站中英文250.7500 USD／approx8024TWD日期與native AI原价／budget500.5核對。全部29product GET：23×200、2注入503、4原receipt404；product writes0／external mutation0、2users／1follow／4lists／4items不變。首次503已在HTTP trace但未保存error screenshot，第二次有failure/recovery完整proof；沒有lost-create真commit或provider／clipboard聲明。
 - 原PNG／完整native AX及wishlist-web-wish-language-price-evidence-20261002.json保存；DevTools visibly390×844後還原1301×627、device mode解除／DevTools關、只關自有incognito，bookmark bar未變。fixture無viewport metadata使nativeAX click有未完成attempt，以新screen coordinate／Space和可見session feedback核對；繼承clipboard QA文字未操作，本批未inject clipboard stub。沒有DOM geometry、新90/90或全controls44px實測声明。自有API／Vite／PG已停，DB／證據／他人worktree保留。
 - 全feature／social／逐欄權限、avatar／unknownFlickr／真provider-mail跨端、PWA install／production upgrade／mixed-version CAS／效能、真credential／permanent browser、diagnostics IDs及fresh Home／Settings各90、正式preflight／merge／Railway／live仍待。PR82 draft、goal active、未部署；精確新HEAD CI另回讀。
+- 同日整合最新main66191f9705f87ac6074f9fb13340dbe49e8dbd1c：保留獨立/source-leads、私密詢問、兩個資料模型及additive migration；source-leads沿用lazy recovery shell，深連結query與返回首頁新增真App regression。上游refresh的Response明確型別修正TypeScript循環推導建置錯誤，runtime與詢問契約不改；APP原始碼未改。整合後完整隔離gate退出0：Server913＋既有3skip／HTTP630共40檔／Web1688共104檔＋build／Native852＋typecheck及Expo，45migrations schema diff0、required cleanup0；主JS350.74KB、PWA95entries6086.09KiB。最初symlink依賴超出Vite允許範圍，改獨立依賴副本；原失敗logs保留，未放寬設定或刪除assertions。前述Chrome願望證據在main整合前，願望與價格component未再改；不宣稱新來源詢問已真browser/provider驗收。精確整合HEAD與CI另回讀，正式feature flags及環境未變。
 
 ## 2026-10-02 第五十四批：舊願望清單雙語與分享恢復（仍未部署）
 
@@ -351,6 +352,7 @@
 | 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 本機實作；真實帳號6個願望、漫畫3件第三方匹配已唯讀核對；第53批繁中English／expanded group／mobile／guest及生日獨立503→單GET恢復真Chrome核對 | 全願望／匹配分頁、最多3個並行、跨頁排序、失敗明示、不混入自己商品 |
 | 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 本機實作；單件zoom13、窄屏與漫畫詳情已驗證 | 同願望漫畫正反例、单件深連結最新狀態核對、鍵盤願望選擇 |
 | 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 本機實作；繁中底圖／照片實際顯示；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
+| 保留既有Web來源線索地圖／委託詢問 | main66191f9獨立Web功能；不冒稱APP已驗證商品或付款 | 整合保留公共日期／地點及帳號隔離詢問、原未知request查核、撤回與人工轉交邊界；既有8Web及8HTTP全通過，加1真App深連結／返回首頁回歸，45migration整合diff0 | 真browser、來源／人工轉交送達證據及正式端仍待；English與觸控另audit，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |

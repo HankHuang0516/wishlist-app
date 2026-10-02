@@ -6,6 +6,19 @@ import { Analytics } from './utils/analytics';
 describe('App', () => {
     beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'zh-TW'); window.history.replaceState(null, '', '/'); });
     afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+    it('retains the independently published source-lead route within the recoverable shared shell', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({items:[],nextCursor:null}) } as Response);
+        window.history.replaceState(null,'','/source-leads?id=11111111-1111-4111-8111-111111111111');
+        render(<App />);
+        await screen.findByRole('heading',{name:'來源線索地圖'});
+        await screen.findByText('0 件來源線索・0 個公共地點');
+        expect(window.location.search).toBe('?id=11111111-1111-4111-8111-111111111111');
+        expect(screen.getByRole('link',{name:'Wishlist.ai'})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('link',{name:'Wishlist.ai'}));
+        await screen.findByRole('heading',{name:'整理你的願望。'});
+        expect(screen.queryByRole('heading',{name:'來源線索地圖'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
     it('loads the home page and navigates to login without removing the shared shell', async () => {
         render(<App />);
         await screen.findByRole('heading', { name: '整理你的願望。' });

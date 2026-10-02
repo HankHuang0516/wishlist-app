@@ -69,6 +69,7 @@ const english = {
   "站內商品查詢未完成：": "In-app item query is incomplete: ",
   "外部商品查詢未完成：": "External item query is incomplete: ",
   "重新搜尋": "Search again",
+  "來源線索未完成讀取，已暫停自動更新；不代表沒有資料，請明確重新搜尋。": "Source items could not be fully read. Automatic updates are paused; this does not mean there is no data. Search again explicitly.",
   "搜尋等待時間": "Search wait time",
   "查詢暫時受限，請等待 {seconds} 秒後再試。等待期間可調整地圖與條件，不會自動搜尋。": "Queries are temporarily limited. Wait {seconds} seconds before retrying. You can adjust the map and filters while waiting; searches do not run automatically.",
   "等待已結束；請明確重試搜尋、載入更多或重新核對商品，不會自動執行。": "The wait has ended. Explicitly retry searching, loading more, or checking the item; nothing runs automatically.",

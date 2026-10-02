@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十二批：PWA 舊私人圖片快取清理與真 worker 離線驗證（仍未部署）
+
+- 證據限制：最初數份AX保存是「無變動」差異而非完整snapshot；原before／after／private-offline／docs JPEG已逐張實際檢視，工具完整狀態亦已讀取。image probe部分JSON保存完整snapshot，不把先前差異字段當作自動布林證明；所有原紀錄保留。
+- 舊 catch-all `images` runtime cache 與 Workbox precache 是不同儲存區；現有 Workbox cleanup 不會淘汰該 runtime cache。新的 classic script 由真 generateSW 的 importScripts 載入，在 activate／navigate waitUntil 清除整份 `images`，不遷移任何舊 response，包括看似公開 logo 的內容。新 `wishlist-public-artwork-v1` 僅容許同源、無query、八個精確公開 artwork 路徑；清理注入的私人／外站／未知feature項目，保留真正 precache／無關cache，不碰session／IDB／加密journal／request body，不重送或reload。
+- 清理工作共用pending promise；拒絕或未刪除會傳遞 bounded failure，後續導航重試。已在途舊worker仍可能晚到重建舊cache，下一navigation再清除；新worker不讀舊cache。controllerchange通知可能早於activate waitUntil完成，瀏覽器最初讀仍見舊cache，清理完成後明確再讀已不存在。這不是atomic erase／mixed-version journal CAS保證；已解碼同URL圖片可留在既有頁面，不聲稱撤回已顯示圖片或清理HTTP cache／所有舊版本資料。
+- 新7項Web回歸執行實際public script：整份舊cache淘汰、精確allowlist、不建立空cache／不replay、晚到導航、並行共用、拒絕／false刪除與retry。完整隔離pre-push退出0：Server56檔913＋既有3skip、HTTP38檔615、Web100檔1623＋build、Native42檔852＋typecheck／Expo、44migration schema diff0／required cleanup0；主JS350.59KB、PWA93entries6049.36KiB，既有map/worker warnings保留，APP／後台／migration未改。最初node environment測試因全域window setup失敗，修正常jsdom fixture及Node URL，不弱化斷言。
+- Chrome新loopback5226，真dist/sw.js／Workbox／policy／公開assets，合成舊worker重現舊image規則；四legacyentries含私人JSON／image／外站／stale logo，另新cache注入uploads與無關cache。升級後整份legacy消失、注入項目消失，precache／無關cache保留；真privatePendingStore API-integration marker與deletion vault marker逐字不變，未送出textarea不變，無自動reload／POST。vault只使用合成儲存marker，不冒稱完整帳號刪除回執恢復；有效HTTPS synthetic scope僅用於實際加密儲存，不送往外站。
+- CDP真正offline：私人JSON／image fetch均network unavailable，公開API docs連同lazy module完整呈現。image destination online時public logo／feature1各1024px、private合成PNG1px可讀，CacheStorage沒有私人圖。首次同頁同URL離線仍復用已解碼圖片，如實保留trace；QA private src加入新的非秘密probe UUID後，online可讀、offline新請求失敗，公開圖仍可讀。晚到images注入在次navigation移除，無關cache仍在。五張原JPEG＋browser-proof JSON保存並檢視代表升級圖；provider frame為明示inert QA stub，built API base未配置因此docs顯示不可用，不當成正式API／外部provider／全站離線寫入證據。QA server增補probe曾重開，未以重開後counter冒稱整段request trace。
+- 自有server／PG已停、tab已關、offline override已還原；DB／fixtures／證據與他人worktree保留。精確新提交CI另核對。仍待PWA安裝／正式升級／mixed-version deletion CAS與效能、全feature/social/Home語系／逐欄權限、avatar／unknown Flickr／真provider跨端、真credential／permanent browser、diagnostics production IDs核對、fresh Home／Settings各90及正式preflight／merge／Railway／live。PR82 draft、goal active、未部署。
+
 ## 2026-10-02 第五十一批：AI 指令與金鑰復原、API 文件契約（仍未部署）
 
 - 原POST/GET apikey與POST ai-prompt的個人金鑰／JWT能力、原prompt/apiKey/userName回覆及既有JSON指令保留。以User FOR NO KEY UPDATE同一gate序列化首次建立、明確輪替及密碼／撤銷操作；middleware後重新核對實際憑證與authVersion／owner存在。12並行首次請求只取得同一有效key；明確rotation才換key，也能修復舊格式錯誤key。新增GET ai-prompt只讀目前指令，無key時精確available:false，不建立、不冒充歷史回執。private no-store在auth前設定，錯誤只bounded code；配置先驗證credential-free /api base並保留loopback HTTP。
@@ -329,7 +339,7 @@
 | 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
 | 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |
 | 既有帳號交易與送禮認領紀錄 | Web既有功能；APP沒有此頁 | 第50批actual HTTP11／Web23與Chrome populated／empty／single-read503→retry／guest；105筆完整、private current claim minimal reminder、原amount／0／refund／status、雙語mobile／desktop及single44px Settings entry核對 | Current claims不是付款／送達或durable history；對方私人／隱藏立即依新讀取遮蔽；正式端待驗 |
-| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／key lifecycle與雙語文件已第51批實際回歸；PWA與真OS/credential仍待 | autosave真實回執、隱私切換；個人指令含金鑰僅明確複製／手動顯示，不寫入持久journal／log／artifact |
+| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／key lifecycle與雙語文件已第51批實際回歸；第52批真built worker upgrade淘汰legacy private image cache，保留加密marker／unsent文字，公開docs／image offline可讀且private新請求不可讀；安裝／正式升級／mixed-version CAS／真OS/credential仍待 | autosave真實回執、隱私切換；個人指令含金鑰僅明確複製／手動顯示，不寫入持久journal／log／artifact；已解碼圖片不聲稱立即撤回 |
 
 ## 平台替代策略
 

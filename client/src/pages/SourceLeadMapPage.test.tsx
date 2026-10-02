@@ -19,7 +19,9 @@ describe('source lead public map',()=>{
    return{ok:true,json:async()=>row};
   });vi.stubGlobal('fetch',fetch);render(<MemoryRouter><SourceLeadMapPage/></MemoryRouter>);await screen.findByRole('heading',{name:'原公開來源'});
   expect(screen.getByRole('heading',{name:'Source lead map'})).toBeInTheDocument();expect(screen.getByText('Source leads: 1 · Public places: 1')).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('textbox',{name:'Question'}),{target:{value:question}});fireEvent.click(screen.getByRole('button',{name:'Save question'}));await screen.findByText(question);
+  fireEvent.change(screen.getByRole('textbox',{name:'Question'}),{target:{value:question}});
+  expect(screen.getByRole('textbox',{name:'Question'})).toHaveValue(question);expect(screen.getByRole('button',{name:'Save question'})).toBeEnabled();
+  fireEvent.click(screen.getByRole('button',{name:'Save question'}));await screen.findByText(question);
   const consent=screen.getByRole('button',{name:'Consent to forward only the questions above to the verified original seller'});fireEvent.click(consent);await screen.findByRole('alert');
   expect(screen.getByRole('alert')).toHaveTextContent('The operation is unconfirmed');const marker=sessionStorage.getItem('source-lead-request:1:a');expect(marker).toBeTruthy();expect(marker).not.toContain(question);
   fireEvent.click(screen.getByRole('button',{name:'Read saved inquiry'}));await screen.findByText(/WAITING_ROUTE/);expect(screen.getByText(question)).toBeInTheDocument();expect(screen.getByText(/Not sent to the seller/)).toBeInTheDocument();expect(sessionStorage.getItem('source-lead-request:1:a')).toBeNull();

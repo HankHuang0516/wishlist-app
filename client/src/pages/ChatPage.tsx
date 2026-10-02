@@ -36,7 +36,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
       if (!active.current || current !== seq.current) return;
       if (next) seen.current.add(next); else seen.current.clear();
       setRooms(old => next ? [...new Map([...old, ...page.items].map(room => [room.id, room])).values()] : page.items); setCursor(page.nextCursor); setLoaded(true);
-    } catch (failure) { if (active.current && current === seq.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；請重新登入原帳號，待確認操作會保留。' : '暫時無法載入聊天；不代表沒有對話，請重試。'); }
+    } catch (failure) { if (active.current && current === seq.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；請重新登入原帳號，待確認操作會保留。' : '暫時無法載入聊天；不代表沒有對話，請重試。'); }
     finally { gate.current = false; if (active.current && current === seq.current) setBusy(false); }
   }
   useEffect(() => {
@@ -99,7 +99,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     if (reading.current || mutation.current || !active.current) return; reading.current = true; setUpdating(true); setError(''); const seq = ++sequence.current;
     try {
       const next = parseChatRoom(await read('/chat/conversations/' + roomId), userId);
-      if (!active.current || seq !== sequence.current) return; admit(next); setBlockUnknown(false); if (!older) void refreshMeetup(next);
+      if (!active.current || seq !== sequence.current) return; admit(next); setBlockUnknown(false); if (!older && !shownMeetup.current) void refreshMeetup(next);
       const last = messageRef.current.at(-1)?.sequence;
       const anchor = older ? '&beforeSequence=' + older : last !== undefined ? '&afterSequence=' + last : '';
       let page = parseMessagePage(await read(`/chat/conversations/${roomId}/messages?limit=50${anchor}`), next);
@@ -114,7 +114,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
         if (page.items.some(m => m.sequence <= after)) throw new ChatDataError('聊天分頁重複。'); await admitMessages(page.items);
       }
       if (active.current && seq === sequence.current) setCatchup(!older && page.nextAfterSequence !== null);
-    } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；原訊息保留，請重新登入原帳號後查核。' : '無法更新聊天；歷史可能不完整，待確認訊息仍保留，請重試。'); }
+    } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ChatDataError ? failure.message : failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : failure instanceof ApiFailure && failure.status === 401 ? '登入已失效；原訊息保留，請重新登入原帳號後查核。' : '無法更新聊天；歷史可能不完整，待確認訊息仍保留，請重試。'); }
     finally { reading.current = false; if (active.current) setUpdating(false); }
   }
   async function checkPending() {

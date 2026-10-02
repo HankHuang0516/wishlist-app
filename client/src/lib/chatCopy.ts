@@ -1,6 +1,7 @@
 import { getDisplayLocale } from '../utils/localization';
 import type { ChatRoomRecord } from './chatData';
 const english = {
+  "請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。": "Requests are temporarily limited. Automatic reads are paused; try again later. Your original content and pending operations remain.",
   "售價未提供": "Price unavailable",
   "免費贈送": "Free",
   "聊天商品照片": "Chat item photo",

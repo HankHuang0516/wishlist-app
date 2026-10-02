@@ -12,7 +12,22 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行。第六十三批v2.0.541已正式發布，原登入Chrome538頁面實際顯示541更新提示，取消後保留未傳送的合成草稿，明確確認後同一QA聊天室載入541；探索地圖／8件商品列表及設定的目前可用版本檢查通過。IAB舊534分頁仍未升級，不能推定所有舊瀏覽器通過。第六十二批736×952首頁／設定的單一agent人工90/90保留為534歷史證據，不冒稱541重新評分；真訊息／面交異動、手機／英文更新、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+目前狀態：目標持續進行。第六十五批v2.0.547已正式發布，原登入Chrome541頁實際提示547，取消保留未傳送的合成草稿，明確確認後同一QA聊天室載入547英文介面；英文面交表單原文保留並清空本agent合成輸入，沒有提交。IAB舊534正常reload兩次後載入547。手機Chrome390×844實際排版正常，但後續聊天／面交讀取429，已保存錯誤且未冒稱資料流程通過；第66批修正請求等待。IAB手機圖與DOM量測矛盾保留排除，不能推定所有瀏覽器通過。第六十二批736×952首頁／設定90/90保留為534歷史證據，不冒稱547重評；真訊息／面交異動、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+
+## 2026-10-02 第六十六批：聊天長時間開啟後的限流等待
+
+- v547原生Chrome390×844畫布正常顯示英文Chat／Meetup，但持續讀取後遇429，設定讀取也429；原生DevTools可見 `/api/chat/conversations/...` 與 `/api/users/me` Too Many Requests，未操作Console程式／storage／安全開關。production既有限制每IP全路由500次／15分鐘，本輪兩版本各96資源讀取及真頁面操作也共享該額度，不能歸因為正常單一聊天輪詢必定超限。
+- Web API收到429即依Retry-After秒數或HTTP-date記住純記憶deadline，其他route／account亦不再發出請求，無有效header時保守等60秒；期限到達不會自行重送任何mutation。只保留期限、不存token／response／journal；原訊息及預約pending identity／body保持。Chat／Meetup顯示中英文等待提示，不把失敗說成空紀錄。未放寬或移除伺服器限制。
+- 面交詳情開啟時由對話與詳情重複讀取meetup，移除parent重複呼叫，仍讀最新room／messages及詳情appointment。回歸涵蓋跨route／account cooldown、期限前零fetch、原操作明確重試、日期／非JSON／缺header、401不誤暫停、原草稿保留與一次輪詢僅一筆meetup read。
+- 第一次新輪詢測試因fake timers在render後才啟動而未攔既有interval失敗；改在render前只攔interval，不改timeout／不略過斷言。候選HEAD count549＋1為v550；完整Web／build／精確CI及正式更新另驗收，不以本機通過代替正式流程。全目標保持active。
+- 第一輪完整Web另抓到Marketing月額度429被當全站限流：保留失敗log，runtime改只對global RATE_LIMIT_EXCEEDED或無product code的429等待，MONTHLY_LIMIT／CHAT_RATE_LIMIT／PHOTO_UPLOAD_BUSY仍走各自原恢復，不阻止無關帳號讀取。新增隔離回歸，原月額度顯示／原request留存斷言不放寬。
+- 最終focused7檔195項、完整Web111檔1761項與TypeScript／Vite build／實際worker postbuild均退出0；metadata／index／bundle550一致，既有private cache policy與bridge保持。精確三項CI、正常合併及正式讀取另記錄。
+
+## 第六十五批正式更新與雙語验收
+
+- PR97 exact head b2aa7541a95f97353830121e3d3775ab97951217，CI37023141766三項all success；merge45c1dffb3a9f4e65c3eabe90e1a6b3baacba9475、空觸發997d82622e99dd575a9cca97d4cc5ff28b52beed。Git部署WAITING後同乾淨checkout直接部署原service，d20f3b2c-0f9b-4e90-9b59-01c230727617 SUCCESS，volume／環境／DB／APP不改。metadata／index／bundle547、四feature chunks200、健康200／private401、96 precache URLs正確；public worker實際入口skipWaiting1／clientsClaim1，v544同測0／0。
+- 真Chrome541→547 ready保留合成未傳送文字 `雙語更新驗收，未傳送 250.7500 USD {version}`，取消仍541原文未改。只清本agent合成文字後明確確認reload，同一QA room547、原中文商品／聯絡人／NT165／空歷史與disabled Send。英文面交表單合成地點／備註原文不變，清空後關閉，無POST／預約／封鎖／帳號異動。這個桌面驗收不取代雙方真正送達或手機429後恢復。
+- IAB原534兩次正常reload後547，沒清cache／登入資料或強制skipWaiting。390×844手機圖視覺窄列但DOM main390／section358／scrollWidth390，矛盾raw圖與geometry保留，不計視覺通過；以另存原生Chrome390×844實際畫布確認排版，資料429待第66批正式恢復。完整目標與最終逐頁90驗收仍active。
 
 ## 2026-10-02 第六十五批：已下載新版仍等待啟用的實際更新缺口
 

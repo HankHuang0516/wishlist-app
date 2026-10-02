@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../context/AuthContext';
 import { makeMessage, makeRoom, roomId } from '../__tests__/fixtures/chat';
 import ChatPage, { ChatRoomWeb } from './ChatPage';
+import { ApiFailure } from '../lib/marketplaceApi';
 const { api, data, store } = vi.hoisted(() => ({ api: vi.fn(), data: new Map<string, string>(), store: { get: vi.fn(), save: vi.fn(), clear: vi.fn() } }));
 vi.mock('../lib/marketplaceApi', async original => ({ ...await original<typeof import('../lib/marketplaceApi')>(), api }));
 vi.mock('../lib/webPendingStore', async original => ({ ...await original<typeof import('../lib/webPendingStore')>(), privatePendingStore: store, pendingRequestKey: async (_: string, id: number, resource: string) => `${id}.${resource}` }));
@@ -31,6 +32,31 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <ChatRoomWeb {...value} />;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('explains rate-limited inbox reads without declaring an empty inbox', async () => {
+    localStorage.setItem('user-locale', 'en-US'); api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByText(/Requests are temporarily limited/);
+    expect(screen.queryByText(/No other item conversations/)).not.toBeInTheDocument(); expect(posts()).toHaveLength(0);
+  });
+  it('retains unsent original text and history after a rate-limited read without creating a journal or POST', async () => {
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const original = '原文草稿 250.7500 USD {version}';
+    fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: original } });
+    api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_COOLDOWN', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' }));
+    await screen.findByText('請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。');
+    expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toHaveValue(original);
+    expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
+  it('reads meetup once per polling cycle while details are open instead of duplicating the parent read', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    fireEvent.click(screen.getByRole('button', { name: '查看或提議面交預約' }));
+    await screen.findByText('尚無面交預約，先與對方討論時間再提出邀約。');
+    const before = api.mock.calls.filter(call => call[1].endsWith('/meetup')).length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(api.mock.calls.filter(call => call[1].endsWith('/meetup'))).toHaveLength(before + 1); expect(posts()).toHaveLength(0);
+  });
   it('uses English inbox labels while preserving original listing/contact names and unread count', async () => {
     localStorage.setItem('user-locale', 'en-US'); room = makeRoom({ lastMessageSequence: 2, unreadCount: 2 });
     render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);

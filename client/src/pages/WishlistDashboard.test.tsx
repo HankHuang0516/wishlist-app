@@ -17,6 +17,47 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('legacy wishlist read truth and account scope', () => {
+  it('keeps English search, sorting and clear actions usable without changing loaded data or dispatching writes', async () => {
+    window.localStorage.setItem('user-locale', 'en-US');
+    const rows = [{ ...row, id: 3, title: 'Zebra list', isPublic: true }, { ...row, id: 2, title: 'Apple list' }, { ...row, title: 'Middle list' }];
+    const base = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url, init) => url.endsWith('/wishlists') ? response(rows) : base(url, init));
+    mount(); await screen.findByRole('link', { name: 'Zebra list' });
+    const order = () => screen.getAllByRole('link').filter(link => link.getAttribute('href')?.startsWith('/wishlists/')).map(link => link.textContent);
+    expect(order()).toEqual(['Zebra list', 'Apple list', 'Middle list']);
+    fireEvent.change(screen.getByRole('combobox', { name: 'List order' }), { target: { value: 'oldest' } }); expect(order()).toEqual(['Middle list', 'Apple list', 'Zebra list']);
+    fireEvent.change(screen.getByRole('combobox', { name: 'List order' }), { target: { value: 'name' } }); expect(order()).toEqual(['Apple list', 'Middle list', 'Zebra list']);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search lists' }), { target: { value: 'absent' } }); expect(screen.getByText('No loaded lists match')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear list search' })); expect(order()).toEqual(['Apple list', 'Middle list', 'Zebra list']);
+    expect(screen.getByRole('link', { name: 'Apple list' })).toHaveAttribute('href', '/wishlists/2');
+    expect(screen.getByText('Visible to everyone')).toBeInTheDocument(); expect(screen.getAllByText('Visible only to me')).toHaveLength(2);
+    expect(fetcher.mock.calls.some(call => call[1]?.method)).toBe(false);
+  });
+  it('labels the English create form and keeps its original private default and original-operation recovery link', async () => {
+    window.localStorage.setItem('user-locale', 'en-US'); mount(); await screen.findByText('合成舊清單');
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Create New Wishlist' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '+ Create New Wishlist' }));
+    expect(screen.getByRole('textbox', { name: 'List title' })).toBeInTheDocument(); expect(screen.getByRole('textbox', { name: 'List description · optional' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Close list creation' }));
+    expect(screen.getByRole('link', { name: /Photo and AI wishes/ })).toHaveAttribute('href', '/wishes');
+  });
+  it('renders English current-state recovery while retaining the original marker and never automatically mutating', async () => {
+    window.localStorage.setItem('user-locale', 'en-US');
+    const raw = JSON.stringify({ version: 1, id: 1, kind: 'PRIVACY', wanted: true, localOperationId: '11111111-1111-4111-8111-111111111111' });
+    store.get.mockImplementation(async key => key === '42.legacy-list-operation' ? raw : null); mount();
+    await screen.findByRole('region', { name: 'Original list operation check' });
+    expect(screen.getByRole('button', { name: 'Make list public' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Read current list state' }));
+    await screen.findByText(/This is not a historical receipt/); expect(store.clear).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Acknowledge current state, clear marker and resume' })).toBeEnabled();
+    expect(fetcher.mock.calls.some(call => call[1]?.method)).toBe(false);
+  });
+  it('renders safe English labels when optional locale storage fails, without bypassing recovery storage', async () => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw Error('synthetic locale failure'); });
+    try { mount(); await screen.findByText('合成舊清單'); expect(screen.getByRole('combobox', { name: 'List order' })).toBeInTheDocument(); expect(store.get).toHaveBeenCalledWith('42.legacy-list-operation'); }
+    finally { vi.restoreAllMocks(); }
+  });
   it('renders the visible wishlist count in the selected English language',async()=>{
     window.localStorage.setItem('user-locale','en-US');mount();await screen.findByText('合成舊清單');expect(screen.getByText('2 wishes')).toBeInTheDocument();expect(screen.queryByText('dashboard.items')).not.toBeInTheDocument();
   });

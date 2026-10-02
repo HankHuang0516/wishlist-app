@@ -16,6 +16,49 @@ async function edit(){const button=await screen.findByRole('button',{name:'編�
 beforeEach(()=>{identity.user.id=42;identity.token='synthetic-a';saved.clear();window.localStorage.setItem('user-locale','zh-TW');store.get.mockReset().mockImplementation(async key=>saved.get(key)??null);store.save.mockReset().mockImplementation(async (key,raw)=>{saved.set(key,raw);});store.clear.mockReset().mockImplementation(async (key,raw)=>{if(saved.get(key)!==raw)return false;saved.delete(key);return true;});fetcher.mockReset().mockImplementation(async ()=>response(row));vi.stubGlobal('fetch',fetcher);});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 describe('legacy detail list and gift contracts',()=>{
+  it('translates owner image and AI queue states while preserving exact reference and budget values', async () => {
+    window.localStorage.setItem('user-locale','en-US');
+    fetcher.mockResolvedValue(response({...row,items:[{...item,price:'0',maxPrice:0,aiStatus:'PENDING'}, {...item,id:5,name:'Failed upload',uploadStatus:'FAILED',aiStatus:'FAILED'}, {...item,id:6,name:'Manual wish',aiStatus:'SKIPPED'}]}));
+    mount(); await screen.findByText('Manual wish'); expect(screen.getAllByText('AI queued…')).toHaveLength(2); expect(screen.getByText('Upload failed')).toBeInTheDocument(); expect(screen.getByText('Manual mode')).toBeInTheDocument();
+    expect(screen.getByText('0 TWD')).toBeInTheDocument(); expect(screen.getByText('Maximum budget: 0 TWD')).toBeInTheDocument(); expect(screen.queryByText(/EClaw/)).not.toBeInTheDocument();
+  });
+  it('retains a single translated guest registration link without a nested button', async () => {
+    identity.token=''; identity.user.id=7; mount(); await screen.findByText('喜歡這份清單？');
+    const link=screen.getByRole('link',{name:'立即加入'}); expect(link).toHaveAttribute('href','/register'); expect(link.querySelector('button')).toBeNull();
+    expect(screen.queryByRole('button',{name:'編輯清單'})).not.toBeInTheDocument();
+  });
+  it('shows a readonly URL after clipboard failure without reporting copied or leaking raw diagnostics', async () => {
+    window.localStorage.setItem('user-locale','en-US');
+    const writeText=vi.fn().mockRejectedValue(Error('synthetic private clipboard diagnostic'));
+    vi.stubGlobal('navigator',{language:'en-US',onLine:true,clipboard:{writeText}}); mount(); await screen.findByText('合成清單');
+    fireEvent.click(screen.getAllByRole('button',{name:'Share',exact:true})[0]);
+    await screen.findByRole('region',{name:'Wishlist URL'});
+    const input=screen.getByRole('textbox',{name:'Wishlist URL'}); expect(input).toHaveAttribute('readonly'); expect(input).toHaveValue(window.location.origin+'/wishlists/1');
+    expect(writeText).toHaveBeenCalledTimes(1); expect(screen.queryByText('Link copied!')).not.toBeInTheDocument(); expect(screen.queryByText(/private clipboard diagnostic/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Hide URL'})); expect(screen.queryByRole('region',{name:'Wishlist URL'})).not.toBeInTheDocument();
+  });
+  it('synchronously gates both share buttons while one clipboard operation is pending', async () => {
+    window.localStorage.setItem('user-locale','en-US'); let finish!:()=>void; const writeText=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve;}));
+    vi.stubGlobal('navigator',{language:'en-US',onLine:true,clipboard:{writeText}}); mount(); await screen.findByText('合成清單');
+    const buttons=screen.getAllByRole('button',{name:'Share',exact:true});fireEvent.click(buttons[0]);fireEvent.click(buttons[1]);expect(writeText).toHaveBeenCalledTimes(1);expect(buttons.every(button=>(button as HTMLButtonElement).disabled)).toBe(true);
+    await act(async()=>finish());expect(screen.getAllByText('Link copied!').length).toBeGreaterThan(0);
+  });
+  it('supports native sharing without canShare and treats cancellation as cancellation without copying', async () => {
+    window.localStorage.setItem('user-locale','en-US'); const share=vi.fn().mockRejectedValue(new DOMException('synthetic cancel','AbortError')),writeText=vi.fn();
+    vi.stubGlobal('navigator',{language:'en-US',onLine:true,share,clipboard:{writeText}});mount();await screen.findByText('合成清單');fireEvent.click(screen.getAllByRole('button',{name:'Share',exact:true})[0]);
+    await waitFor(()=>expect(share).toHaveBeenCalledTimes(1)); expect(share).toHaveBeenCalledWith({title:'Wishlist: 合成清單',text:'View this wishlist on Wishlist.ai.',url:window.location.origin+'/wishlists/1'});expect(writeText).not.toHaveBeenCalled();expect(screen.queryByRole('region',{name:'Wishlist URL'})).not.toBeInTheDocument();
+  });
+  it('falls back to copying when native capability probing throws', async () => {
+    window.localStorage.setItem('user-locale','en-US'); const share=vi.fn(),writeText=vi.fn().mockResolvedValue(undefined),canShare=vi.fn(()=>{throw Error('synthetic capability');});
+    vi.stubGlobal('navigator',{language:'en-US',onLine:true,share,canShare,clipboard:{writeText}});mount();await screen.findByText('合成清單');fireEvent.click(screen.getAllByRole('button',{name:'Share',exact:true})[0]);
+    await waitFor(()=>expect(writeText).toHaveBeenCalledTimes(1));expect(share).not.toHaveBeenCalled();expect(screen.getAllByText('Link copied!').length).toBeGreaterThan(0);
+  });
+  it('does not copy after a late native share rejection belongs to an account that has departed', async () => {
+    window.localStorage.setItem('user-locale','en-US');let reject!:(value:Error)=>void;const share=vi.fn(()=>new Promise<void>((_,fail)=>{reject=fail;})),writeText=vi.fn();
+    vi.stubGlobal('navigator',{language:'en-US',onLine:true,share,clipboard:{writeText}});const view=mount();await screen.findByText('合成清單');fireEvent.click(screen.getAllByRole('button',{name:'Share',exact:true})[0]);await waitFor(()=>expect(reject).toBeDefined());
+    identity.user.id=7;identity.token='synthetic-b';view.rerender(tree());await screen.findByRole('button',{name:'Mark as purchased 合成願望'});await act(async()=>reject(Error('late share failure')));
+    expect(writeText).not.toHaveBeenCalled();expect(screen.queryByRole('region',{name:'Wishlist URL'})).not.toBeInTheDocument();
+  });
   it('merges the itemless edit ACK and preserves child wishes and budget',async()=>{
     fetcher.mockImplementation(async (_url,init)=>response(init?.method==='PUT'?{id:1,userId:42,...JSON.parse(init.body)}:row));mount();await edit();await screen.findByRole('heading',{name:'編輯後清單'});
     expect(screen.getByText('合成願望')).toBeInTheDocument();expect(screen.getByText(/最高預算:/)).toHaveTextContent('750.75');expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(saved.size).toBe(0);

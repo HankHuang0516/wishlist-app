@@ -31,7 +31,7 @@ export default function ItemDetailModal({isOpen,onClose,item,isOwner,wisherName,
   }
   if(zoom && item.imageUrl)return <MarketplaceDialog key="image" title={text('zoom')+' · '+item.name} onClose={()=>setZoom(false)} closeLabel={t('common.close')}><img src={getImageUrl(item.imageUrl)} alt={item.name} className="max-h-[75dvh] w-full object-contain"/></MarketplaceDialog>;
   const reference=safeDetailLink(item.link),ai=safeDetailLink(item.aiLink),search='https://www.google.com/search?tbm=shop&q='+encodeURIComponent(item.name);
-  const field=(name:keyof DetailItemDraft,label:string,props:Record<string,unknown>={})=><label className="block space-y-1"><span className="text-sm font-medium">{label}</span><Input value={form[name]} onChange={e=>setForm(old=>({...old,[name]:e.target.value}))} disabled={locked || busy} {...props}/></label>;
+  const field=(name:keyof DetailItemDraft,label:string,props:Record<string,unknown>={})=><label className="block space-y-1"><span className="text-sm font-medium">{label}</span><Input className="min-h-11 text-base md:text-sm" value={form[name]} onChange={e=>setForm(old=>({...old,[name]:e.target.value}))} disabled={locked || busy} {...props}/></label>;
   return <MarketplaceDialog key="detail" title={editing?text('edit')+' · '+item.name:item.name} onClose={onClose} closeDisabled={busy} closeLabel={t('common.close')}>
     <div className="space-y-4">
       {item.aiError?.includes('403') && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700"><strong>{text('blocked')}</strong><p>{text('blockedHelp')}</p></div>}

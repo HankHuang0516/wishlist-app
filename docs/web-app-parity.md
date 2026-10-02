@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十四批：舊願望清單雙語與分享恢復（仍未部署）
+
+- WishlistDashboard／WishlistDetail的搜尋排序、建立欄位、private captions、未知原操作、照片／AI狀態與guest註冊CTA繁中／English，安全locale read fallback；原路由、payload、容量、visibility／送禮／clone及encrypted原操作協定保留。長清單標題完整換行；主要buttons／搜尋排序／inputs含portal及原操作links設44px，checkbox label44px，guest註冊只保留單一Link，未改全站Button預設。
+- 分享同步ref gate涵蓋兩個按鈕，支援navigator.share但沒有canShare；canShare失敗仍有clipboard替代，native AbortError取消不另copy。每個await以departure／account lifetime檢查，成功才顯示copied／analytics，tracked timer卸載清理；失敗只顯示ephemeral readonly可選網址與目前权限提示，隱藏／換帳號不保存URL，不露raw diagnostics。URL只有origin與原wishlist ID，不含query／JWT；已開始的clipboard write不能撤回，沒有atomic OS clipboard聲明。
+- 新Web11，focused114／5檔；四次完整隔離gate最後退出0：Server56檔913＋既有3skip、HTTP39檔622、Web102檔1658＋build、Native42檔852＋typecheck／Expo、44migration schema diff0／required cleanup0；主JS350.63KB、PWA94entries6062.22KiB及既有warnings保留。Partial localization mock保留原t-key assertions，locale storage fault注入修為實際localStorage instance；沒有弱化原公開件數／導航／帳號assertions。最後恢復link44px後再跑全gate；一次PG重開漏explicit55441，preflight失敗log保留，改回自有55441後final gate成功，不碰他人5432。
+- 新loopback5231／API5232／獨立UTF8 DB44migrations、兩合成owner；browser provider unavailable改原生CUA Chrome獨立無痕視窗。英文搜尋absent→clear、選Name與建立private default，actual encrypted未知privacy marker重開保持、explicit current GET提示不是receipt；share QA stub失敗readonlyURL、成功copied；B訪客兩公開清單、book件數1與無hidden願望／ownercontrols，詳情原250.75／500.5及備註讀回；繁中清單／詳情、0價格預算、failed AI無raw403、手機長標題已核對。final36個產品GET全200，product writes0／external mutation0，2users／1follow／4lists／4items不變；clipboard是明示QA stub，沒有OS copy／native sheet或真provider聲明。一次非秘密loopback網址輸入少字導向Google搜尋後修正，external0不代表無外部read。
+- 原PNG與完整native AX、state journal及wishlist-web-legacy-localization-evidence-20261002.json保存。DevTools visibly390×844，最後還原1301×627、device mode解除／DevTools關，bookmark bar還原、只關自有incognito；圖含browser UI及部分DevTools，非full-page。Console paste受self-XSS阻擋，未繞過，沒有DOM geometry／實測全controls44px或新90/90聲明。最後新增44px恢復link不在本批browser fixture可見狀態，但已包含final complete gate。
+- 標籤逐欄audit：Prisma Item無tags，APP WishScreen／native wishManagement無可編輯分類；EClaw preview最多5tags，queue append「標籤：…」至notes，既有備註與選用preview保留，不虛構持久editable tags。舊price card仍沿既有匯率工具250.75→251，detail modal原值不變；完整幣別／欄位與來源估值audit續作。
+- 自有API／Vite／PG已停，fixtures／證據及他人worktree保留。全feature／social／逐欄權限、avatar／unknownFlickr／真provider-mail跨端、PWA install／production upgrade／mixed-version CAS／效能、真credential／permanent browser、diagnostics IDs及fresh Home／Settings各90、正式preflight／merge／Railway／live仍待。PR82 draft、goal active、未部署；精確新HEAD CI另回讀。
+
 ## 2026-10-02 第五十三批：首頁語系、好友生日恢復與正式路由順序修正（仍未部署）
 
 - Home／WishHome／embedded map介面繁中／English及安全locale fallback；原願望匹配、分頁、擴展、跳轉、搜尋與資料規則保留。原四張guest feature cards、淡粉節日／淡藍生日、公開API介紹保留，移除CTA nested Button。主要links／map zoom與來源toggle44px；map preview128→160px避免重疊，來源圖示no-repeat置中，完整地圖480px未改，地名仍原繁中。
@@ -336,7 +346,7 @@
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
-| 願望清單與願望建立／編輯／刪除；既有Web標籤 | WishScreen；wishManagement無分類欄；legacy Web標籤另保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。Web標籤整體回歸、永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
+| 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
@@ -344,7 +354,7 @@
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
-| 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；第53批生日六欄privacy／UTC calendar及Home語系真HTTP／Chrome已核對；真mail、friend legacy WishlistDashboard英文搜尋排序、其他社交流程／feature／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
+| 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；第53批生日六欄privacy／UTC calendar及Home語系真HTTP／Chrome已核對；第54批friend legacy WishlistDashboard英文搜尋排序與訪客清單核對；真mail、其他社交流程／feature／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；第48批landing中英文／安全locale讀取／原form入口真browser已核對 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
 | 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
 | 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |

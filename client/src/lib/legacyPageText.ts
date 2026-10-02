@@ -1,0 +1,58 @@
+import { getDisplayLocale } from '../utils/localization';
+
+const en = {
+  invalidOwner: 'Invalid public wishlist owner.', anonymous: 'Display name not set',
+  createStorage: 'Creation recovery data is unconfirmed. Check the original operation on the photo wish page; no replacement will be created.',
+  signInRead: 'Sign in to read your own lists.',
+  readFailed: 'Lists could not be loaded or verified. Retry the read. Previously shown lists, if any, are not confirmed current.',
+  created: 'The server confirmed list creation.',
+  createCleanup: 'The list was created, but its local marker remains. Check the original receipt on the photo wish page.',
+  createUnknown: 'The original creation is unconfirmed. Check it on the photo wish page; nothing will be recreated or resent automatically.',
+  createInvalid: 'The name, description or safe storage could not be verified. Creation was not sent.',
+  readLists: 'Read lists again', photoEntry: 'Optional · Photo and AI wishes and original-operation recovery',
+  pendingCreate: 'The original creation or local recovery marker is unconfirmed. New creation is paused.',
+  checkCreate: 'Check original creation without resending', capacity: 'Limit {value}',
+  search: 'Search lists', clearSearch: 'Clear list search', sort: 'List order',
+  newest: 'Newest first', oldest: 'Oldest first', name: 'Name', title: 'List title',
+  description: 'List description · optional', closeCreate: 'Close list creation',
+  noMatches: 'No loaded lists match', changeSearch: 'Try another search term',
+  makePrivate: 'Make list private', makePublic: 'Make list public', createList: 'Create wishlist',
+  noImage: 'No image', uploading: 'Uploading…', uploadFailed: 'Upload failed',
+  preparing: 'Preparing image…', queued: 'AI queued…', recognizing: 'AI recognizing…',
+  titlePlaceholder: 'Name this list', descriptionPlaceholder: 'Visible on public lists',
+  guestTitle: 'Love this list?', guestHelp: 'Join Wishlist.ai to create your own collection.', join: 'Join now',
+  shareTitle: 'Wishlist: {title}', shareMessage: 'View this wishlist on Wishlist.ai.',
+  shareFailed: 'Sharing or copying could not be confirmed. Select and copy the URL below.',
+  shareUrl: 'Wishlist URL', shareHelp: 'Access to this list still follows its current visibility and permissions.',
+  hideShareUrl: 'Hide URL',
+};
+const zh: Record<keyof typeof en, string> = {
+  invalidOwner: '無效的公開清單帳號。', anonymous: '未設定顯示名稱',
+  createStorage: '建立恢復資料未確認，請到照片願望頁安全查核；不會另建。',
+  signInRead: '請登入後讀取自己的清單。',
+  readFailed: '清單讀取失敗，不代表沒有願望。請重新讀取；上次資料若仍顯示，尚未確認為最新。',
+  created: '後台已確認建立清單。',
+  createCleanup: '清單已建立，但本機標記尚未清理；請到照片願望頁只查核原回執。',
+  createUnknown: '原建立尚待確認；請到照片願望頁查核，不會另建或自動重送。',
+  createInvalid: '名稱、說明或安全儲存未通過確認；尚未送出建立。',
+  readLists: '重新讀取清單', photoEntry: '快捷選用 · 拍照／AI 願望與待確認操作恢復',
+  pendingCreate: '原建立或本機恢復標記待確認；新建立暫停。',
+  checkCreate: '查核原建立，不自動重送', capacity: '上限 {value}',
+  search: '搜尋清單', clearSearch: '清除清單搜尋', sort: '清單排序',
+  newest: '最新建立', oldest: '最早建立', name: '名稱', title: '清單名稱',
+  description: '清單說明（選填）', closeCreate: '關閉清單建立',
+  noMatches: '沒有符合的已載入清單', changeSearch: '請換個關鍵字',
+  makePrivate: '設為私人清單', makePublic: '設為公開清單', createList: '建立願望清單',
+  noImage: '無圖片', uploading: '上傳中…', uploadFailed: '上傳失敗',
+  preparing: '準備圖片…', queued: 'AI 排隊中…', recognizing: 'AI 辨識中…',
+  titlePlaceholder: '為清單命名', descriptionPlaceholder: '公開清單會顯示',
+  guestTitle: '喜歡這份清單？', guestHelp: '加入 Wishlist.ai，建立自己的願望清單。', join: '立即加入',
+  shareTitle: '願望清單：{title}', shareMessage: '到 Wishlist.ai 查看這份願望清單。',
+  shareFailed: '分享或複製尚未確認，請選取並複製下方網址。',
+  shareUrl: '願望清單網址', shareHelp: '清單存取仍依目前的公開設定與權限。',
+  hideShareUrl: '隱藏網址',
+};
+export function legacyPageText(key: keyof typeof en, values: Record<string, string | number> = {}) {
+  const copy = getDisplayLocale().startsWith('zh') ? zh : en;
+  return copy[key].replace(/\{(\w+)\}/g, (match, field) => Object.hasOwn(values, field) ? String(values[field]) : match);
+}

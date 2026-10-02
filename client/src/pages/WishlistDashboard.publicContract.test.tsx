@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import WishlistDashboard from './WishlistDashboard';
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ token: 'synthetic-session', user: { id: 2 } }) }));
-vi.mock('../utils/localization', () => ({ t: (key: string) => key }));
+vi.mock('../utils/localization', async original => ({ ...await original<typeof import('../utils/localization')>(), t: (key: string) => key }));
 const dto = (items: object[]) => [{ id: 11, title: 'Synthetic public list', description: 'Public description', isPublic: true, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', items, _count: { items: items.length } }];
 function Location() { return <div>{useLocation().pathname}</div>; }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

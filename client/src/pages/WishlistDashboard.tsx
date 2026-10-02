@@ -9,6 +9,7 @@ import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "../components/ui/Card";
 import { Plus, Search, X, Lock, Eye, EyeOff, Trash2, Gift, User, ExternalLink, Share2, Copy, Loader2 } from "lucide-react";
 import { t } from "../utils/localization";
+import { legacyPageText as pageText } from "../lib/legacyPageText";
 import MarketplaceDialog from "../components/MarketplaceDialog";
 import { legacyDeleteAck, legacyListOperation, legacyListText, legacyPrivacyAck, type LegacyListOperation } from '../lib/legacyWishlistWeb';
 
@@ -26,7 +27,7 @@ interface Wishlist {
 export default function WishlistDashboard() {
     const { token, user } = useAuth();
     const { userId } = useParams();
-    if (userId && (!/^[1-9]\d{0,9}$/.test(userId) || Number(userId) > 2147483647)) return <p role="alert">無效的公開清單帳號。</p>;
+    if (userId && (!/^[1-9]\d{0,9}$/.test(userId) || Number(userId) > 2147483647)) return <p role="alert">{pageText('invalidOwner')}</p>;
     return <WishlistDashboardSession key={`${user?.id ?? 'public'}:${token ?? ''}:${userId ?? 'self'}`} />;
 }
 
@@ -46,7 +47,7 @@ export function WishlistDashboardSession() {
     }, [isOwner, token, navigate]);
 
     const [wishlists, setWishlists] = useState<Wishlist[]>([]);
-    const [targetUserName, setTargetUserName] = useState("User");
+    const [targetUserName, setTargetUserName] = useState(pageText('anonymous'));
     const [loading, setLoading] = useState(true);
     const [readError, setReadError] = useState('');
     const alive = useRef(true), lifetime = useRef(0), readSequence = useRef(0);
@@ -95,7 +96,7 @@ export function WishlistDashboardSession() {
                 const raw = await privatePendingStore.get(key); if (raw) parseWebWishJournal(raw);
                 if (!alive.current || generation !== lifetime.current) return;
                 creationKey.current = key; setCreateRecovery(raw !== null); setCreateReady(raw === null);
-            } catch { if (alive.current && generation === lifetime.current) { setCreateRecovery(true); setFeedbackMessage('建立恢復資料未確認，請到照片願望頁安全查核；不會另建。'); } }
+            } catch { if (alive.current && generation === lifetime.current) { setCreateRecovery(true); setFeedbackMessage(pageText('createStorage')); } }
         })();
     }, [isOwner, token, user?.id]);
 
@@ -224,7 +225,7 @@ export function WishlistDashboardSession() {
     const fetchWishlists = async () => {
         const generation = lifetime.current, sequence = ++readSequence.current;
         const current = () => alive.current && generation === lifetime.current && sequence === readSequence.current;
-        if (isOwner && !token) { if (current()) { setReadError('請登入後讀取自己的清單。'); setLoading(false); } return; }
+        if (isOwner && !token) { if (current()) { setReadError(pageText('signInRead')); setLoading(false); } return; }
         setLoading(true); setReadError('');
         try {
             const url = !userId
@@ -245,7 +246,7 @@ export function WishlistDashboardSession() {
             if (new Set(projected.map(row => row.id)).size !== projected.length) throw new Error('duplicate lists');
             if (current()) { setWishlists(projected); return projected; }
         } catch {
-            if (current()) setReadError('清單讀取失敗，不代表沒有願望。請重新讀取；上次資料若仍顯示，尚未確認為最新。');
+            if (current()) setReadError(pageText('readFailed'));
         } finally {
             if (current()) setLoading(false);
         }
@@ -274,11 +275,11 @@ export function WishlistDashboardSession() {
             setNewTitle(''); setNewDescription(''); setIsCreateExpanded(false);
             const stored = await privatePendingStore.get(key);
             if (stored !== null && (stored !== raw || !await privatePendingStore.clear(key, raw))) throw new Error('Unconfirmed local cleanup');
-            if (current()) { setCreateRecovery(false); setCreateReady(true); setFeedbackMessage('後台已確認建立清單。'); }
+            if (current()) { setCreateRecovery(false); setCreateReady(true); setFeedbackMessage(pageText('created')); }
         } catch {
             if (current()) {
                 if (staged) { setCreateReady(false); setCreateRecovery(true); }
-                setFeedbackMessage(confirmed ? '清單已建立，但本機標記尚未清理；請到照片願望頁只查核原回執。' : staged ? '原建立尚待確認；請到照片願望頁查核，不會另建或自動重送。' : '名稱、說明或安全儲存未通過確認；尚未送出建立。');
+                setFeedbackMessage(confirmed ? pageText('createCleanup') : staged ? pageText('createUnknown') : pageText('createInvalid'));
             }
         } finally {
             creationGate.current = false;
@@ -296,7 +297,7 @@ export function WishlistDashboardSession() {
 
     if (loading) {
         return (
-            <div className="container mx-auto p-4 space-y-8">
+            <div className="container mx-auto p-4 space-y-8 [&_button]:min-h-11 [&_input:not([type=checkbox])]:min-h-11">
                 <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-8" />
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {[1, 2, 3].map((i) => (
@@ -312,8 +313,8 @@ export function WishlistDashboardSession() {
     const writesBlocked = !listReady || listBusy || listPending !== null || !!readError || creating;
 
     return (
-        <div className="container mx-auto p-4 space-y-8">
-            {readError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800"><p>{readError}</p><Button onClick={() => void fetchWishlists()}>重新讀取清單</Button></div>}
+        <div className="container mx-auto p-4 space-y-8 [&_button]:min-h-11 [&_input:not([type=checkbox])]:min-h-11">
+            {readError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800"><p>{readError}</p><Button onClick={() => void fetchWishlists()}>{pageText('readLists')}</Button></div>}
             {listIssue && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{listIssue}</p>}
             {listNotice && <p role="status" className="rounded-xl bg-green-50 p-4 text-green-800">{listNotice}</p>}
             {isOwner && !listReady && <Button className="min-h-11" disabled={listBusy} onClick={() => void restoreListOperation()}>{legacyListText('recoveryTitle')}</Button>}
@@ -324,8 +325,8 @@ export function WishlistDashboardSession() {
                     {(listKnown || listChecked) && <Button className="min-h-11" variant="outline" disabled={listBusy} onClick={() => void acknowledgeListOperation()}>{legacyListText(listKnown ? 'clean' : 'resume')}</Button>}
                 </div>
             </section>}
-            {isOwner && <Link className="inline-block rounded-xl border border-dashed border-green-600 bg-green-50 px-4 py-3 text-green-900" to="/wishes">快捷選用 · 拍照／AI 願望與待確認操作恢復</Link>}
-            {createRecovery && <p role="alert">原建立或本機恢復標記待確認；新建立暫停。<Link className="ml-2 underline" to="/wishes">查核原建立，不自動重送</Link></p>}
+            {isOwner && <Link className="inline-block rounded-xl border border-dashed border-green-600 bg-green-50 px-4 py-3 text-green-900" to="/wishes">{pageText('photoEntry')}</Link>}
+            {createRecovery && <p role="alert">{pageText('pendingCreate')}<Link className="ml-2 inline-flex min-h-11 items-center underline" to="/wishes">{pageText('checkCreate')}</Link></p>}
             {/* Header / Dashboard Stats */}
             {isOwner && (
                 <div className="grid grid-cols-1 mb-8">
@@ -335,7 +336,7 @@ export function WishlistDashboardSession() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-muji-primary">
-                                {readError ? legacyListText('capacity') : totalItems} <span className="text-sm text-gray-400 font-normal">({t('dashboard.perList')}上限 {maxCapacity === null ? legacyListText('capacity') : maxCapacity.toLocaleString()})</span>
+                                {readError ? legacyListText('capacity') : totalItems} <span className="text-sm text-gray-400 font-normal">({t('dashboard.perList')}{' '}{pageText('capacity', { value: maxCapacity === null ? legacyListText('capacity') : maxCapacity.toLocaleString() })})</span>
                             </div>
                             {maxCapacity === null && <Button className="min-h-11 mt-3" variant="outline" onClick={() => void fetchSelf()}>{legacyListText('capacityRetry')}</Button>}
                         </CardContent>
@@ -352,34 +353,34 @@ export function WishlistDashboardSession() {
 
                 {/* Search & Sort */}
                 <div className="flex gap-2">
-                    <div className="relative flex-1">
+                    <div className="relative min-w-0 flex-1">
                         <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                         <Input
-                            aria-label="搜尋清單"
+                            aria-label={pageText('search')}
                             placeholder={t('dashboard.searchPlaceholder') || "Search..."}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 pr-9 text-base md:text-sm"
+                            className="min-h-11 pl-9 pr-12 text-base md:text-sm"
                         />
                         {searchQuery && (
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute right-1 top-1 h-8 w-8 hover:bg-transparent"
+                                aria-label={pageText('clearSearch')} className="absolute right-0 top-0 h-11 w-11 hover:bg-transparent"
                                 onClick={() => setSearchQuery("")}
                             >
                                 <X className="h-4 w-4 text-gray-400" />
                             </Button>
                         )}
                     </div>
-                    <select aria-label="清單排序"
-                        className="h-10 rounded-md border border-muji-border bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-muji-primary"
+                    <select aria-label={pageText('sort')}
+                        className="min-h-11 min-w-0 max-w-[45%] rounded-md border border-muji-border bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-muji-primary"
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
                     >
-                        <option value="newest">最新建立</option>
-                        <option value="oldest">最早建立</option>
-                        <option value="name">名稱</option>
+                        <option value="newest">{pageText('newest')}</option>
+                        <option value="oldest">{pageText('oldest')}</option>
+                        <option value="name">{pageText('name')}</option>
                     </select>
                 </div>
             </div>
@@ -399,7 +400,7 @@ export function WishlistDashboardSession() {
                         <Card className="animate-in slide-in-from-top-4 duration-300">
                             <CardHeader className="flex flex-row items-center justify-between pb-2">
                                 <CardTitle className="text-xl">{t('dashboard.createTitle')}</CardTitle>
-                                <Button variant="ghost" size="sm" onClick={() => setIsCreateExpanded(false)}>
+                                <Button variant="ghost" size="sm" aria-label={pageText('closeCreate')} className="min-h-11 min-w-11" disabled={creating} onClick={() => setIsCreateExpanded(false)}>
                                     ✕
                                 </Button>
                             </CardHeader>
@@ -407,7 +408,7 @@ export function WishlistDashboardSession() {
                                 <form onSubmit={handleCreate} className="space-y-4">
                                     <div>
                                         <Input
-                                            aria-label="清單名稱"
+                                            aria-label={pageText('title')}
                                             placeholder={t('dashboard.titlePlaceholder')}
                                             value={newTitle}
                                             onChange={(e) => setNewTitle(e.target.value)}
@@ -421,7 +422,7 @@ export function WishlistDashboardSession() {
                                         </div>
                                     </div>
                                     <Input
-                                        aria-label="清單說明（選填）"
+                                        aria-label={pageText('description')}
                                         placeholder={t('dashboard.descPlaceholder')}
                                         value={newDescription}
                                         onChange={(e) => setNewDescription(e.target.value)}
@@ -429,7 +430,7 @@ export function WishlistDashboardSession() {
                                         disabled={writesBlocked}
                                     />
 
-                                    <div className="flex items-center space-x-2">
+                                    <div className="flex min-h-11 items-center space-x-2">
                                         <input
                                             type="checkbox"
                                             id="newIsPublic"
@@ -438,7 +439,7 @@ export function WishlistDashboardSession() {
                                             onChange={(e) => setNewIsPublic(e.target.checked)}
                                             className="h-4 w-4 rounded border-gray-300 text-muji-primary focus:ring-muji-primary"
                                         />
-                                        <label htmlFor="newIsPublic" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        <label htmlFor="newIsPublic" className="inline-flex min-h-11 items-center text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                             {t('dashboard.publicLabel')} - {newIsPublic ? t('dashboard.public') : t('dashboard.private')}
                                         </label>
                                     </div>
@@ -467,8 +468,8 @@ export function WishlistDashboardSession() {
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Gift className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">{searchQuery ? '沒有符合的已載入清單' : t('dashboard.empty')}</h3>
-                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? '請換個關鍵字' : t(isOwner ? 'dashboard.emptyOwner' : 'dashboard.emptyVisitor')}</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">{searchQuery ? pageText('noMatches') : t('dashboard.empty')}</h3>
+                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">{searchQuery ? pageText('changeSearch') : t(isOwner ? 'dashboard.emptyOwner' : 'dashboard.emptyVisitor')}</p>
                     {!searchQuery && isOwner && (
                         <Button disabled={!createReady || writesBlocked} onClick={() => setIsCreateExpanded(true)}>
                             {t('dashboard.createNew')}
@@ -482,7 +483,7 @@ export function WishlistDashboardSession() {
                             <Card className="hover:shadow-lg transition-shadow cursor-pointer group relative">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="flex justify-between items-start">
-                                        <Link to={'/wishlists/' + list.id} className="truncate pr-4 underline-offset-4 hover:underline" onClick={e => e.stopPropagation()}>{list.title}</Link>
+                                        <Link to={'/wishlists/' + list.id} className="inline-flex min-h-11 min-w-0 items-center break-words pr-4 underline-offset-4 hover:underline" onClick={e => e.stopPropagation()}>{list.title}</Link>
                                         {!list.isPublic && <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                                     </CardTitle>
                                     <CardDescription className="line-clamp-2 h-10">
@@ -496,7 +497,7 @@ export function WishlistDashboardSession() {
                                 </CardContent>
                                 <CardFooter className="flex justify-between items-center">
                                     <span className={"text-xs px-2 py-1 rounded " + (list.isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
-                                        {list.isPublic ? '公開' : '私人'}
+                                        {t(list.isPublic ? 'dashboard.public' : 'dashboard.private')}
                                     </span>
                                     {isOwner && (
                                         <div className="flex gap-1">
@@ -510,8 +511,8 @@ export function WishlistDashboardSession() {
                                                     e.stopPropagation();
                                                     handleTogglePrivacy(list.id, list.isPublic);
                                                 }}
-                                                title={list.isPublic ? '設為私人清單' : '設為公開清單'}
-                                                aria-label={list.isPublic ? '設為私人清單' : '設為公開清單'}
+                                                title={list.isPublic ? pageText('makePrivate') : pageText('makePublic')}
+                                                aria-label={list.isPublic ? pageText('makePrivate') : pageText('makePublic')}
                                             >
                                                 {list.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                                             </Button>
@@ -549,7 +550,7 @@ export function WishlistDashboardSession() {
             {/* Mobile Create FAB */}
             {isOwner && !isCreateExpanded && (
                 <Button
-                    aria-label="建立願望清單"
+                    aria-label={pageText('createList')}
                     disabled={!createReady || writesBlocked}
                     className="md:hidden fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg z-40 bg-muji-primary hover:bg-muji-secondary transition-all active:scale-95"
                     onClick={() => {

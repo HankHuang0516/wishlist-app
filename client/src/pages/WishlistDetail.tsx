@@ -19,6 +19,7 @@ import { API_URL } from '../config';
 import { formatPriceWithConversion } from "../utils/currency";
 import { getImageUrl } from "../utils/image";
 import { t } from "../utils/localization";
+import { legacyPageText as pageText } from "../lib/legacyPageText";
 import { Analytics } from "../utils/analytics";
 
 export default function WishlistDetail() {
@@ -46,40 +47,48 @@ export function WishlistDetailSession() {
     const [editDesc, setEditDesc] = useState("");
     const [editIsPublic, setEditIsPublic] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [shareBusy, setShareBusy] = useState(false), [shareUrl, setShareUrl] = useState('');
+    const shareGate = useRef(false), shareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => { if (shareTimer.current) clearTimeout(shareTimer.current); }, []);
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
     const handleShare = async () => {
+        if (!active.current || !wishlist || shareGate.current) return;
+        shareGate.current = true; setShareBusy(true); setCopied(false); setShareUrl('');
+        if (shareTimer.current) clearTimeout(shareTimer.current);
+        const version = lifetime.current, current = () => active.current && version === lifetime.current;
         const shareData = {
-            title: `Wishlist: ${wishlist?.title || 'Check this out'}`,
-            text: `Check out my wishlist on Wishlist App!`,
-            url: window.location.origin + window.location.pathname
+            title: pageText('shareTitle', { title: wishlist.title }),
+            text: pageText('shareMessage'),
+            url: window.location.origin + '/wishlists/' + wishlist.id
         };
-
-        // Try Native Share First (Mobile friendly)
-        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-            try {
-                await navigator.share(shareData);
-                Analytics.logShare('wishlist', wishlist?.id.toString());
-                return; // Success, no need to copy
-            } catch (err) {
-                if (err instanceof DOMException && err.name === 'AbortError') return;
-            }
-        }
-
-        // Fallback to Clipboard
         try {
-            await navigator.clipboard.writeText(shareData.url);
-            Analytics.logShare('wishlist', wishlist?.id.toString());
-            setCopied(true);
-            setFeedbackMessage(t('detail.linkCopied'));
-            setTimeout(() => {
-                setCopied(false);
-                setFeedbackMessage(null);
-            }, 2000);
-        } catch (err) {
-            console.error('Failed to copy', err);
-            setFeedbackMessage(t('common.error'));
-        }
+            // Support browsers with share but no canShare. Capability failures
+            // still leave the existing clipboard/manual URL alternative usable.
+            let native = false;
+            try { native = !!navigator.share && (!navigator.canShare || navigator.canShare(shareData)); } catch { /* use copy */ }
+            if (native) {
+                try {
+                    await navigator.share(shareData);
+                    if (current()) Analytics.logShare('wishlist', wishlist.id.toString());
+                    return;
+                } catch (err) {
+                    if (!current() || err instanceof DOMException && err.name === 'AbortError') return;
+                }
+            }
+            if (!current()) return;
+            try {
+                await navigator.clipboard.writeText(shareData.url);
+                if (!current()) return;
+                Analytics.logShare('wishlist', wishlist.id.toString());
+                setCopied(true); setFeedbackMessage(t('detail.linkCopied'));
+                shareTimer.current = setTimeout(() => {
+                    if (current()) { setCopied(false); setFeedbackMessage(null); }
+                }, 2000);
+            } catch {
+                if (current()) setShareUrl(shareData.url);
+            }
+        } finally { shareGate.current = false; if (current()) setShareBusy(false); }
     };
 
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -283,8 +292,8 @@ export function WishlistDetailSession() {
         {readError && <p role="alert">{readError}</p>}
         {operation.issue && <p role="alert">{operation.issue}</p>}
         {operation.notice && <p role="status">{operation.notice}</p>}
-        {readError && <Button onClick={()=>void fetchWishlist()} disabled={operation.busy}>{detailText('retry')}</Button>}
-        {operation.pending && operation.pending.id!==Number(id) ? <Link to={'/wishlists/'+operation.pending.id}>{detailText('original')}</Link> : operation.pending && <>
+        {readError && <Button className="min-h-11" onClick={()=>void fetchWishlist()} disabled={operation.busy}>{detailText('retry')}</Button>}
+        {operation.pending && operation.pending.id!==Number(id) ? <Link className="inline-flex min-h-11 items-center underline" to={'/wishlists/'+operation.pending.id}>{detailText('original')}</Link> : operation.pending && <>
             {operation.pending.kind==='CLONE'?<>
                 <Button className="min-h-11" onClick={()=>void operation.checkClone('read')} disabled={operation.busy || operation.known}>{detailItemText('read')}</Button>
                 <Button className="min-h-11" onClick={()=>void operation.checkClone('stop')} disabled={operation.busy || operation.known}>{detailItemText('stop')}</Button>
@@ -297,26 +306,32 @@ export function WishlistDetailSession() {
             <Button className="min-h-11" onClick={()=>void operation.acknowledge()} disabled={operation.busy || !operation.checked && !operation.known}>{legacyListText(operation.known?'clean':'resume')}</Button>
         </>}
         {token && <LegacyWishPhotoRecovery photo={photo} listId={Number(id)} locked={operation.busy || !!operation.pending || isSubmittingUrl} />}
-        {!operation.ready && token && <Button onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
+        {!operation.ready && token && <Button className="min-h-11" onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
     </section>;
     if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
-    if (!wishlist) return <div className="p-4 space-y-4">{deleted && <p role="status">{detailItemText('listDeleted')}</p>}{recovery}<Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('dashboard')}</Link>{!token && <Link to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
+    if (!wishlist) return <div className="p-4 space-y-4">{deleted && <p role="status">{detailItemText('listDeleted')}</p>}{recovery}<Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('dashboard')}</Link>{!token && <Link className="inline-flex min-h-11 items-center underline" to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
 
     const isOwner = user?.id === wishlist.userId;
 
     return (
-        <div className="container mx-auto p-4 space-y-6 pb-24 relative min-h-screen">
+        <div className="container mx-auto p-4 space-y-6 pb-24 relative min-h-screen [&_button]:min-h-11 [&_input:not([type=checkbox])]:min-h-11">
             {recovery}
+            {shareUrl && <section className="space-y-3 rounded-xl border bg-white p-4" aria-label={pageText('shareUrl')}>
+                <p role="alert">{pageText('shareFailed')}</p>
+                <label className="block space-y-1"><span>{pageText('shareUrl')}</span><Input className="min-h-11 text-base md:text-sm" readOnly value={shareUrl} onFocus={event => event.currentTarget.select()} /></label>
+                <p className="text-sm text-muji-secondary">{pageText('shareHelp')}</p>
+                <Button variant="outline" className="min-h-11" onClick={() => setShareUrl('')}>{pageText('hideShareUrl')}</Button>
+            </section>}
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
                 <div className="space-y-2 flex-1">
                     {isEditing ? (
                         <div className="space-y-2 max-w-lg">
-                            <label className="block text-sm font-medium text-gray-700">清單名稱
-                                <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="為清單命名" />
+                            <label className="block text-sm font-medium text-gray-700">{pageText('title')}
+                                <Input className="min-h-11 text-base md:text-sm" value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder={pageText('titlePlaceholder')} />
                             </label>
-                            <label className="block text-sm font-medium text-gray-700">清單說明（選填）
-                                <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="公開清單會顯示" />
+                            <label className="block text-sm font-medium text-gray-700">{pageText('description')}
+                                <Input className="min-h-11 text-base md:text-sm" value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder={pageText('descriptionPlaceholder')} />
                             </label>
 
                             <div className="flex items-center gap-3 p-3 border rounded-lg border-dashed hover:bg-gray-50 transition-colors">
@@ -343,15 +358,10 @@ export function WishlistDetailSession() {
                         <>
                             <div className="flex flex-wrap items-center gap-2">
                                 <h1 className="text-3xl font-bold text-muji-primary">{wishlist.title}</h1>
-                                <div
-                                    onClick={handleShare}
-                                    title={t('wishlist.share')}
-                                >
-                                    <Button variant="outline" size="sm" className={`min-h-11 gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200 font-medium' : ''}`}>
+                                    <Button onClick={() => void handleShare()} disabled={shareBusy} variant="outline" size="sm" className={`min-h-11 gap-2 ${copied ? 'bg-green-50 text-green-600 border-green-200 font-medium' : ''}`}>
                                         {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
                                         {copied ? t('detail.linkCopied') : t('wishlist.share')}
                                     </Button>
-                                </div>
                                 <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
                                     {wishlist.items.length}/{wishlist.maxItems ?? legacyListText('capacity')}
                                 </span>
@@ -366,7 +376,7 @@ export function WishlistDetailSession() {
                         <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={detailText('edit')} disabled={!canMutate()} onClick={() => {setEditTitle(wishlist.title);setEditDesc(wishlist.description);setEditIsPublic(wishlist.isPublic);setFeedbackMessage(null);operation.resetFeedback();setIsEditModalOpen(true);}}>
                             <Edit2 className="w-5 h-5 text-gray-600" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={t('wishlist.share')} onClick={() => handleShare()}>
+                        <Button variant="ghost" size="icon" className="h-11 w-11" disabled={shareBusy} aria-label={t('wishlist.share')} onClick={() => void handleShare()}>
                             {copied ? <Check className="w-5 h-5 text-green-600" /> : <Share2 className="w-5 h-5 text-gray-600" />}
                         </Button>
                         <Button variant="destructive" size="icon" className="h-11 w-11" aria-label={detailText('removeList')} disabled={!canMutate()} onClick={handleDeleteWishlist}>
@@ -391,13 +401,13 @@ export function WishlistDetailSession() {
                                 <div className="w-20 h-20 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center relative overflow-hidden">
                                     {item.imageUrl ? (
                                         <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
-                                    ) : <span className="text-xs text-gray-400">No Img</span>}
+                                    ) : <span className="text-xs text-gray-400">{pageText('noImage')}</span>}
                                     {isProcessing && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                             <span className="text-xs text-white font-bold animate-pulse">
                                                 {item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING'
-                                                    ? '⬆️ Uploading...'
-                                                    : item.aiStatus === 'PREPARING' ? '準備圖片…' : item.aiStatus === 'PENDING' ? 'AI 排隊中…' : t('ai.analyzing')}
+                                                    ? pageText('uploading')
+                                                    : item.aiStatus === 'PREPARING' ? pageText('preparing') : item.aiStatus === 'PENDING' ? pageText('queued') : t('ai.analyzing')}
                                             </span>
                                         </div>
                                     )}
@@ -411,21 +421,21 @@ export function WishlistDetailSession() {
                                     </div>
                                     {isOwner && <div className="text-xs text-gray-500">
                                         {item.uploadStatus === 'FAILED' ? (
-                                            <span className="text-red-600">Upload Failed</span>
+                                            <span className="text-red-600">{pageText('uploadFailed')}</span>
                                         ) : item.uploadStatus === 'PENDING' || item.uploadStatus === 'UPLOADING' ? (
-                                            <span className="text-blue-600 animate-pulse">⬆️ Uploading...</span>
+                                            <span className="text-blue-600 animate-pulse">{pageText('uploading')}</span>
                                         ) : item.aiStatus === 'COMPLETED' ? (
                                             <span className="text-green-600">{t('ai.complete')}</span>
                                         ) : item.aiStatus === 'FAILED' ? (
                                             <span className="text-red-600">{t('ai.failed')}</span>
                                         ) : item.aiStatus === 'SKIPPED' ? (
-                                            <span className="text-orange-600">傳統模式</span>
+                                            <span className="text-orange-600">{detailItemText('aiSkipped')}</span>
                                         ) : item.aiStatus === 'PREPARING' ? (
-                                            <span className="text-blue-600 animate-pulse">準備圖片…</span>
+                                            <span className="text-blue-600 animate-pulse">{pageText('preparing')}</span>
                                         ) : item.aiStatus === 'PENDING' ? (
-                                            <span className="text-yellow-600 animate-pulse">EClaw 排隊中…</span>
+                                            <span className="text-yellow-600 animate-pulse">{pageText('queued')}</span>
                                         ) : item.aiStatus === 'PROCESSING' ? (
-                                            <span className="text-yellow-600 animate-pulse">EClaw 辨識中…</span>
+                                            <span className="text-yellow-600 animate-pulse">{pageText('recognizing')}</span>
                                         ) : (
                                             <span className="text-yellow-600">{t('ai.analyzing')}...</span>
                                         )}
@@ -455,7 +465,7 @@ export function WishlistDetailSession() {
                                             <Button variant="ghost" size="icon" aria-label={detailText('clone')+' '+item.name} disabled={!!token && !canMutate()} className="h-11 w-11 text-red-600 hover:bg-red-50" onClick={() => handleCloneClick(item)}>
                                                 <Plus className="w-5 h-5 font-bold" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending || photo.busy || isUrlModalOpen} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title="View Info">
+                                            <Button variant="ghost" size="icon" aria-label={detailText('info')+' '+item.name} disabled={operation.busy || !!operation.pending || photo.busy || isUrlModalOpen} className="h-11 w-11 text-blue-600 hover:bg-blue-50" onClick={() => openDetail(item)} title={detailText('info')}>
                                                 <Info className="w-5 h-5" />
                                             </Button>
                                         </>
@@ -524,15 +534,15 @@ export function WishlistDetailSession() {
             {photo.usable() && !isUrlModalOpen && isOwner && <Button className="min-h-11" disabled={!operation.allowed() || !!readError} onClick={()=>openCreate('PHOTO')}>{createText('photoTitle')}</Button>}
             {isUrlModalOpen && <MarketplaceDialog title={createText(createKind==='PHOTO'?'photoTitle':'title')} onClose={()=>setIsUrlModalOpen(false)} closeDisabled={isSubmittingUrl || operation.busy || photo.busy} closeLabel={t('common.close')}>
                 <form onSubmit={handleUrlSubmit} className="space-y-4">
-                    {createKind==='LINK'?<div className="space-y-1"><label htmlFor="legacy-create-source">{createText('input')}</label><Input id="legacy-create-source" aria-describedby="legacy-create-tip" type="text" maxLength={2000} value={urlInput} onChange={e=>setUrlInput(e.target.value)} required disabled={!canCreate()}/><p id="legacy-create-tip" className="text-sm text-muji-secondary">{createText('tip')}</p></div>:<>
+                    {createKind==='LINK'?<div className="space-y-1"><label htmlFor="legacy-create-source">{createText('input')}</label><Input className="min-h-11 text-base md:text-sm" id="legacy-create-source" aria-describedby="legacy-create-tip" type="text" maxLength={2000} value={urlInput} onChange={e=>setUrlInput(e.target.value)} required disabled={!canCreate()}/><p id="legacy-create-tip" className="text-sm text-muji-secondary">{createText('tip')}</p></div>:<>
                         <p className="text-sm text-muji-secondary">{createText('photoHelp')}</p>
                         {photo.mediaId && token && <PrivatePhoto id={photo.mediaId} token={token} label={createText('photoNew')} />}
                         <div className="flex flex-wrap gap-3"><Button className="min-h-11" type="button" disabled={!operation.allowed() || photo.busy || photo.removing || !!photo.result} onClick={()=>fileInputRef.current?.click()}>{createText(photo.raw?'photoRetry':'photoNew')}</Button><Button className="min-h-11" type="button" disabled={!operation.allowed() || photo.busy || photo.removing || !!photo.result} onClick={()=>cameraInputRef.current?.click()}>{createText('photoCamera')}</Button></div>
                         <input type="file" ref={fileInputRef} hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={handleFileUpload}/>
                         <input type="file" ref={cameraInputRef} hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={handleFileUpload}/>
                     </>}
-                    <label className="block space-y-1"><span>{createText('name')}</span><Input value={createDraft.name} maxLength={200} onChange={e=>setCreateDraft(old=>({...old,name:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{(['price','currency','budget','budgetCurrency'] as const).map(field=><label key={field} className="block space-y-1"><span>{detailItemText(field)}</span><Input value={createDraft[field]} inputMode={field==='price' || field==='budget'?'decimal':'text'} maxLength={field==='currency' || field==='budgetCurrency'?3:64} onChange={e=>setCreateDraft(old=>({...old,[field]:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>)}</div>
+                    <label className="block space-y-1"><span>{createText('name')}</span><Input className="min-h-11 text-base md:text-sm" value={createDraft.name} maxLength={200} onChange={e=>setCreateDraft(old=>({...old,name:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{(['price','currency','budget','budgetCurrency'] as const).map(field=><label key={field} className="block space-y-1"><span>{detailItemText(field)}</span><Input className="min-h-11 text-base md:text-sm" value={createDraft[field]} inputMode={field==='price' || field==='budget'?'decimal':'text'} maxLength={field==='currency' || field==='budgetCurrency'?3:64} onChange={e=>setCreateDraft(old=>({...old,[field]:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>)}</div>
                     <label className="block space-y-1"><span>{detailItemText('notes')}</span><textarea className="min-h-24 w-full rounded-xl border p-3" value={createDraft.notes} maxLength={1000} onChange={e=>setCreateDraft(old=>({...old,notes:e.target.value}))} disabled={isSubmittingUrl || operation.busy || !!operation.pending || photo.busy}/></label>
                     {createIssue && <p role="alert">{createIssue}</p>}{operation.issue && <p role="alert">{operation.issue}</p>}{photo.issue && <p role="alert">{photo.issue}</p>}{photo.notice && createKind==='PHOTO' && <p role="status">{photo.notice}</p>}
                     <div className="flex flex-wrap justify-end gap-3"><Button className="min-h-11" variant="secondary" type="button" disabled={isSubmittingUrl || operation.busy || photo.busy} onClick={()=>setIsUrlModalOpen(false)}>{t('common.cancel')}</Button><Button className="min-h-11" type="submit" disabled={!canCreate() || isSubmittingUrl}>{createText('submit')}</Button></div>
@@ -543,7 +553,7 @@ export function WishlistDetailSession() {
             {selectedItem && isDetailOpen && <ItemDetailModal
                 key={selectedItem.id} isOpen={isDetailOpen} onClose={()=>{setIsDetailOpen(false);setSelectedItem(null);}}
                 item={wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem}
-                wisherName={selectedItem.originalUser?.name || wishlist.user?.name || 'User'}
+                wisherName={selectedItem.originalUser?.name || wishlist.user?.name || pageText('anonymous')}
                 wisherId={selectedItem.originalUser?.id || wishlist.userId} isOwner={isOwner}
                 busy={operation.busy} locked={!!token && !canMutate()} issue={operation.issue} notice={operation.notice}
                 onSave={body=>handleItemSave(wishlist.items.find(item=>item.id===selectedItem.id) ?? selectedItem,body)}
@@ -566,8 +576,8 @@ export function WishlistDetailSession() {
             {/* Edit Wishlist Modal */}
             {isEditModalOpen && <MarketplaceDialog title={detailText('edit')} onClose={()=>setIsEditModalOpen(false)} closeDisabled={operation.busy} closeLabel={t('common.close')}>
                 <div className="space-y-4">
-                    <label className="block">{detailText('title')}<Input value={editTitle} maxLength={200} onChange={e=>setEditTitle(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
-                    <label className="block">{detailText('description')}<Input value={editDesc} maxLength={1000} onChange={e=>setEditDesc(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
+                    <label className="block">{detailText('title')}<Input className="min-h-11 text-base md:text-sm" value={editTitle} maxLength={200} onChange={e=>setEditTitle(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
+                    <label className="block">{detailText('description')}<Input className="min-h-11 text-base md:text-sm" value={editDesc} maxLength={1000} onChange={e=>setEditDesc(e.target.value)} disabled={operation.busy || !!operation.pending}/></label>
                     <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={editIsPublic} onChange={e=>setEditIsPublic(e.target.checked)} disabled={operation.busy || !!operation.pending}/>{detailText('public')}</label>
                     <Button className="min-h-11 w-full" onClick={handleUpdateWishlist} disabled={!canMutate()}>{t('common.save')}</Button>
                     {(operation.issue || operation.notice) && <p role="status">{operation.issue || operation.notice}</p>}
@@ -584,14 +594,12 @@ export function WishlistDetailSession() {
                 !token && (
                     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40 flex items-center justify-between pb-8 md:pb-4">
                         <div className="flex-1 mr-4">
-                            <p className="font-bold text-muji-primary text-sm sm:text-base">Love this list?</p>
-                            <p className="text-xs text-muji-secondary">Join Wishlist.ai to create your own collection.</p>
+                            <p className="font-bold text-muji-primary text-sm sm:text-base">{pageText('guestTitle')}</p>
+                            <p className="text-xs text-muji-secondary">{pageText('guestHelp')}</p>
                         </div>
-                        <Link to="/register">
-                            <Button className="bg-muji-primary hover:bg-stone-800 text-white shadow-lg">
+                        <Link to="/register" className="inline-flex min-h-11 items-center rounded-md bg-muji-primary px-4 py-2 text-white shadow-lg hover:bg-stone-800">
                                 <UserPlus className="w-4 h-4 mr-2" />
-                                Join Now
-                            </Button>
+                                {pageText('join')}
                         </Link>
                     </div>
                 )

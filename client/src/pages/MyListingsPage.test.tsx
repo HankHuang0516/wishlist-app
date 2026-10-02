@@ -84,6 +84,8 @@ describe('native-equivalent owner management', () => {
     const fetch = vi.fn(async (url: string, init?: RequestInit) => init?.method === 'POST' ? proof(url,init,'APPLIED',1) : ok({ items: [row], nextCursor: null })); vi.stubGlobal('fetch', fetch);
     render(view()); await screen.findByRole('heading', { name: row.title }); await ready();fireEvent.click(screen.getByRole('button', { name: '標記售出' }));
     await screen.findByRole('region',{name:'原商品操作與最新資料比較'});expect(screen.getByRole('button', { name: '編輯資訊' })).toBeDisabled();
+    await waitFor(()=>expect(screen.getByRole('button',{name:'只查核原操作回執與最新商品'})).toBeEnabled());
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(journals.size).toBe(1);
     expect(screen.getByRole('tab', { name: '已售出 (0)' })).toBeInTheDocument();
   });
   it('treats past expiry as expired and requires a future extension before editing', async () => {

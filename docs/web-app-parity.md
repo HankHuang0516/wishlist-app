@@ -22,6 +22,7 @@
 - 尚未含這個入口的舊bundle無法事後注入UI，需先保存工作後重新開啟網站載入本版；保留原生成worker與圖片cache policy，不改native APP／API權限／付款／migration。正式兩版間更新、真browser保留未存文字與已保存journal、使用者確認重載、手機／英文與Home／Settings正式90需發布後另驗證，不能以單元mock或新檔名宣稱。
 - 新focused21：準備／ready／同版／rollback／舊meta／revision／bad metadata，以及首次安裝、保留draft／marker、明確確認／繼續操作、server更新競爭、取消中晚回、失敗恢復、hung update deadline／departure與中英文storage fallback。首輪重複狀態文字斷言改限定dialog，原意不變；typecheck抓到Navigator型別的always-defined條件，改用實際typeof能力判定，未放寬strict。完整Web v2.0.537：108檔1729項及TypeScript／Vite正式build退出0，公開版本JSON與index meta同537、JSON不precache、原cache policy import保留；主JS357.51KB、既有map1088.52KB與PWA95entries6104.55KiB警告保留。精確CI與正式升級另回讀。
 - 參考已安裝vite-plugin-pwa1.2.0來源及[官方自動更新說明](https://vite-pwa-org.netlify.app/guide/auto-update)；不引入新依賴或強制關閉使用者分頁。原完整目標仍active，每個完成增量通過必要檢查後直接部署既有Railway。
+- 首輪精確CI37014216631（head ae83fac44af01ed24c3a02a62a146372741f442d）Web1728通過／1個既有MyListings到期案例失敗，原DOM有上一例的待查核STATUS journal，沒有放寬timeout或重跑同提交。上一例曾只等比較區出現就結束，現在等待原回執流程完成且GET恢復可用，另確認POST1／journal1；runtime sendManagement補上非同步journal核對後、storage保存前的active fence，離開後不再發起晚到保存。新增控制hash晚到的回歸確定零保存／清除／POST，focused51通過；版本依新HEAD count更新為538，完整Web108檔1730項及正式build退出0、metadata checks通過；新的精確CI與發布另回讀。原失敗log `/tmp/wishlist-live63-ci-first-web-failure-20261002.log` 保留。
 
 ## 最新正式發布：v2.0.534 導覽與來源输入修正（2026-10-02）
 

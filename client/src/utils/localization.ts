@@ -94,7 +94,7 @@ const translations: Record<string, Record<string, string>> = {
         'feedback.success': '感謝您的回饋！',
         'feedback.aiReply': 'Wishlist.ai 客服回覆:',
         'feedback.close': '關閉',
-        'feedback.note': '注意：兩次提交之間需間隔 10 分鐘。',
+        'feedback.note': '請勿提供密碼或完整付款資料。結果不明時，先查核原收件結果。',
         'settings.securityMandatory': '(系統強制)',
 
         // PWA
@@ -436,6 +436,15 @@ const translations: Record<string, Record<string, string>> = {
 
     },
     'en-US': {
+        'feedback.title': 'Feedback',
+        'feedback.placeholder': 'Describe your issue or suggestion.',
+        'feedback.submit': 'Submit Feedback',
+        'feedback.submitting': 'Submitting…',
+        'feedback.cancel': 'Cancel',
+        'feedback.success': 'Thank you for your feedback!',
+        'feedback.aiReply': 'Wishlist.ai support reply:',
+        'feedback.close': 'Close',
+        'feedback.note': 'Never include passwords or full payment details. If the result is unknown, check the original receipt first.',
         'pwa.installTitle': 'Install Web app',
         'pwa.android': 'Android',
         'pwa.desktop': 'Desktop',
@@ -798,9 +807,12 @@ const translations: Record<string, Record<string, string>> = {
     }
 };
 
+export const getDisplayLocale = (): string => {
+    try { return getUserLocale(); } catch { return 'en-US'; }
+};
+
 export const t = (key: string): string => {
-    let locale = 'en-US';
-    try { locale = getUserLocale(); } catch { /* Optional language storage must not break page rendering. */ }
+    const locale = getDisplayLocale();
     const lang = locale.startsWith('zh') ? 'zh-TW' : 'en-US';
     return translations[lang]?.[key] || translations['en-US'][key] || key;
 };

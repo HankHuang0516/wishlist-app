@@ -2,7 +2,7 @@
 import { webcrypto, randomUUID } from 'node:crypto';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createWebPendingStore, pendingRequestKey, PendingStoreError } from './webPendingStore';
+import { createWebPendingStore, pendingRequestKey, feedbackPendingKey, PendingStoreError } from './webPendingStore';
 const scope = `wishlist.pending.v1.${'a'.repeat(64)}.42`, key = scope + '.listing-report';
 const crypt = webcrypto as unknown as Crypto;
 function fixture() { const factory = new IDBFactory(), name = randomUUID(); return { factory, name, store: createWebPendingStore(name, factory, crypt) }; }
@@ -13,6 +13,20 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('isolates anonymous feedback by API from all owners, encrypts contact text and restricts public keys to feedback',async()=>{
+    const {store,factory,name}=fixture(),a=await feedbackPendingKey('https://example.com/api',null),b=await feedbackPendingKey('https://other.example/api',null),own=await feedbackPendingKey('https://example.com/api',42);
+    const body=JSON.stringify({content:'synthetic-private-feedback',email:'fixture@example.invalid'});await store.save(a,body);
+    expect(await createWebPendingStore(name,factory,crypt).get(a)).toBe(body);expect(await store.get(b)).toBeNull();expect(await store.get(own)).toBeNull();
+    const row=await raw(factory,name,'pending',a) as {cipher:ArrayBuffer};expect(new TextDecoder().decode(row.cipher)).not.toMatch(/synthetic-private-feedback|fixture@example/);
+    const secret=await raw(factory,name,'keys',a.slice(0,-9)) as CryptoKey;expect(secret.extractable).toBe(false);
+    await expect(store.save(a.replace(/feedback$/,'profile'),'invalid')).rejects.toThrow();await expect(store.eraseScope(a.slice(0,-9))).rejects.toThrow();
+    expect(await store.clear(a,'another')).toBe(false);expect(await store.clear(a,body)).toBe(true);await store.save(a,'newer');expect(await store.clear(a,body)).toBe(false);expect(await store.get(a)).toBe('newer');
+  });
+  it('erases signed-in feedback with its confirmed owner scope, leaving anonymous and other owners untouched',async()=>{
+    const {store,factory,name}=fixture(),own=await feedbackPendingKey('https://example.com/api',42),other=await feedbackPendingKey('https://example.com/api',43),anonymous=await feedbackPendingKey('https://example.com/api',null);
+    for(const key of [own,other,anonymous])await store.save(key,'original');await store.eraseScope(own.slice(0,-9));
+    expect(await store.get(own)).toBeNull();expect(await store.get(other)).toBe('original');expect(await store.get(anonymous)).toBe('original');await expect(createWebPendingStore(name,factory,crypt).save(own,'late')).rejects.toThrow();
+  });
   it.each(['legacy-list-operation','legacy-detail-operation'])('restores encrypted %s markers with unique local identity, CAS and account/API isolation', async feature => {
     const {factory,name,store}=fixture();
     const a=await pendingRequestKey('https://example.com/api',42,feature),b=await pendingRequestKey('https://example.com/api',43,feature),c=await pendingRequestKey('https://other.example/api',42,feature);

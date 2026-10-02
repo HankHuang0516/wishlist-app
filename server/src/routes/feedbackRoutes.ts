@@ -1,11 +1,13 @@
 import express from 'express';
 import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { createFeedback } from '../controllers/feedbackController';
+import { createFeedback, getFeedbackReceipt } from '../controllers/feedbackController';
 import { sendEmail } from '../lib/emailService';
 
 const router = express.Router();
 
 // Allow anonymous feedback, but track user if logged in
+router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
+router.get('/submissions/:clientSubmissionId', optionalAuthenticateToken, getFeedbackReceipt);
 router.post('/', optionalAuthenticateToken, createFeedback);
 
 // Debug Route: Test Email (Auth Required)

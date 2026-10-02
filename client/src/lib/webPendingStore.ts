@@ -9,8 +9,8 @@ export type PendingStore = {
   clear(key: string, expectedBody: string): Promise<boolean>;
 };
 type Entry = { revision: string; iv: Uint8Array<ArrayBuffer>; cipher: ArrayBuffer };
-const resource = /^(profile|avatar|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/i;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/;
+const resource = /^(profile|avatar|feedback|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(profile|avatar|feedback|social-follow|legacy-list-operation|legacy-detail-operation|legacy-wish-photo|legacy-wish-photo-remove|listing|listing-management|listing-photo|listing-photo-remove|listing-draft|listing-compose-details|wish-create|wish-photo|wish-photo-remove|listing-report|(message|meetup|marketing|listing-edit|listing-compose)\.[0-9a-f-]{36})$/;
 export async function sha256(value: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -27,7 +27,15 @@ export async function pendingRequestKey(apiUrl: string, userId: number, feature:
   if (!resource.test(feature)) throw new PendingStoreError();
   return `${await pendingScope(apiUrl, userId)}.${feature.toLowerCase()}`;
 }
+/** Anonymous feedback is isolated from every signed-in account; no fake user ID. */
+export async function feedbackPendingKey(apiUrl: string, userId: number | null) {
+  if(userId!==null)return pendingRequestKey(apiUrl,userId,'feedback');
+  const absolute=apiUrl==='/api'&&typeof window!=='undefined'?new URL('/api',window.location.origin).href:apiUrl;
+  return `wishlist.pending.public.v1.${await sha256(validateApiUrl(absolute,import.meta.env.DEV))}.feedback`;
+}
 function scopeOf(key: string) {
+  const publicFeedback=/^(wishlist\.pending\.public\.v1\.[a-f0-9]{64})\.feedback$/.exec(key);
+  if(publicFeedback)return publicFeedback[1];
   const match = keyPattern.exec(key);
   if (!match || Number(match[1].split('.').at(-1)) > 2147483647) throw new PendingStoreError();
   return match[1];

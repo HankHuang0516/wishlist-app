@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十三批：支援回饋持久回執與政策導覽（仍未部署）
+
+- Feedback送出前以AES-GCM保存原UUID／內容／回覆email／userId／原language／canonical hash；匿名feedback使用獨立API scope，登入者沿用本人scope，無token／無plaintext fallback。同步gate防double submit，storage failure保留可複製文字且不POST；回覆未知重開只GET原receipt。明確retry只送原body／ID／hash，不因顯示語言切換生成新操作。嚴格核對received／ID／hash／receipt UUID／notification enum；不呈現raw message、AI或provider diagnostics。已確認但cleanup失敗僅清理；CAS發現另一分頁journal先凍結並安全重讀其內容，不能盲目送新journal。Auth／unmount generations阻止舊回覆污染新帳號／清除未知原journal，StrictMode只有目前GET。
+- 後台新增GET feedback/submissions/:clientSubmissionId，私有no-store；hash必須放header，不在URL，kind／有效record／當下owner或原anonymous均核對，只回5個minimal receipt fields。錯帳號／hash／kind／已刪record／不存在均不洩漏內容／email。POST201原message／aiAnalysis／inquiryId／notificationStatus保留，新增received／原client ID／hash及optional hash check；無ID/hash原相容入口仍可用，既有canonical hash和transaction/mail-only-winner保持不變。沒有migration或APP修改。MailFAILED或PENDING不否定已存record，ACCEPTED不等於inbox送達。
+- 公開Support及Feedback控制繁中／英文，已找出的English feedback.* keys補齊；移除沒有對應實作的10分鐘cooldown說法。具名focus dialog／busy-close保護／44px按鈕／label／5000內容與254mail上限，anon mailbox提前採後台同規則拒絕。Privacy與Terms只修safe locale read及具名44px返回，原法律正文不變。FAQ更新現有self-service刪除、外部／備份分階段及原操作恢復，不再要求先找開發團隊或保證所有資料立即消失；avatar及各browser安装說明對準現有控制。
+- 新Web40／real HTTP-DB15，包含persist-before-HTTP、重開GET-only、exact retry、wrong ACK、read/save/cleanup faults、CAS-newer、auth/unmount／StrictMode、mailbox與anon-account/API crypto隔離、account erasure late fences、legal storage fallback；後台12同UUID並發record1／mail1、owner/hash拒絕、legacy201、PENDING→ACCEPTED、原commit502與GET恢复、刪record不復活。第一輪16 UI failures來自缺English keys，補真文字／保留斷言後20及61focused通過；額外邊界加入後最後full pre-push0：Server56檔913＋3skip／HTTP34檔562／Web90檔1451＋build／Native42檔852＋typecheck／Expo，44migrations schema一致與required cleanup0；主JS349.35KB／PWA91entries5991.24KiB及原map／worker警告保留。
+- Chrome390×844／document390／modal366×424／buttons44px，獨立UTF8 DB＋compiled feedback routes，synthetic text與example.invalid email、mail明確stub。原POST提交真record／receipt後QA502；reload重開只GET原1c09d01f-5437-4d90-9bc0-8e3cf3747277、確認收件83545ad8-77fc-47e9-b800-e7e579c55340、FAILED notice如實、encrypted cleanup；再開中文空表單，POST總1／GET1／record1／receipt1／notification attempt1／external0。公開support／feedback繁中英文及English Privacy返回Support／Terms均真browser核對，7原JPEG與中文DOM／原HTTP journal及wishlist-web-feedback-evidence-20261002.json保存。QA finish paths是mounted relative paths，未冒稱完整URL。自有API／Vite／PG／tab關與viewport reset，合成DB及他人worktree保留。
+- 矩陣政策客服列已更新上述本機證據；其他feature／social／deletion／partner語系與流程、avatar server/provider安全耐久性、unknown Flickr、真MiniMax-Flickr-mail與跨端、PWA／效能／private cache、完整憑證／永久刪除browser acceptance、正式migration／merge／Railway與Home/Settings各90%正式回讀繼續。PR82 draft、goal active／未部署、100%可適用功能門檻不變；精確新CI另回讀。
+
 ## 2026-10-02 第四十二批：設定英文介面與安全語言切換（仍未部署）
 
 - Settings profile／avatar／privacy／app entries／advanced、原profile／avatar恢復notice、AccountBenefits及AccountSecurityPanel提供繁中／英文。使用者文字、原payload／ID／hash／encrypted journal／notice狀態不變；付款保持paused，TWD90/月及USD1/10次是原價格的英文標示，不換幣。iOS／Android／desktop安装說明補齊，沒有安裝選項仍可使用網站；不是PWA實際安裝或offline驗收。
@@ -247,7 +256,7 @@
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
-| 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。政策客服、完整英文／其他社交流程與正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
+| 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；真mail、其他社交流程／feature英文／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 
 ## 平台替代策略

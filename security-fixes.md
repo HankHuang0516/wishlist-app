@@ -1,3 +1,9 @@
+## 2026-10-02 Feedback original receipt and recovery isolation
+
+Feedback journals are encrypted before sending and bound to API plus the actual owner or a distinct anonymous feedback scope. No token or plaintext fallback. Exact receipt identity/hash and minimal projections prevent malformed HTTP success or raw provider details from becoming a success claim. Original read-only restoration, immutable retries, synchronous dispatch gates, account/departure generations and compare-and-swap cleanup preserve unknown operations. Newer tab journals freeze controls until reread; confirmed account erasure fences late signed-in feedback writes without clearing anonymous or another owner.
+
+The additive private no-store GET requires the original UUID and hash header plus the original owner/anonymous context, returns only receipt facts, and rejects wrong kind/hash/owner and removed records. Legacy POST201 fields and optional unkeyed callers remain compatible. Fifteen real PostgreSQL/HTTP cases and40 Web cases cover races, scope, ACK/storage faults and recovery. Chrome proves a real local commit followed by synthetic502 and GET-only recovery; mail is explicitly stubbed. This is not real delivery, provider/production acceptance or APP modification. The existing manual mail-debug route was not changed or called.
+
 ## 2026-10-02 Settings reload and safe error presentation
 
 Language switching consults synchronous profile, avatar and security gates before saving the preference or scheduling reload. Unsent or invalid drafts prevent reload; drafts covered by the original persisted operation can reopen through GET-only verification. Inputs lock during the reload delay and unmount clears the timer. A failed language write leaves controls usable. Optional locale reads fall back to English without weakening recovery storage checks. Unknown failures before persistence freeze autosave, keep text and display a bounded message rather than raw implementation details.

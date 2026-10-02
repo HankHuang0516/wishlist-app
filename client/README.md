@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Feedback recovery and support — 2026-10-02
+
+Feedback saves an encrypted original operation before dispatch, validates the exact server receipt and reopens with GET only. Anonymous feedback has its own API scope; signed-in feedback follows owner isolation and confirmed scope erasure. Explicit retry retains the original body, UUID, hash and language. Storage faults stop dispatch; verified cleanup retries never resend, and a newer tab journal must be reread before use. Saved feedback is distinct from mail acceptance or inbox delivery.
+
+Support and feedback use Chinese/English labels. Terms/Privacy keep their original wording with safe locale reads and named 44px back controls. Batch43 adds40 Web and15 real HTTP cases; final isolated gate passes Web1451, HTTP562, Server913 plus3 skips and Native852/typecheck/Expo, 44 migrations/schema/cleanup. Chrome390×844 proves one POST commit-then502, reload GET-only receipt and one stubbed notification attempt. No APP change or external mail; production/full parity remain pending. See docs/web-app-parity.md.
+
 ## Settings language and reload safety — 2026-10-02
 
 Settings profile, privacy, recovery, avatar, benefits and account security now follow Chinese/English preferences while preserving user text and original operation identities. Language storage failures remain usable; synchronous gates and unsent drafts prevent reload before safe persistence. Unknown operations already covered by the original journal may switch language and reopen with receipt GET only. Unexpected pre-persist failures freeze autosave without exposing implementation details. Desktop/Android/iOS installation help has readable translations and an explicit browser fallback.

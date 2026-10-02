@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMeetup, makeRoom } from '../__tests__/fixtures/chat';
 import type { MeetupRecord } from '../lib/meetupData';
 import MeetupWeb from './MeetupWeb';
+import { ApiFailure } from '../lib/marketplaceApi';
 const { api, data, store } = vi.hoisted(() => ({ api: vi.fn(), data: new Map<string, string>(), store: { get: vi.fn(), save: vi.fn(), clear: vi.fn() } }));
 vi.mock('../lib/marketplaceApi', async original => ({ ...await original<typeof import('../lib/marketplaceApi')>(), api }));
 vi.mock('../lib/webPendingStore', async original => ({ ...await original<typeof import('../lib/webPendingStore')>(), privatePendingStore: store, pendingRequestKey: async (_: string, id: number, resource: string) => `${id}.${resource}` }));
@@ -28,6 +29,18 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private meetup web parity', () => {
+  it('preserves unsent English terms after a rate-limited refresh without writing an appointment', async () => {
+    localStorage.setItem('user-locale', 'en-US'); render(<MeetupWeb {...props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Propose meetup' }));
+    fireEvent.change(screen.getByLabelText('Private meetup place'), { target: { value: '合成公共集合點 {version}' } });
+    fireEvent.change(screen.getByLabelText('Meetup notes (optional, up to 1000 characters)'), { target: { value: '原備註 250.7500 USD' } });
+    api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: 'Update appointment status only' }));
+    await screen.findByText(/Requests are temporarily limited/);
+    expect(screen.getByLabelText('Private meetup place')).toHaveValue('合成公共集合點 {version}');
+    expect(screen.getByLabelText('Meetup notes (optional, up to 1000 characters)')).toHaveValue('原備註 250.7500 USD');
+    expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
   it('uses English appointment controls but sends the original private terms and Taiwan instant', async () => {
     localStorage.setItem('user-locale', 'en-US'); render(<MeetupWeb {...props} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Propose meetup' }));

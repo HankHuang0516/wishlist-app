@@ -27,7 +27,7 @@ export default function MeetupWeb({ token, userId, room, onClose }: { token: str
       const result = await read(`/chat/conversations/${room.id}/meetup`) as { appointment: unknown };
       const next = parseMeetup(result.appointment, latestRoom.current);
       if (active.current && seq === sequence.current) { current.current = next; setAppointment(next); setLoaded(true); setError(''); }
-    } catch { if (active.current && seq === sequence.current) setError('無法更新面交預約；不代表尚無預約或已確認，請重試。'); }
+    } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : '無法更新面交預約；不代表尚無預約或已確認，請重試。'); }
     finally { reading.current = false; }
   }
   async function restore() {

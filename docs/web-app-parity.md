@@ -12,7 +12,34 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式 v2.0.574 已發布。第71批探索雙語、第72批外部詳情照片及第73批聊天／面交明確讀取恢復均各自驗證後部署；原570分頁以已保存確認更新574，正式探索地圖、8筆商品清單與聊天收件匣照片核對。聊天登入失效／受限後停止自動讀取，手動成功才恢復；隔離真實瀏覽器四個暫停／恢復流程與九項新增測試保存證據。正式外部來源仍未開放。首頁／設定最近評分仍553各90；完整供應商、跨端、PWA、不可逆操作與功能矩陣仍在進行，APP2.0.12不改。
+目前狀態：正式v2.0.577已發布。探索地圖／8筆商品清單照片、聊天收件匣／空聊天室與面交視窗皆以正常574→577更新核對。第74批只讀原面交回執成功：隔離真commit後502、reload保留原操作、查核僅GET，原提案POST始終1，不同意新版本。完整Web1823、HTTP634及精確三CI通過。第75批正式首頁／設定736×952重新人工評分各90，390×844兩頁無水平溢出、唯一設定入口。APP2.0.12現來源183檔保持，fresh iOS QA建置／安裝／啟動與Android來源核對完成，但原生畫面入口不可操作，實際native跨端仍待。正式外部來源仍未開放；真provider、OS PWA、不可逆操作與完整矩陣仍active。
+
+## 2026-10-03 第七十六批：公開商品分享替代與重新讀取
+
+- 候選v2.0.580依HEAD提交數579＋1。公開商品原自動分享失敗僅泛用錯誤，現在自動顯示readonly可選商品名稱／TWD價格／目前版號網址，也可明確展開／收合；成功才顯示已複製、native取消保持安靜，進行中禁止重入／改讀，原payload與期限檢查保留。網址從本站與validated listing生成，不帶原query、測試參數或帳號token。
+- ready、暫時失敗及不公開頁新增明確重新載入，使用原anonymous GET且credentials omit／no-store；開始讀取就移除舊商品、分享文字、notice及report，404與503／429分別處理，不把暫時故障當停售。分享與讀取未增加後台寫入，APP2.0.12、server與45migration不改。
+- 新9項Web測試，修正前新增5項實際失敗（原工具輸出，無單獨prefail檔）；第一次focused 3項label失敗log保留，明確aria-label修正，未放寬斷言。最後完整Web113檔1832項通過、SSR12項與兩端build通過；focused3檔68項為第9項加入前，完整1832涵蓋全部9項。英文為自動測試，訪客settings登入轉向沒有實際英文GUI聲明。
+- 隔離真compiled read handlers／PG／2件本機合成非販售商品，受控clipboard失敗1次且沒有假的copied，v3旧URL重新讀取v4名稱／免費／Reserved／分享?v4，503移除舊操作並明確GET恢復；SOLDv5不公開／原SSR404、恢復ACTIVEv6再讀取與分享?v6。SSR以目前後台版號生成?v4／v6；private draft API／SSR／照片404。合成fixture狀態控制不是APP管理操作；瀏覽器失敗由local QA source注入，不冒稱實際OS權限拒絕。所有產品請求GET，無真實聯絡／分享送出／帳號或provider寫入。
+- 初次本機CORS preflight標頭漏Content-Type，原錯誤畫面及log保留；仅QA環境補標頭，保留資料重新啟動而不seed重播。原短狀態full-page截圖另逐一核對viewport／DOM幾何，視覺結果以final-visual-inspection證據為準。390×844商品頁documentWidth375、實際照片載入、readonly文字可讀；QA分頁關閉、尺寸恢復、各程序／18889／5278／55474停止，資料保留。
+- 正式部署前577公開商品／照片／SSR與無效連結唯讀核對。名為stale-url的577檔實際?v1等於目前v1，不能作舊版號證據；真正舊URL驗收為本機v3→v4／v6。完整證據wishlist-web-audit76-evidence-20261003.json；精確三CI、正常merge、空trigger、原Railway580與正式畫面回讀接續，完整目標active。
+
+## 2026-10-03 第七十五批：最新版正式視覺複驗與現來源原生驗收準備
+
+- 正式網站再次讀回v2.0.577。以736×952、scrollY0原始viewport圖逐頁對照Hank核准概念板；另外保存完整頁面查看地圖／進階功能／頁尾。首頁31＋24＋18＋12＋5＝90，設定33＋24＋18＋10＋5＝90；為本代理獨立逐頁人工加權審查，非像素相似度、非沿用553分數。原願望標籤、核對與地圖來源說明、隱私／聯絡權限及方案列仍造成高度差異，均列為扣分，沒有隱藏原功能或虛構三張商品／餘額。首頁頁高1236，設定1184；documentWidth721，header六入口均至少44×48、設定1個、無alert。
+- 正式390×844首頁與設定各documentWidth375、導航約54×48且唯一設定入口；兩頁完整原圖與DOM已檢視，首頁商品240×320及三張堆疊圖載入。主操作／提醒／搜尋與底圖署名、設定私人欄位／暫停付款／永久0次／進階入口及577頁尾保持；這是兩頁手機排版證據，不是全站響應式或手機90分。原browser尺寸已reset至1280×720，分頁返回正式設定頁；沒有修改本人資料、商品、訊息或面交。
+- 新loopback UTF8合成DB套用45個migration；三合成帳號、一個非販售藍杯商品與空room，runtime-only憑證經正常Web登入。收件匣／空聊天室／面交入口與真正320×320私人商品圖均實際核對。原快照70個API請求、訊息0、預約null、外部寫入0；此快照不是連續全時追蹤，含APP的合成賣家名稱不是原生證據，沒有雙端收送／未讀／新版本同意驗收。
+- 拒絕把舊iOS QA當目前基準：雖72個hash相符，AuthScreen、ProductNoticeScreen、config、package及QA drivers不同。從577原生樹e2dcf2b0962aaef9fc6b3e157994b1af0efc426a匯出183檔，fresh獨立iOS Debug QA2.0.12/build12、arm64/x86_64、獨立bundle／keychain建置成功。managed04D84B5C-1960-466E-8851-3A21D1C93917安裝／啟動及當前來源Metro bundle成功；CUA對實際Device Hub bundle／安裝路徑／display name皆逾時，沒有原生登入、截圖或互動。建置與啟動不冒稱原生流程通過，未使用XCTest input bridge，也非商店包／release-equivalent包。
+- Android第74批static non-debuggable QA重新核對129個source hash及相同當前native樹，產生的Android inputs在原build scratch核對。5556剩餘容量不足失敗保留、未刪資料；atomic受管理兩台分配後，既有自有5558 QA包正常啟動。CUA Android Studio Running Devices／Add Device沒有指定Codex_Shared_7b698d91b5dc，未啟動其他未受管理裝置、未改全域ADB／設定；實際原生跨端仍待。所有native／GUI lease正常結束，只停止獨立QA app及自有reverse，共用装置保持booted與原資料。
+- 初次Expo offline/localhost參數組合、deployment-locked pods與generated inputs不存在於integration等中間失敗如實保留；修正只在隔離驗收scratch，183個原生檔最終hash不變。手機GUI曾在排隊期間由guard阻止，取得本任務lease後才操作。API／Vite／Metro／PG正常停止，55474／18889／5277／18887關閉，runtime合成憑證移除，DB／照片／QA包及log保留，隔離tab關閉、原129其他workspace改動保留。
+- 本批只有驗收與原生包準備，沒有新產品修改／PR／部署；既有577仍為最新版，不為同版本驗收重複發布。證據`wishlist-web-audit75-evidence-20261003.json`與逐檔hash索引保存。完整目標active；實際APP-Web跨端、真MiniMax/Flickr與郵件、OS PWA/mixed-version CAS、不可逆GUI及其餘功能矩陣繼續。
+
+## 第七十四批正式發布與面交回執驗收
+
+- 正式v2.0.577，PR106精確head 5e51ec0de78ba334b2baa7def0d6c1fcc4f0e544、CI37058756858三項成功；正常合併5fead96423aad34fcd2b0b4e55101f33fbf8f02b、空triggerc45962295b1a7517cc118f641358199f595c9287。原Git部署7d68eb5a-5309-4dab-8a55-7570642aa5cc等待；同一乾淨checkout上傳既有Railway部署88766b64-3e29-4361-ba21-cd55c8bcfac4 SUCCESS，client／server／mobile樹與精確CI一致、uploads原掛載保持。無migration／APP／正式環境設定變更。
+- 完整Web113檔1823項、Server58套930項＋3略過、真HTTP40檔634項及build／45migration schema agreement成功。初次既有五秒逾時保留原log與後續原案例／完整有限並行結果，沒有降低timeout或assertion。原面交GET/hash／actor／會員／封存／已放棄／未知／較新版本／關閉晚到／CAS皆有新增證據；不是測試件數等於功能覆蓋率。
+- 實際隔離Web買家真handler提出v1後受控502，重開原操作仍保留，查核只增加兩個GET、原POST1；預約ID與全部私密條件不變、賣家未同意。三組原圖／DOM／request snapshots與匿名401／outsider404保持。照片fixtureplaceholder、dev meta absent、後續讀到v1的lost-ack截圖等限制均記錄；這批不冒稱native或production失敗注入。APP2.0.12現來源QA建置／managed5558安裝啟動成功，尚無CUA原生互動，不以含APP的合成賣家名稱當跨端證據。
+- 原正式574分頁經ready與「我已保存，重新載入」升級577；原更新前聊天240×320照片保留，升級後探索map／8張清單照片、聊天收件匣照片、空QA聊天室composer及空面交dialog均1280×720、無水平溢出、單一設定入口且原圖已視覺檢查。未送訊息／面交提案／其他產品寫入；正式外部來源保持未開放與0件。公開版號、主bundle與四個chunks200、worker activation1／claim1、legacy registerSW.js200核對，不清cache／storage或繞過正常更新。
+- 隔離QA分頁已在managedGUI關閉；API／Vite／PG停止且5276／18889／55474關閉，合成DB／media／失敗log及nativeQA包保留。原129其他workspace改動hash保持，正式分頁返回載入收件匣。完整目標仍active，provider／實際native跨端／OS PWA／不可逆GUI與完整矩陣待完成；最近Home／Settings553各90，未對577重新評分。
 
 ## 2026-10-03 第七十四批：只讀查核原面交回執
 
@@ -20,7 +47,7 @@
 - 新authenticated GET在單一RepeatableRead快照核對目前room會員、未封存及actor本人回執，只接受一個64hex requestHash、嚴格UUID，private/no-store。不同actor／未知404、hash不符409、封存409、額外query400，不寫回執／不重放／不放棄；既有APP mutation契約不改、無新migration。
 - 修正前新增三HTTP與一UI案例實際失敗，修正後新增18個Web與3個真HTTP／PG案例；focused3檔67項。完整Web113檔1823項、Server58套930項＋3略過、真HTTP40檔634項、45個migration與schema diff空、兩端build通過。初次完整Web既有BirthdayReminders五秒逾時原log保留，原案例單獨7項及完整兩worker1823項通過，沒有放寬timeout或斷言；精確雲端CI仍用原檢查。
 - 隔離compiled真handler／PG／三合成帳號及一非販售商品，Web買家提出邀約真commit後受控502；reload保留原內容，按查核後只增加原回執GET與預約GET，原邀約POST始終1。原預約ID、v1、PROPOSED與私密條件不變，賣家仍未同意。匿名／非參與者真room、messages、meetup讀取401／404且不含私密條件；沒有真實訊息／provider／郵件。三組原JPEG／DOM均已視覺檢查；lost-ack畫面是pending與後續讀到的v1，不是502瞬間。照片fixture相對URL是placeholder，這批不宣稱照片驗收；dev meta absent但footer／build577保存。
-- 現APP2.0.12原生樹未改；現來源獨立QA包versionCode30成功建置、安裝及啟動於managed5558。5556容量不足的失敗保留、不刪任何裝置資料；CUA無可控emulator視窗，沒有實際原生登入／操作或雙端送達證據，不能以合成賣家名稱含APP冒稱跨端成功。lease／自有reverse／QA app正常釋放，API／Vite／PG停止與5276／18889／55474關閉、DB／照片保留；QA分頁待下一次GUI租約關閉。
+- 現APP2.0.12原生樹未改；現來源獨立QA包versionCode30成功建置、安裝及啟動於managed5558。5556容量不足的失敗保留、不刪任何裝置資料；CUA無可控emulator視窗，沒有實際原生登入／操作或雙端送達證據，不能以合成賣家名稱含APP冒稱跨端成功。lease／自有reverse／QA app正常釋放，API／Vite／PG停止與5276／18889／55474關閉、DB／照片保留；QA分頁已於後續managedGUI租約關閉。
 - 精確CI、正常merge、空trigger、原Railway發布與正式574→577畫面回讀接續。正式外部來源仍未開放、APP與正式環境設定不改。證據wishlist-web-audit74-evidence-20261003.json，完整目標active、最新首頁／設定仍553各90；真provider、跨端、OS PWA與完整矩陣仍保留。
 
 ## 第七十三批正式發布與聊天恢復驗收
@@ -621,15 +648,15 @@
 | 商品編輯／保留／售出／移除／延長 | MyListingsScreen；PATCH listings/id、status、extend | 新增不可變管理回執及API／帳號隔離加密原操作；Chrome／真DB驗證編輯與售出commit後502→reload僅GET恢復、跨端衝突保留比較及明確新版本儲存；尚未送出名稱／說明／不完整價格的加密草稿恢復及跨分頁CAS已真UI驗證；前批延長／保留／恢復在售保留為舊協定證據，新協定延長已真UI點日格＋commit後502→GET恢復v2／日期一致；完整多頁已第40批實測；新協定移除／草稿發布真UI仍待補 | expectedVersion 衝突、失聯查核而非盲目重送 |
 | 已刊登商品額外選項行銷助手 | MyListingsScreen | 原真實漫畫入口唯讀；第40／41批合成商品真browser編輯與4圖批准commit後502→reload只GET原receipt、v4與cover排序2/1/3/4一致，nested中英文已驗證；真provider品質仍待 | 原來源圖、先儲存、人工確認、版號衝突；合成四圖不當MiniMax品質證明 |
 | 行銷4圖、1次免費修改、排序、話術、批准 | MarketingAssistant；marketing/jobs | 共用元件、原版／免費調整queue及不可變批准回執、加密原選圖／文案／版本紀錄已實作；實際批准commit後502→reload只GET恢復，child套用後root歷史證據不變且月次數1；能力關閉時仍可查看／批准既有結果，新生成及免費調整停用、明確只讀重查，Chrome暫停期間實測同樣成功恢復；上下文變更、舊紀錄及真provider／跨端仍待補 | 4圖完整交付、只扣原任務、拖曳與鍵盤可操作、未知回覆只讀恢復 |
-| 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 公開頁本機補齊嚴格投影、最新狀態、分享／管理／聊天／檢舉入口；SSR跨端預覽仍待回歸 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
+| 商品分享連結與商品預覽 | listingShare、PublicListingPage；SSR metadata | 第69–70批正式預覽／雙語回讀；第76批補手動分享文字及明確重新GET，合成v3→v4／v6、503恢復、SOLD／private照片404與手機真browser核對；真native分享及第三方社交card仍待 | 商品縮圖、名稱、TWD價格、非網站通用圖 |
 | 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 本機實作；真實帳號6個願望、漫畫3件第三方匹配已唯讀核對；第53批繁中English／expanded group／mobile／guest及生日獨立503→單GET恢復真Chrome核對 | 全願望／匹配分頁、最多3個並行、跨頁排序、失敗明示、不混入自己商品 |
 | 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 本機實作；單件zoom13、窄屏與漫畫詳情已驗證 | 同願望漫畫正反例、单件深連結最新狀態核對、鍵盤願望選擇 |
-| 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 本機實作；繁中底圖／照片實際顯示；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
+| 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 正式577底圖及8件列表照片已實際核對；第70–72批雙語正文／完整篩選／外部原圖與失敗恢復證據保留；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
 | 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批原target／撤回／unknown／late scope保留；第60批中英文與native44px point／Space真UI、空GET不配置、ASK與CONSENT各真commit502→reload GET同room／原中文問題／WAITING_ROUTE、B null不建room，35requests只有原配置／ASK／CONSENT3POST；新Web1／focused16／HTTP9通過、45migration diff0 | 完整來源／核實原賣家路由／人工delivery證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
 | 商品檢舉與聊天入口 | ExploreScreen、ListingReportSheet | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
-| 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 已正式部署550；繁中桌面／390手機收件匣、QA空history及547英文原文介面通過，隔離HTTP／DB與瀏覽器發送、未知回應、121則分頁證據保持；正式雙方送達／跨端仍待 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
-| 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 已正式部署550；QA無預約詳情、547英文未提交表單原文通過；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成有UI／HTTP測試；正式双方面交異動待 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
+| 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 正式577收件匣照片與QA空聊天室實際核對；原繁中／390手機、英文、隔離發送／未知回應／121則分頁與第73批限流明確恢复證據保持；第75批current-source iOS／Android QA僅建置與啟動，實際APP-Web雙方送達仍待 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
+| 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 正式577QA空面交詳情已核對；隔離雙方確認／改期／封鎖／取消／重開證據保留，完成有UI／HTTP測試；第74批commit502→reload→只GET原receipt、POST1、不誤同意新版本已驗證；實際APP-Web與正式双方面交異動待 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
 | 保留既有Web朋友搜尋／追蹤／公開資料 | Social／public-profile／follow-operations；APP社交以ChatInbox為基準 | 第25／26批server privacy及原回執保留；第56批雙語原生日／photo failure-retry／公開與mask欄位、真取消commit502→reload及換帳號返回GET同回執／CAS清理、profile503恢復已Chrome本機驗證，原users逐欄不變 | 原HTTPS照片provider／跨端及正式站仍待；null不提供隱藏個資，calendar原值不依browser timezone換日 |
 | 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；第55批native-contract願望UI雙語／GET-only跨語言恢復／原decimal及dated fixed-rate estimate真Chrome核對；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
@@ -642,7 +669,7 @@
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；第53批生日六欄privacy／UTC calendar及Home語系真HTTP／Chrome已核對；第54批friend legacy WishlistDashboard英文搜尋排序與訪客清單核對；真mail、其他社交流程／feature／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；第48批landing中英文／安全locale讀取／原form入口真browser已核對 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
-| 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
+| 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41／48批入口與尺寸證據保留；第75批正式577Home／Settings各自人工90分、736×952與390×844原图核對、唯一Settings、導航≥44px、兩頁無水平溢出；整站響應式仍待 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
 | 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |
 | 既有帳號交易與送禮認領紀錄 | Web既有功能；APP沒有此頁 | 第50批actual HTTP11／Web23與Chrome populated／empty／single-read503→retry／guest；105筆完整、private current claim minimal reminder、原amount／0／refund／status、雙語mobile／desktop及single44px Settings entry核對 | Current claims不是付款／送達或durable history；對方私人／隱藏立即依新讀取遮蔽；正式端待驗 |
 | 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／key lifecycle與雙語文件已第51批實際回歸；第52批真built worker upgrade淘汰legacy private image cache，保留加密marker／unsent文字，公開docs／image offline可讀且private新請求不可讀；安裝／正式升級／mixed-version CAS／真OS/credential仍待 | autosave真實回執、隱私切換；個人指令含金鑰僅明確複製／手動顯示，不寫入持久journal／log／artifact；已解碼圖片不聲稱立即撤回 |

@@ -34,6 +34,38 @@ const openEditor = async (name: string) => {
   fireEvent.click(button);
 };
 describe('private meetup web parity', () => {
+  it('keeps the original journal on a missing English receipt and does not dispatch a POST', async () => {
+    localStorage.setItem('user-locale', 'en-US');
+    const req = { clientActionId: crypto.randomUUID(), action: 'CONFIRM', expectedVersion: 1 }, body = JSON.stringify(req); data.set(key, body); appointment = makeMeetup();
+    api.mockImplementation(async (_token: string, path: string) => { if (path.includes('/operations/')) throw new ApiFailure('synthetic private error', 404); return { appointment }; });
+    render(<MeetupWeb {...props} />); await screen.findByText('Proposed · Version 1'); fireEvent.click(screen.getByRole('button', { name: 'Read original meetup receipt only' }));
+    await screen.findByText('No original meetup receipt is available yet. This does not prove failure or cancellation. The original operation is retained.');
+    expect(data.get(key)).toBe(body); expect(posts()).toHaveLength(0); expect(screen.queryByText('synthetic private error')).not.toBeInTheDocument();
+  });
+  it('fences duplicate receipt reads and preserves the journal when the dialog closes before a reply', async () => {
+    const req = { clientActionId: crypto.randomUUID(), action: 'CONFIRM', expectedVersion: 1 }, body = JSON.stringify(req); data.set(key, body); appointment = makeMeetup();
+    let finish: (value: unknown) => void = () => {}; const deferred = new Promise(resolve => { finish = resolve; });
+    api.mockImplementation(async (_token: string, path: string) => path.includes('/operations/') ? deferred : { appointment });
+    const view = render(<MeetupWeb {...props} />); await screen.findByText('提議中 · 第1版');
+    const button = screen.getByRole('button', { name: '只查核原面交回執' }); fireEvent.click(button); fireEvent.click(button);
+    await waitFor(() => expect(api.mock.calls.filter(call => call[1].includes('/operations/'))).toHaveLength(1));
+    const path = api.mock.calls.find(call => call[1].includes('/operations/'))![1]; view.unmount();
+    await act(async () => { finish({ replayed: true, appointment, receipt: { ...req, requestHash: path.split('requestHash=')[1], actorUserId: 42, conversationId: props.room.id, resultingVersion: 1, abandoned: false } }); });
+    expect(data.get(key)).toBe(body); expect(store.clear).not.toHaveBeenCalled(); expect(posts()).toHaveLength(0);
+  });
+  it('checks an original pending meetup using GET only and never approves the newer terms', async () => {
+    const req = { clientActionId: crypto.randomUUID(), action: 'CONFIRM', expectedVersion: 1 }, body = JSON.stringify(req); data.set(key, body);
+    appointment = makeMeetup({ version: 2 });
+    api.mockImplementation(async (_token: string, path: string, init?: RequestInit) => {
+      expect(init?.method).not.toBe('POST');
+      if (path.includes('/operations/')) return { replayed: true, appointment, receipt: { ...req, requestHash: path.split('requestHash=')[1], actorUserId: 42, conversationId: props.room.id, resultingVersion: 1, abandoned: false } };
+      return { appointment };
+    });
+    render(<MeetupWeb {...props} />); await screen.findByText('提議中 · 第2版');
+    fireEvent.click(screen.getByRole('button', { name: '只查核原面交回執' }));
+    await screen.findByText('已確認先前第1版操作；目前第2版仍需重新核對。');
+    expect(posts()).toHaveLength(0); expect(data.has(key)).toBe(false); expect(screen.getByText('買家尚未同意 · 賣家已同意')).toBeInTheDocument();
+  });
   it('requires manual appointment recovery after rate limiting and preserves the original unsent fields', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     localStorage.setItem('user-locale', 'en-US'); const base = api.getMockImplementation()!;

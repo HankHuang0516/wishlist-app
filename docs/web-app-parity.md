@@ -12,7 +12,25 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式 v2.0.570 已發布。第71批探索雙語與第72批外部詳情照片分別通過驗證後部署；原分頁以已保存確認由567更新570，正式探索地圖、8筆商品清單與聊天收件匣照片再次核對。外部詳情原圖、縮圖替代及雙圖失敗提示有隔離真實瀏覽器四種狀態證據；正式外部來源仍未開放。首頁／設定最近評分仍553各90；完整供應商、跨端、PWA、不可逆操作與功能矩陣仍在進行，APP2.0.12不改。
+目前狀態：正式 v2.0.574 已發布。第71批探索雙語、第72批外部詳情照片及第73批聊天／面交明確讀取恢復均各自驗證後部署；原570分頁以已保存確認更新574，正式探索地圖、8筆商品清單與聊天收件匣照片核對。聊天登入失效／受限後停止自動讀取，手動成功才恢復；隔離真實瀏覽器四個暫停／恢復流程與九項新增測試保存證據。正式外部來源仍未開放。首頁／設定最近評分仍553各90；完整供應商、跨端、PWA、不可逆操作與功能矩陣仍在進行，APP2.0.12不改。
+
+## 2026-10-03 第七十四批：只讀查核原面交回執
+
+- 候選v2.0.577依HEAD提交數576＋1。發現Web待確認面交原本只能讀目前預約或明確重送原POST，缺少讀取本人原操作回執；新增「只查核原面交回執」與英文入口，重開仍保留原journal、不自動重送。原UUID與完整標準化內容hash核對，回執確認版號與目前預約版號分開，查核舊同意不會同意新條件。404不推定失敗或取消；已確認但CAS清理失敗保留原紀錄，新scope／晚到／關閉視窗不清掉新操作。
+- 新authenticated GET在單一RepeatableRead快照核對目前room會員、未封存及actor本人回執，只接受一個64hex requestHash、嚴格UUID，private/no-store。不同actor／未知404、hash不符409、封存409、額外query400，不寫回執／不重放／不放棄；既有APP mutation契約不改、無新migration。
+- 修正前新增三HTTP與一UI案例實際失敗，修正後新增18個Web與3個真HTTP／PG案例；focused3檔67項。完整Web113檔1823項、Server58套930項＋3略過、真HTTP40檔634項、45個migration與schema diff空、兩端build通過。初次完整Web既有BirthdayReminders五秒逾時原log保留，原案例單獨7項及完整兩worker1823項通過，沒有放寬timeout或斷言；精確雲端CI仍用原檢查。
+- 隔離compiled真handler／PG／三合成帳號及一非販售商品，Web買家提出邀約真commit後受控502；reload保留原內容，按查核後只增加原回執GET與預約GET，原邀約POST始終1。原預約ID、v1、PROPOSED與私密條件不變，賣家仍未同意。匿名／非參與者真room、messages、meetup讀取401／404且不含私密條件；沒有真實訊息／provider／郵件。三組原JPEG／DOM均已視覺檢查；lost-ack畫面是pending與後續讀到的v1，不是502瞬間。照片fixture相對URL是placeholder，這批不宣稱照片驗收；dev meta absent但footer／build577保存。
+- 現APP2.0.12原生樹未改；現來源獨立QA包versionCode30成功建置、安裝及啟動於managed5558。5556容量不足的失敗保留、不刪任何裝置資料；CUA無可控emulator視窗，沒有實際原生登入／操作或雙端送達證據，不能以合成賣家名稱含APP冒稱跨端成功。lease／自有reverse／QA app正常釋放，API／Vite／PG停止與5276／18889／55474關閉、DB／照片保留；QA分頁待下一次GUI租約關閉。
+- 精確CI、正常merge、空trigger、原Railway發布與正式574→577畫面回讀接續。正式外部來源仍未開放、APP與正式環境設定不改。證據wishlist-web-audit74-evidence-20261003.json，完整目標active、最新首頁／設定仍553各90；真provider、跨端、OS PWA與完整矩陣仍保留。
+
+## 第七十三批正式發布與聊天恢復驗收
+
+- v2.0.574：PR105精確head 8c601e203f37da55ebc9938de2fbe790569ab88f，CI 37052855842 三項成功；正常合併 9ce0c02b087fe0e87b232a828f127bcbfe1c0b4a，空觸發 24c59d3536568c9dd87405bc7814ff9e875fdba2。Git部署 b3ff830c-b173-41c6-87ef-f0ec95d16e8a 等待後，以同一乾淨checkout上傳既有Railway服務，部署 32ddccc3-570e-489d-b13e-f6172b767545 SUCCESS。client/server/mobile樹符合精確CI；uploads掛載、正式環境設定與資料庫服務保持，APP與migration未修改。
+- 完整Web113檔1805項、Server58套930項＋3略過及兩端建置通過；四檔88項集中檢查先於最後close/send自動refresh gate，最後來源與八個既有面交editor readiness修正由完整檢查與精確CI覆蓋。修正前四個案例實際失敗，新增九項針對401／429、pending body、並行失敗、visible-read ACK、父子面交與草稿保存；不增加timeout或放寬assertion。
+- 隔離45個migration與compiled真實API、兩個合成使用者、一件合成非販售商品、seed history及private appointment；各GET一次受控429／Retry-After5秒後真handler可讀。收件匣在超過30秒後請求數仍3、房間超過15秒仍8、面交超過15秒仍29，原歷史／未送出文字／集合點／私密備註保留。手動child更新只解除child；關閉後parent仍暫停，31個請求在下個週期仍31；明確parent更新後讀取與後續週期恢復。49個API快照GET（46×200＋3×429），零送出／proposal／產品寫入／read ACK／外部provider。
+- 快照先於QA分頁關閉，不冒稱涵蓋後续所有GET；房間與面交等待尾端DOM可見，不冒稱連續focus/visibility事件追蹤。繁中desktop與英文390px十四組原JPEG／DOM／geometry；phone面交截圖scrolled到原欄位與更新控制，pause header在保存DOM，不冒稱每張partial截圖顯示完整modal。隔離573與發布574的四個product runtime檔hash一致。401與pending body為測試證據，不冒稱正式登入過期。QA分頁已關、viewport還原、API／Vite／PG停止，5274／5275／55473關閉，資料與證據保留。
+- 原正式570分頁經ready與「我已保存，重新載入」更新574；正式探索地圖、8筆站內清單與八張240×320照片、聊天收件匣一張240×320照片均載入。另唯讀開啟既有非販售QA空聊天室，核對訊息輸入／手動更新／面交入口，再開面交dialog核對尚無預約，未填寫或送出、未封鎖；關閉後回到已載入收件匣。五組正式原圖均1280×720無橫向溢出、單一設定入口並經視覺核對；partial聊天室截圖不冒稱包含所有下方控制，原DOM完整保存。正式外部来源仍未開放且0件；沒有清cache/storage、強制worker、送訊息、檢舉或面交操作。公開版號、主bundle、四個功能chunk200、worker activation1／claim1與legacy registerSW.js200核對。
+- 原始證據、明確限制與hash索引均保存；不以隔離驗收冒充正式故障、真provider／跨裝置送達或OS PWA。完整目標仍active、最近首頁／設定評分仍553各90，原129其他workspace改動保留。
 
 ## 2026-10-03 第七十三批：聊天與面交的明確讀取恢復
 

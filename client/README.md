@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Read-only original meetup recovery — 2026-10-03
+
+Pending meetup operations expose a bilingual original-receipt check. It sends one authenticated GET containing the original UUID and normalized request hash, without private terms or a mutation body. The server returns only the requesting participant's matching durable receipt and the current appointment from one read-only snapshot. Unknown, mismatched, unauthorized and archived results retain the journal; an old acknowledged version cannot approve newer terms. Exact local cleanup preserves a competing journal and departure fences reject late results. Reopening retains the explicit check and never replays a write. Existing native APP, appointment write contracts and migrations remain unchanged.
+
 ## Bilingual item exploration — 2026-10-03
 
 The Explore search, map/list controls, filters, wish comparison, pagination, item/source details and recovery notices follow the saved Chinese/English preference. Original keywords, brand text, category/condition/delivery values, wish names, product/source content, prices and IDs remain unchanged. Taiwan time and approximate-location disclaimers are retained. Known match reasons retain budget-currency and authenticity limitations; generated keyword text is inserted literally, not treated as a second translation template.

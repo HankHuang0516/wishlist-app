@@ -5,7 +5,7 @@ import { getFullApiUrl } from '../config';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import type { ChatRoomRecord } from '../lib/chatData';
 import { meetupRequest, parseMeetup, type MeetupAction, type MeetupRecord } from '../lib/meetupData';
-import { fromTaipeiInput, meetupActionLabels, meetupLabels, submitMeetupAction, taipeiInput } from '../lib/chatWeb';
+import { fromTaipeiInput, lookupMeetupAction, meetupActionLabels, meetupLabels, submitMeetupAction, taipeiInput } from '../lib/chatWeb';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
 import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
@@ -21,7 +21,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
   const autoPause = useChatReadPause();
   const current = useRef(appointment); current.current = appointment;
   const latestRoom = useRef(room); latestRoom.current = room;
-  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已關閉')); return api<unknown>(token, path, init).catch(failure => { if (active.current && shouldPauseChatReads(failure)) { autoPause.pause(); onReadPause?.(); } throw failure; }); };
+  const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已關閉')); return api<unknown>(token, path, init).then(value => { if (!active.current) throw new Error('已關閉'); return value; }).catch(failure => { if (active.current && shouldPauseChatReads(failure)) { autoPause.pause(); onReadPause?.(); } throw failure; }); };
   async function refresh(automatic = false) {
     if (reading.current || gate.current || !active.current || latestRoom.current.archived || automatic && autoPause.control.current.paused) return;
     reading.current = true; const seq = ++sequence.current; const pauseGeneration = autoPause.control.current.generation;
@@ -54,6 +54,25 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
     setDuration(item ? String((Date.parse(item.endsAt) - Date.parse(item.startsAt)) / 60000) : '60');
     setLatitude(item?.latitude == null ? '' : String(item.latitude)); setLongitude(item?.longitude == null ? '' : String(item.longitude)); setEditing(true); setError('');
   }
+  function acceptResult(result: Awaited<ReturnType<typeof submitMeetupAction>>, abandon = false) {
+    if (!active.current) return;
+    current.current = result.appointment; setAppointment(result.appointment); setLoaded(true); setEditing(false);
+    if (result.pendingCleared) { saved.current = null; setPending(null); setConfirmFence(false); }
+    else setError('後台操作已確認，但本機待確認標記尚未清除；請查核或重試同一操作，暫不建立新操作。');
+    setNotice(result.abandoned ? '原待確認操作已安全放棄；這不會取消已成立的預約。' : result.acknowledgedVersion! < result.appointment!.version ? `已確認先前第${result.acknowledgedVersion}版操作；目前第${result.appointment!.version}版仍需重新核對。` : abandon ? '原操作已先完成，已確認結果；放棄操作沒有取消目前預約。' : '操作已確認；是否雙方同意請查看預約狀態。');
+  }
+  async function checkPending() {
+    if (!ready || !key.current || !saved.current || gate.current || latestRoom.current.archived) return;
+    const body = saved.current, requestKey = key.current, pauseGeneration = autoPause.control.current.generation;
+    gate.current = true; sequence.current++; setBusy(true); setError(''); setNotice('');
+    try {
+      const result = await lookupMeetupAction(read, latestRoom.current, userId, privatePendingStore, requestKey, body);
+      if (!active.current) return;
+      acceptResult(result); autoPause.resume(pauseGeneration);
+    } catch (failure) {
+      if (active.current) setError(failure instanceof ApiFailure && failure.status === 404 ? '尚無原面交回執；不代表操作失敗或已取消，原內容仍保留。' : '無法查核原面交回執；沒有重新送出，原內容仍保留。');
+    } finally { gate.current = false; if (active.current) setBusy(false); }
+  }
   async function act(action: MeetupAction, abandon = false) {
     if (!ready || !loaded || !key.current || gate.current || room.archived || (abandon && !saved.current)) return;
     if (!saved.current && ['PROPOSE', 'REVISE'].includes(action) && editVersion !== (current.current?.version ?? 0)) { setError('對方已更新預約，請載入最新版本後重新編輯；沒有送出操作。'); return; }
@@ -66,10 +85,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
       await privatePendingStore.save(requestKey, body); saved.current = body; if (!active.current) return; setPending(body);
       const result = await submitMeetupAction(read, latestRoom.current, userId, privatePendingStore, requestKey, body, abandon);
       if (!active.current) return;
-      current.current = result.appointment; setAppointment(result.appointment); setEditing(false);
-      if (result.pendingCleared) { saved.current = null; setPending(null); setConfirmFence(false); }
-      else setError('後台操作已確認，但本機待確認標記尚未清除；請查核或重試同一操作，暫不建立新操作。');
-      setNotice(result.abandoned ? '原待確認操作已安全放棄；這不會取消已成立的預約。' : result.acknowledgedVersion! < result.appointment!.version ? `已確認先前第${result.acknowledgedVersion}版操作；目前第${result.appointment!.version}版仍需重新核對。` : abandon ? '原操作已先完成，已確認結果；放棄操作沒有取消目前預約。' : '操作已確認；是否雙方同意請查看預約狀態。');
+      acceptResult(result, abandon);
     } catch (failure) {
       if (active.current) {
         if (failure instanceof PendingStoreError) { setReady(false); setRestoreIssue(failure.message); }
@@ -93,7 +109,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
     </section> : loaded ? <p>{pending ? chatText("上次讀取尚無預約；目前有待確認操作，請更新狀態核對，不能據此認定邀約未成立。") : chatText("尚無面交預約，先與對方討論時間再提出邀約。")}</p> : <p role="status">{chatText("正在讀取面交預約…")}</p>}
     {!ready && <button className={button} disabled={busy} onClick={() => void restore()}>{chatText("重試恢復待確認預約")}</button>}
     {pendingAction && <section aria-label={chatText("待確認面交操作")} className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-semibold">{chatText("有一個尚未確認結果的操作")}</h3><p>{chatText("原操作：")}{chatMessage(meetupActionLabels[pendingAction.action])} {chatText("· 原第")}{pendingAction.expectedVersion}{chatText("版。重試沿用相同識別碼、版本與條件，不會自動改為同意新版本。")}</p>{pendingAction.terms && <p>{chatTime(pendingAction.terms.startsAt)}{chatText("（台灣時間） ·")} {pendingAction.terms.placeName}</p>}
-      <div className="flex flex-wrap gap-2"><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => void act(pendingAction.action)}>{chatText("明確重試原操作")}</button><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => setConfirmFence(true)}>{chatText("安全放棄待確認操作")}</button></div>
+      <div className="flex flex-wrap gap-2"><button className={button} disabled={!ready || busy || room.archived} onClick={() => void checkPending()}>{chatText('只查核原面交回執')}</button><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => void act(pendingAction.action)}>{chatText("明確重試原操作")}</button><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => setConfirmFence(true)}>{chatText("安全放棄待確認操作")}</button></div>
       {confirmFence && <div className="space-y-2"><p>{chatText("若原操作已完成，只確認原結果；不會取消已成立預約。只有未完成的操作會被封存。")}</p><button className={button} disabled={busy} onClick={() => void act(pendingAction.action, true)}>{chatText("確認安全放棄（不取消現有預約）")}</button><button className={button} disabled={busy} onClick={() => setConfirmFence(false)}>{chatText("返回查核")}</button></div>}
     </section>}
     {editing && !pending && <form className="space-y-3 rounded-xl bg-gray-50 p-4" onSubmit={event => { event.preventDefault(); void act(editVersion ? 'REVISE' : 'PROPOSE'); }}>

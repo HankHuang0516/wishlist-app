@@ -1,21 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
 import { erasePrivatePendingData } from '../lib/webPendingStore';
 import { getDisplayLocale } from '../utils/localization';
 import { deletionText as dt } from '../lib/accountDeletionCopy';
+import { recoverDeletionJournal,publishDeletionJournal,verifyDeletionJournal,clearDeletionJournal } from '../lib/deletionRecoveryWeb';
 import {
-  PENDING_DELETION_KEY, abandonDeletion, createPendingDeletion, lookupDeletion,
-  parsePendingDeletion, submitDeletion, type DeletionResult, type PendingDeletion,
+  abandonDeletion, createPendingDeletion, lookupDeletion,
+  submitDeletion, type DeletionResult, type PendingDeletion,
 } from '../lib/accountDeletionWeb';
 
 type Impact = { capturedAt: string; counts: Record<string, number> };
-
-function readInitialJournal(): { pending: PendingDeletion | null; invalid: boolean } {
-  try { return { pending: parsePendingDeletion(localStorage.getItem(PENDING_DELETION_KEY), API_URL), invalid: false }; }
-  catch { return { pending: null, invalid: true }; }
-}
 
 function parseImpact(value: unknown): Impact {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('刪除影響盤點無效。');
@@ -39,8 +35,9 @@ function DeletionSession() {
   const { token, user, logout } = useAuth();
   const [confirmationPhrase]=useState(()=>getDisplayLocale().startsWith('zh')?'刪除帳號':'DELETE ACCOUNT');
   const generation=useRef(0);
-  const [initial] = useState(readInitialJournal);
-  const [pending, setPending] = useState<PendingDeletion | null>(initial.pending);
+  const [initial,setInitial]=useState<{pending:PendingDeletion|null;invalid:boolean;ready:boolean}>({pending:null,invalid:false,ready:false});
+  const [pending, setPending] = useState<PendingDeletion | null>(null);
+  const [storagePaused,setStoragePaused]=useState(false),[readAttempt,setReadAttempt]=useState(0);
   const [impact, setImpact] = useState<Impact | null>(null);
   const [result, setResult] = useState<DeletionResult | null>(null);
   const [password, setPassword] = useState('');
@@ -51,7 +48,7 @@ function DeletionSession() {
   const [cleanupAttempt, setCleanupAttempt] = useState(0);
   const operationBusy = useRef(false);
   const foreignPending = !!pending && !!user && user.id !== pending.userId;
-  useEffect(()=>{generation.current++;operationBusy.current=false;return()=>{generation.current++;operationBusy.current=true;};},[]);
+  useLayoutEffect(()=>{generation.current++;operationBusy.current=true;return()=>{generation.current++;operationBusy.current=true;};},[]);
 
   useEffect(() => {
     if (result?.kind !== 'confirmed' || result.ack.state !== 'ERASED' || !pending || foreignPending) return;
@@ -64,27 +61,25 @@ function DeletionSession() {
     return () => { live = false; };
   }, [result, pending, foreignPending, cleanupAttempt]);
 
-  useEffect(() => {
-    if (!initial.pending) return;
-    if (user && user.id !== initial.pending.userId) {
-      setIssue('此瀏覽器保留另一帳號的未確認刪除操作；不會使用目前帳號查詢或建立新刪除，請由原帳號核對。');
-      return;
-    }
-    let live = true;
-    operationBusy.current = true;
-    setBusy(true);
-    void lookupDeletion(initial.pending).then(value => {
-      if (!live) return;
-      setResult(value);
-      if (value.kind === 'unconfirmed') setIssue('原刪除操作的結果仍未確認；不會自動重送刪除。');
-      operationBusy.current = false;
-      setBusy(false);
-    });
-    return () => { live = false; };
-  }, [initial, user]);
+  useEffect(()=>{
+    let live=true;operationBusy.current=true;setBusy(true);setStoragePaused(false);setIssue('');setResult(null);setCleanup('idle');
+    setInitial({pending:null,invalid:false,ready:false});
+    void(async()=>{
+      try{
+        const restored=await recoverDeletionJournal(API_URL);if(!live)return;
+        setInitial({pending:restored.journal,invalid:false,ready:true});setPending(restored.journal);
+        if(!restored.journal)return;
+        setPassword('');setConfirmation('');
+        if(user&&user.id!==restored.journal.userId){setIssue('此瀏覽器保留另一帳號的未確認刪除操作；不會使用目前帳號查詢或建立新刪除，請由原帳號核對。');return;}
+        const value=await lookupDeletion(restored.journal);if(!live)return;setResult(value);
+        if(value.kind==='unconfirmed')setIssue('原刪除操作的結果仍未確認；不會自動重送刪除。');
+      }catch{if(live){setStoragePaused(true);setInitial({pending:null,invalid:true,ready:true});}}
+      finally{if(live){operationBusy.current=false;setBusy(false);}}
+    })();return()=>{live=false;};
+  },[readAttempt,user?.id,token]);
 
   useEffect(() => {
-    if (initial.pending || initial.invalid || !token || !user) return;
+    if (!initial.ready || initial.pending || initial.invalid || !token || !user) return;
     let live = true;
     void (async () => {
       try {
@@ -101,7 +96,7 @@ function DeletionSession() {
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (operationBusy.current || initial.invalid || pending || !impact || !token || !user || !password || confirmation !== confirmationPhrase) return;
+    if (operationBusy.current || !initial.ready || initial.invalid || storagePaused || pending || !impact || !token || !user || !password || confirmation !== confirmationPhrase) return;
     if (!window.confirm(dt("永久刪除目前本人帳號？願望、刊登與本人訊息將無法復原；照片清理可能需要後續處理。"))) return;
     operationBusy.current = true;
     const currentGeneration=generation.current;
@@ -113,18 +108,21 @@ function DeletionSession() {
       if(generation.current!==currentGeneration)return;
       stage='journal';
       const journal = createPendingDeletion(API_URL, user.id, token);
-      // Storage must succeed before the irreversible request. Never store the password.
-      if(localStorage.getItem(PENDING_DELETION_KEY)!==null)throw new Error('STORAGE');
-      localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify(journal));
+      // Publish is an immutable encrypted IndexedDB CAS, before dispatch.
+      // Never include the password or typed confirmation in recovery data.
+      await publishDeletionJournal(journal,()=>generation.current===currentGeneration);
+      if(generation.current!==currentGeneration)return;
       setPending(journal);
       const exactPassword = password;
       setPassword(''); setConfirmation('');
       stage='submit';
+      await verifyDeletionJournal(journal,()=>generation.current===currentGeneration);
+      if(generation.current!==currentGeneration)return;
       const settled = await submitDeletion(journal, exactPassword);
       if(generation.current!==currentGeneration)return;
       setResult(settled);
       if (settled.kind === 'unconfirmed') setIssue('尚未確認刪除結果；原操作已保存。請查詢結果，或讓伺服器確認放棄後再重試。');
-    } catch { if(generation.current===currentGeneration)setIssue(stage==='proof'?'登入帳號已改變；沒有送出刪除。':stage==='journal'?'無法安全保存原刪除操作；沒有送出刪除。請保留本頁並重試。':'尚未確認刪除結果；原操作已保存。請查詢結果，或讓伺服器確認放棄後再重試。'); }
+    } catch { if(generation.current===currentGeneration){if(stage==='journal')setStoragePaused(true);setIssue(stage==='proof'?'登入帳號已改變；沒有送出刪除。':stage==='journal'?'無法安全保存原刪除操作；沒有送出刪除。請保留本頁並重試。':'尚未確認刪除結果；原操作已保存。請查詢結果，或讓伺服器確認放棄後再重試。');} }
     finally { if(generation.current===currentGeneration){operationBusy.current = false; setBusy(false);} }
   }
 
@@ -154,16 +152,15 @@ function DeletionSession() {
     setBusy(false);
   }
 
-  function finish() {
-    if (result?.kind !== 'confirmed' || foreignPending) return;
+  async function finish() {
+    if (result?.kind !== 'confirmed' || foreignPending || !pending || operationBusy.current) return;
     if (result.ack.state === 'ERASED' && cleanup !== 'done') return;
-    try {
-      if(localStorage.getItem(PENDING_DELETION_KEY)!==JSON.stringify(pending)){setIssue('已確認的原操作與目前瀏覽器紀錄不同；較新的恢復資料已保留，請重新開啟核對。');return;}
-      localStorage.removeItem(PENDING_DELETION_KEY);
-    }
-    catch { setIssue('刪除結果已確認，但瀏覽器恢復資料尚未清理；請先關閉此分頁。'); return; }
-    if (result.ack.state === 'ERASED') logout();
-    else { setPending(null); setResult(null); setImpact(null); window.location.reload(); }
+    const currentGeneration=generation.current;operationBusy.current=true;setBusy(true);
+    try{
+      await clearDeletionJournal(pending);if(generation.current!==currentGeneration)return;
+      if(result.ack.state==='ERASED')logout();else window.location.reload();
+    }catch{if(generation.current===currentGeneration)setIssue('刪除結果已確認，但瀏覽器恢復資料尚未清理；請先關閉此分頁。');}
+    finally{if(generation.current===currentGeneration){operationBusy.current=false;setBusy(false);}}
   }
 
   return <div className="mx-auto max-w-2xl space-y-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-9">
@@ -177,9 +174,11 @@ function DeletionSession() {
       <p>{dt("商品照片與舊資產可能由背景工作後續清理；「帳號已刪除」不代表照片或備份已即時清空。若有透過商店購買的訂閱，請另至購買平台確認取消。")}</p>
       <p>{dt("更多資訊請閱讀")} <Link to="/privacy" className="underline">{dt("隱私權政策")}</Link>{dt('。')}</p>
     </div>
+    {!initial.ready&&<p role="status">{dt('正在安全讀取原刪除操作…')}</p>}
     {initial.invalid && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{dt("原刪除操作的本機紀錄無法安全讀取。為避免重複送出，這個分頁不會建立新操作；請透過網站意見回饋聯絡支援核對。")}</p>}
+    {storagePaused&&<button type="button" disabled={busy} className="min-h-11 rounded-xl border px-4" onClick={()=>setReadAttempt(n=>n+1)}>{dt('重試安全讀取刪除恢復資料')}</button>}
     {!!issue && !initial.invalid && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{dt(issue as Parameters<typeof dt>[0])}</p>}
-    {!initial.invalid && pending ? <section className="space-y-4">
+    {initial.ready&&!initial.invalid && pending ? <section className="space-y-4">
       <h2 className="text-xl font-semibold">{dt("原刪除操作")}</h2>
       <p className="break-all text-xs text-gray-600">{dt("操作識別碼：")}{pending.clientActionId}</p>
       {result?.kind === 'confirmed' && result.ack.state === 'ERASED' ? <div role="status" className="space-y-2 rounded-xl bg-emerald-50 p-4 text-emerald-900">
@@ -195,21 +194,21 @@ function DeletionSession() {
           <button type="button" disabled={busy} onClick={() => void check()} className="rounded-xl border px-4 py-3 disabled:opacity-50">{dt("只查詢原操作結果")}</button>
           <button type="button" disabled={busy} onClick={() => void abandon()} className="rounded-xl border px-4 py-3 disabled:opacity-50">{dt("安全放棄尚未成立的操作")}</button>
         </>}
-        {result?.kind === 'confirmed' && <button type="button" disabled={result.ack.state === 'ERASED' && cleanup !== 'done'} onClick={finish} className="rounded-xl bg-gray-900 px-4 py-3 text-white disabled:opacity-50">{result.ack.state === 'ERASED' ? dt("完成並登出") : dt("返回刪除表單")}</button>}
+        {result?.kind === 'confirmed' && <button type="button" disabled={busy||result.ack.state === 'ERASED' && cleanup !== 'done'} onClick={()=>void finish()} className="rounded-xl bg-gray-900 px-4 py-3 text-white disabled:opacity-50">{result.ack.state === 'ERASED' ? dt("完成並登出") : dt("返回刪除表單")}</button>}
       </div>}
-    </section> : !initial.invalid && (!token || !user) ? <section className="space-y-3">
+    </section> : initial.ready&&!initial.invalid && (!token || !user) ? <section className="space-y-3">
       <p>{dt("請先以原帳號登入，再在此頁確認刪除影響並提出要求。若忘記密碼，可先使用網頁密碼重設；不需透過 App。")}</p>
       <div className="flex flex-wrap gap-3"><Link className="rounded-xl bg-gray-900 px-4 py-3 text-white" to="/login?next=%2Faccount-deletion">{dt("登入後繼續")}</Link><Link className="rounded-xl border px-4 py-3" to="/forgot-password">{dt("重設密碼")}</Link></div>
-    </section> : !initial.invalid && <section className="space-y-4">
+    </section> : initial.ready&&!initial.invalid && <section className="space-y-4">
       <h2 className="text-xl font-semibold">{dt("本人資料影響盤點")}</h2>
       {impact ? <div className="rounded-xl bg-gray-50 p-4 text-sm">
         <p>{dt("唯讀盤點時間：")}{new Date(impact.capturedAt).toLocaleString(getDisplayLocale().startsWith('zh')?'zh-TW':'en-US')}{dt("；數量可能重疊且會變動，尚未刪除。")}</p>
         <p>{dt("願望清單")} {impact.counts.wishlists}{dt("、願望")} {impact.counts.wishes}{dt("、刊登")} {impact.counts.listings}{dt("、商品照片")} {impact.counts.uploadedPhotos}{dt("、本人訊息")} {impact.counts.messagesAuthored}{dt('。')}</p>
       </div> : <p>{dt("尚未取得有效盤點，不可送出刪除。")}</p>}
       <form onSubmit={(event) => void send(event)} className="space-y-4">
-        <label className="block text-sm font-medium">{dt("目前密碼")}<input aria-label={dt("刪除帳號的目前密碼")} type="password" autoComplete="current-password" maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={busy} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
-        <label className="block text-sm font-medium">{dt('輸入「{phrase}」確認',{phrase:confirmationPhrase})}<input aria-label={dt("輸入刪除帳號以確認")} type="text" maxLength={20} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
-        <button type="submit" disabled={busy || !impact || !password || confirmation !== confirmationPhrase} className="w-full rounded-xl bg-rose-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{dt("永久刪除本人帳號")}</button>
+        <label className="block text-sm font-medium">{dt("目前密碼")}<input aria-label={dt("刪除帳號的目前密碼")} type="password" autoComplete="current-password" maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={busy} readOnly={storagePaused} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
+        <label className="block text-sm font-medium">{dt('輸入「{phrase}」確認',{phrase:confirmationPhrase})}<input aria-label={dt("輸入刪除帳號以確認")} type="text" maxLength={20} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} readOnly={storagePaused} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
+        <button type="submit" disabled={busy || storagePaused || !impact || !password || confirmation !== confirmationPhrase} className="w-full rounded-xl bg-rose-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{dt("永久刪除本人帳號")}</button>
       </form>
     </section>}
   </div>;

@@ -59,6 +59,25 @@ function completed(tx: IDBTransaction) {
  * tab from replacing/clearing a pending operation. Never store access tokens.
  */
 export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', factory = globalThis.indexedDB, crypt = globalThis.crypto) {
+  return createEncryptedPendingStore(dbName,factory,crypt,scopeOf);
+}
+/** Only the deletion recovery vault uses this independent API scope. It must
+ * survive normal owner-data erasure until receipt verification and final CAS
+ * cleanup, because the original session is needed after account deletion. */
+export async function deletionRecoveryKey(apiUrl:string){
+  const absolute=apiUrl==='/api'&&typeof window!=='undefined'?new URL('/api',window.location.origin).href:apiUrl;
+  return `wishlist.recovery.deletion.v1.${await sha256(validateApiUrl(absolute,import.meta.env.DEV))}.account-deletion`;
+}
+export function createDeletionRecoveryVault(dbName='wishlist-deletion-recovery-v1',factory=globalThis.indexedDB,crypt=globalThis.crypto):PendingStore{
+  const store=createEncryptedPendingStore(dbName,factory,crypt,key=>{
+    const match=/^(wishlist\.recovery\.deletion\.v1\.[a-f0-9]{64})\.account-deletion$/.exec(key);
+    if(!match)throw new PendingStoreError();return match[1];
+  });
+  // Ordinary feature journals never gain permission to store session tokens.
+  // This dedicated vault exposes no mutable draft or owner-erasure API.
+  return {get:store.get,save:store.save,clear:store.clear};
+}
+function createEncryptedPendingStore(dbName:string,factory:IDBFactory,crypt:Crypto,scopeForKey:(key:string)=>string) {
   let connection: Promise<IDBDatabase> | undefined;
   const open = () => connection ??= new Promise<IDBDatabase>((resolve, reject) => {
     if (!factory || !crypt?.subtle) { reject(new PendingStoreError()); return; }
@@ -72,7 +91,7 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
     };
   }).catch(() => { connection = undefined; throw new PendingStoreError(); });
   async function read(key: string): Promise<{ entry: Entry | undefined; secret: CryptoKey | undefined; erased: boolean }> {
-    const scope = scopeOf(key), db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readonly'), done = completed(tx);
+    const scope = scopeForKey(key), db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readonly'), done = completed(tx);
     const [entry, secret, erased] = await Promise.all([
       request(tx.objectStore('pending').get(key)), request(tx.objectStore('keys').get(scope)), request(tx.objectStore('erased').get(scope)),
     ]);
@@ -96,7 +115,7 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
   const store: PendingStore = {
     get: key => wrap(async () => { const row = await read(key); return !row.entry || row.erased ? null : decode(key, row.entry, row.secret); }),
     save: (key, body) => wrap(async () => {
-      validBody(body); const scope = scopeOf(key), before = await read(key);
+      validBody(body); const scope = scopeForKey(key), before = await read(key);
       if (before.erased) throw new PendingStoreError();
       if (before.entry && await decode(key, before.entry, before.secret) !== body) throw new PendingStoreError();
       const secret = before.secret ?? await secretFor(scope), iv = crypt.getRandomValues(new Uint8Array(12));
@@ -128,7 +147,7 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
     replaceDraft: (key: string, expectedBody: string | null, body: string) => wrap(async () => {
       if (!/\.(listing-edit|listing-compose)\.[0-9a-f-]{36}$/.test(key) && !key.endsWith('.listing-compose-details')) throw new PendingStoreError();
       validBody(body); if (expectedBody !== null) validBody(expectedBody);
-      const scope = scopeOf(key), before = await read(key);
+      const scope = scopeForKey(key), before = await read(key);
       if (before.erased || (before.entry ? await decode(key, before.entry, before.secret) : null) !== expectedBody) throw new PendingStoreError();
       const secret = before.secret ?? await secretFor(scope), iv = crypt.getRandomValues(new Uint8Array(12));
       const cipher = await crypt.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(key) }, secret, new TextEncoder().encode(body));
@@ -141,7 +160,7 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
     // Metadata discovery is restricted to unsent composer drafts in this exact
     // account/API scope, including photos later attached/deleted on another device.
     composerDraftKeys: (scope: string) => wrap(async () => {
-      scopeOf(scope + '.listing');
+      scopeForKey(scope + '.listing');
       const db = await open(), tx = db.transaction(['pending','erased'],'readonly'), done = completed(tx);
       const [keys, erased] = await Promise.all([
         request(tx.objectStore('pending').getAllKeys(IDBKeyRange.bound(scope + '.listing-compose.', scope + '.listing-compose.\uffff'))),
@@ -153,7 +172,7 @@ export function createWebPendingStore(dbName = 'wishlist-private-pending-v1', fa
     }),
     eraseScope: (scope: string) => wrap(async () => {
     // Only invoke after the server's authoritative ERASED receipt, never logout.
-    scopeOf(scope + '.listing');
+    scopeForKey(scope + '.listing');
     const db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readwrite', { durability: 'strict' }), done = completed(tx);
     tx.objectStore('erased').put(true, scope); tx.objectStore('keys').delete(scope);
     const rows = tx.objectStore('pending').openCursor(IDBKeyRange.bound(scope + '.', scope + '.\uffff'));

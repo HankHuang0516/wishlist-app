@@ -1,5 +1,7 @@
 import { getDisplayLocale } from '../utils/localization';
 const english={
+ '正在安全讀取原刪除操作…':'Reading the original deletion operation safely…',
+ '重試安全讀取刪除恢復資料':'Retry safe deletion recovery reading',
  '刪除 Weesh（Wishlist.ai）帳號與相關資料':'Delete your Weesh (Wishlist.ai) account and related data',
  '不需要重新安裝 App；可在此網頁登入後提出刪除。此操作只處理目前登入的本人帳號。':'You can request deletion here after signing in, without reinstalling the app. This affects only your currently signed-in account.',
  '帳號、本人願望與刊登、本人發送的訊息將依後台刪除流程處理；共享聊天室會封存，對方自有訊息不因你的要求而刪除。':'Your account, wishes, listings and messages you authored follow the server deletion process. Shared conversations are archived; other participants’ own messages remain.',

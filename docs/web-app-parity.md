@@ -27,6 +27,14 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十五批：刪除恢復加密與分頁交易保護（仍未部署）
+
+- 原刪除journal改用獨立AES-GCM IndexedDB vault，僅開放get/save/clear，以可信API隔離，一個API／browser保留一個原操作；immutable transaction CAS讓兩分頁／兩帳號同時publish只有一個winner、不覆寫原UUID／owner／session。原session僅在此purpose vault加密，用於帳號刪除後查原receipt；普通feature journals仍不得保存token，owner scope erase不先摧毀恢復證據。無password／typed confirmation、無plaintext fallback，非硬體Keychain／XSS保護，原server JWT expiry／identity權限不改。
+- 舊localStorage journal嚴格解析→加密保存→round-trip→核對仍是原record才移除明文；失敗、mid-migration newer legacy或encrypted／legacy衝突保留原證據並凍結。首次安全read完成前不開form／不network；明確safe reread恢復winner，dispatch前再核對原journal／generation；finish僅原CAS成功且沒有newer才離開，confirmed cleanup failure只重試cleanup、不DELETE。已在執行的舊PWA bundle無法參與新IndexedDB交易，mixed-version legacy窗口仍須upgrade驗收，沒有宣稱跨版本localStorage atomic lock。
+- 新Web24、focused78，final full gate0：Server56檔913＋3skip／HTTP34檔562／Web91檔1489＋build／Native42檔852＋typecheck／Expo，44migrations schema一致、required cleanup0。真IndexedDB／WebCrypto涵蓋simultaneous winner、API與normal scope隔離、非可匯出key／ciphertext、legacy save/readback/remove失敗與conflict、newer CAS保留；page涵蓋initial gate、安全reread、publish loser、不送late dispatch及confirmed cleanup retry。最初新wait測試早於hash完成釋放mock，補等vault read開始後全通過，原失敗log保留。JS349.87KB／PWA91entries6001.35KiB，原map／worker warnings保留，APP/backend source未改。
+- 真Chrome、新5212 origin／獨立UTF8 DB／compiled user-deletion routes：原4e964985-d38f-4a97-ba46-215dea280a8c legacy移入加密、明文不存在、cipher不含token／key extractable false／未存password；原open、reload、第二分頁GET404共3次，同ID未冒成功。Terminal actual safe-abandonment fixture後，browser只GET200原receipt共3次，finish encrypted record清理，表單空白／DELETE disabled／owner仍存在，所有14 API GET／POST-DELETE0／外部0。6最初desktop originals及2實测390×844／document375、Settings1的product JPEG保留；先設定viewport再建tab未生效，已據實改名desktop-original並重新測mobile，不冒稱所有圖手機。原HTTP journal／非secret DOM／wishlist-web-deletion-recovery-evidence-20261002.json保存。Browser未輸入credential、未永久刪除。
+- 自有API／Vite／PG停、兩tab關及viewport reset，DB與他人worktree保留。矩陣更新僅已驗證項；mixed-version PWA／完整matrix和feature-social-partner、avatar／unknownFlickr／真provider與跨端、credential-permanent browser acceptance、正式migration／merge／Railway及Home-Settings各90正式回讀仍待，PR82 draft／goal active／未部署；精確新commit CI另回讀。
+
 ## 2026-10-02 第四十四批：刪除頁語系與登入離開保護（仍未部署）
 
 - AccountDeletionPage提供繁中／English：公共登入與恢復、影響盤點／時間、原operation receipt、unknown／abandon／ERASED、外部asset與backup限制、scope cleanup及controls。English確認文字為DELETE ACCOUNT、繁中保留刪除帳號；phrase在session初始固定，backend confirmation仍DELETE_MY_ACCOUNT，不保存password／typed confirmation，也不新增自動DELETE。
@@ -260,7 +268,7 @@
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |
 | 修改密碼／撤銷所有裝置 | accountSecurity；users/me/password、sessions/revoke | 本機已實作 | 錯誤密碼401保留登入、失聯不假稱成功／不自動重送 |
-| 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 原刪除路徑保留；本機中英文影響／回執／cleanup與account/token departure fence、原GET404及ABANDONED真browser核對；credential／permanent browser submit及journal atomic/storage audit仍待驗 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
+| 登出／帳號刪除 | AccountSecurityScreen、AccountDeletionScreen | 原刪除路徑保留；本機中英文影響／回執／cleanup與account/token departure fence、原GET404及ABANDONED真browser核對；加密deletion vault／新分頁immutable CAS／legacy round-trip與GET-only真browser核對；mixed-version PWA／credential及permanent browser submit仍待驗 | 影響預覽、密碼、原操作收據恢復；保留原頁路徑 |
 | 贊助／尊榮／行銷加值與永久餘額 | AccountSecurityScreen；marketing/availability、users/me | 本機已實作 | NT$90/月、US$1/10次、同後台、失敗不虛構0 |
 | 付款暫停／原平台管理訂閱 | APP目前未開通驗單 | 本機對齊；不可偽造開通 | 不出現可付款假按鈕、既有會員不推算付費行銷權益 |
 | 登入／註冊／驗證／密碼恢復／session恢復 | App與AuthScreen | 本機原子session、損壞／跨帳號／分頁隔離與登入返回保留；登入補fresh profile身分核對，註冊／確認密碼／選填生日及嚴格ACK、新resend入口／中性寄信、手動web／weesh／64位碼／明確驗證、不自動切換帳號、晚到／未知回覆安全处理已測試；真Chrome驗證另一帳號成功與commit後502、原帳號1讀回、resend429→200及失效APP碼400。新密碼與註冊實際瀏覽器完整憑證輸入、真mail收取、跨端／正式端仍待完整驗收 | 登入後回原功能、失效、切帳號清理；不以使用過的token或中性寄信ACK冒充原歷史結果／信已送達 |

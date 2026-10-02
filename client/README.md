@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Encrypted original deletion recovery — 2026-10-02
+
+The original deletion journal now lives in a purpose-specific AES-GCM IndexedDB vault with immutable transactional publication and exact cleanup CAS. This separate vault retains the original session through owner-data cleanup until receipt verification and final recovery cleanup. Ordinary feature journals still never store tokens. Legacy plaintext migrates only after strict parsing, encrypted round-trip and an exact original-record check; conflicts and storage faults preserve evidence and block new deletion. Initial safe reading gates form/network; explicit rereading restores a competing winner. Password and typed confirmation never persist. Old already-running PWA bundles cannot join the new IndexedDB CAS and need separate upgrade acceptance; no hardware or XSS protection claim.
+
+Batch45 adds24 Web cases; focused78 and full isolated gates pass Web1489/build, HTTP562, Server913 plus3 skips, Native852/typecheck/Expo and44 migrations/schema/cleanup. Chrome proves legacy migration, two-tab same original GET404, terminal-fixture abandonment then original GET200 and final encrypted cleanup; all14 API calls GET, credentials blank, no browser DELETE or external calls. Six original desktop images and two corrected measured390×844 product images are kept with honest labels. APP/backend unchanged; production/full parity remains pending.
+
 ## Account deletion session boundaries — 2026-10-02
 
 Deletion preview, original receipt and cleanup controls support Chinese/English. English typed confirmation uses DELETE ACCOUNT; the server wire confirmation and original operation journal remain unchanged. User/token session boundaries and departure generations stop late proof dispatch and prevent late results from entering another account. Errors are bounded, busy credential fields lock and the synchronous gate prevents duplicate confirmation. Existing journals are checked before publication and compared exactly before finish; this localStorage check is not an atomic cross-tab lock, and deletion storage/concurrency remain under audit.

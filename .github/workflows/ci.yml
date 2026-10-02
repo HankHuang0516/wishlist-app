@@ -96,6 +96,9 @@ jobs:
     - name: Verify native QA photo identity checks
       run: node --test ../mobile/scripts/check-native-qa-photo-fingerprint.cjs
 
+    - name: Prevent incomplete App Review demo and business submissions
+      run: node --test ../scripts/app-review-preflight.test.cjs
+
     - name: Refuse unsafe database configuration before migrations
       run: node ../scripts/assert-test-database.cjs
 

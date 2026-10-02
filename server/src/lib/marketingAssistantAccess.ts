@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { minimaxWorkerToken } from './minimaxWorkerAuth';
+import { appReviewDemoUserId } from './appReviewAccess';
 
 export class MarketingInputError extends Error {
     constructor(public readonly code: string, public readonly status = 400, message = '行銷小助手資料不正確') { super(message); }
@@ -8,7 +9,8 @@ export class MarketingInputError extends Error {
 export function marketingEnabledFor(userId: number) {
     if (process.env.MARKETING_ASSISTANT_ENABLED !== '1' || !minimaxWorkerToken()) return false;
     const pilot = process.env.MARKETING_ASSISTANT_PILOT_USER_ID;
-    return !pilot || (/^[1-9]\d{0,9}$/.test(pilot) && Number(pilot) === userId);
+    return !pilot || (/^[1-9]\d{0,9}$/.test(pilot) &&
+        (Number(pilot) === userId || appReviewDemoUserId() === userId));
 }
 
 export function marketingRequestId(value: unknown) {

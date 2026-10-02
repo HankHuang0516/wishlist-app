@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'crypto';
+import { appReviewDemoUserId } from './appReviewAccess';
 
 export function minimaxPilotUserId() {
     const id = Number(process.env.MINIMAX_PILOT_USER_ID);
@@ -19,8 +20,16 @@ export function isMinimaxWorker(header: string | undefined) {
 
 export function listingAiEnabledFor(userId: number) {
     if (!minimaxWorkerToken() || process.env.MINIMAX_LISTING_AI_ENABLED !== '1') return false;
-    const pilot = process.env.MINIMAX_LISTING_AI_PILOT_USER_ID;
-    return pilot === undefined || Number.isSafeInteger(Number(pilot)) && Number(pilot) > 0 && pilot === String(userId);
+    const users = listingAiUserIds();
+    return users === null || users.includes(userId);
+}
+
+export function listingAiUserIds(): number[] | null {
+    const pilot = listingAiPilotUserId();
+    if (pilot === null) return null;
+    if (pilot === -1) return [];
+    const demo = appReviewDemoUserId();
+    return [...new Set(demo === null ? [pilot] : [pilot, demo])];
 }
 
 export function listingAiPilotUserId() {

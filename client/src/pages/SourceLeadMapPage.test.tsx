@@ -1,12 +1,31 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SourceLeadMapPage, { mapPoint, currentLead } from './SourceLeadMapPage';
 const dates=()=>({checkedAt:new Date().toISOString(),postedEarliestAt:new Date(Date.now()-86400000).toISOString(),postedLatestAt:new Date(Date.now()-86400000).toISOString()});
 const auth=vi.hoisted(()=>({token:null as string|null,user:{id:1}}));
 vi.mock('../context/AuthContext',()=>({useAuth:()=>auth}));
-afterEach(()=>{auth.token=null;sessionStorage.clear();cleanup();vi.unstubAllGlobals()});
+beforeEach(()=>{localStorage.setItem('user-locale','zh-TW')});
+afterEach(()=>{auth.token=null;sessionStorage.clear();localStorage.clear();cleanup();vi.unstubAllGlobals()});
 describe('source lead public map',()=>{
+ it('keeps original question bytes through English save, consent and lost-reply GET recovery',async()=>{
+  localStorage.setItem('user-locale','en-US');auth.token='synthetic-token';
+  const row={...dates(),id:'a',title:'原公開來源',summary:'原來源摘要',canonicalUrl:'https://example.invalid/a',publicPlaceName:'原公共地點',publicAddress:'原公共地址',latitude:23,longitude:120.2};
+  let room:any=null;const question='原中文問題 250.7500 USD';
+  const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+   if(url.endsWith('/source-leads'))return{ok:true,json:async()=>({items:[row],nextCursor:null})};
+   if(url.endsWith('/inquiry')){if(init?.method==='POST')room={id:'original-room',state:'INQUIRY',events:[],transferHash:'original-hash',delivered:false};return{ok:true,json:async()=>room};}
+   if(url.endsWith('/actions')){const payload=JSON.parse(String(init?.body));room={...room,events:[...room.events,payload],state:payload.action==='CONSENT'?'WAITING_ROUTE':'INQUIRY'};return payload.action==='CONSENT'?{ok:false,status:502}:{ok:true,json:async()=>room};}
+   return{ok:true,json:async()=>row};
+  });vi.stubGlobal('fetch',fetch);render(<MemoryRouter><SourceLeadMapPage/></MemoryRouter>);await screen.findByRole('heading',{name:'原公開來源'});
+  expect(screen.getByRole('heading',{name:'Source lead map'})).toBeInTheDocument();expect(screen.getByText('Source leads: 1 · Public places: 1')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox',{name:'Question'}),{target:{value:question}});fireEvent.click(screen.getByRole('button',{name:'Save question'}));await screen.findByText(question);
+  const consent=screen.getByRole('button',{name:'Consent to forward only the questions above to the verified original seller'});fireEvent.click(consent);await screen.findByRole('alert');
+  expect(screen.getByRole('alert')).toHaveTextContent('The operation is unconfirmed');const marker=sessionStorage.getItem('source-lead-request:1:a');expect(marker).toBeTruthy();expect(marker).not.toContain(question);
+  fireEvent.click(screen.getByRole('button',{name:'Read saved inquiry'}));await screen.findByText(/WAITING_ROUTE/);expect(screen.getByText(question)).toBeInTheDocument();expect(screen.getByText(/Not sent to the seller/)).toBeInTheDocument();expect(sessionStorage.getItem('source-lead-request:1:a')).toBeNull();
+  const actions=fetch.mock.calls.filter(([url])=>url.endsWith('/actions'));expect(actions).toHaveLength(2);expect(JSON.parse(String(actions[0][1]?.body))).toEqual({requestId:expect.any(String),action:'ASK',text:question});expect(JSON.parse(String(actions[1][1]?.body))).toEqual({requestId:expect.any(String),action:'CONSENT',consent:true,transferHash:'original-hash'});
+  expect(fetch.mock.calls.filter(([url,init])=>url.endsWith('/inquiry')&&init?.method==='POST')).toHaveLength(1);expect(screen.queryByRole('button',{name:'Consent to forward only the questions above to the verified original seller'})).toBeNull();
+ });
  it('keeps an unavailable deep link on its original inquiry instead of selecting another public lead',async()=>{
   auth.token='synthetic-token';
   const row={...dates(),id:'b',title:'Other public lead',summary:'Original public summary',canonicalUrl:'https://example.invalid/b',publicPlaceName:'Public place',publicAddress:'Public address',latitude:23,longitude:120.2};

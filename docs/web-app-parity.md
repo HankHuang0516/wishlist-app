@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第六十批：來源詢問双語與正常保存／同意恢复（仍未部署）
+
+- 保留main原來源線索功能，頁面固定labels、地圖說明、count、詢問／未知／錯誤與delivery描述繁中／English；原來源title／summary／公共地址／public facts／問題與receipt state bytes不翻寫，stock／rights／transaction待確認及未送賣家仍明示。原inquiry GET-only、scope／minimal marker、同意問題hash重新核對及withdrawn target規則保留；未新增來源資料模型、native商品達成率或outbound sender。
+- 地圖點由小SVG g改原生44×44 HTML button，依原mapPoint百分比定位、同座標只一組count，native Enter／Space可操作；select／links／READ／ASK／CONSENT／CANCEL至少44px、textarea96px。原OSM來源／原source link保留。手機真Space把withdrawn id明確改成public原id；不是自動fallback。English390×844 doc375×1868、Chinese375×1728，無橫向溢出；真測map44×44、select44、read/save/consent/cancel44及textarea96，未宣稱其他全站controls。
+- 新Web1涵蓋英文保存原中文question／同意commit502→GET-only恢復同WAITING_ROUTE、exact原ASK text／CONSENT hash／single allocation與minimal marker不含私密text；focused16全過。最初原15個固定中文測試未設locale導致13失敗，補明確zh-TW baseline並保留原斷言，English case自行選語系；沒有移除或放寬。完整隔離gate两次退出0，最後包含英文count文字校正：Server56檔913＋既有3skip、HTTP40檔631、Web105檔1704＋build、Native42檔852＋typecheck／Expo、45migration schema diff0／required cleanup0。APP／server／migration未改，原warnings保留。
+- 全新loopback5241／API5242及UTF8合成DB，compiled真routes，2owners／3leads／原withdrawn1room。A空READ不配置，明確ASK配置一次並真寫中文問題後QA502；reload明確GET恢復同1902b565-16e3-410e-946f-1042e5ec6f51、原question bytes不变。再明確CONSENT真commit後QA502；reload GET同WAITING_ROUTE／原問題，未重送且不能新增ASK／CONSENT。B讀原withdrawn／public都null、不見A問題或建room；A繁中原withdrawn仍保留原問題且newASK／CONSENT disabled，再回English讀同WAITING_ROUTE。35product requests＝32GET200＋1配置POST200＋原ASK502＋原CONSENT502；真DB仍2users／3leads／2rooms，其中原seed room未改、新room只有1ASK＋1CONSENT、inventory0、sellerRoutes0／deliveryReceipts0／external mutations0，無真credentials／mail或賣家訊息。沒有把WAITING_ROUTE稱已人工送達。
+- 原JPEG／DOM／手機geometry／state与DB proof及sha256 index保留於wishlist-web-source60-evidence-20261002.json；沒有後製。部分fullPage圖因locator自動捲動讓sticky header位在capture中間，原圖保留；最終Chinese mobile与English desktop實際點標題回scrollY0後另保存完整raw圖。Control+Home嘗試仍scrollY745，未誤稱成功；native map Space真正改選有URL／select核對。只關自有IAB／resetviewport，API／Vite／PG停；合成DB與證據保留，原Chrome两視窗／DevTools仍未清理。
+- 第59批精確CI37002500186三項success、PR82 draft／head／body已回讀。Home／Settings未改，最新本機人工各90證據仍為第59批，正式端未驗收。功能矩陣其餘逐欄／權限／流程、來源原seller路由及人工delivery真證据、provider／跨端、PWA正式升級／mixed-version／安裝、credential／permanent browser及最終migration preflight／merge／Railway／live門檻仍保留；goal active、PR82 draft，本批精確新HEAD CI另回讀。
+
 ## 2026-10-02 第五十九批：首頁比例與手機操作尺寸重驗（仍未部署）
 
 - 首頁地圖caption縮成中英文約略位置提示；完整原綠／橘來源、群聚、列表及底圖說明保留在既有願望交叉比對details。原無願望filter的browse入口也保留在details，空願望時仍在外顯示。真鍵盤Enter展開中英文、ArrowRight選原漫畫並維持原listing深連結；商品匹配／radio／分頁／搜尋／原資料不變。桌面完整ready首頁1356→1284px，縮短72px。
@@ -389,7 +398,7 @@
 | 首頁所有願望最匹配商品／多件列表 | WishHome；listings/match-wishes | 本機實作；真實帳號6個願望、漫畫3件第三方匹配已唯讀核對；第53批繁中English／expanded group／mobile／guest及生日獨立503→單GET恢復真Chrome核對 | 全願望／匹配分頁、最多3個並行、跨頁排序、失敗明示、不混入自己商品 |
 | 今天想找什麼、單件結果地圖定位 | WishHome、ExploreScreen | 本機實作；單件zoom13、窄屏與漫畫詳情已驗證 | 同願望漫畫正反例、单件深連結最新狀態核對、鍵盤願望選擇 |
 | 地圖縮圖、列表、搜尋、過濾、目前位置 | ExploreScreen、listingSearch | 本機實作；繁中底圖／照片實際顯示；定位拒絕與完整手動範圍流程待整體回歸 | 同邊界／條件、地圖移動不自動重查、群聚只顯示實際葉節點、圖與列表一致 |
-| 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批整合GET不配置receipt与變更內容重新同意；撤回deep link不誤選、初選refresh／unknown空收件／late reply4新Web，15 focused及HTTP9均通過；新Chrome-independent IAB真A讀原／B null／unknown reload無POST、CANCEL真commit502→reload只GET原CANCELLED，DB仍1receipt、45migration diff0 | English與觸控、正常ASK／CONSENT真UI及完整來源／人工送達證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
+| 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批原target／撤回／unknown／late scope保留；第60批中英文與native44px point／Space真UI、空GET不配置、ASK與CONSENT各真commit502→reload GET同room／原中文問題／WAITING_ROUTE、B null不建room，35requests只有原配置／ASK／CONSENT3POST；新Web1／focused16／HTTP9通過、45migration diff0 | 完整來源／核實原賣家路由／人工delivery證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |

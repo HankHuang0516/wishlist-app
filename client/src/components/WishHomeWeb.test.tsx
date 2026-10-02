@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WishHomeWeb from './WishHomeWeb';
 import { makeWish, makeMatch, makeMatchPage, makeListing, responseOk } from '../__tests__/fixtures/marketplace';
 vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect }: { items: { id: string }[]; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}</div> }));
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => localStorage.setItem('user-locale', 'zh-TW'));
+afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key={token} token={token} userId={userId} /></MemoryRouter>;
 describe('APP-equivalent homepage match UX', () => {
   it('shows one best match per wish, expands alternatives, and puts the wish selector below matches', async () => {
@@ -21,7 +22,7 @@ describe('APP-equivalent homepage match UX', () => {
     expect(screen.getByRole('link', { name: new RegExp(first.listing.title) })).toBeInTheDocument();
     const chooser = screen.getByText('選願望交叉比對').closest('details')!;
     expect(chooser).not.toHaveAttribute('open'); chooser.setAttribute('open', '');
-    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['Welcome Back.', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用']);
+    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['歡迎回來。', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用']);
     expect(chooser.querySelector('summary')).toHaveTextContent('今天想找什麼？');
     expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
   });
@@ -68,5 +69,16 @@ describe('APP-equivalent homepage match UX', () => {
     const map = await screen.findByTestId('home-map'); expect(within(map).getAllByRole('button')).toHaveLength(1);
     fireEvent.click(within(map).getByRole('button'));
     expect(screen.getByTestId('path')).toHaveTextContent('/explore?listing=' + item.id);
+  });
+  it('provides the same match expansion, chooser and destination in English', async () => {
+    localStorage.setItem('user-locale', 'en-US'); const first = makeMatch(), second = makeMatch(1, makeListing('Other synthetic item'), 91);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([first, second]))));
+    render(view()); const expand = await screen.findByRole('button', { name: /has 2 matching items, View all/ });
+    fireEvent.click(expand); expect(screen.getByRole('button', { name: /has 2 matching items, Collapse results/ })).toHaveAttribute('aria-expanded', 'true');
+    const links = screen.getAllByRole('link', { name: /Other synthetic item/ }); expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute('href', '/explore?wish=1&listing=' + second.listing.id);
+    screen.getByText('Choose a wish to compare').closest('details')!.setAttribute('open', '');
+    expect(screen.getByRole('radiogroup', { name: 'Choose the wish to compare' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Batch photo listing' })).toHaveAttribute('href', '/sell');
   });
 });

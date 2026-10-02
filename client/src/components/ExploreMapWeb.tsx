@@ -6,6 +6,8 @@ import { libertyZhHantStyle } from '../lib/libertyZhHantStyle';
 import { listingGeoJSON, type Bounds, type PublicListing } from '../lib/listingSearch';
 import { externalGeoJSON, externalPrice, type ExternalListing } from '../lib/externalListingSearch';
 import { clusterLeafIds, type ResultCamera } from '../lib/exploreMapView';
+import { mapText } from '../lib/mapText';
+import './ExploreMapWeb.css';
 
 // MapLibre v6 requires Vite to bundle the worker with its shared imports.
 setWorkerUrl(workerUrl);
@@ -55,19 +57,19 @@ export default function ExploreMapWeb(props: Props) {
     setReady(false);
     let active = true, clusterRequest = 0;
     let map: MapLibreMap;
-    const watchdog = window.setTimeout(() => { if (active) setError('地圖載入較慢或無法連線，仍可切換商品列表。'); }, 20_000);
+    const watchdog = window.setTimeout(() => { if (active) setError(mapText('slow')); }, 20_000);
     try {
       map = new MapLibreMap({ container: container.current, style: libertyZhHantStyle,
         center: [121, 23.7], zoom: 6.1, maxZoom: 19, attributionControl: { compact: true },
-        locale: { 'NavigationControl.ZoomIn': '放大地圖', 'NavigationControl.ZoomOut': '縮小地圖',
-          'AttributionControl.ToggleAttribution': '顯示地圖來源', 'Map.Title': '商品地圖' } });
+        locale: { 'NavigationControl.ZoomIn': mapText('zoomIn'), 'NavigationControl.ZoomOut': mapText('zoomOut'),
+          'AttributionControl.ToggleAttribution': mapText('attribution'), 'Map.Title': mapText('title') } });
       mapRef.current = map;
       map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
       map.on('moveend', () => {
         if (!active) return;
         const bounds = map.getBounds(); latest.current.onViewport([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
       });
-      map.on('error', () => { if (active) setError('部分地圖資源無法載入，商品資料不受影響，可使用列表。'); });
+      map.on('error', () => { if (active) setError(mapText('resources')); });
       map.on('load', () => {
         if (!active) return;
         window.clearTimeout(watchdog);
@@ -100,13 +102,13 @@ export default function ExploreMapWeb(props: Props) {
               const leaves = await source.getClusterLeaves(feature.properties.cluster_id, 500, 0);
               if (active && seq === clusterRequest && generation === dataGeneration.current) latest.current.onCluster(kind, clusterLeafIds(leaves, kind === 'seller' ? 'listingId' : 'externalId'));
             }
-          } catch { if (active) setError('群聚資料已變動，請再點一次，或切換商品列表。'); }
+          } catch { if (active) setError(mapText('cluster')); }
         } else {
           const id = feature.properties[kind === 'seller' ? 'listingId' : 'externalId'];
           if (typeof id === 'string') latest.current.onSelect({ kind, id });
         }
       });
-    } catch { setError('此瀏覽器無法啟動互動地圖，請使用商品列表。'); }
+    } catch { setError(mapText('unavailable')); }
     const resize = new ResizeObserver(() => mapRef.current?.resize()); resize.observe(container.current);
     return () => { active = false; window.clearTimeout(watchdog); resize.disconnect(); mapRef.current?.remove(); mapRef.current = null; loadedPhotos.current.clear(); };
   }, []);
@@ -125,7 +127,7 @@ export default function ExploreMapWeb(props: Props) {
       if (!active) return;
       // Remove old images only after workers have replaced the source data.
       for (const key of map.listImages()) if ((key.startsWith('photo-') || key.startsWith('external-')) && !keys.has(key)) { map.removeImage(key); loadedPhotos.current.delete(key); }
-    }).catch(() => { if (active) setError('地圖商品圖層無法更新，請使用列表查看最新搜尋結果。'); });
+    }).catch(() => { if (active) setError(mapText('layer')); });
     let index = 0, failures = 0;
     // External hosts need not grant CORS: their photos are HTML markers below,
     // never drawn into a canvas or downloaded with the app's credentials.
@@ -141,7 +143,7 @@ export default function ExploreMapWeb(props: Props) {
       }
     }
     void Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker)).then(() => {
-      if (active && failures) setPhotoError('部分商品縮圖未能載入，請從列表查看照片。');
+      if (active && failures) setPhotoError(mapText('photos'));
     });
     return () => { active = false; controller.abort(); };
   }, [ready, props.items, props.external]);
@@ -160,10 +162,10 @@ export default function ExploreMapWeb(props: Props) {
         if (markers.has(item.id)) continue;
         const button = document.createElement('button'); button.type = 'button';
         button.className = 'h-14 w-14 overflow-hidden rounded-xl border-2 border-amber-700 bg-white shadow-md';
-        button.setAttribute('aria-label', `外部來源：${item.title}，${externalPrice(item)}`);
+        button.setAttribute('aria-label', mapText('external', { name: item.title, price: externalPrice(item) }));
         const image = document.createElement('img'); image.alt = ''; image.setAttribute('referrerpolicy', 'no-referrer');
         image.className = 'h-full w-full object-cover';
-        image.onerror = () => { if (active) { button.textContent = '▧'; setPhotoError('部分外部商品縮圖未能載入，仍可點擊標記或從列表查看来源。'); } };
+        image.onerror = () => { if (active) { button.textContent = '▧'; setPhotoError(mapText('externalPhotos')); } };
         image.src = item.thumbnailUrl;
         button.append(image); button.onclick = event => { event.stopPropagation(); latest.current.onSelect({ kind: 'external', id: item.id }); };
         markers.set(item.id, new Marker({ element: button }).setLngLat([item.location.longitude, item.location.latitude]).addTo(map!));
@@ -184,7 +186,7 @@ export default function ExploreMapWeb(props: Props) {
   useEffect(() => { if (props.visible) mapRef.current?.resize(); }, [props.visible]);
   return <div className={props.visible ? 'space-y-2' : 'hidden'}>
     {(error || photoError) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{error || photoError}</p>}
-    <div ref={container} role="region" aria-label="商品探索地圖，亦可切換商品列表使用鍵盤操作" className={`${props.preview ? 'h-32 rounded-md' : 'h-[480px] rounded-2xl'} w-full overflow-hidden border bg-gray-100`} />
-    <p className="text-xs text-gray-500">綠色：站內商品 · 橘色：外部來源。位置為約略範圍；重疊商品可點擊群聚數量，或切换列表。底圖：OpenFreeMap／OpenStreetMap。</p>
+    <div ref={container} role="region" aria-label={mapText('region')} className={`wishlist-map ${props.preview ? 'h-40 rounded-md' : 'h-[480px] rounded-2xl'} w-full overflow-hidden border bg-gray-100`} />
+    <p className="text-xs text-gray-500">{mapText('notice')}</p>
   </div>;
 }

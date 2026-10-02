@@ -23,25 +23,26 @@ vi.mock('maplibre-gl', () => ({ setWorkerUrl: mocks.worker, NavigationControl: c
   getZoom = () => this.zoom; easeTo = vi.fn(); fitBounds = vi.fn(); resize = vi.fn(); remove = vi.fn();
 } }));
 beforeEach(() => {
+  localStorage.setItem('user-locale', 'zh-TW');
   mocks.maps.length = 0; mocks.markers.length = 0; mocks.fail = false;
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const ctx = { fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), getImageData: () => ({ width: 56, height: 56, data: new Uint8ClampedArray(56 * 56 * 4) }) };
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
   vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 320, height: 200, close: vi.fn() }));
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const listing = () => parsePublicListing(makeListing(), marketplaceOrigin(), true);
 const props = () => ({ items: [listing()], external: [], frame: null, visible: true, onViewport: vi.fn(), onSelect: vi.fn(), onCluster: vi.fn() });
 describe('real web map lifecycle and photo isolation', () => {
   it('sizes the actual preview canvas rather than clipping the full map and its attribution', () => {
     const mounted = render(<ExploreMapWeb {...props()} preview />);
     const map = screen.getByRole('region', { name: '商品探索地圖，亦可切換商品列表使用鍵盤操作' });
-    expect(map).toHaveClass('h-32');
+    expect(map).toHaveClass('h-40');
     expect(map.parentElement).not.toHaveClass('overflow-hidden');
     expect(screen.getByText(/底圖：OpenFreeMap／OpenStreetMap/)).toBeVisible();
     mounted.rerender(<ExploreMapWeb {...props()} />);
     expect(map).toHaveClass('h-[480px]');
-    expect(map).not.toHaveClass('h-32');
+    expect(map).not.toHaveClass('h-40');
   });
   it('keeps search/list available when the browser cannot start WebGL', () => {
     mocks.fail = true; render(<ExploreMapWeb {...props()} />);
@@ -93,5 +94,12 @@ describe('real web map lifecycle and photo isolation', () => {
     button.click(); expect(value.onSelect).toHaveBeenCalledWith({ kind: 'external', id: item.id });
     expect(marker.setLngLat).toHaveBeenCalledWith([item.location.longitude, item.location.latitude]);
     mounted.unmount(); expect(marker.remove).toHaveBeenCalled();
+  });
+  it('localizes live controls, attribution and resource failure without changing map data', () => {
+    localStorage.setItem('user-locale', 'en-US'); render(<ExploreMapWeb {...props()} preview />);
+    expect(mocks.maps[0].options.locale).toMatchObject({ 'NavigationControl.ZoomIn': 'Zoom in', 'NavigationControl.ZoomOut': 'Zoom out', 'AttributionControl.ToggleAttribution': 'Toggle map attribution' });
+    expect(screen.getByRole('region', { name: /Item exploration map/ })).toHaveClass('wishlist-map', 'h-40');
+    act(() => mocks.maps[0].handlers.error()); expect(screen.getByRole('status')).toHaveTextContent('Item data is unaffected');
+    expect(screen.getByText(/Basemap: OpenFreeMap\/OpenStreetMap/)).toBeInTheDocument();
   });
 });

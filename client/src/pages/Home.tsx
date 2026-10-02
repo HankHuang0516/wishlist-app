@@ -1,114 +1,43 @@
-import { useState, useEffect } from "react";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Link } from "react-router-dom";
-import { API_URL, API_BASE_URL } from '../config';
-import { Info, Gift } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getNextHoliday, t } from "../utils/localization";
 import WishHomeWeb from '../components/WishHomeWeb';
+import BirthdayReminders from '../components/BirthdayReminders';
+import { homeDate, homeText } from '../lib/homeText';
 
 export default function Home() {
     const { isAuthenticated, token, user } = useAuth();
-    const [birthdayState, setBirthdayState] = useState<{ session: string; items: any[] }>({ session: '', items: [] });
-    const [birthdayError, setBirthdayError] = useState('');
-    const session = `${user?.id ?? ''}:${token ?? ''}`;
-    const upcomingBirthdays = birthdayState.session === session ? birthdayState.items : [];
     const nextHoliday = getNextHoliday();
-
-    useEffect(() => {
-        if (!isAuthenticated || !token) return;
-        let active = true; const controller = new AbortController(); setBirthdayError('');
-        void (async () => {
-            try {
-                const res = await fetch(`${API_URL}/users/upcoming-birthdays`, {
-                    headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store',
-                    signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
-                });
-                if (!res.ok) throw new Error('讀取失敗');
-                const data = await res.json();
-                if (!Array.isArray(data)) throw new Error('格式不正確');
-                if (active) setBirthdayState({ session, items: data });
-            } catch { if (active) setBirthdayError('好友生日無法載入；請重新整理。'); }
-        })();
-        return () => { active = false; controller.abort(); };
-    }, [isAuthenticated, token, session]);
 
     if (isAuthenticated) {
         return (
             <div className="mx-auto max-w-6xl">
                 {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id}>
                 <div className="flex flex-wrap justify-center gap-3">
-                    <Link to="/wishes" className="inline-flex min-h-11 items-center justify-center rounded-md bg-muji-primary px-12 py-2 text-sm font-medium text-white shadow-sm hover:bg-opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary sm:min-h-9">我的願望</Link>
-                    <Link to="/sell" className="inline-flex min-h-11 items-center justify-center rounded-md border border-muji-border px-12 py-2 text-sm font-medium hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary sm:min-h-9">拍照刊登好物</Link>
+                    <Link to="/wishes" className="inline-flex min-h-11 items-center justify-center rounded-md bg-muji-primary px-12 py-2 text-sm font-medium text-white shadow-sm hover:bg-opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary">{homeText('wishes')}</Link>
+                    <Link to="/sell" className="inline-flex min-h-11 items-center justify-center rounded-md border border-muji-border px-12 py-2 text-sm font-medium hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary">{homeText('sell')}</Link>
                 </div>
 
                 <div className="home-reminders grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Holiday Card */}
                     <Card className="bg-pink-50 border-none shadow-sm h-full">
                         <CardHeader className="p-4 pb-1">
-                            <CardTitle className="text-xs font-medium text-pink-600">Upcoming Holiday</CardTitle>
+                            <CardTitle className="text-xs font-medium text-pink-600">{homeText('holiday')}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-4">
                             <div className="text-base font-bold text-pink-700">
                                 {nextHoliday.name}
                             </div>
                             <p className="text-xs text-pink-500 mt-1">
-                                {nextHoliday.date.toLocaleDateString()}
+                                {homeDate(nextHoliday.date)}
                             </p>
                             {nextHoliday.calendarNotice && <p role="status" className="mt-2 text-xs text-pink-700">{nextHoliday.calendarNotice}</p>}
                         </CardContent>
                     </Card>
 
-                    {/* Birthdays Card */}
-                    <Card className="bg-blue-50 border-none shadow-sm h-full">
-                        <CardHeader className="p-4 pb-1">
-                            <CardTitle className="text-xs font-medium text-blue-600">Upcoming Friend Birthdays</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4 px-4 pb-4 max-h-[300px] overflow-y-auto">
-                            {birthdayError ? <p role="alert">{birthdayError}</p> : birthdayState.session !== session ? <p role="status" className="text-xs text-blue-600">正在讀取好友生日…</p> : upcomingBirthdays.length > 0 ? upcomingBirthdays.map(friend => (
-                                <div key={friend.id} className="flex items-center bg-white p-3 rounded-lg shadow-sm">
-                                    {/* Avatar */}
-                                    <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-100 mr-3">
-                                        {friend.avatarUrl ? (
-                                            <img src={`${API_BASE_URL}${friend.avatarUrl}`} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center font-bold text-gray-400 text-lg">{friend.name[0]}</div>
-                                        )}
-                                    </div>
-
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-base text-gray-900 truncate">{friend.name}</span>
-                                        </div>
-                                        <div className="text-sm text-gray-500 truncate">
-                                            {friend.nicknames || friend.phoneNumber}
-                                        </div>
-                                        <div className="text-xs text-pink-500 font-medium mt-0.5">
-                                            生日: {new Date(friend.nextBirthday).toLocaleDateString()}
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center space-x-1 ml-2">
-                                        <Link to={`/users/${friend.id}/profile`}>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50">
-                                                <Info className="h-4 w-4 stroke-[3px]" />
-                                            </Button>
-                                        </Link>
-                                        <Link to={`/users/${friend.id}/wishlists`}>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-pink-500 hover:text-pink-700 hover:bg-pink-50">
-                                                <Gift className="h-4 w-4 stroke-[3px]" />
-                                            </Button>
-                                        </Link>
-                                    </div>
-                                </div>
-                            )) : (
-                                <p className="text-xs text-blue-600">No upcoming birthdays.</p>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <BirthdayReminders token={token} />
                 </div>
 
                 </WishHomeWeb>}
@@ -127,9 +56,7 @@ export default function Home() {
                     {t('home.subtitle')}
                 </p>
                 <div className="flex justify-center space-x-4">
-                    <Link to="/login">
-                        <Button size="lg">{t('home.getStarted')}</Button>
-                    </Link>
+                    <Link to="/login" className="inline-flex min-h-12 items-center justify-center rounded-md bg-muji-primary px-8 text-base font-medium text-white focus-visible:outline focus-visible:outline-2">{t('home.getStarted')}</Link>
                     <Button
                         variant="outline"
                         size="lg"
@@ -218,15 +145,13 @@ export default function Home() {
                         <CardContent className="p-6 md:p-8 text-center text-white">
                             <div className="flex items-center justify-center gap-3 mb-3">
                                 <span className="text-3xl">🤖</span>
-                                <h3 className="font-bold text-xl md:text-2xl">AI 整合 · 公開 API</h3>
+                                <h3 className="font-bold text-xl md:text-2xl">{homeText('integration')}</h3>
                             </div>
                             <p className="text-white/80 text-sm md:text-base">
-                                讓 AI Agent（ChatGPT、Claude）幫你管理願望清單，送禮不用猜！
+                                {homeText('integrationDescription')}
 
                             </p>
-                            <Button className="mt-4 bg-white text-blue-600 hover:bg-gray-100 font-semibold">
-                                查看 API 文件 →
-                            </Button>
+                            <span className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-white px-4 text-blue-600 font-semibold">{homeText('api')}</span>
                         </CardContent>
                     </Card>
                 </Link>

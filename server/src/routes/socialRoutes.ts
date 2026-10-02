@@ -11,18 +11,19 @@ import {
 
 const router = express.Router();
 
-router.use(authenticateToken);
-
-router.get('/search', searchUsers);
-router.get('/following', getFollowing);
-router.get('/upcoming-birthdays', getUpcomingBirthdays); // New
+router.use((_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
+// This router shares /api/users with account routes. Authenticate only our
+// endpoints so deletion recovery can use its original-session verifier.
+router.get('/search', authenticateToken, searchUsers);
+router.get('/following', authenticateToken, getFollowing);
+router.get('/upcoming-birthdays', authenticateToken, getUpcomingBirthdays);
 const followWrites=rateLimit({windowMs:60_000,limit:60,standardHeaders:true,legacyHeaders:false,message:{errorCode:'FOLLOW_RATE_LIMIT'}});
-router.get('/me/follow-state/:targetUserId',getFollowState);
-router.get('/me/follow-operations/:clientActionId',getFollowOperation);
-router.post('/me/follow-operations/:clientActionId',followWrites,submitFollowOperation);
-router.post('/me/follow-operations/:clientActionId/abandon',followWrites,abandonFollowOperation);
-router.post('/:id/follow',followWrites,legacyFollow(true));
-router.delete('/:id/follow',followWrites,legacyFollow(false));
-router.get('/:id/wishlists', getUserPublicWishlists);
+router.get('/me/follow-state/:targetUserId',authenticateToken,getFollowState);
+router.get('/me/follow-operations/:clientActionId',authenticateToken,getFollowOperation);
+router.post('/me/follow-operations/:clientActionId',authenticateToken,followWrites,submitFollowOperation);
+router.post('/me/follow-operations/:clientActionId/abandon',authenticateToken,followWrites,abandonFollowOperation);
+router.post('/:id/follow',authenticateToken,followWrites,legacyFollow(true));
+router.delete('/:id/follow',authenticateToken,followWrites,legacyFollow(false));
+router.get('/:id/wishlists', authenticateToken, getUserPublicWishlists);
 
 export default router;

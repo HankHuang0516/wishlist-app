@@ -79,55 +79,7 @@ export const getFollowing = async (req: Request, res: Response) => {
     }
 };
 
-export const getUpcomingBirthdays = async (req: Request, res: Response) => {
-    res.set('Cache-Control', 'private, no-store');
-    const currentUserId = (req as any).user.id;
-
-    try {
-        const follows = await prisma.follow.findMany({
-            where: { followerId: currentUserId },
-            select: { following: { select: socialCardSelect } }
-        });
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const thirtyDaysFromNow = new Date(today);
-        thirtyDaysFromNow.setDate(today.getDate() + 30);
-
-        const upcoming = follows
-            .filter(f => f.following.birthday && f.following.isBirthdayVisible)
-            .map(f => {
-                const bday = new Date(f.following.birthday!);
-                // Construct next birthday for this year
-                let nextBday = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
-
-                // If passed, move to next year
-                if (nextBday < today) {
-                    nextBday.setFullYear(today.getFullYear() + 1);
-                }
-
-                return { ...f.following, nextBday };
-            })
-            // Filter: Must be within next 30 days
-            .filter(f => f.nextBday >= today && f.nextBday <= thirtyDaysFromNow)
-            // Sort: Nearest first
-            .sort((a, b) => a.nextBday.getTime() - b.nextBday.getTime())
-            .map(f => ({
-                id: f.id,
-                name: f.name,
-                nicknames: f.nicknames,
-                avatarUrl: f.isAvatarVisible ? f.avatarUrl : null,
-                birthday: f.birthday,
-                nextBirthday: f.nextBday
-            }));
-
-        res.json(upcoming);
-    } catch (error) {
-        console.error('Birthdays unavailable; personal and database details withheld');
-        res.status(500).json({ error: 'Failed to fetch birthdays', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { getUpcomingBirthdays } from './birthdayController';
 
 // Get public wishlists of a specific user
 export const getUserPublicWishlists = async (req: Request, res: Response) => {

@@ -6,12 +6,15 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import userRoutes from '../../routes/userRoutes';
+import socialRoutes from '../../routes/socialRoutes';
 import { erasureIdentityHash } from '../../lib/accountErasure';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
 const secret = 'erasure-transport-integration-only', previous = process.env.JWT_SECRET, password = 'SyntheticPass123';
 process.env.JWT_SECRET = secret;
-const app = express(); app.set('trust proxy', 1); app.use(express.json()); app.use('/api/users', userRoutes);
+// Keep the production mounting order: social routes must not authenticate
+// unrelated user endpoints before their dedicated erasure-session authority.
+const app = express(); app.set('trust proxy', 1); app.use(express.json()); app.use('/api/users', socialRoutes); app.use('/api/users', userRoutes);
 const server = createServer(app), users: number[] = [], hashes: string[] = [], media: string[] = [];
 let owner: number, other: number, action: string, otherWish: number, photoId: string, ip = 0;
 const token = (id = owner, version = 0) => jwt.sign({ id, authVersion: version }, secret, { algorithm: 'HS256', expiresIn: '1h' });
@@ -67,6 +70,16 @@ describe('actual erasure/recovery/abandon HTTP, JWT and PostgreSQL', () => {
         const res = await erase(); expect(res.status).toBe(200); expect(res.headers['cache-control']).toBe('private, no-store');
         expect(res.body).toMatchObject({ state: 'ERASED', accountDeleted: true, clientActionId: action, photoCleanupPending: 1, legacyCleanupPending: 0 });
         expect((await call('get', '/me')).status).toBe(401);
+        for (const [method, suffix] of [
+            ['get', '/search'], ['get', '/following'], ['get', '/upcoming-birthdays'],
+            ['get', '/me/follow-state/' + other], ['get', '/me/follow-operations/' + action],
+            ['post', '/me/follow-operations/' + action], ['post', '/me/follow-operations/' + action + '/abandon'],
+            ['post', '/' + other + '/follow'], ['delete', '/' + other + '/follow'], ['get', '/' + other + '/wishlists'],
+        ] as const) {
+            const denied = await call(method, suffix);
+            expect(denied.status).toBe(401);
+            expect(denied.headers['cache-control']).toBe('private, no-store');
+        }
         const recovered = await receipt(); expect(recovered.status).toBe(200); expect(recovered.body).toEqual(res.body);
         expect(JSON.stringify(recovered.body)).not.toMatch(/password|token|identityHash|resourceId|synthetic-private/);
         expect(await prisma.wishlist.findUnique({ where: { id: otherWish } })).not.toBeNull();

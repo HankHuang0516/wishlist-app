@@ -49,7 +49,7 @@ export const formatPrice = (amount: number): string => {
     }
 };
 
-export const getNextHoliday = () => nextHoliday(getUserLocale(), new Date());
+export const getNextHoliday = () => nextHoliday(getDisplayLocale(), new Date());
 
 const translations: Record<string, Record<string, string>> = {
     'zh-TW': {

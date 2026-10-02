@@ -244,7 +244,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     detailRequest.current?.abort(); const controller = new AbortController(); detailRequest.current = controller;
     setDetail({ kind, id, loading: true, error: '' });
     try {
-      if(kind==='source'){const lead=parseLead(await api<unknown>(token,'/source-leads/'+id+'?presentation=1',{signal:controller.signal}));if(lead.id!==id)throw Error();if(active.current&&!controller.signal.aborted)setDetail({kind,source:lead,loading:false,error:''});return;}
+      if(kind==='source'){const lead=parseLead(await api<unknown>(token,'/source-leads/'+id+'?presentation=1',{signal:controller.signal}));if(lead.id!==id)throw Error();if(active.current&&!controller.signal.aborted)setDetail({kind,id,source:lead,loading:false,error:''});return;}
       const response = await api<unknown>(token, '/' + (kind === 'seller' ? 'listings/' : 'external-listings/') + id, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
       if (!active.current || controller.signal.aborted) return;
       if (kind === 'seller') {

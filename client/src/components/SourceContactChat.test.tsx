@@ -1,4 +1,4 @@
-import {describe,it,expect,vi,afterEach} from 'vitest';
+import {describe,it,expect,vi,afterEach,beforeEach} from 'vitest';
 import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
 import SourceContactChat from './SourceContactChat';
@@ -11,6 +11,7 @@ const id='d897f4d9-1e66-4a0d-bd3f-1861f0e6cb46',roomId='9269fe36-ff74-4f18-a87c-
 const now=()=>new Date().toISOString();
 const source=()=>({id,kind:'SOURCE_LEAD',title:'合成測試來源商品',summary:'僅供本地測試',canonicalUrl:'https://example.invalid/source/one',county:'臺南市',district:'永康區',publicPlaceName:'公共面交點',publicAddress:'公開地點',latitude:23,longitude:120.2,postedEarliestAt:now(),postedLatestAt:now(),checkedAt:now(),stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false,notice:'待確認',publicFacts:null,coordinateSourceUrl:'https://www.openstreetmap.org/node/1',coordinateAttribution:null,media:[]});
 const emptyRoom=()=>({id:roomId,leadId:id,available:true,state:'INQUIRY',transferHash:'a'.repeat(64),events:[] as any[],routeVerified:false,delivered:false,delivery:null,checkoutEnabled:false,orderCreated:false,notice:'不下訂'});
+beforeEach(()=>localStorage.setItem('user-locale','zh-TW'));
 afterEach(()=>{auth.token='synthetic-token';sessionStorage.clear();cleanup();vi.unstubAllGlobals();vi.restoreAllMocks()});
 function fixture({unknown=false,reject=false,wrong=false}: {unknown?:boolean;reject?:boolean;wrong?:boolean}={}) {
  let room:any=null;let actions=0;

@@ -1,3 +1,4 @@
+import {publicCommentRoute} from './sourcePublicComment';
 import { createHash } from 'crypto';
 import { sourceLeadMediaDTO } from './sourceLeadMedia';
 import type { ExternalSourceLead } from '@prisma/client';
@@ -89,7 +90,7 @@ export type LeadEvent = {
 export function transferSnapshot(lead: ExternalSourceLead, events: LeadEvent[]) { return { leadId: lead.id, contentHash: lead.contentHash, canonicalUrl: lead.canonicalUrl, questions: events.filter(e => e.action === 'ASK').map(e => ({ requestId: e.requestId, text: e.text })) }; }
 export function routeCurrent(lead: ExternalSourceLead, now = new Date()) { try {
     const r = object(lead.sellerRoute);
-    return r.leadId === lead.id && r.contentHash === lead.contentHash && r.sourceUrl === lead.canonicalUrl && ['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(r.channel) && ref(r.identityEvidenceRef) && ref(r.routeEvidenceRef) && publicUrl(r.publicRouteUrl) && date(r.verifiedAt) <= now && now.getTime() - date(r.verifiedAt).getTime() < 24 * 3600000;
+    return (r.routeKind===undefined||publicCommentRoute(r,lead.canonicalUrl)) && r.leadId === lead.id && r.contentHash === lead.contentHash && r.sourceUrl === lead.canonicalUrl && ['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(r.channel) && ref(r.identityEvidenceRef) && ref(r.routeEvidenceRef) && publicUrl(r.publicRouteUrl) && date(r.verifiedAt) <= now && now.getTime() - date(r.verifiedAt).getTime() < 24 * 3600000;
 }
 catch {
     return false;

@@ -28,7 +28,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     (call[1] as RequestInit | undefined)?.method && (call[1] as RequestInit).method !== 'GET')).toBe(false);
 
   it('preserves entered keywords and original enum values across a display-language change, querying only on explicit apply', async () => {
-    english(); const item = makeListing('原商品 {title} $& 漫畫'), fetch = sellerFetch(item); vi.stubGlobal('fetch', fetch);
+    english(); const item = makeListing('原商品 {title} $& 漫畫'), fetch = sellerFetch(item); stubFetch(fetch);
     const mounted = render(view('/explore?q=' + encodeURIComponent('三國演義 & {name}')));
     await screen.findByRole('button', { name: `View item details: ${item.title}` });
     expect(screen.getByLabelText('Item keywords')).toHaveValue('三國演義 & {name}');
@@ -63,10 +63,10 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     const fetch = vi.fn(async (url:string) => responseOk(url.includes('match-wishes') ? {items:[wish],nextCursor:null}
       : url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null}
         : { items:[match],nextCursor:null,scannedCandidates:1,ordering:'RECENT_CANDIDATES_PAGE_SCORE',notice:'已包含自己刊登的配對預覽；自己的商品不能向自己購買。圖片不直接比對，文字吻合不保證同一型號或真偽。' }));
-    vi.stubGlobal('fetch',fetch); render(view('/explore?wish=814'));
+    stubFetch(fetch); render(view('/explore?wish=814'));
     await screen.findByText(/1 in-app items \(including 1 own-listing previews\)/);
     expect(screen.getByText('Comparing wish: 願望 {name} $&')).toBeInTheDocument();
-    expect(screen.getByText(/My listing preview/)).toBeInTheDocument();
+    expect(await screen.findByText(/My listing preview/)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(`Match score ${match.score}`))).toHaveTextContent('Approximately 3.2 km');
     const reasons = screen.getByText(/Name or brand includes wish keywords: 三國、\{name\}/);
     expect(reasons).toHaveTextContent('Budget currency differs; no conversion or price match is claimed');
@@ -81,7 +81,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     english(); let failed = true; const item=makeListing(), raw='private provider diagnostic fixture';
     const fetch=vi.fn(async (url:string) => { if(url.includes('match-wishes')) return responseOk({items:[],nextCursor:null});
       if(failed) throw new Error(raw); return responseOk(url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null} : {items:[item],nextCursor:null}); });
-    vi.stubGlobal('fetch',fetch); render(view());
+    stubFetch(fetch); render(view());
     expect(await screen.findAllByRole('alert')).toHaveLength(2);
     expect(screen.getAllByText(/Item data could not be read or verified/)).toHaveLength(2);
     expect(screen.queryByText(raw)).not.toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   it('translates invalid price and radius feedback before dispatch and leaves the original inputs intact', async () => {
     english(); const wish=makeWish(814), fetch=vi.fn(async (url:string) => responseOk(url.includes('match-wishes') ? {items:[wish],nextCursor:null}
       : url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null} : makeMatchPage([])));
-    vi.stubGlobal('fetch',fetch); render(view('/explore?wish=814')); await screen.findByText(/Loaded in this area/);
+    stubFetch(fetch); render(view('/explore?wish=814')); await screen.findByText(/Loaded in this area/);
     fireEvent.click(screen.getByText('Filters and wish comparison (optional)'));
     fireEvent.change(screen.getByLabelText('Minimum price (NT$)'),{target:{value:'500'}});
     fireEvent.change(screen.getByLabelText('Maximum price (NT$)'),{target:{value:'100'}}); const before=fetch.mock.calls.length;
@@ -111,7 +111,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   });
 
   it('keeps original authoritative details and report destination while translating every seller control', async () => {
-    english(); const item={...makeListing('漫畫 {title} $&'),description:'原說明 {name} $&',status:'RESERVED'},fetch=sellerFetch(item);vi.stubGlobal('fetch',fetch);
+    english(); const item={...makeListing('漫畫 {title} $&'),description:'原說明 {name} $&',status:'RESERVED'},fetch=sellerFetch(item);stubFetch(fetch);
     render(view());fireEvent.click(await screen.findByRole('button',{name:`View item details: ${item.title}`}));
     const dialog=await screen.findByRole('dialog',{name:'Item details'}); await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText(item.description)).toBeInTheDocument();expect(within(dialog).getByText('Used · Reserved')).toBeInTheDocument();
@@ -126,7 +126,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('keeps external source facts and URL separate from in-app contact controls in English', async () => {
     english();const item={...makeExternalListing(),title:'來源 {host} $&'},fetch=vi.fn(async (url:string) => responseOk(url.endsWith(`/external-listings/${item.id}`) ? item
-      : url.includes('/external-listings?') ? {enabled:true,items:[item],nextCursor:null} : {items:[],nextCursor:null}));vi.stubGlobal('fetch',fetch);
+      : url.includes('/external-listings?') ? {enabled:true,items:[item],nextCursor:null} : {items:[],nextCursor:null}));stubFetch(fetch);
     render(view());fireEvent.click(await screen.findByRole('button',{name:`View source details: ${item.title}`}));
     const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText('Source price NT$ 590')).toBeInTheDocument();expect(within(dialog).getByText(/not an in-app seller/)).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     english();let success!:PositionCallback,deny!:PositionErrorCallback;
     const locate=vi.fn((ready:PositionCallback,failed:PositionErrorCallback) => {success=ready;deny=failed;});
     vi.stubGlobal('navigator',{language:'en-US',geolocation:{getCurrentPosition:locate}});
-    const fetch=sellerFetch();vi.stubGlobal('fetch',fetch);render(view());await screen.findByText(/Loaded in this area/);const before=fetch.mock.calls.length;
+    const fetch=sellerFetch();stubFetch(fetch);render(view());await screen.findByText(/Loaded in this area/);const before=fetch.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'Move to my location'}));
     expect(screen.getByText(/Reading location; it is not sent directly/)).toBeInTheDocument();
     act(() => deny({message:'private location failure'} as GeolocationPositionError));
@@ -161,7 +161,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('provides an English list fallback after a real component render failure without hiding loaded items', async () => {
     english();mapState.failed=true;vi.spyOn(console,'error').mockImplementation(() => {});
-    const item=makeListing(),fetch=sellerFetch(item);vi.stubGlobal('fetch',fetch);render(view());
+    const item=makeListing(),fetch=sellerFetch(item);stubFetch(fetch);render(view());
     await screen.findByRole('button',{name:`View item details: ${item.title}`});
     expect(screen.getByText(/The interactive map is unavailable. Switch to Item list/)).toBeInTheDocument();const before=fetch.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'Item list'}));
@@ -170,7 +170,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('falls back to English with inaccessible locale storage while guest access keeps its original return path and makes no private read', () => {
     vi.spyOn(localStorage,'getItem').mockImplementation(() => {throw new Error('blocked locale storage');});
-    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);render(view('/explore',{...auth,token:null,user:null} as unknown as typeof auth));
+    const fetch=vi.fn();stubFetch(fetch);render(view('/explore',{...auth,token:null,user:null} as unknown as typeof auth));
     expect(screen.getByRole('heading',{name:'Explore the item map'})).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Sign in'})).toHaveAttribute('href','/login?next=%2Fexplore');expect(fetch).not.toHaveBeenCalled();
   });

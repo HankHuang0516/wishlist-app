@@ -12,7 +12,20 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式v564已發布；檢舉視窗與私人紀錄繁中／英文及390px畫面實際核對，原561分頁經已保存確認更新564，精確三CI與正式Runtime樹一致。探索／聊天入口持續可用；Explore主要控制英文仍為下一批。首頁／設定最近評分仍553各90；完整provider／跨端／PWA與不可逆GUI及矩陣仍active，APP2.0.12不改。
+目前狀態：正式v567已發布；探索搜尋／篩選／map/list／詳情繁中与英文、390px布局實際核對，原564分頁以已保存確認更新567，精確三CI與正式Runtime樹一致。探索／聊天入口及聊天原照片可用；外部詳情原圖／fallback正在下一批實作，原production外部开关仍off。首頁／設定最近評分仍553各90；完整provider／跨端／PWA與不可逆GUI及矩陣active，APP2.0.12不改。
+
+## 2026-10-03 第七十二批：外部商品詳情原圖與失敗替代
+
+- Native ExternalDetailPhoto與externalPhotoPresentation對照：只有真正original onLoad後顯示原圖；thumbnail先成功可預覽，original失敗仍顯示縮圖並如實說明；兩圖失敗明確placeholder，不能將空白或破圖当載入完成。Web加入相同狀態，沒有在清單或地圖預抓所有原圖，只在fresh身份／有效期已核對的外部詳情使用原imageUrl與thumbnailUrl。
+- 原來源price／title／description／AI補充／canonical link與行政區中心限制不改，no-referrer保持，不加Authorization或私人API要求。原圖成功優先、單一失敗等待另圖、晚到事件、不同id／URL換圖時reset、切語言維持狀態及source link保持，以原生image load/error事件測試。載入／失敗status位在role=img之外可被輔助科技讀取，單一照片ARIA包含原商品文字與明確状態；輸入中的模板符號保持literal。
+- v570依HEAD569＋1；focused4files59passed之後更換tuple key為JSON保證照片pair不混淆，必要完整Web／Server／三CI与瀏覽器驗收另驗。正式外部開關維持原狀；合成來源fixture與現有公開非販售QA照片只能證明網頁及真compiled API，不冒稱真实provider新增或交易。首頁／設定最近評分仍553各90，完整provider／兩方跨端／OS PWA／不可逆GUI與完整矩陣仍active，APP與migration不改。
+
+## 第七十一批正式發布與探索雙語驗收
+
+- v567 PR103精確headdbedba7312150d31e77f37e306332ad1d8e00d5b、CI37046524019三項成功；normal merge6d35547131db2f2fa608efdcffa785e334d4bff3、empty trigger25534432f1f84ee2c97ee2909d731903412e73aa。Gitc8f1b630-20e5-4793-ae11-f4357a7bef79 WAITING後同乾淨checkout上傳原service，部署58f51da7-c69a-4576-ad88-508914e12ff1 SUCCESS，uploads與client/server/mobile Runtime樹符合精確CI。原129其他workspace改動逐檔保留；APP與migration不改。
+- Web112files1789passed、focused3files37passed、Server58suites930passed+3skipped與兩端build通過。原filter enums／原商品與願望文字／NT$／raw品牌／price／UUID保持；切語系、map/list與定位移動不自動query，失敗不當empty，closed known recovery維持手動恢復。私人權限、fresh detail、自己刊登preview不能自己購買與有限cursor／MAX_LOADED保持。
+- 原IAB564以英文Settings原控制ready／明確saved確認更新567。正式Map與Item list八筆；原中文三國演義＋books／USED／MEETUP＋1–100明確Apply得四筆，500／100英文錯誤保留四筆與輸入，Clear filters恢复八筆。原非販售QA商品NT59、南門書局、原description、Used／Available、行政區、交付與台灣時間以DOM與真桌面／390px原圖核對；詳情垂直捲動，不宣稱每張截圖都看得到全部欄位。Escape關閉，還原繁中map/list／詳情及Chat照片240×320已載入；每頁一個Settings入口、documentWidth不超viewport，viewport reset並handoff原tab。沒有發訊息、檢舉、面交提案、改商品或profile。
+- 中間證據如實保存：首次ready locator尚無匹配，fresh DOM為preparing；下一張名update-preparing-initial已是ready，不把命名當preparing證據。filters-applied原圖有lazy照片仍loading，invalid-price後四圖均loaded；chat-current初為0photo，chat-loaded才是完成圖。原JPEG／DOM／geometry與HTTP／worker及PR回讀在wishlist-web-audit71-evidence-20261003.json與hash索引。不用HTTP401代替已登入GUI，不宣稱真正送出或實際provider成功。下一批外部原圖／thumbnail/failure，本批正式外部开关不改；完整provider／跨端／OS PWA／不可逆GUI與完整矩陣仍active，最新相似度仍553各90。
 
 ## 2026-10-03 第七十一批：探索控制、詳情與已知恢復雙語
 

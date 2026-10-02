@@ -257,3 +257,7 @@ Seven regressions run the actual classic script. Synthetic Chrome upgrades to th
 來源線索與商品/結帳分離，公開網址 `/source-leads?id=<UUID>`。座標指向公開公共地點，不代表現貨所在地；原始日期須近兩月且來源核對在48小時內。私有證據與聯絡路由不進公开 DTO。询问先保存，再逐次明確同意；無已核原賣家路由維持 WAITING_ROUTE，撤回不宣稱已送。
 回滾：關閉 SOURCE_LEADS_PUBLIC_ENABLED 或回退應用版本，保留新增兩表與收件歷史；不刪除正式資料。既有外部商品公開開關維持關閉。手機舊版需另更新新圖層，網頁可獨立查看。
 更新入口保留 `public/registerSW.js` 供舊快取 HTML 使用，新的 HTML 不注入此檔；相容入口只準備 worker，不重载或清除資料。SPA 換頁會取消更新確認，核對晚到也不能重載另一功能。
+
+### External detail photo parity (v570)
+
+Fresh external details now load the verified original and thumbnail, promote only after an actual image load, retain a successful thumbnail if the original fails, and explain failure when both fail. Changing the verified photo pair resets the presentation; language changes preserve it. Only fresh detail loads the original; list/map thumbnails and source-only actions remain. Production external-source enablement is unchanged.

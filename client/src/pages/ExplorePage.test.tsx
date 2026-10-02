@@ -133,6 +133,14 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     expect(within(dialog).getByText(/District centre, not the exact item location/)).toHaveTextContent('Taiwan time');
     const source=within(dialog).getByRole('link',{name:`Visit the original website (${item.source.host})`});
     expect(source).toHaveAttribute('href',item.canonicalUrl);expect(source).toHaveAttribute('rel','noopener noreferrer');
+    const before=fetch.mock.calls.length,photos=Array.from(dialog.querySelectorAll('img'));
+    const thumbnail=photos.find(photo=>photo.getAttribute('src')===item.thumbnailUrl)!,original=photos.find(photo=>photo.getAttribute('src')===item.imageUrl)!;
+    expect(photos).toHaveLength(2);expect(original).toHaveAttribute('referrerPolicy','no-referrer');
+    fireEvent.load(thumbnail);fireEvent.error(original);
+    expect(within(dialog).getByRole('img')).toHaveAccessibleName(item.title+' · Source item photo, showing a thumbnail');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('The high-resolution photo could not load. Showing a thumbnail.');
+    expect(thumbnail).toHaveClass('opacity-100');expect(source).toHaveAttribute('href',item.canonicalUrl);
+    expect(fetch.mock.calls).toHaveLength(before);expect(fetch.mock.calls.filter(([url])=>url.endsWith(`/external-listings/${item.id}`))).toHaveLength(1);
     expect(within(dialog).queryByRole('button',{name:/Contact seller/})).not.toBeInTheDocument();noWrites(fetch);
   });
 

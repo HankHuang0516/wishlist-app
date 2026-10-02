@@ -15,7 +15,10 @@ const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 
   isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
-beforeEach(() => { pending.clear(); localStorage.setItem('user-locale', 'zh-TW'); });
+beforeEach(() => {
+  pending.clear(); localStorage.setItem('user-locale', 'zh-TW');
+  vi.mocked(privatePendingStore.get).mockReset().mockImplementation(async key => pending.get(key) ?? null);
+});
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('settings hub retains web-only functionality while adding app actions', () => {
   it('has one birthday field and accessible visibility labels alongside app and legacy entries', async () => {
@@ -110,7 +113,12 @@ describe('settings hub retains web-only functionality while adding app actions',
     expect(screen.getByLabelText('暱稱')).toHaveValue('失聯後確認');expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);expect(pending.size).toBe(0);
   });
   it('rejects corrupt restore data and unreadable storage without sending a mutation',async()=>{
-    vi.mocked(privatePendingStore.get).mockRejectedValueOnce(new PendingStoreError());
+    // Profile and avatar scope hashes resolve independently. Fault the actual
+    // profile read rather than whichever feature happens to call get first.
+    vi.mocked(privatePendingStore.get).mockImplementation(async key => {
+      if (key.endsWith('.profile')) throw new PendingStoreError();
+      return pending.get(key) ?? null;
+    });
     const fetcher=vi.fn(async()=>ok(profile));vi.stubGlobal('fetch',fetcher);render(view());
     await screen.findByText(/無法安全讀取帳號資料/);expect(fetcher.mock.calls.every(call=>(call[1] as RequestInit|undefined)?.method!=='POST')).toBe(true);
   });

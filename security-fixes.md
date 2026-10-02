@@ -1,3 +1,9 @@
+## 2026-10-02 Legacy multipart and managed clone-photo lifecycle follow-up
+
+Legacy multipart now uses a bounded memory parser and the controlled photo encoders/providers, preserving user/verified-agent authorization and the existing unkeyed 201 contract. Typed fields reject coerced proxy identities, invalid prices and unknown shapes. Owner/parent locks recheck capacity and final user-session validity. Provider work runs outside these short transactions; an exact independent cleanup task precedes allocation, with a five-minute lease and locked commit check. Expired preparations and late rejected writes retain cleanup targets. In-flight preparations participate in account erasure's original cleanup receipt under the owner lock.
+
+Clones independently own app-managed photos, rechecking source visibility/image identity and destination/session/receipt after copying. Source item/account deletion preserves the target image; a missing source asset fails without a broken wish. External product images remain external references. Unknown Flickr upload responses before a provider ID is available still require opaque-tag reconciliation; local/stub evidence is not proof of that window or real provider behavior. Actual PostgreSQL/storage cases and Chrome lost-ACK/reload/source-erasure/restart evidence are recorded in docs/web-app-parity.md. Native APP was not changed and production deployment remains pending.
+
 # Security Audit Report (Vibe Coding Shield)
 
 **Project Info:** Wishlist App (Node.js/Express + React + Prisma)

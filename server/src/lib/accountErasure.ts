@@ -32,6 +32,10 @@ export async function eraseAccountData(userId: number, authVersion: number, pass
                 await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
                 const user = await tx.user.findUnique({ where: { id: userId }, select: { password: true, authVersion: true, avatarUrl: true } });
                 if (!user || user.authVersion !== authVersion || !await bcrypt.compare(currentPassword, user.password)) throw new AccountSecurityError(401);
+                // Unattached legacy/clone preparations were allocated under
+                // this same owner lock. Keep their lease while provider I/O
+                // finishes, and include them in the original cleanup receipt.
+                await tx.mediaErasureTask.updateMany({ where: { identityHash, clientActionId: null }, data: { clientActionId } });
                 // READ COMMITTED inventory AFTER the key lock sees any earlier
                 // committed FK insert; later User-referencing inserts cannot
                 // commit behind it. A repeatable snapshot before the gate could
@@ -120,14 +124,18 @@ export async function abandonAccountErasure(userId: number, authVersion: number,
 export async function drainMediaErasureTasks(limit = 25, storage = new ListingMediaStorage(), flickrStorage = new ListingFlickrStorage()) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccountSecurityError();
     let completed = 0;
-    const candidates = await prisma.mediaErasureTask.findMany({ orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }, { mediaId: 'asc' }], take: limit, select: { mediaId: true, flickrPhotoId: true } });
-    for (const { mediaId, flickrPhotoId } of candidates) {
+    const candidates = await prisma.mediaErasureTask.findMany({ where: { notBefore: { lte: new Date() } }, orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }, { mediaId: 'asc' }], take: limit, select: { mediaId: true } });
+    for (const { mediaId } of candidates) {
         const removed = await prisma.$transaction(async tx => {
             const locked = await tx.$queryRaw<Array<{ mediaId: string }>>`SELECT "mediaId" FROM "MediaErasureTask" WHERE "mediaId" = ${mediaId}::uuid FOR UPDATE SKIP LOCKED`;
             if (!locked.length) return false;
+            // Re-read after the task lock: allocation may have changed the
+            // provider identity or lease since the candidate inventory.
+            const task = await tx.mediaErasureTask.findUnique({ where: { mediaId }, select: { notBefore: true, flickrPhotoId: true } });
+            if (!task || task.notBefore.getTime() > Date.now()) return false;
             // Never trust an outbox entry to erase a still-owned media record.
             if (await tx.listingMedia.findUnique({ where: { id: mediaId }, select: { id: true } })) return false;
-            try { if (flickrPhotoId) await flickrStorage.remove(flickrPhotoId); else await storage.remove(mediaId); }
+            try { if (task.flickrPhotoId) await flickrStorage.remove(task.flickrPhotoId); else await storage.remove(mediaId); }
             catch { await tx.mediaErasureTask.update({ where: { mediaId }, data: { attempts: { increment: 1 } } }); return false; }
             await tx.mediaErasureTask.delete({ where: { mediaId } }); return true;
         }, { timeout: 15000 });

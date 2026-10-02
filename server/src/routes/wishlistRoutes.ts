@@ -13,25 +13,13 @@ import { createItemFromMedia,readLegacyWishCreate,abandonLegacyWishCreate } from
 
 // Item routes nested under wishlist
 import { createItem, createItemFromUrl } from '../controllers/itemController';
-import multer from 'multer';
-import path from 'path';
-
-// Configure multer for local storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'public/uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage });
+import { legacyWishUpload, legacyWishUploadRate } from '../middleware/legacyWishUpload';
 
 // Item creation accepts a logged-in USER (JWT/apiKey) OR a verified EClaw AGENT
 // (token / device-entity-botSecret headers). The old x-merchant-api-key path is
 // gone (card_e30cf03d — NO merchant key). An EClaw agent's proxy_end_user_id is
 // bound to its own verified publicCode inside the controller.
-router.post('/:wishlistId/items', authenticateUserOrEclawAgent, upload.single('image'), createItem);
+router.post('/:wishlistId/items', authenticateUserOrEclawAgent, legacyWishUploadRate, legacyWishUpload(createItem));
 router.post('/:wishlistId/items/url', authenticateUserOrEclawAgent, createItemFromUrl);
 
 // Other routes still require user token for now

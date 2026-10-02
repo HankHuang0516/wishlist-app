@@ -720,6 +720,7 @@ model MediaErasureTask {
   // Persist the remote identity before the media row is erased.
   flickrPhotoId String?
   attempts  Int      @default(0)
+  notBefore DateTime @default(now())
   createdAt DateTime @default(now())
   identityHash String? @db.VarChar(64)
   clientActionId String? @db.Uuid

@@ -4,6 +4,14 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  "來源商品圖片": "Source item photo",
+  "來源商品圖片，顯示縮圖": "Source item photo, showing a thumbnail",
+  "來源商品圖片，縮圖已載入": "Source item photo, thumbnail loaded",
+  "來源商品圖片無法載入": "Source item photo could not load",
+  "來源商品圖片載入中": "Source item photo is loading",
+  "照片載入中…": "Loading photo…",
+  "照片暫時無法載入，仍可前往來源網站確認商品。": "Photos could not load. You can still verify the item on the source website.",
+  "高畫質照片暫時無法載入，目前顯示縮圖": "The high-resolution photo could not load. Showing a thumbnail.",
   "探索商品地圖": "Explore the item map",
   "登入後可搜尋商品與交叉比對自己的願望。": "Sign in to search items and compare them with your wishes.",
   "登入": "Sign in",

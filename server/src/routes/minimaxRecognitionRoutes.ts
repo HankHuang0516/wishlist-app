@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../lib/externalListingIntake';
 import prisma from '../lib/prisma';
 import { getApiUrl } from '../config/constants';
-import { isMinimaxWorker, listingAiEnabledFor, listingAiPilotUserId, minimaxPilotUserId, minimaxWorkerToken } from '../lib/minimaxWorkerAuth';
+import { isMinimaxWorker, listingAiEnabledFor, listingAiUserIds, minimaxPilotUserId, minimaxWorkerToken } from '../lib/minimaxWorkerAuth';
 import { validListingAiDraft } from '../lib/listingAiDraft';
 import { forbiddenListingField } from '../lib/listingPolicy';
 
@@ -73,14 +73,15 @@ async function claimWish(userId: number | null, prefix: string) {
 }
 
 async function claimListing(prefix: string) {
-    const listingPilot = listingAiPilotUserId();
-    if (process.env.MINIMAX_LISTING_AI_ENABLED !== '1' || listingPilot === -1) return null;
+    const users = listingAiUserIds();
+    if (process.env.MINIMAX_LISTING_AI_ENABLED !== '1' || users?.length === 0) return null;
+    const ownerFilter = users === null ? {} : { ownerUserId: { in: users } };
     await prisma.listingMedia.updateMany({ where: { aiDraftStatus: 'PROCESSING', aiDraftUpdatedAt: { lt: new Date(Date.now() - LEASE_MS) },
-        ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
+        ...ownerFilter },
         data: { aiDraftStatus: 'PENDING', aiDraftJobId: null, aiDraftError: 'MINIMAX_RETRY', aiDraftUpdatedAt: new Date() } });
     for (let attempt = 0; attempt < 3; attempt++) {
         const media = await prisma.listingMedia.findFirst({ where: { aiDraftStatus: 'PENDING', listingId: null, wishItemId: null,
-            ...(listingPilot ? { ownerUserId: listingPilot } : {}) },
+            ...ownerFilter },
             orderBy: { createdAt: 'asc' }, select: { id: true, ownerUserId: true, imageUrl: true } });
         if (!media) break;
         if (!listingAiEnabledFor(media.ownerUserId) || media.imageUrl !== `${prefix}${media.id}/image`) {

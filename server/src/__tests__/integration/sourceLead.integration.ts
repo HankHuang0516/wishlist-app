@@ -50,6 +50,22 @@ run('independent source lead map -> inquiry (synthetic local DB)', () => {
         expect((await importLead([{ ...body(), archiveVersion: 2 }])).body.errorCode).toBe('STALE_OR_CONFLICTING_LEAD');
         expect((await importLead([{ ...body(), summary: 'same version changed content' }])).status).toBe(409);
     });
+    test('GET before and after opening reads only the authenticated buyer without allocating receipts', async () => {
+        const before = await prisma.sourceLeadInquiry.count();
+        for (let i = 0; i < 2; i++) {
+            const result = await request(app).get('/leads/' + leadId + '/inquiry').set('x-api-key', key);
+            expect(result.status).toBe(200);
+            expect(result.body).toBeNull();
+        }
+        expect(await prisma.sourceLeadInquiry.count()).toBe(before);
+        const opened = await open();
+        expect(opened.status).toBe(200);
+        const read = await request(app).get('/leads/' + leadId + '/inquiry').set('x-api-key', key);
+        expect(read.body.id).toBe(opened.body.id);
+        expect(read.body.events).toEqual([]);
+        expect((await request(app).get('/leads/' + leadId + '/inquiry').set('x-api-key', otherKey)).body).toBeNull();
+        expect(await prisma.sourceLeadInquiry.count()).toBe(before + 1);
+    });
     test('single buyer room, ownership, exact request replay; consent freezes question IDs; waiting is not sent', async () => {
         const rooms = await Promise.all([open(), open()]);
         expect(rooms.every(r => r.status === 200)).toBe(true);

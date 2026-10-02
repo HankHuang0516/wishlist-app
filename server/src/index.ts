@@ -40,7 +40,7 @@ import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import { websiteRateLimits } from './middleware/websiteRateLimits';
 
 dotenv.config();
 
@@ -73,17 +73,8 @@ app.use(helmet({
 // Trust proxy (required for Railway/reverse proxy to work with rate-limit)
 app.set('trust proxy', 1);
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per windowMs (increased from 100 to account for polling)
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: {
-    error: '請求過於頻繁，請稍後再試。(Too many requests, please try again later.)',
-    errorCode: 'RATE_LIMIT_EXCEEDED'
-  },
-});
-app.use(limiter); // Apply rate limiting to all requests
+const clientBuildPath = path.join(__dirname, '../../client/dist');
+app.use(...websiteRateLimits(clientBuildPath));
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -192,7 +183,6 @@ app.get('/api/swagger.json', (req: Request, res: Response) => {
 });
 
 // Serve static files from the client build directory
-const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 // Product-specific metadata must be in the initial HTML for LINE and other link crawlers.
 app.use('/listings', createListingSharePageRoutes(path.join(clientBuildPath, 'index.html')));

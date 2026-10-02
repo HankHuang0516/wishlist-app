@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { API_URL } from '../config';
 import { isUuid } from '../lib/listingBatch';
-export default function PrivatePhoto({ id, token, label = '僅本人可見的商品照片', compact = false }: { id: string; token: string; label?: string; compact?: boolean }) {
+import { webShellText } from '../lib/webShellCopy';
+export default function PrivatePhoto({ id, token, label, compact = false }: { id: string; token: string; label?: string; compact?: boolean }) {
   const [image, setImage] = useState<{ source: string; url: string } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const source = `${id}:${token}`;
@@ -18,6 +19,8 @@ export default function PrivatePhoto({ id, token, label = '僅本人可見的商
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [id, token, source]);
   const size = compact ? 'h-16 w-16 max-w-16' : 'h-32 w-full max-w-32';
-  return image?.source === source ? <img src={image.url} alt={label} className={`${size} rounded-2xl object-cover`} />
-    : <div role="img" aria-label={`${label}：${failed === source ? '照片暫時無法載入' : '照片載入中'}`} className={`flex ${size} items-center justify-center rounded-2xl bg-stone-100 text-sm text-stone-500`}>{failed === source ? '照片暫時無法載入' : '照片載入中'}</div>;
+  const photoLabel = label ?? webShellText('privatePhoto');
+  const photoStatus = webShellText(failed === source ? 'photoUnavailable' : 'photoLoading');
+  return image?.source === source ? <img src={image.url} alt={photoLabel} className={`${size} rounded-2xl object-cover`} />
+    : <div role="img" aria-label={`${photoLabel}${webShellText('photoSeparator')}${photoStatus}`} className={`flex ${size} items-center justify-center rounded-2xl bg-stone-100 text-sm text-stone-500`}>{photoStatus}</div>;
 }

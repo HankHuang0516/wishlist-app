@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import PrivatePhoto from './PrivateMarketplacePhoto';
 import { API_URL } from '../config';
+import { marketingText as mt, marketingMessage } from '../lib/marketingCopy';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { abandonMarketingQueue, marketingQueueJournal, parseMarketingQueueJournal, parseMarketingJob, readMarketingQueue, sendMarketingQueue, type MarketingJob, type MarketingQueueBody, type MarketingQueueResult } from '../lib/marketingQueueWeb';
 import { abandonMarketingApproval,marketingApprovalJournal,parseMarketingApprovalJournal,readMarketingApproval,sendMarketingApproval,type MarketingApprovalBody,type MarketingApprovalResult } from '../lib/marketingApprovalWeb';
@@ -200,44 +201,44 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
     if (from < 0 || to < 0 || to >= old.length) return old;
     const updated = [...old]; updated.splice(from, 1); updated.splice(to, 0, id); return updated;
   }); }
-  if (!expanded) return <button type="button" aria-expanded={false} aria-label="開啟行銷小助手 Beta"
+  if (!expanded) return <button type="button" aria-expanded={false} aria-label={mt("開啟行銷小助手 Beta")}
     className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-left" onClick={() => setExpanded(true)}>
-    <span className="rounded-xl bg-orange-600 p-3 text-white" aria-hidden>✦</span><span><span className="block font-semibold">行銷小助手 · Beta</span><span className="text-sm text-stone-600">{generationAccess==='available'?'生成商品圖與文案，提升曝光':generationAccess==='paused'?'新增生成暫停；仍可查看與確認既有結果':'生成服務待查核；仍可查看既有工作'}</span></span><span aria-hidden className="ml-auto">›</span>
+    <span className="rounded-xl bg-orange-600 p-3 text-white" aria-hidden>✦</span><span><span className="block font-semibold">{mt("行銷小助手 · Beta")}</span><span className="text-sm text-stone-600">{generationAccess==='available'?mt("生成商品圖與文案，提升曝光"):generationAccess==='paused'?mt("新增生成暫停；仍可查看與確認既有結果"):mt("生成服務待查核；仍可查看既有工作")}</span></span><span aria-hidden className="ml-auto">›</span>
   </button>;
-  return <section aria-label="行銷小助手 Beta" className="mt-5 rounded-2xl bg-orange-50 p-4 text-sm">
-    <button type="button" aria-expanded={true} aria-label="收合行銷小助手 Beta" onClick={() => setExpanded(false)} className="flex w-full justify-between min-h-11 font-semibold">行銷小助手 · Beta<span aria-hidden>⌃</span></button>
-    <p className="mt-1 text-stone-600">原始實拍照保留；AI 圖僅為行銷示意，確認前不公開。</p>
-    {generationAccess!=='available'&&<p role="status" className="mt-3 rounded-xl border border-orange-200 bg-white p-3">{generationAccess==='paused'?'新增生成與免費調整暫停；既有工作、原操作查核及已交付結果的確認仍可使用。免費調整期限仍依原交付時間計算。':'暫時無法確認生成服務；不會新增生成或免費調整。仍可查核原操作及確認已交付結果。'}</p>}
-    {(!queueReady||generationAccess!=='available')&&<button type="button" disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4" onClick={()=>setReadTick(n=>n+1)}>重新查核行銷工作</button>}
-    {queuePending&&<div role="region" aria-label="原行銷排隊操作待確認" className="mt-3 rounded-xl border border-orange-300 p-3">
-      <p>保留原操作；重新開頁只查核，不會自動重送或再次扣次數。</p>
-      {queueDetails&&<p className="mt-2 whitespace-pre-wrap break-words">{queueDetails.kind==='CREATE'?`原操作：生成四圖；商品版本 ${queueDetails.expectedVersion}`:`原免費調整：圖 ${queueDetails.slots.join('、')}\n${queueDetails.prompt}`}</p>}
-      {queueCleanup?<button type="button" disabled={busy} onClick={()=>void recoverQueue('clear')}>只重試清理原行銷紀錄</button>:<>
-        <button type="button" disabled={busy} onClick={()=>void recoverQueue('read')}>查核原排隊結果</button>
-        <button type="button" disabled={busy} onClick={()=>void recoverQueue('retry')}>以相同識別碼重試原排隊</button>
-        {!cancelConfirm?<button type="button" disabled={busy} onClick={()=>setCancelConfirm(true)}>取消未建立的原排隊</button>:<><p>若工作已建立，只回讀原結果；不會撤銷已建立工作或刪除照片。</p><button type="button" disabled={busy} onClick={()=>void recoverQueue('cancel')}>確認取消未建立工作</button><button type="button" disabled={busy} onClick={()=>setCancelConfirm(false)}>返回查核</button></>}
+  return <section aria-label={mt("行銷小助手 Beta")} className="mt-5 rounded-2xl bg-orange-50 p-4 text-sm">
+    <button type="button" aria-expanded={true} aria-label={mt("收合行銷小助手 Beta")} onClick={() => setExpanded(false)} className="flex w-full justify-between min-h-11 font-semibold">{mt("行銷小助手 · Beta")}<span aria-hidden>⌃</span></button>
+    <p className="mt-1 text-stone-600">{mt("原始實拍照保留；AI 圖僅為行銷示意，確認前不公開。")}</p>
+    {generationAccess!=='available'&&<p role="status" className="mt-3 rounded-xl border border-orange-200 bg-white p-3">{generationAccess==='paused'?mt("新增生成與免費調整暫停；既有工作、原操作查核及已交付結果的確認仍可使用。免費調整期限仍依原交付時間計算。"):mt("暫時無法確認生成服務；不會新增生成或免費調整。仍可查核原操作及確認已交付結果。")}</p>}
+    {(!queueReady||generationAccess!=='available')&&<button type="button" disabled={busy} className="mt-3 min-h-11 rounded-xl border px-4" onClick={()=>setReadTick(n=>n+1)}>{mt("重新查核行銷工作")}</button>}
+    {queuePending&&<div role="region" aria-label={mt("原行銷排隊操作待確認")} className="mt-3 rounded-xl border border-orange-300 p-3">
+      <p>{mt("保留原操作；重新開頁只查核，不會自動重送或再次扣次數。")}</p>
+      {queueDetails&&<p className="mt-2 whitespace-pre-wrap break-words">{queueDetails.kind==='CREATE'?mt('原操作：生成四圖；商品版本 {version}',{version:queueDetails.expectedVersion}):mt('原免費調整：圖 {slots}\n{prompt}',{slots:queueDetails.slots.join('、'),prompt:queueDetails.prompt})}</p>}
+      {queueCleanup?<button type="button" disabled={busy} onClick={()=>void recoverQueue('clear')}>{mt("只重試清理原行銷紀錄")}</button>:<>
+        <button type="button" disabled={busy} onClick={()=>void recoverQueue('read')}>{mt("查核原排隊結果")}</button>
+        <button type="button" disabled={busy} onClick={()=>void recoverQueue('retry')}>{mt("以相同識別碼重試原排隊")}</button>
+        {!cancelConfirm?<button type="button" disabled={busy} onClick={()=>setCancelConfirm(true)}>{mt("取消未建立的原排隊")}</button>:<><p>{mt("若工作已建立，只回讀原結果；不會撤銷已建立工作或刪除照片。")}</p><button type="button" disabled={busy} onClick={()=>void recoverQueue('cancel')}>{mt("確認取消未建立工作")}</button><button type="button" disabled={busy} onClick={()=>setCancelConfirm(false)}>{mt("返回查核")}</button></>}
       </>}
     </div>}
     {!job || job.status === 'FAILED' ? <button type="button" disabled={generationLocked} onClick={() => void start()}
-      className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{job ? '重新排隊生成四圖' : '生成四張行銷圖'}</button>
+      className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{job ? mt("重新排隊生成四圖") : mt("生成四張行銷圖")}</button>
       : ['PENDING', 'PROCESSING'].includes(job.status) ? <p role="status" className="mt-3 text-orange-900">
-        {job.status === 'PENDING' ? '已排隊，稍後自動更新' : '正在生成四張圖片與文案'}</p>
+        {job.status === 'PENDING' ? mt("已排隊，稍後自動更新") : mt("正在生成四張圖片與文案")}</p>
         : <>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{job.generatedMedia.map(media => <button key={media.id}
-            type="button" role="checkbox" aria-label={`選用圖 ${media.marketingSlot} · ${selected.includes(media.id) ? '已選用' : '未選用'} · AI 示意`} disabled={selectionLocked} aria-checked={selected.includes(media.id)} onClick={() => toggle(media.id)} className="rounded-xl border bg-white p-2 text-left">
-            <PrivatePhoto id={media.id} token={token} /><span>{selected.includes(media.id) ? '☑ 選用' : '☐ 不選用'} · AI 示意</span>
+            type="button" role="checkbox" aria-label={mt('選用圖 {slot} · {selected} · AI 示意',{slot:media.marketingSlot,selected:mt(selected.includes(media.id)?'已選用':'未選用')})} disabled={selectionLocked} aria-checked={selected.includes(media.id)} onClick={() => toggle(media.id)} className="rounded-xl border bg-white p-2 text-left">
+            <PrivatePhoto id={media.id} token={token} /><span>{selected.includes(media.id) ? mt("☑ 選用") : mt("☐ 不選用")} {mt("· AI 示意")}</span>
           </button>)}</div>
-          {!!job.previousMedia?.length && <div className="mt-4"><p>{job.status==='COMPLETED'?'調整前的照片（已確認選用狀態）':'調整前的照片（可點選保留原版）'}</p>
+          {!!job.previousMedia?.length && <div className="mt-4"><p>{job.status==='COMPLETED'?mt("調整前的照片（已確認選用狀態）"):mt("調整前的照片（可點選保留原版）")}</p>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">{job.previousMedia.map(media => <button key={media.id}
               type="button" role="checkbox" disabled={selectionLocked} aria-checked={selected.includes(media.id)} onClick={() => toggle(media.id)}
               className="rounded-xl border bg-white p-2 text-left"><PrivatePhoto id={media.id} token={token} />
-              <span>{selected.includes(media.id) ? '☑ 保留原版' : '☐ 選原版'} · 圖 {media.marketingSlot}</span>
+              <span>{selected.includes(media.id) ? mt("☑ 保留原版") : mt("☐ 選原版")} {mt("· 圖")} {media.marketingSlot}</span>
             </button>)}</div></div>}
-          {!!selected.length && <div className="mt-4"><p className="font-semibold">{job.status==='COMPLETED'?'此工作確認時的順序（第一張為封面）':'拖放公開順序（第一張為封面）'}</p><p id={`sort-help-${sourceMediaId}`} className="text-stone-600">{job.status==='COMPLETED'?'此工作當時的排序僅供閱覽；商品目前可能已由後續調整更新。':'拖動右側把手；也可聚焦把手後按鍵盤上下方向鍵調整。'}</p>
-            {job.status === 'COMPLETED' && <p className="mt-1 text-stone-600">此工作已確認，照片與順序僅供閱覽；如仍有免費調整機會，可在下方另行提出。</p>}
+          {!!selected.length && <div className="mt-4"><p className="font-semibold">{job.status==='COMPLETED'?mt("此工作確認時的順序（第一張為封面）"):mt("拖放公開順序（第一張為封面）")}</p><p id={`sort-help-${sourceMediaId}`} className="text-stone-600">{job.status==='COMPLETED'?mt("此工作當時的排序僅供閱覽；商品目前可能已由後續調整更新。"):mt("拖動右側把手；也可聚焦把手後按鍵盤上下方向鍵調整。")}</p>
+            {job.status === 'COMPLETED' && <p className="mt-1 text-stone-600">{mt("此工作已確認，照片與順序僅供閱覽；如仍有免費調整機會，可在下方另行提出。")}</p>}
             <ol ref={sortList}>{selected.map((id, index) => <li key={id} className={`mt-2 flex items-center gap-3 rounded-xl border p-3 ${dragging === id ? 'bg-orange-100 ring-2 ring-orange-400' : 'bg-white'}`}>
-              <span className="flex-1">{index === 0 ? '封面' : index + 1}. 圖 {choices.find(media => media.id === id)?.marketingSlot}</span>
-              <button type="button" disabled={selectionLocked} aria-label={`拖放圖 ${choices.find(media => media.id === id)?.marketingSlot}，目前第 ${index + 1} 張`} aria-describedby={`sort-help-${sourceMediaId}`}
+              <span className="flex-1">{index === 0 ? mt("封面") : index + 1}{mt(". 圖")} {choices.find(media => media.id === id)?.marketingSlot}</span>
+              <button type="button" disabled={selectionLocked} aria-label={mt('拖放圖 {slot}，目前第 {position} 張',{slot:choices.find(media=>media.id===id)?.marketingSlot??'',position:index+1})} aria-describedby={`sort-help-${sourceMediaId}`}
                 className="min-h-11 cursor-grab touch-none rounded-lg border px-3 active:cursor-grabbing"
                 onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); move(id, index + (event.key === 'ArrowUp' ? -1 : 1)); } }}
                 onPointerDown={event => { if (busy) return; event.currentTarget.setPointerCapture(event.pointerId); setDragging(id); }}
@@ -249,31 +250,31 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
                   move(id, to); setDragging(null);
                   if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 }}
-                onPointerCancel={() => setDragging(null)}>☰ 拖放排序</button>
-            </li>)}</ol><p role="status" className="sr-only">目前照片順序：{selected.map(id => `圖 ${choices.find(media => media.id === id)?.marketingSlot}`).join('、')}</p></div>}
-          <label className="mt-4 block">{job.status==='COMPLETED'?'行銷文案（已套用，只讀）':'行銷文案（可修改後確認）'}<textarea aria-label="編輯行銷文案"
+                onPointerCancel={() => setDragging(null)}>{mt("☰ 拖放排序")}</button>
+            </li>)}</ol><p role="status" className="sr-only">{mt("目前照片順序：")}{selected.map(id => mt('圖 {slot}',{slot:choices.find(media=>media.id===id)?.marketingSlot??''})).join('、')}</p></div>}
+          <label className="mt-4 block">{job.status==='COMPLETED'?mt("行銷文案（已套用，只讀）"):mt("行銷文案（可修改後確認）")}<textarea aria-label={mt("編輯行銷文案")}
             className="mt-1 min-h-28 w-full rounded-xl border p-3" maxLength={1200} disabled={selectionLocked} value={copy} onChange={event => setCopy(event.target.value)} /></label>
           {job.status === 'REVIEW' && <button type="button" disabled={busy || refreshNeeded || !!queuePending || !queueReady || job.generatedMedia.length !== 4}
-            onClick={() => void approve()} className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">確認照片與文案</button>}
-          {mayAdjust && <div className="mt-4 border-t pt-3"><p className="font-semibold text-red-700">免費調整剩餘 {Math.floor(remaining / 86_400_000)}天 {Math.floor(remaining % 86_400_000 / 3_600_000)}時 {Math.floor(remaining % 3_600_000 / 60_000)}分</p>
-            <p className="mt-2">勾選要重新生成的圖片（最多一次）</p><div className="mt-2 flex gap-3">{[1, 2, 3, 4].map(slot => <label key={slot}>
-              <input type="checkbox" disabled={generationLocked} checked={slots.includes(slot)} onChange={event => setSlots(old => event.target.checked ? [...old, slot] : old.filter(value => value !== slot))} /> 圖 {slot}</label>)}</div>
-            <input aria-label="描述要調整的地方" disabled={generationLocked} className="mt-3 w-full rounded-xl border p-3" maxLength={500} placeholder="例如：改成更明亮的背景" value={adjustment} onChange={event => setAdjustment(event.target.value)} />
-            <button type="button" disabled={generationLocked} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">免費調整一次</button>
+            onClick={() => void approve()} className="mt-3 min-h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white">{mt("確認照片與文案")}</button>}
+          {mayAdjust && <div className="mt-4 border-t pt-3"><p className="font-semibold text-red-700">{mt('免費調整剩餘 {days}天 {hours}時 {minutes}分',{days:Math.floor(remaining/86_400_000),hours:Math.floor(remaining%86_400_000/3_600_000),minutes:Math.floor(remaining%3_600_000/60_000)})}</p>
+            <p className="mt-2">{mt("勾選要重新生成的圖片（最多一次）")}</p><div className="mt-2 flex gap-3">{[1, 2, 3, 4].map(slot => <label key={slot}>
+              <input type="checkbox" disabled={generationLocked} checked={slots.includes(slot)} onChange={event => setSlots(old => event.target.checked ? [...old, slot] : old.filter(value => value !== slot))} /> {mt("圖")} {slot}</label>)}</div>
+            <input aria-label={mt("描述要調整的地方")} disabled={generationLocked} className="mt-3 w-full rounded-xl border p-3" maxLength={500} placeholder={mt("例如：改成更明亮的背景")} value={adjustment} onChange={event => setAdjustment(event.target.value)} />
+            <button type="button" disabled={generationLocked} onClick={() => void revise()} className="mt-3 min-h-11 rounded-xl border px-4">{mt("免費調整一次")}</button>
           </div>}
         </>}
-    {refreshNeeded&&approvalDetails&&<div role="region" aria-label="原行銷確認操作待查核" className="mt-3 rounded-xl border border-orange-300 p-3">
-      <p>原選用 {approvalDetails.selectedMediaIds.length} 張 · 原商品版本 {approvalDetails.expectedVersion}；重新開頁只查核原回執，不會自動重送。</p>
-      <p className="mt-2 whitespace-pre-wrap break-words">原文案：{approvalDetails.copy}</p>
-      <p className="mt-2">原照片順序：{approvalDetails.selectedMediaIds.map((id,index)=>`第${index+1}張${choices.find(m=>m.id===id)?`（圖 ${choices.find(m=>m.id===id)!.marketingSlot}）`:'（待讀取原工作）'}`).join(' → ')}</p>
-      {approvalResult?<><p className="mt-2">{approvalResult.state==='APPLIED'?`原操作已套用，當時版本 ${approvalResult.appliedVersion}；後續商品編輯不會改變此回執。`:approvalResult.state==='CONFLICT'?'原操作未套用；商品或選图已變更。':'原操作已取消，不代表撤回其他已套用工作。'}</p>
-        <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('accept')}>{approvalResult.state==='APPLIED'?'只重新讀取商品並清理原確認紀錄':'讀取後台並結束原確認操作'}</button></>:
-        <><button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('read')}>查核原行銷套用結果</button>
-          <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('retry')}>以相同識別碼重試原確認</button>
-          {!approvalCancel?<button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>setApprovalCancel(true)}>取消未套用的原確認</button>:<><p>只阻止尚未套用的原請求；已套用則回讀原回執，不回復商品或刪除照片。</p><button type="button" disabled={busy} onClick={()=>void recoverApproval('cancel')}>確認取消未套用操作</button><button type="button" disabled={busy} onClick={()=>setApprovalCancel(false)}>返回查核</button></>}
+    {refreshNeeded&&approvalDetails&&<div role="region" aria-label={mt("原行銷確認操作待查核")} className="mt-3 rounded-xl border border-orange-300 p-3">
+      <p>{mt('原選用 {count} 張 · 原商品版本 {version}；重新開頁只查核原回執，不會自動重送。',{count:approvalDetails.selectedMediaIds.length,version:approvalDetails.expectedVersion})}</p>
+      <p className="mt-2 whitespace-pre-wrap break-words">{mt("原文案：")}{approvalDetails.copy}</p>
+      <p className="mt-2">{mt("原照片順序：")}{approvalDetails.selectedMediaIds.map((id,index)=>mt('第{position}張{image}',{position:index+1,image:choices.find(m=>m.id===id)?mt('（圖 {slot}）',{slot:choices.find(m=>m.id===id)!.marketingSlot}):mt('（待讀取原工作）')})).join(' → ')}</p>
+      {approvalResult?<><p className="mt-2">{approvalResult.state==='APPLIED'?mt('原操作已套用，當時版本 {version}；後續商品編輯不會改變此回執。',{version:approvalResult.appliedVersion??''}):approvalResult.state==='CONFLICT'?mt("原操作未套用；商品或選图已變更。"):mt("原操作已取消，不代表撤回其他已套用工作。")}</p>
+        <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('accept')}>{approvalResult.state==='APPLIED'?mt("只重新讀取商品並清理原確認紀錄"):mt("讀取後台並結束原確認操作")}</button></>:
+        <><button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('read')}>{mt("查核原行銷套用結果")}</button>
+          <button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>void recoverApproval('retry')}>{mt("以相同識別碼重試原確認")}</button>
+          {!approvalCancel?<button type="button" disabled={busy} className="mt-2 min-h-11 rounded-xl border px-3" onClick={()=>setApprovalCancel(true)}>{mt("取消未套用的原確認")}</button>:<><p>{mt("只阻止尚未套用的原請求；已套用則回讀原回執，不回復商品或刪除照片。")}</p><button type="button" disabled={busy} onClick={()=>void recoverApproval('cancel')}>{mt("確認取消未套用操作")}</button><button type="button" disabled={busy} onClick={()=>setApprovalCancel(false)}>{mt("返回查核")}</button></>}
         </>}
     </div>}
-    {notice && <p role="status" className="mt-2 text-green-800">{notice}</p>}
-    {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
+    {notice && <p role="status" className="mt-2 text-green-800">{marketingMessage(notice)}</p>}
+    {error && <p role="alert" className="mt-2 text-red-700">{marketingMessage(error)}</p>}
   </section>;
 }

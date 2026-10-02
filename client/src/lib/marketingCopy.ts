@@ -1,0 +1,111 @@
+import { getUserLocale } from '../utils/localization';
+
+const english = {
+  '原確認回執已核對，商品畫面仍需讀取；不會再次套用。': 'The original approval receipt is verified. The listing still needs refreshing; approval will not be applied again.',
+  '原套用結果仍待確認；保留原選圖與文案，不會再次套用。': 'The original approval is unconfirmed. Your selected images and copy are retained without applying again.',
+  '原行銷排隊結果仍待查核；不會自動重送。': 'The original marketing request needs verification. It will not be resent automatically.',
+  '無法安全讀取行銷工作或本機紀錄；請重新查核，不會建立新工作。': 'Marketing work or its local journal could not be read safely. Recheck; no new work will be created.',
+  '排隊狀態暫時無法讀取；資料仍安全保存。': 'The queue status is temporarily unavailable. Your saved data is retained.',
+  '免費調整已排隊；未勾選的照片保留。': 'The free revision is queued. Images you did not select are retained.',
+  '調整結果已交付；請選用新版或保留原版，再確認照片與文案。': 'The revision is ready. Choose the new images or keep the originals, then confirm images and copy.',
+  '原排隊操作已取消；未建立新工作。': 'The original queue request was stopped. No new work was created.',
+  '已核對原行銷工作；沒有另建工作或再扣次數。': 'The original marketing work is verified. No additional work or usage charge was created.',
+  '原工作已不存在；已核對原回執，不會重建。': 'The original work no longer exists. Its receipt is verified; it will not be recreated.',
+  '原結果已確認，但本機紀錄尚未清理；只重試清理，不會重送。': 'The original result is confirmed, but its local journal needs cleanup. Retry cleanup only; nothing will be resent.',
+  '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。原操作仍保留，可查核或取消。': 'The 3 free monthly uses are exhausted. Premium with 100 monthly uses and the 10-use US$1 pack await payment verification. The original request is retained for verification or stopping.',
+  '原排隊結果仍待查核；保留原內容與識別碼，不會另建工作。': 'The original queue result needs verification. Its content and ID are retained; no additional work will be created.',
+  '請先儲存並確認商品名稱、說明與售價。': 'Save and verify the listing title, description, and price first.',
+  '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。': 'The 3 free monthly uses are exhausted. Premium with 100 monthly uses and the 10-use US$1 pack await payment verification.',
+  '排隊回覆尚未確認，不代表失敗；請查核原工作，不要重新生成。': 'The queue reply is unconfirmed; this does not prove failure. Verify the original work before generating again.',
+  '無法安全保存排隊操作；請先儲存商品並重試，不會在未記錄時送出。': 'The queue request could not be saved safely. Save the listing and retry; no request is sent without a journal.',
+  '原確認未套用：商品或選图已變更。請核對原文案，再讀取後台結果。': 'The original approval was not applied: the listing or images changed. Review the original copy, then read the server result.',
+  '原確認已取消；晚到的原請求不會套用。請核對原文案，再讀取後台結果。': 'The original approval was stopped; a late request cannot apply it. Review the original copy, then read the server result.',
+  '已核對原確認回執（當時版本 {version}）；沒有再次套用。商品目前內容可能已有後續更新。': 'The original approval receipt is verified (applied version {version}). It was not applied again. The listing may have changed since then.',
+  '已讀取後台並結束原確認操作；沒有套用或刪除照片。': 'The server result was read and the original approval closed. No images were applied or deleted.',
+  '請至少選一張行銷圖。': 'Select at least one marketing image.',
+  '請先完成或查核商品儲存；未儲存的修改不會被行銷結果覆蓋。': 'Finish or verify the listing save first. Marketing results will not overwrite unsaved changes.',
+  '套用回覆尚未確認，不代表失敗；原選圖與文案已保留，重開只查核，不會重送。': 'The approval reply is unconfirmed; this does not prove failure. Original images and copy are retained. Reopening verifies without resending.',
+  '無法安全保存原確認內容；不會在未記錄時套用，請檢查文案與商品儲存。': 'The original approval could not be saved safely. Nothing is applied without a journal. Check the copy and listing save.',
+  '請勾選照片並描述要調整的地方。': 'Select images and describe the changes you want.',
+  '免費調整回覆尚未確認，不代表失敗；請查核原調整工作。': 'The free revision reply is unconfirmed; this does not prove failure. Verify the original revision.',
+  '無法安全保存免費調整操作；不會在未記錄時送出。': 'The free revision could not be saved safely. No request is sent without a journal.',
+  '開啟行銷小助手 Beta': 'Open marketing assistant Beta',
+  '行銷小助手 · Beta': 'Marketing assistant · Beta',
+  '生成商品圖與文案，提升曝光': 'Generate listing images and copy to improve visibility',
+  '新增生成暫停；仍可查看與確認既有結果': 'New generation is paused; view and confirm existing results',
+  '生成服務待查核；仍可查看既有工作': 'Generation needs verification; existing work is still available',
+  '行銷小助手 Beta': 'Marketing assistant Beta',
+  '收合行銷小助手 Beta': 'Collapse marketing assistant Beta',
+  '原始實拍照保留；AI 圖僅為行銷示意，確認前不公開。': 'Original photos are retained. AI images are marketing illustrations and remain private until confirmed.',
+  '新增生成與免費調整暫停；既有工作、原操作查核及已交付結果的確認仍可使用。免費調整期限仍依原交付時間計算。': 'New generation and free revisions are paused. Existing work, original receipt verification, and confirmation of delivered results remain available. The free revision deadline still uses the original delivery time.',
+  '暫時無法確認生成服務；不會新增生成或免費調整。仍可查核原操作及確認已交付結果。': 'Generation availability could not be verified. New generation and free revisions are disabled. You can verify original requests and confirm delivered results.',
+  '重新查核行銷工作': 'Recheck marketing work',
+  '原行銷排隊操作待確認': 'Original marketing queue request needs verification',
+  '保留原操作；重新開頁只查核，不會自動重送或再次扣次數。': 'The original request is retained. Reopening only verifies it, without resending or another usage charge.',
+  '原操作：生成四圖；商品版本 {version}': 'Original request: generate four images; listing version {version}',
+  '原免費調整：圖 {slots}\n{prompt}': 'Original free revision: images {slots}\n{prompt}',
+  '只重試清理原行銷紀錄': 'Retry original marketing journal cleanup only',
+  '查核原排隊結果': 'Verify original queue result',
+  '以相同識別碼重試原排隊': 'Retry original queue request with the same ID',
+  '取消未建立的原排隊': 'Stop original uncreated queue request',
+  '若工作已建立，只回讀原結果；不會撤銷已建立工作或刪除照片。': 'If work already exists, only its original result is read. Existing work and photos will not be removed.',
+  '確認取消未建立工作': 'Confirm stopping uncreated work',
+  '返回查核': 'Back to verification',
+  '重新排隊生成四圖': 'Queue four images again',
+  '生成四張行銷圖': 'Generate four marketing images',
+  '已排隊，稍後自動更新': 'Queued; updates will appear automatically',
+  '正在生成四張圖片與文案': 'Generating four images and copy',
+  '選用圖 {slot} · {selected} · AI 示意': 'Use image {slot} · {selected} · AI illustration',
+  '已選用': 'Selected', '未選用': 'Not selected',
+  '☑ 選用': '☑ Use', '☐ 不選用': '☐ Skip', '· AI 示意': '· AI illustration',
+  '調整前的照片（已確認選用狀態）': 'Images before revision (confirmed selection)',
+  '調整前的照片（可點選保留原版）': 'Images before revision (select to keep originals)',
+  '☑ 保留原版': '☑ Keep original', '☐ 選原版': '☐ Select original', '· 圖': '· Image',
+  '此工作確認時的順序（第一張為封面）': 'Order when this work was confirmed (first image is the cover)',
+  '拖放公開順序（第一張為封面）': 'Reorder public images (first image is the cover)',
+  '此工作當時的排序僅供閱覽；商品目前可能已由後續調整更新。': 'This historical order is for reference. Later revisions may have changed the listing.',
+  '拖動右側把手；也可聚焦把手後按鍵盤上下方向鍵調整。': 'Drag the handle on the right, or focus it and use the up and down arrow keys.',
+  '此工作已確認，照片與順序僅供閱覽；如仍有免費調整機會，可在下方另行提出。': 'This work is confirmed. Its images and order are read only. If a free revision remains available, request it below.',
+  '封面': 'Cover', '. 圖': '. Image',
+  '拖放圖 {slot}，目前第 {position} 張': 'Reorder image {slot}, currently position {position}',
+  '☰ 拖放排序': '☰ Reorder', '目前照片順序：': 'Current image order: ', '圖 {slot}': 'Image {slot}',
+  '行銷文案（已套用，只讀）': 'Marketing copy (applied, read only)',
+  '行銷文案（可修改後確認）': 'Marketing copy (edit before confirming)',
+  '編輯行銷文案': 'Edit marketing copy', '確認照片與文案': 'Confirm images and copy',
+  '免費調整剩餘 {days}天 {hours}時 {minutes}分': 'Free revision remaining: {days}d {hours}h {minutes}m',
+  '勾選要重新生成的圖片（最多一次）': 'Select images to regenerate (one revision maximum)',
+  '圖': 'Image', '描述要調整的地方': 'Describe the changes you want',
+  '例如：改成更明亮的背景': 'For example: use a brighter background', '免費調整一次': 'Request one free revision',
+  '原行銷確認操作待查核': 'Original marketing approval needs verification',
+  '原選用 {count} 張 · 原商品版本 {version}；重新開頁只查核原回執，不會自動重送。': '{count} originally selected images · Original listing version {version}. Reopening only reads the original receipt without resending.',
+  '原文案：': 'Original copy: ', '原照片順序：': 'Original image order: ',
+  '第{position}張{image}': 'Position {position}{image}', '（圖 {slot}）': ' (image {slot})',
+  '（待讀取原工作）': ' (original work needs loading)',
+  '原操作已套用，當時版本 {version}；後續商品編輯不會改變此回執。': 'The original operation was applied at version {version}. Later listing edits do not change this receipt.',
+  '原操作未套用；商品或選图已變更。': 'The original operation was not applied; the listing or images changed.',
+  '原操作已取消，不代表撤回其他已套用工作。': 'The original operation was stopped. Other applied work is not reversed.',
+  '只重新讀取商品並清理原確認紀錄': 'Refresh listing and clean original approval journal only',
+  '讀取後台並結束原確認操作': 'Read server result and close original approval',
+  '查核原行銷套用結果': 'Verify original marketing approval result',
+  '以相同識別碼重試原確認': 'Retry original approval with the same ID',
+  '取消未套用的原確認': 'Stop original unapplied approval',
+  '只阻止尚未套用的原請求；已套用則回讀原回執，不回復商品或刪除照片。': 'Only an unapplied original request is stopped. If already applied, its original receipt is read; the listing and photos are not reversed or deleted.',
+  '確認取消未套用操作': 'Confirm stopping unapplied operation',
+} as const;
+
+function chinese() {
+  try { return getUserLocale().startsWith('zh'); } catch { return false; }
+}
+export function marketingText(key: keyof typeof english, values: Record<string, string | number> = {}) {
+  const template = chinese() ? key : english[key];
+  return template.replace(/\{(\w+)\}/g, (whole, name: string) => String(values[name] ?? whole));
+}
+
+/** Journals and internal notices retain their original values; translate presentation only. */
+export function marketingMessage(value: string) {
+  if (!value || chinese()) return value;
+  if (Object.hasOwn(english, value)) return english[value as keyof typeof english];
+  const version = /^已核對原確認回執（當時版本 (\d+)）；沒有再次套用。商品目前內容可能已有後續更新。$/.exec(value);
+  if (version) return marketingText('已核對原確認回執（當時版本 {version}）；沒有再次套用。商品目前內容可能已有後續更新。', { version: version[1] });
+  return 'The marketing result needs verification. Recheck the original work.';
+}

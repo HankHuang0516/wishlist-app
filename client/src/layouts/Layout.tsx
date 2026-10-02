@@ -6,7 +6,7 @@ import FeedbackModal from "../components/FeedbackModal";
 import WebNavigation from "../components/WebNavigation";
 
 import { useAuth } from "../context/AuthContext";
-import { t } from "../utils/localization";
+import { webShellText } from '../lib/webShellCopy';
 
 export default function Layout() {
     const { isAuthenticated, logout, user } = useAuth();
@@ -25,14 +25,14 @@ export default function Layout() {
                             <span>Wishlist.ai</span>
                         </Link>
                         {isAuthenticated && isPremium && (
-                            <div title="Premium Member" className="hidden sm:flex items-center gap-1.5 px-3 py-1 ml-2 rounded-full bg-amber-50 border border-amber-200 shadow-sm">
+                            <div title={webShellText('premium')} className="hidden sm:flex items-center gap-1.5 px-3 py-1 ml-2 rounded-full bg-amber-50 border border-amber-200 shadow-sm">
                                 <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />
-                                <span className="text-xs font-bold text-amber-700">尊榮會員</span>
+                                <span className="text-xs font-bold text-amber-700">{webShellText('premium')}</span>
                             </div>
                         )}
                         {/* Mobile view icon only */}
                         {isAuthenticated && isPremium && (
-                            <div title="Premium Member" className="sm:hidden flex items-center justify-center -mt-1 ml-1 w-6 h-6 rounded-full bg-amber-100 border border-amber-300">
+                            <div title={webShellText('premium')} className="sm:hidden flex items-center justify-center -mt-1 ml-1 w-6 h-6 rounded-full bg-amber-100 border border-amber-300">
                                 <Crown className="w-3 h-3 text-amber-600 fill-amber-600" />
                             </div>
                         )}
@@ -41,9 +41,9 @@ export default function Layout() {
 
                     {isAuthenticated && <div className="order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation /></div>}
                     <div className="flex items-center gap-1">
-                        {isAuthenticated ? <Button variant="ghost" size="icon" aria-label="登出" title={t('nav.logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
-                            : <Link to="/login" className="rounded-md px-3 py-2 text-sm hover:bg-gray-100">{t('nav.login')}</Link>}
-                        <Button variant="ghost" size="icon" aria-label="意見回饋與協助" onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
+                        {isAuthenticated ? <Button variant="ghost" size="icon" aria-label={webShellText('logout')} title={webShellText('logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
+                            : <Link to="/login" className="rounded-md px-3 py-2 text-sm hover:bg-gray-100">{webShellText('login')}</Link>}
+                        <Button variant="ghost" size="icon" aria-label={webShellText('help')} onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
                     </div>
                 </div>
             </header>
@@ -62,13 +62,13 @@ export default function Layout() {
                     <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
                         <span>&copy; {new Date().getFullYear()} Wishlist.ai. Simple & Smart.</span>
                         <div className="flex flex-wrap justify-center gap-x-3 gap-y-2">
-                            <Link to="/terms" className="hover:text-muji-primary transition-colors">使用者條款</Link>
-                            <Link to="/privacy" className="hover:text-muji-primary transition-colors">隱私權政策</Link>
-                            <Link to="/support" className="hover:text-muji-primary transition-colors">支援與聯絡</Link>
-                            <Link to="/account-deletion" className="hover:text-muji-primary transition-colors">刪除帳號</Link>
-                            <Link to="/partners" className="hover:text-muji-primary transition-colors">供給合作</Link>
-                            <Link to="/changelog" className="hover:text-muji-primary transition-colors">進版日誌</Link>
-                            <button onClick={() => setIsFeedbackOpen(true)} className="hover:text-muji-primary transition-colors text-left">意見回饋</button>
+                            <Link to="/terms" className="hover:text-muji-primary transition-colors">{webShellText('terms')}</Link>
+                            <Link to="/privacy" className="hover:text-muji-primary transition-colors">{webShellText('privacy')}</Link>
+                            <Link to="/support" className="hover:text-muji-primary transition-colors">{webShellText('support')}</Link>
+                            <Link to="/account-deletion" className="hover:text-muji-primary transition-colors">{webShellText('deletion')}</Link>
+                            <Link to="/partners" className="hover:text-muji-primary transition-colors">{webShellText('partners')}</Link>
+                            <Link to="/changelog" className="hover:text-muji-primary transition-colors">{webShellText('changelog')}</Link>
+                            <button onClick={() => setIsFeedbackOpen(true)} className="hover:text-muji-primary transition-colors text-left">{webShellText('feedback')}</button>
                         </div>
                     </div>
                     <span className="text-xs text-gray-400 font-mono">v{__APP_VERSION__}</span>

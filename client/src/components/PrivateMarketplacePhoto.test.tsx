@@ -6,10 +6,11 @@ const id = 'f549f117-8d48-48ca-9a10-04d636c2922c', nativeURL = URL;
 const create = vi.fn(), revoke = vi.fn();
 const response = (blob = new Blob(['synthetic'], { type: 'image/png' })) => ({ ok: true, blob: async () => blob });
 beforeEach(() => {
+  localStorage.setItem('user-locale','zh-TW');
   create.mockReset().mockReturnValue('blob:synthetic'); revoke.mockReset();
   vi.stubGlobal('URL', class extends nativeURL { static createObjectURL = create; static revokeObjectURL = revoke; });
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('private same-backend photo transport', () => {
   it('uses bearer and no-store only for the trusted backend path, refusing redirects', async () => {
     const fetch = vi.fn().mockResolvedValue(response()); vi.stubGlobal('fetch', fetch);
@@ -31,5 +32,20 @@ describe('private same-backend photo transport', () => {
   it('rejects oversized data and does not leave a failed thumbnail labelled as loaded', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(new Blob(['x'.repeat(5 * 1024 * 1024 + 1)], { type: 'image/png' })))); render(<PrivatePhoto id={id} token="synthetic" />);
     await screen.findByText('照片暫時無法載入'); expect(create).not.toHaveBeenCalled();
+  });
+  it('uses English loading and private-image labels while retaining trusted transport and object URL cleanup',async()=>{
+    localStorage.setItem('user-locale','en-US');let finish!:(value:unknown)=>void;
+    const fetch=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
+    const view=render(<PrivatePhoto id={id} token="synthetic-token"/>);
+    expect(screen.getByRole('img',{name:'Listing photo visible only to you: Loading photo'})).toBeInTheDocument();
+    await act(async()=>finish(response()));expect(await screen.findByRole('img',{name:'Listing photo visible only to you',exact:true})).toHaveAttribute('src','blob:synthetic');
+    expect(fetch).toHaveBeenCalledWith(`${API_URL}/listing-media/${id}/thumbnail`,expect.objectContaining({cache:'no-store',redirect:'error',headers:{Authorization:'Bearer synthetic-token'}}));
+    view.unmount();expect(revoke).toHaveBeenCalledWith('blob:synthetic');
+  });
+  it('shows a safe English failure for an invalid image and keeps an explicit caller label unchanged',async()=>{
+    localStorage.setItem('user-locale','en-US');vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response(new Blob(['private provider response'],{type:'text/html'}))));
+    render(<PrivatePhoto id={id} token="synthetic" label="Original image 原始照片"/>);
+    await screen.findByRole('img',{name:'Original image 原始照片: Photo temporarily unavailable'});
+    expect(create).not.toHaveBeenCalled();expect(screen.queryByText('private provider response')).not.toBeInTheDocument();
   });
 });

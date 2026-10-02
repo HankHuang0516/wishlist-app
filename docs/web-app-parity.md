@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十一批：共用導覽與行銷操作英文介面（仍未部署）
+
+- 共用六項導覽、accessible descriptions、header登入／登出／feedback與premium、footer六個原目的地及feedback依saved locale顯示繁中／英文；兩種語言都保留唯一帶標籤Settings navigation與原routes／CSS。locale storage無法讀取時上述控制仍可用英文。Settings正文、其他features、feedback回執細節與政策客服正文仍待逐項驗收，沒有全站英文完成聲明。
+- nested Marketing Beta入口、paused／unknown availability、四圖選用、keyboard／pointer排序、原文案／原操作內容、免費調整期限、原receipt／同ID retry／safe stop／cleanup提示提供英文。內部notice原值及比較不變；只翻譯presentation，不改encrypted journal、client IDs、hash、server payload、permissions或payment gate。使用者原copy／prompt包括中文字與花括號均保持原文。私人thumbnail default alt與loading／failure翻譯，caller自訂label原樣保留；bearer／no-store／redirect拒絕／MIME／5MB／object URL cleanup不變。
+- 新Web14項：English navigation／active route／single gear／storage failure；Layout原footer destinations、help／logout及public／Chinese shell；Marketing paused approval＋keyboard cover、原APPLIED GET-only recovery、unknown同ID/body只POST1、CAS replacement cleanup、storage failure無write／rawdetails、monthly limit不冒稱付款開放、revision polling交付提示與original prompt；English thumbnail safe transport／cleanup與invalid MIME保留caller label。首輪focused兩項因測試Storage mock未對準專案testStorage及等待notice後尚未完成copy effect而失敗，修正實際storage spy與await display value，原assertions保留；首輪工具輸出保留。原CJK fixtures明確zh-TW。完整第一輪Web1392 passed後補thumbnail兩項，最後完整pre-push退出0：Server56檔913＋3skip／HTTP33檔547／Web88檔1394＋build／Native42檔852＋typecheck／Expo，44 migrations schema一致及native／erasure cleanup全0；主JS332.14KB、PWA93entries5969.44KiB，既有map／worker warnings保留。
+- ChromeDEV／compiled handlers／獨立UTF8 DB44：DB與原physical photo由batch40合成fixture複製至batch41專用DB／media root，原batch40證據未更改；再準備四份distinct本機合成photo＋明示synthetic REVIEW job，沒有外部AI／Flickr／mail。英文paused still permits delivered approval，four images320×320真loaded；keyboard封面順序2／1／3／4，原copy保持一致。明確Confirm後後台APPLIED v4、COMPLETED，而QA回覆502；reload再開editor只GET原approval receipt並CAS cleanup，該原ID approval POST總1、receipt GET1、原job1／receipt1／selected images4，readonly順序仍2／1／3／4。未新增generation／revision工作、沒有DELETE，沒有真provider品質聲明。
+- 手機390×844／document375、設定navigation1。由實際Settings language controls切繁中及回English，header／footer保持對應語言及單一入口；Settings內仍有待翻譯正文，列為剩餘。5張原截圖及DOM、synthetic HTTP journal與`outputs/wishlist-web-english-marketing-evidence-20261002.json`保留；本機完整checks／原DB素材／其他worktree變更保留。APP未改，本批只修改Web及文件，CI精確head回讀另記JSON／roadmap。
+- 全功能矩陣、Settings與其他feature／feedback／policy語系、unknown Flickr upload reconciliation、真MiniMax／Flickr／mail／跨端、PWA／效能、憑證與正式migration audit／merge／Railway以及首頁設定各90%正式回讀繼續。PR82 draft／未部署，目標active與100%可適用功能門檻不變。
+
 ## 2026-10-02 第四十批：完整商品管理分頁與英文核心操作（仍未部署）
 
 - 原 `/listings/mine` 的 items／nextCursor、預設50及原生limit100保留；游標須屬於登入帳號，foreign／missing／deleted同一400、不默默移動本人分頁邊界。owned cursor lookup與createdAt／id keyset在同一RepeatableRead snapshot，全狀態可讀，owned REMOVED亦可當boundary；查詢、驗證失敗及成功均private,no-store。跨頁新增的front row需reload才顯示，不承諾多個請求具有同一永久snapshot。無新migration或APP修改。

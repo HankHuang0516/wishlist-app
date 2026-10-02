@@ -1,3 +1,9 @@
+## 2026-10-02 Shared Web and marketing recovery localization
+
+Shared navigation/header/footer and marketing presentation now follow the saved Chinese/English locale without changing routes, permissions, backend payloads, receipt identity or internal notice comparisons. Original user copy and revision prompts remain verbatim, including braces and Chinese text. Marketing recovery errors translate known safe messages rather than surfacing raw provider/storage responses. Locale-storage failures retain a usable English navigation and private-thumbnail status. Photo authentication, cache/redirect restrictions, MIME/size validation and object URL cleanup are unchanged.
+
+English tests preserve same-operation retry, historical receipt/order, paused generation, unverified paid availability and exact CAS cleanup protections. An isolated compiled-handler Chrome flow verified original approval APPLIED version4 after a lost reply, GET-only reopening and one total approval POST. Full Web/server/HTTP/native and schema/cleanup checks passed. Remaining Settings/feedback/policy translations, real providers, PWA and production acceptance remain explicitly pending in docs/web-app-parity.md.
+
 ## 2026-10-02 Owned management cursor and stale-response follow-up
 
 The private management endpoint resolves a cursor only among the authenticated owner's listings and reads its keyset page in the same RepeatableRead snapshot. Foreign, missing and deleted IDs receive the same bounded input error; they cannot silently skip the owner's inventory. Private no-store headers precede authentication, including rejected sessions. Existing item projections, native limit100 and items/nextCursor contracts remain intact; no migration or native change was added.

@@ -14,8 +14,8 @@ const job = { id: jobId, sourceMediaId:source,listingId,status: 'REVIEW', parent
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const releaseApproval = vi.fn();
 const props = { token: 'fixture-session',userId:42,getExpectedVersion:()=>1, sourceMediaId: source, listingId, beforeStart: vi.fn(async () => true), beforeApprove: vi.fn(async () => releaseApproval), onApproved: vi.fn(async () => undefined) };
-beforeEach(() => {vi.stubGlobal('crypto',webcrypto);queueStore.get.mockReset().mockResolvedValue(null);queueStore.save.mockReset().mockResolvedValue(undefined);queueStore.clear.mockReset().mockResolvedValue(true); props.beforeStart.mockClear(); props.beforeApprove.mockClear(); props.onApproved.mockClear(); releaseApproval.mockClear(); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => {localStorage.setItem('user-locale','zh-TW');vi.stubGlobal('crypto',webcrypto);queueStore.get.mockReset().mockResolvedValue(null);queueStore.save.mockReset().mockResolvedValue(undefined);queueStore.clear.mockReset().mockResolvedValue(true); props.beforeStart.mockClear(); props.beforeApprove.mockClear(); props.onApproved.mockClear(); releaseApproval.mockClear(); });
+afterEach(() => { localStorage.removeItem('user-locale'); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const open = async () => fireEvent.click(await screen.findByRole('button', { name: '開啟行銷小助手 Beta' }));
 const approvalBody=()=>({kind:'APPROVE' as const,jobId,sourceMediaId:source,listingId,expectedVersion:1,selectedMediaIds:media.map(m=>m.id),copy:job.copy});
 async function proof(clientActionId:string,body=approvalBody()) {return {receipt:{clientActionId,jobId:body.jobId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,requestHash:await sha256(JSON.stringify(body)),state:'APPLIED',reason:null,appliedVersion:body.expectedVersion+1,selectedMediaIds:body.selectedMediaIds,copy:body.copy,createdAt:new Date().toISOString()}};}
@@ -344,5 +344,109 @@ describe('shared web marketing entry for drafts and published products', () => {
     const raw=await marketingApprovalJournal(approvalBody()),j=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);let finish!:(value:unknown)=>void;
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>{if(url.includes('/approvals/'))return new Promise(resolve=>{finish=resolve;});if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo not mocked');});vi.stubGlobal('fetch',fetch);
     render(<MarketingAssistantWeb {...props}/>);const retry=await screen.findByRole('button',{name:'以相同識別碼重試原確認'});await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(retry).toBeDisabled();fireEvent.click(retry);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);await act(async()=>finish(ok(await proof(j.clientActionId))));await screen.findByText(successNotice);expect(props.beforeApprove).toHaveBeenCalledOnce();
+  });
+  it('can confirm English delivered work while generation is paused, preserving copy and keyboard cover order',async()=>{
+    localStorage.setItem('user-locale','en-US');const fetch=install(undefined,false);
+    render(<MarketingAssistantWeb {...props}/>);fireEvent.click(await screen.findByRole('button',{name:'Open marketing assistant Beta'}));
+    expect(await screen.findByRole('textbox',{name:'Edit marketing copy'})).toHaveValue(job.copy);
+    expect(screen.getByRole('button',{name:'Request one free revision'})).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole('button',{name:'Reorder image 2, currently position 2'}),{key:'ArrowUp'});
+    fireEvent.click(screen.getByRole('button',{name:'Confirm images and copy'}));
+    await screen.findByText('The original approval receipt is verified (applied version 2). It was not applied again. The listing may have changed since then.');
+    const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0][1]?.body))).toEqual({...approvalBody(),selectedMediaIds:[media[1].id,media[0].id,media[2].id,media[3].id]});
+    expect(screen.getByRole('button',{name:'Reorder image 2, currently position 1'})).toBeDisabled();
+    expect(screen.getByRole('textbox',{name:'Edit marketing copy'})).toBeDisabled();
+  });
+  it('restores an English applied receipt with reads only and preserves the original historical order',async()=>{
+    localStorage.setItem('user-locale','en-US');const original={...approvalBody(),copy:'Original copy 原始文字 {version}',selectedMediaIds:[media[2].id,media[0].id]};
+    const raw=await marketingApprovalJournal(original),journal=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method==='POST')throw Error('no writes');if(url.endsWith('/availability'))return ok({available:false});
+      if(url.includes('/approvals/'))return ok(await proof(journal.clientActionId,original));
+      if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',copy:original.copy,selectedMediaIds:original.selectedMediaIds});throw Error('photo unavailable');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);
+    await screen.findByText(/The original approval receipt is verified \(applied version 2\)/);
+    expect(await screen.findByDisplayValue(original.copy)).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Reorder image 3, currently position 1'})).toBeDisabled();
+    expect(fetch.mock.calls.filter(([url])=>url.includes('/approvals/'))).toHaveLength(1);
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);expect(queueStore.clear).toHaveBeenCalledWith(expect.any(String),raw);
+  });
+  it('retains unknown English approval content and retries exactly the same operation and body once',async()=>{
+    localStorage.setItem('user-locale','en-US');const original={...approvalBody(),copy:'Keep original 文案 {count}'};
+    const raw=await marketingApprovalJournal(original),journal=await parseMarketingApprovalJournal(raw);queueStore.get.mockResolvedValue(raw);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/availability'))return ok({available:true});
+      if(url.includes('/approvals/')){if(init?.method==='POST')return ok(await proof(journal.clientActionId,JSON.parse(String(init.body))));throw Error('private provider detail');}
+      if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',copy:original.copy,selectedMediaIds:original.selectedMediaIds});throw Error('photo unavailable');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);
+    await screen.findByText('The original approval is unconfirmed. Your selected images and copy are retained without applying again.');
+    expect(screen.getByText('Original copy: '+original.copy)).toBeInTheDocument();expect(screen.queryByText(/private provider detail/)).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+    const retry=screen.getByRole('button',{name:'Retry original approval with the same ID'});fireEvent.click(retry);fireEvent.click(retry);
+    await screen.findByText(/The original approval receipt is verified \(applied version 2\)/);
+    const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toContain('/approvals/'+journal.clientActionId);expect(JSON.parse(String(writes[0][1]?.body))).toEqual(journal.body);
+  });
+  it('offers English cleanup only for a confirmed result and does not erase a replacement journal',async()=>{
+    localStorage.setItem('user-locale','en-US');const raw=await marketingApprovalJournal(approvalBody()),journal=await parseMarketingApprovalJournal(raw);
+    queueStore.get.mockResolvedValueOnce(raw).mockResolvedValue('replacement journal');queueStore.clear.mockResolvedValue(false);
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method==='POST')throw Error('no writes');if(url.endsWith('/availability'))return ok({available:true});
+      if(url.includes('/approvals/'))return ok(await proof(journal.clientActionId));
+      if(url.endsWith('/jobs/'+jobId))return ok({...job,status:'COMPLETED',selectedMediaIds:media.map(m=>m.id)});throw Error('photo unavailable');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);
+    await screen.findByText('The original approval receipt is verified. The listing still needs refreshing; approval will not be applied again.');
+    expect(screen.getByRole('region',{name:'Original marketing approval needs verification'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Retry original approval with the same ID'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Refresh listing and clean original approval journal only'}));
+    await vi.waitFor(()=>expect(queueStore.clear).toHaveBeenCalledTimes(2));
+    expect(queueStore.clear).toHaveBeenLastCalledWith(expect.any(String),raw);
+    expect(fetch.mock.calls.filter(([url])=>url.includes('/approvals/'))).toHaveLength(1);expect(fetch.mock.calls.some(([,init])=>init?.method==='POST')).toBe(false);
+  });
+  it('disables English generation when local journal storage fails, without leaking storage details',async()=>{
+    localStorage.setItem('user-locale','en-US');queueStore.get.mockRejectedValue(Error('private storage detail'));const fetch=install({job:null});
+    render(<MarketingAssistantWeb {...props}/>);fireEvent.click(await screen.findByRole('button',{name:'Open marketing assistant Beta'}));
+    await screen.findByText('Marketing work or its local journal could not be read safely. Recheck; no new work will be created.');
+    expect(screen.getByRole('button',{name:'Generate four marketing images'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Recheck marketing work'})).toBeEnabled();expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByText(/private storage detail/)).not.toBeInTheDocument();
+  });
+  it('retains an English monthly-limit original queue without offering an active payment flow',async()=>{
+    localStorage.setItem('user-locale','en-US');const fetch=install({job:null}),original=fetch.getMockImplementation()!;
+    fetch.mockImplementation(async(url,init)=>url.includes('/requests/')&&init?.method==='POST'?{ok:false,status:429,json:async()=>({errorCode:'MONTHLY_LIMIT',error:'private billing detail'})}:original(url,init));
+    render(<MarketingAssistantWeb {...props}/>);fireEvent.click(await screen.findByRole('button',{name:'Open marketing assistant Beta'}));
+    fireEvent.click(screen.getByRole('button',{name:'Generate four marketing images'}));
+    await screen.findByText('The 3 free monthly uses are exhausted. Premium with 100 monthly uses and the 10-use US$1 pack await payment verification.');
+    expect(screen.getByRole('region',{name:'Original marketing queue request needs verification'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Generate four marketing images'})).toBeDisabled();expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+    expect(queueStore.clear).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:/pay|purchase/i})).not.toBeInTheDocument();
+  });
+  it('translates English revision delivery after polling while retaining unselected originals and exact prompt',async()=>{
+    localStorage.setItem('user-locale','en-US');const revisionId='55555555-5555-4555-8555-555555555555';
+    const revisedMedia=media.map((m,index)=>({...m,id:`66666666-6666-4666-8666-66666666666${index+1}`}));
+    let delivered=false,requestBody:Record<string,unknown>|null=null;
+    const scheduled:Array<()=>void>=[],realTimeout=window.setTimeout.bind(window);
+    vi.spyOn(window,'setTimeout').mockImplementation((handler,delay,...args)=>{
+      if(delay===3000){scheduled.push(()=>{if(typeof handler==='function')handler(...args);});return 9100+scheduled.length;}return realTimeout(handler,delay,...args);
+    });
+    const fetch=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/availability'))return ok({available:true});if(url.includes('?sourceMediaId'))return ok({job:{id:jobId}});
+      if(url.endsWith('/jobs/'+jobId))return ok(job);
+      if(url.includes('/requests/')&&init?.method==='POST'){
+        requestBody=JSON.parse(String(init.body));return ok({receipt:{clientRequestId:url.split('/').at(-1),sourceMediaId:source,requestHash:await sha256(JSON.stringify(requestBody)),state:'QUEUED',jobId:revisionId,createdAt:new Date().toISOString()},job:{id:revisionId,status:'PENDING',sourceMediaId:source,listingId,parentJobId:jobId}});
+      }
+      if(url.endsWith('/jobs/'+revisionId))return ok({...job,id:revisionId,parentJobId:jobId,status:delivered?'REVIEW':'PENDING',copy:delivered?'Revised original 文案':null,deliveredAt:delivered?new Date().toISOString():null,generatedMedia:delivered?revisedMedia:[],previousMedia:media});
+      throw Error('photo unavailable');
+    });vi.stubGlobal('fetch',fetch);render(<MarketingAssistantWeb {...props}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Open marketing assistant Beta'}));await screen.findByDisplayValue(job.copy);
+    fireEvent.click(screen.getByRole('checkbox',{name:'Image 2'}));fireEvent.change(screen.getByRole('textbox',{name:'Describe the changes you want'}),{target:{value:'Brighter background 原始指示 {slots}'}});
+    fireEvent.click(screen.getByRole('button',{name:'Request one free revision'}));
+    await screen.findByText('The free revision is queued. Images you did not select are retained.');expect(requestBody).toEqual({kind:'REVISION',sourceMediaId:source,listingId,parentJobId:jobId,prompt:'Brighter background 原始指示 {slots}',slots:[2]});
+    expect(scheduled).toHaveLength(1);delivered=true;await act(async()=>scheduled[0]());
+    await screen.findByText('The revision is ready. Choose the new images or keep the originals, then confirm images and copy.');
+    expect(screen.getByText('Images before revision (select to keep originals)')).toBeInTheDocument();
+    expect(screen.getByRole('textbox',{name:'Edit marketing copy'})).toHaveValue('Revised original 文案');
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(screen.queryByRole('button',{name:'Request one free revision'})).not.toBeInTheDocument();
   });
 });

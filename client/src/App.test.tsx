@@ -1,15 +1,43 @@
-import { render } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import App from './App';
+import { Analytics } from './utils/analytics';
 
 describe('App', () => {
-    it('renders without crashing', () => {
+    beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'zh-TW'); window.history.replaceState(null, '', '/'); });
+    afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+    it('retains the independently published source-lead route within the recoverable shared shell', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({items:[],nextCursor:null}) } as Response);
+        window.history.replaceState(null,'','/source-leads?id=11111111-1111-4111-8111-111111111111');
         render(<App />);
-        // Basic smoke test - just check if something from the app is there, 
-        // or just that render doesn't throw.
-        // Since App has routing, it might render Home or Login depending on path.
-        // By default "/" -> Home. 
-        // We can check for something common or just "true".
-        expect(true).toBe(true);
+        await screen.findByRole('heading',{name:'來源線索地圖'});
+        await screen.findByText('0 件來源線索・0 個公共地點');
+        expect(window.location.search).toBe('?id=11111111-1111-4111-8111-111111111111');
+        expect(screen.getByRole('link',{name:'Wishlist.ai'})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('link',{name:'Wishlist.ai'}));
+        await screen.findByRole('heading',{name:'整理你的願望。'});
+        expect(screen.queryByRole('heading',{name:'來源線索地圖'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+    it('loads the home page and navigates to login without removing the shared shell', async () => {
+        render(<App />);
+        await screen.findByRole('heading', { name: '整理你的願望。' });
+        fireEvent.click(screen.getByRole('link', { name: '登入' }));
+        await screen.findByRole('heading', { name: '歡迎回來' });
+        expect(screen.getByRole('link', { name: 'Wishlist.ai' })).toBeInTheDocument();
+        expect(within(screen.getByRole('contentinfo')).getByRole('link', { name: '隱私權政策' })).toHaveAttribute('href', '/privacy');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+    it('preserves reset-link parameters for the form while tracking only its route category', async () => {
+        const track = vi.spyOn(Analytics,'logPageView').mockImplementation(() => {});
+        window.history.replaceState(null,'','/reset-password?token=synthetic-privacy-only#synthetic-fragment');
+        render(<App />);
+        await screen.findByRole('heading',{name:'重設密碼'});
+        expect(track.mock.calls).toEqual([['/reset-password']]);
+        expect(window.location.search).toBe('?token=synthetic-privacy-only');
+        expect(window.location.hash).toBe('#synthetic-fragment');
+        fireEvent.click(within(screen.getByRole('contentinfo')).getByRole('link',{name:'隱私權政策'}));
+        await screen.findByRole('heading',{name:'隱私權政策'});
+        expect(track.mock.calls).toEqual([['/reset-password'],['/privacy']]);
     });
 });

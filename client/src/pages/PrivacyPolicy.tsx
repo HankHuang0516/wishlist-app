@@ -1,16 +1,17 @@
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { getUserLocale } from "../utils/localization";
+import { supportText } from "../lib/supportCopy";
+import { getDisplayLocale } from "../utils/localization";
 
 export default function PrivacyPolicy() {
-    const isZh = getUserLocale().startsWith("zh");
+    const isZh = getDisplayLocale().startsWith("zh");
     const navigate = useNavigate();
 
     return (
         <div className="container mx-auto px-4 py-8 pb-24">
             <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b mb-6 px-4 py-3 flex items-center shadow-sm">
-                <Button variant="ghost" className="p-0 mr-4 h-auto hover:bg-transparent" onClick={() => navigate(-1)}>
+                <Button variant="ghost" className="mr-4 min-h-11 min-w-11 hover:bg-transparent" aria-label={supportText("返回")} onClick={() => navigate(-1)}>
                     <ArrowLeft className="w-6 h-6 text-gray-600" />
                 </Button>
                 <h1 className="text-lg font-bold text-muji-primary truncate">{isZh ? "隱私權政策" : "Privacy Policy"}</h1>
@@ -27,7 +28,7 @@ export default function PrivacyPolicy() {
                             <li><strong>帳號與個人資料：</strong>註冊及使用服務所需的手機號碼、密碼，以及您選填的姓名、電子郵件、地址、生日、頭像與個人資料可見性設定。密碼以雜湊方式儲存，不以明文保存。</li>
                             <li><strong>您建立的內容：</strong>願望、商品名稱與價格、描述、連結、上傳或拍攝的照片、刊登地點、聊天訊息、面交安排，以及檢舉或客服內容。</li>
                             <li><strong>位置：</strong>您可手動設定地區，或選擇授予使用期間的定位權限來找附近商品。公開地圖上的商品位置採概略座標；面交地點僅提供相關對話參與者查看，不作為公開地圖標記。</li>
-                            <li><strong>技術與分析資料：</strong>為登入、安全、除錯與維運所需的 IP 位址、裝置／瀏覽器資訊、使用時間及服務日誌。網頁使用 Cookie 或本機儲存空間保持登入與設定，並透過 Google Analytics 分析頁面瀏覽及功能使用情形。</li>
+                            <li><strong>技術與分析資料：</strong>為登入、安全、除錯與維運所需的 IP 位址、裝置／瀏覽器資訊、使用時間及服務日誌。網頁使用 Cookie 或本機儲存空間保持登入與設定。Google Analytics 透過隔離框架取得頁面功能分類與彙總使用事件，不傳送網址查詢參數、驗證碼、願望名稱、商品連結或帳號識別碼；瀏覽器要求 Do Not Track 或 Global Privacy Control 時不載入分析框架。</li>
                         </ul>
                     </section>
                     <section>
@@ -51,7 +52,7 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">7. 聯絡與政策更新</h2>
                         <p>若對資料處理、存取、更正或刪除有疑問，請透過<Link to="/support" className="underline">支援頁面</Link>聯絡我們。政策更新會公布於本頁，請定期查看。</p>
                     </section>
-                    <div className="pt-6 text-sm text-gray-500">最後更新日期：2026-09-30</div>
+                    <div className="pt-6 text-sm text-gray-500">最後更新日期：2026-10-02</div>
                 </div>
             ) : (
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
@@ -65,7 +66,7 @@ export default function PrivacyPolicy() {
                             <li><strong>Account and profile:</strong> Your phone number and password for registration and use, plus any name, email address, address, birthday, avatar, and profile visibility settings you choose to provide. Passwords are stored as hashes, not plaintext.</li>
                             <li><strong>Content you create:</strong> Wishes, listing titles and prices, descriptions, links, uploaded or captured photos, listing locations, chat messages, meetup arrangements, reports, and support requests.</li>
                             <li><strong>Location:</strong> You may select an area manually or optionally allow location access while using the app to find nearby items. Public map listings use approximate coordinates. Meetup locations are visible only to the relevant conversation participants, not as public map markers.</li>
-                            <li><strong>Technical and analytics data:</strong> IP address, device/browser information, access times, and service logs needed for sign-in, security, troubleshooting, and operations. The website uses cookies or local storage for sign-in and preferences, and Google Analytics to analyze page views and feature use.</li>
+                            <li><strong>Technical and analytics data:</strong> IP address, device/browser information, access times, and service logs needed for sign-in, security, troubleshooting, and operations. The website uses cookies or local storage for sign-in and preferences. Google Analytics receives page categories and aggregate usage events through an isolated frame. URL query parameters, verification tokens, wish names, product links and account identifiers are not sent. The analytics frame is not loaded when the browser requests Do Not Track or Global Privacy Control.</li>
                         </ul>
                     </section>
                     <section>
@@ -89,7 +90,7 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">7. Contact and updates</h2>
                         <p>For questions about processing, access, correction, or deletion, contact us through the <Link to="/support" className="underline">support page</Link>. Updates to this policy will be posted here; please review it periodically.</p>
                     </section>
-                    <div className="pt-6 text-sm text-gray-500">Last updated: 2026-09-30</div>
+                    <div className="pt-6 text-sm text-gray-500">Last updated: 2026-10-02</div>
                 </div>
             )}
         </div>

@@ -1,3 +1,5 @@
+import { nextHoliday } from './holidayCalendar';
+
 export const getUserLocale = (): string => {
     if (typeof window !== 'undefined' && window.localStorage) {
         const saved = window.localStorage.getItem('user-locale');
@@ -47,65 +49,18 @@ export const formatPrice = (amount: number): string => {
     }
 };
 
-interface Holiday {
-    name: string;
-    date: Date;
-}
-
-export const getNextHoliday = (): Holiday => {
-    const locale = getUserLocale();
-    const today = new Date();
-    const year = today.getFullYear();
-    let holidays: Holiday[] = [];
-
-    if (locale.startsWith('zh-TW')) {
-        // Taiwan Holidays
-        holidays = [
-            { name: "元旦 New Year", date: new Date(year, 0, 1) },
-            { name: "農曆新年 Lunar New Year", date: new Date(year, 0, 29) }, // Approx 2025
-            { name: "和平紀念日 Peace Day", date: new Date(year, 1, 28) },
-            { name: "兒童節 Children's Day", date: new Date(year, 3, 4) },
-            { name: "清明節 Tomb Sweeping", date: new Date(year, 3, 5) },
-            { name: "勞動節 Labor Day", date: new Date(year, 4, 1) },
-            { name: "端午節 Dragon Boat", date: new Date(year, 4, 31) }, // Approx 2025
-            { name: "中秋節 Moon Festival", date: new Date(year, 9, 6) }, // Approx 2025
-            { name: "國慶日 National Day", date: new Date(year, 9, 10) },
-        ];
-    } else if (locale.startsWith('en-US')) {
-        // US Holidays
-        holidays = [
-            { name: "New Year's Day", date: new Date(year, 0, 1) },
-            { name: "Valentine's Day", date: new Date(year, 1, 14) },
-            { name: "Independence Day", date: new Date(year, 6, 4) },
-            { name: "Halloween", date: new Date(year, 9, 31) },
-            { name: "Thanksgiving", date: new Date(year, 10, 27) }, // Approx
-            { name: "Christmas", date: new Date(year, 11, 25) },
-        ];
-    } else {
-        // Generic / International
-        holidays = [
-            { name: "New Year's Day", date: new Date(year, 0, 1) },
-            { name: "Christmas", date: new Date(year, 11, 25) },
-        ];
-    }
-
-    // Find next
-    let next = holidays.find(h => h.date >= today);
-
-    // Check next year's first holiday if none found this year
-    if (!next) {
-        if (locale.startsWith('zh-TW')) {
-            next = { name: "元旦 New Year", date: new Date(year + 1, 0, 1) };
-        } else {
-            next = { name: "New Year's Day", date: new Date(year + 1, 0, 1) };
-        }
-    }
-
-    return next || { name: "Holiday", date: new Date() };
-};
+export const getNextHoliday = () => nextHoliday(getDisplayLocale(), new Date());
 
 const translations: Record<string, Record<string, string>> = {
     'zh-TW': {
+        'route.loading': '正在載入頁面…',
+        'route.unavailable': '此頁暫時無法顯示',
+        'route.loadFailed': '頁面資源未能載入。請確認網路連線後重試。',
+        'route.renderFailed': '頁面顯示時發生問題，可以重試或使用導覽前往其他功能。',
+        'route.recoveryHint': '若重試仍失敗，可重新整理網站取得目前版本。若先前操作結果不明，請先查核結果。',
+        'route.retry': '重試載入頁面',
+        'route.reload': '重新整理網站',
+        'route.home': '返回首頁',
         // Navigation
         'nav.home': '首頁',
         'nav.dashboard': '禮物',
@@ -139,19 +94,20 @@ const translations: Record<string, Record<string, string>> = {
         'feedback.success': '感謝您的回饋！',
         'feedback.aiReply': 'Wishlist.ai 客服回覆:',
         'feedback.close': '關閉',
-        'feedback.note': '注意：兩次提交之間需間隔 10 分鐘。',
+        'feedback.note': '請勿提供密碼或完整付款資料。結果不明時，先查核原收件結果。',
         'settings.securityMandatory': '(系統強制)',
 
         // PWA
-        'pwa.installTitle': '安裝 App',
+        'pwa.installTitle': '安裝網頁 App',
         'pwa.android': 'Android',
-        'pwa.noButton': "Don't see the button?",
-        'pwa.manual': 'Manually install:',
-        'pwa.step1': 'Tap the Menu icon (three dots)',
-        'pwa.step2': 'Tap "Install App" or "Add to Home screen"',
-        'pwa.step3': 'Tap "Install"',
+        'pwa.desktop': '電腦版',
+        'pwa.noButton': '沒有看到安裝按鈕？',
+        'pwa.manual': '瀏覽器提供安裝選項時，可依以下步驟操作：',
+        'pwa.step1': '點選瀏覽器選單（三個點）',
+        'pwa.step2': '選擇「安裝應用程式」或「加入主畫面」',
+        'pwa.step3': '點選「安裝」',
         'pwa.howTo': '如何安裝？',
-        'pwa.desktopDesc': '請檢查網址列右側的安裝圖示',
+        'pwa.desktopDesc': '請檢查網址列右側的安裝圖示，或瀏覽器選單中的安裝選項。沒有安裝選項時仍可直接使用網站。',
 
         // Wishlist Detail
         'wishlist.emptyOwner': '此清單目前是空的。點擊 + 新增項目！',
@@ -231,6 +187,25 @@ const translations: Record<string, Record<string, string>> = {
         'social.title': '朋友',
         'social.search': '搜尋使用者',
         'social.searchPlaceholder': '姓名、手機號碼或電子信箱',
+        'social.loginRequired': '登入後才能查看朋友與追蹤資料。',
+        'social.queryInvalid': '請輸入1至100字的搜尋內容。',
+        'social.readError': '讀取失敗，尚未取得結果，不代表沒有朋友。請重試。',
+        'social.loading': '正在讀取朋友資料…',
+        'social.retrySearch': '重試搜尋',
+        'social.retryFollowing': '重試讀取追蹤清單',
+        'social.clearSearch': '清除搜尋',
+        'social.privacyHint': '可搜尋公開顯示名稱與暱稱；手機、真實姓名與信箱僅在本人允許公開時可搜尋，信箱需完整輸入。',
+        'social.refineSearch': '目前顯示前20位；請加入更精確的內容以縮小範圍。',
+        'social.anonymous': '未設定顯示名稱',
+        'social.contactHidden': '聯絡資料未公開',
+        'social.viewProfile': '查看公開資料',
+        'social.viewWishes': '查看公開願望',
+        'social.limitUnknown': '尚未取得追蹤上限；不以預設數字代替。',
+        'social.changeConfirmed': '後台已確認追蹤變更。',
+        'social.changeUnknown': '尚未確認追蹤變更結果。請只讀查核目前狀態，不會自動重送。',
+        'social.checkCurrentFollow': '查核目前追蹤狀態',
+        'social.currentFollowing': '目前後台顯示已追蹤；這是目前狀態，不是原操作歷史回執。',
+        'social.currentNotFollowing': '目前後台顯示未追蹤；這是目前狀態，不是原操作歷史回執。',
         'social.following': '追蹤中',
         'social.followers': '追蹤者',
         'social.follow': '追蹤',
@@ -240,6 +215,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Dashboard
         'dashboard.myWishlists': '我的願望清單',
+        'dashboard.items': '個願望',
         'dashboard.newWishlist': '新增清單',
         'dashboard.empty': '還沒有願望清單',
         'dashboard.createFirst': '建立你的第一個願望清單',
@@ -355,8 +331,47 @@ const translations: Record<string, Record<string, string>> = {
         // Social - Extra
         'social.findFriends': '尋找朋友',
         'social.mutual': '朋友',
-        'social.peek': '偷窺',
-        'social.confirmUnfollow': '確定要刪除好友 {name} 嗎？',
+        'social.peek': '單向追蹤',
+        'social.retryLimit': '重試讀取追蹤上限',
+        "social.followRestoring": "正在恢復原追蹤操作；只查核，不會自動重送。",
+        "social.followNotice.unknown": "原追蹤結果尚未確認；請查核回執或明確重試同一操作。",
+        "social.followNotice.storage": "無法安全保存或恢復追蹤紀錄；暫停變更，未保存時不會送出。",
+        "social.followNotice.read": "尚未取得可核對的追蹤狀態；未送出變更。",
+        "social.followNotice.unavailable": "對象已不存在或不適用；未送出變更。",
+        "social.followNotice.unchanged": "查核時已是所選追蹤狀態；沒有送出新操作。",
+        "social.followNotice.cleaned": "已清理讀過的本機回執標記；後台關係不變。",
+        "social.followNotice.cleanup": "原回執已確認，本機標記清理失敗；請重試清理，不要重送。",
+        "social.followNotice.changed": "本機紀錄已被另一分頁更新；未清掉該紀錄，請重新查核。",
+        "social.followNotice.other": "原紀錄已清理；另一筆追蹤操作仍待確認。",
+        "social.followReceipt.APPLIED": "後台回執已確認原追蹤變更完成。",
+        "social.followReceipt.CONFLICT": "追蹤版本已更新；原操作未套用。請核對後再提出新操作。",
+        "social.followReceipt.LIMIT": "原操作因追蹤額度不足而未套用；不會自動購買或重試。",
+        "social.followReceipt.UNAVAILABLE": "原操作的對象已不存在；沒有套用追蹤變更。",
+        "social.followReceipt.ABANDONED": "原操作已安全停止，晚到的重試不會套用。",
+        "social.followCurrent": "查核時對象 #{id} 的狀態：",
+        "social.notFollowing": "未追蹤",
+        "social.targetUnavailable": "對象已不存在",
+        "social.followReceiptExplanation": "原回執是歷史證據；查核時狀態可能已被後續操作改變。",
+        "social.followPending": "原操作紀錄保留中；新追蹤變更暫停。重開只查核，不會自動重送。",
+        "social.followReadReceipt": "查核原追蹤回執",
+        "social.followRetrySame": "重試同一追蹤操作",
+        "social.followCleanup": "已讀回執，清理本機標記",
+        "social.followAbandon": "安全停止原追蹤操作",
+        "social.followAbandonWarning": "尚未套用的操作將停止；已完成的追蹤變更不會撤回。是否繼續？",
+        "social.followConfirmAbandon": "確認停止原追蹤操作",
+        "social.followKeep": "保留原追蹤操作",
+        "social.followRetryRestore": "重試恢復追蹤紀錄",
+        "social.closeDialog": "關閉",
+        "friend.invalid": "使用者連結不正確。",
+        "friend.missing": "這個使用者已不存在。",
+        "friend.readError": "公開資料讀取失敗或無法核對；不代表使用者不存在。請重試。",
+        "friend.retry": "重試讀取公開資料",
+        "friend.backFriends": "返回朋友",
+        "friend.notSet": "未提供",
+        "friend.photoUnavailable": "照片未提供或未公開",
+        "friend.photoReadFailed": "照片暫時無法顯示",
+        "friend.retryPhoto": "重試照片",
+        'social.confirmUnfollow': '確定要取消追蹤 {name} 嗎？不會刪除對方的帳號或商品。',
         'social.unfollowErr': '無法追蹤',
         'social.birthdayPrefix': '生日: ',
         'social.nicknamePrefix': '暱稱: ',
@@ -423,6 +438,33 @@ const translations: Record<string, Record<string, string>> = {
 
     },
     'en-US': {
+        'feedback.title': 'Feedback',
+        'feedback.placeholder': 'Describe your issue or suggestion.',
+        'feedback.submit': 'Submit Feedback',
+        'feedback.submitting': 'Submitting…',
+        'feedback.cancel': 'Cancel',
+        'feedback.success': 'Thank you for your feedback!',
+        'feedback.aiReply': 'Wishlist.ai support reply:',
+        'feedback.close': 'Close',
+        'feedback.note': 'Never include passwords or full payment details. If the result is unknown, check the original receipt first.',
+        'pwa.installTitle': 'Install Web app',
+        'pwa.android': 'Android',
+        'pwa.desktop': 'Desktop',
+        'pwa.noButton': 'No install button?',
+        'pwa.manual': 'If your browser offers installation, follow these steps:',
+        'pwa.step1': 'Open the browser menu with three dots',
+        'pwa.step2': 'Choose Install app or Add to Home screen',
+        'pwa.step3': 'Choose Install',
+        'pwa.howTo': 'How to install',
+        'pwa.desktopDesc': 'Look for the install icon on the right of the address bar or an install option in the browser menu. You can still use the website if installation is unavailable.',
+        'route.loading': 'Loading page…',
+        'route.unavailable': 'This page is temporarily unavailable',
+        'route.loadFailed': 'Page resources could not be loaded. Check your connection and retry.',
+        'route.renderFailed': 'This page encountered a display problem. Retry or use navigation to visit another feature.',
+        'route.recoveryHint': 'If retry still fails, reload the site to get the current version. Verify any earlier operation whose result is unknown before acting again.',
+        'route.retry': 'Retry loading page',
+        'route.reload': 'Reload site',
+        'route.home': 'Back to home',
         // Navigation
         'nav.home': 'Home',
         'nav.dashboard': 'Dashboard',
@@ -509,6 +551,25 @@ const translations: Record<string, Record<string, string>> = {
         'social.title': 'Social',
         'social.search': 'Search Users',
         'social.searchPlaceholder': 'Name, phone number, or email',
+        'social.loginRequired': 'Sign in to view friends and following.',
+        'social.queryInvalid': 'Enter a search query of 1 to 100 characters.',
+        'social.readError': 'The request failed; results are unknown, not empty. Please retry.',
+        'social.loading': 'Loading friend details…',
+        'social.retrySearch': 'Retry search',
+        'social.retryFollowing': 'Retry following list',
+        'social.clearSearch': 'Clear search',
+        'social.privacyHint': 'Search public display names and nicknames. Phone numbers, real names and emails are searchable only when their owner makes them public. Enter the complete email address.',
+        'social.refineSearch': 'Showing the first 20 people. Refine your query to narrow the results.',
+        'social.anonymous': 'No display name',
+        'social.contactHidden': 'Contact details are private',
+        'social.viewProfile': 'View public profile',
+        'social.viewWishes': 'View public wishes',
+        'social.limitUnknown': 'The following limit is unknown; no default number is substituted.',
+        'social.changeConfirmed': 'The backend confirmed the following change.',
+        'social.changeUnknown': 'The change is unconfirmed. Read the current status; the operation will not be retried automatically.',
+        'social.checkCurrentFollow': 'Check current following status',
+        'social.currentFollowing': 'Currently following, according to the backend. This is the current state, not a historical receipt for the original operation.',
+        'social.currentNotFollowing': 'Currently not following, according to the backend. This is the current state, not a historical receipt for the original operation.',
         'social.following': 'Following',
         'social.followers': 'Followers',
         'social.follow': 'Follow',
@@ -518,6 +579,7 @@ const translations: Record<string, Record<string, string>> = {
 
         // Dashboard
         'dashboard.myWishlists': 'My Wishlists',
+        'dashboard.items': 'wishes',
         'dashboard.newWishlist': 'New Wishlist',
         'dashboard.empty': 'No wishlists yet',
         'dashboard.createFirst': 'Create your first wishlist',
@@ -642,7 +704,46 @@ const translations: Record<string, Record<string, string>> = {
         'social.findFriends': 'Find Friends',
         'social.mutual': 'Friend',
         'social.peek': 'Following',
-        'social.confirmUnfollow': 'Are you sure you want to remove {name}?',
+        'social.retryLimit': 'Retry following limit',
+        "social.followRestoring": "Restoring the original follow operation; reads only, never resends.",
+        "social.followNotice.unknown": "Original result unknown; read its receipt or explicitly retry the same operation.",
+        "social.followNotice.storage": "Private journal unavailable; changes paused. Nothing sent without saving.",
+        "social.followNotice.read": "Follow state unavailable; no change sent.",
+        "social.followNotice.unavailable": "Target unavailable or ineligible; no change sent.",
+        "social.followNotice.unchanged": "Verified state already matches; no new operation sent.",
+        "social.followNotice.cleaned": "Local receipt marker cleared; server relationships unchanged.",
+        "social.followNotice.cleanup": "Receipt confirmed, local cleanup failed. Retry cleanup, not the mutation.",
+        "social.followNotice.changed": "Another tab changed the journal; it was not cleared. Verify it again.",
+        "social.followNotice.other": "Original marker cleared; another operation remains pending.",
+        "social.followReceipt.APPLIED": "Server receipt confirms the original follow change completed.",
+        "social.followReceipt.CONFLICT": "Follow version changed; original operation not applied. Review before creating a new one.",
+        "social.followReceipt.LIMIT": "Original operation not applied due to capacity; no automatic purchase or retry.",
+        "social.followReceipt.UNAVAILABLE": "Target unavailable; original change not applied.",
+        "social.followReceipt.ABANDONED": "Original operation safely stopped; delayed retries cannot apply it.",
+        "social.followCurrent": "Target #{id} at verification:",
+        "social.notFollowing": "Not following",
+        "social.targetUnavailable": "Target no longer exists",
+        "social.followReceiptExplanation": "Receipt is historical evidence; later changes may alter the verified current state.",
+        "social.followPending": "Original journal retained; new changes paused. Reopening only reads, never resends.",
+        "social.followReadReceipt": "Read original follow receipt",
+        "social.followRetrySame": "Retry the same follow operation",
+        "social.followCleanup": "Acknowledge receipt and clear local marker",
+        "social.followAbandon": "Safely stop original operation",
+        "social.followAbandonWarning": "Stop an unapplied operation; applied changes will not be undone. Continue?",
+        "social.followConfirmAbandon": "Confirm stopping original operation",
+        "social.followKeep": "Keep original operation",
+        "social.followRetryRestore": "Retry restoring follow journal",
+        "social.closeDialog": "Close",
+        "friend.invalid": "Invalid user link.",
+        "friend.missing": "This user no longer exists.",
+        "friend.readError": "Public profile failed to load or verify; this does not mean the user is missing. Retry.",
+        "friend.retry": "Retry public profile",
+        "friend.backFriends": "Back to friends",
+        "friend.notSet": "Not provided",
+        "friend.photoUnavailable": "Photo absent or private",
+        "friend.photoReadFailed": "Photo could not be loaded",
+        "friend.retryPhoto": "Retry photo",
+        'social.confirmUnfollow': 'Unfollow {name}? This will not delete their account or listings.',
         'social.unfollowErr': 'Cannot follow',
         'social.birthdayPrefix': 'Birthday: ',
         'social.nicknamePrefix': 'Nickname: ',
@@ -710,8 +811,12 @@ const translations: Record<string, Record<string, string>> = {
     }
 };
 
+export const getDisplayLocale = (): string => {
+    try { return getUserLocale(); } catch { return 'en-US'; }
+};
+
 export const t = (key: string): string => {
-    const locale = getUserLocale();
+    const locale = getDisplayLocale();
     const lang = locale.startsWith('zh') ? 'zh-TW' : 'en-US';
     return translations[lang]?.[key] || translations['en-US'][key] || key;
 };

@@ -1,3 +1,5 @@
+import { getDisplayLocale } from './localization';
+
 /**
  * Currency Conversion Utility
  * Provides exchange rate conversion and price formatting
@@ -46,15 +48,37 @@ const EXCHANGE_RATES: Record<string, number> = {
 /**
  * Parse price string to number
  */
-function parsePrice(priceStr: string | number): number | null {
-    if (typeof priceStr === 'number') return priceStr;
-    if (!priceStr) return null;
+function parsePrice(price: string | number): { amount: string; value: number } | null {
+    if (typeof price === 'number' && !Number.isFinite(price)) return null;
+    let text = String(price).trim().replace(/^(?:NT\$|[$¥€£₩₹฿₫₱])\s*/, '');
+    // Expand a numeric exponent without rounding the number's canonical digits.
+    if (typeof price === 'number' && /e/i.test(text)) {
+        const [coefficient, exponent] = text.toLowerCase().split('e');
+        const sign = coefficient.startsWith('-') ? '-' : '';
+        const parts = coefficient.replace(/^-/, '').split('.');
+        const digits = parts.join('');
+        const point = parts[0].length + Number(exponent);
+        text = sign + (point <= 0 ? '0.' + '0'.repeat(-point) + digits : point >= digits.length ? digits + '0'.repeat(point - digits.length) : digits.slice(0, point) + '.' + digits.slice(point));
+    }
+    if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(text)) return null;
+    const amount = text.replace(/,/g, '');
+    const value = Number(amount);
+    return Number.isFinite(value) ? { amount, value } : null;
+}
 
-    // Remove currency symbols, commas, spaces
-    const cleaned = priceStr.replace(/[NT$,¥€£₩₹฿₫₱\s]/g, '');
-    const num = parseFloat(cleaned);
+function normalizeCurrency(currency: string) {
+    const code = currency.trim().toUpperCase();
+    return code === 'NTD' ? 'TWD' : code;
+}
 
-    return isNaN(num) ? null : num;
+function rateFor(currency: string): number | null {
+    const code = normalizeCurrency(currency);
+    return Object.hasOwn(EXCHANGE_RATES, code) ? EXCHANGE_RATES[code] : null;
+}
+
+function formatOriginal(amount: string) {
+    const [whole, fraction] = amount.split('.');
+    return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction === undefined ? '' : '.' + fraction);
 }
 
 /**
@@ -70,12 +94,10 @@ function formatNumber(num: number): string {
  * Convert price from one currency to TWD
  */
 export function convertToTWD(price: number, fromCurrency: string): number | null {
-    const normalizedCurrency = fromCurrency.toUpperCase().trim();
-    const rate = EXCHANGE_RATES[normalizedCurrency];
-
-    if (rate === undefined) return null;
-
-    return Math.round(price * rate);
+    const rate = rateFor(fromCurrency);
+    if (rate === null || !Number.isFinite(price)) return null;
+    const converted = price * rate;
+    return Number.isFinite(converted) ? Math.round(converted) : null;
 }
 
 /**
@@ -90,32 +112,19 @@ export function formatPriceWithConversion(
     currency: string = 'TWD',
     localCurrency: string = 'TWD'
 ): string {
-    const numPrice = parsePrice(price);
-    if (numPrice === null) return 'Unknown';
-
-    const normalizedCurrency = currency.toUpperCase().trim();
-    const normalizedLocal = localCurrency.toUpperCase().trim();
-
-    // Format the original price
-    const formattedPrice = formatNumber(numPrice);
-
-    // If same as local currency, no conversion needed
-    if (normalizedCurrency === normalizedLocal ||
-        (normalizedCurrency === 'NTD' && normalizedLocal === 'TWD') ||
-        (normalizedCurrency === 'TWD' && normalizedLocal === 'NTD')) {
-        return `${formattedPrice} ${normalizedCurrency === 'NTD' ? 'TWD' : normalizedCurrency}`;
-    }
-
-    // Convert to local currency
-    const convertedPrice = convertToTWD(numPrice, normalizedCurrency);
-
-    if (convertedPrice === null) {
-        // Unknown currency, just display as-is
-        return `${formattedPrice} ${normalizedCurrency}`;
-    }
-
-    const formattedConverted = formatNumber(convertedPrice);
-    return `${formattedPrice} ${normalizedCurrency} (約 ${formattedConverted} TWD)`;
+    const parsed = parsePrice(price);
+    const zh = getDisplayLocale().startsWith('zh');
+    if (parsed === null) return zh ? '價格未確認' : 'Price unconfirmed';
+    const normalizedCurrency = normalizeCurrency(currency);
+    const normalizedLocal = normalizeCurrency(localCurrency);
+    const original = `${formatOriginal(parsed.amount)} ${/^[A-Z]{3}$/.test(normalizedCurrency) ? normalizedCurrency : zh ? '幣別未確認' : 'Currency unconfirmed'}`;
+    if (normalizedCurrency === normalizedLocal) return original;
+    const fromRate = rateFor(normalizedCurrency), toRate = rateFor(normalizedLocal);
+    if (fromRate === null || toRate === null) return original;
+    const converted = parsed.value * fromRate / toRate;
+    if (!Number.isFinite(converted)) return original;
+    const estimate = `${formatNumber(Math.round(converted))} ${normalizedLocal}`;
+    return original + (zh ? `（約 ${estimate}；固定匯率估算，2026-01-02）` : ` (approx. ${estimate}; fixed-rate estimate, 2026-01-02)`);
 }
 
 /**
@@ -129,5 +138,5 @@ export function getSupportedCurrencies(): string[] {
  * Check if a currency is supported
  */
 export function isCurrencySupported(currency: string): boolean {
-    return currency.toUpperCase().trim() in EXCHANGE_RATES;
+    return rateFor(currency) !== null;
 }

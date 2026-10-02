@@ -1,169 +1,64 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { API_URL, API_BASE_URL } from '../config';
-import { useAuth } from "../context/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
-import { User, Smartphone, MapPin, Tag, Gift, UserPlus, UserMinus, EyeOff, ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
-import { t } from "../utils/localization";
+import { useEffect,useRef,useState,type ComponentType } from 'react';
+import { Link,useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { api,ApiFailure } from '../lib/marketplaceApi';
+import { parsePublicProfile,type PublicProfile } from '../lib/socialWeb';
+import SocialAvatar from '../components/SocialAvatar';
+import { useFollowOperation } from '../lib/useFollowOperation';
+import { parseFollowState,type FollowState } from '../lib/followWeb';
+import FollowRecovery from '../components/FollowRecovery';
+import MarketplaceDialog from '../components/MarketplaceDialog';
+import { Card,CardContent,CardHeader,CardTitle } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { User,Smartphone,MapPin,Tag,Gift,UserPlus,UserMinus,EyeOff,ArrowLeft,Calendar } from 'lucide-react';
+import { t } from '../utils/localization';
 
-interface PublicProfile {
-    id: number;
-    name: string;
-    nicknames: string | null;
-    avatarUrl: string | null;
-    phoneNumber: string | null;
-    realName: string | null;
-    address: string | null;
-    isFollowing?: boolean; // Added
+export default function FriendProfilePage(){
+    const {id}=useParams(),{token,user}=useAuth();
+    if(!id||!/^[1-9]\d{0,9}$/.test(id)||Number(id)>2147483647)return <div role="alert" className="p-4">{t('friend.invalid')}</div>;
+    if(!token||!user)return <div className="p-4"><p>{t('social.loginRequired')}</p><Link className="inline-flex min-h-11 items-center text-blue-600 underline" to={'/login?next='+encodeURIComponent('/users/'+id+'/profile')}>{t('nav.login')}</Link></div>;
+    return <ProfileSession key={user.id+':'+token+':'+id} token={token} userId={user.id} targetId={Number(id)} />;
 }
-
-export default function FriendProfilePage() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const { token } = useAuth();
-    const [profile, setProfile] = useState<PublicProfile | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        fetchProfile();
-    }, [id]);
-
-    const fetchProfile = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/${id}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setProfile(data);
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (loading) return <div className="p-8 text-center">{t('common.processing')}</div>;
-    if (!profile) return <div className="p-8 text-center">User not found</div>;
-
-    const renderField = (label: string, value: string | null, Icon: any) => {
-        const isHidden = value === null;
-        return (
-            <div className={`flex items-center gap-4 p-4 rounded-lg border ${isHidden ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-muji-border'}`}>
-                <div className={`p-2 rounded-full ${isHidden ? 'bg-gray-200' : 'bg-muji-bg'}`}>
-                    <Icon className={`w-5 h-5 ${isHidden ? 'text-gray-400' : 'text-muji-primary'}`} />
-                </div>
-                <div>
-                    <p className="text-xs text-muji-secondary font-medium">{label}</p>
-                    <p className={`font-medium ${isHidden ? 'text-gray-400 italic' : 'text-muji-primary'}`}>
-                        {isHidden ? t('friend.hidden') : value}
-                    </p>
-                </div>
+function ProfileSession({token,userId,targetId}:{token:string;userId:number;targetId:number}){
+    const [profile,setProfile]=useState<PublicProfile|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[reload,setReload]=useState(0),[confirm,setConfirm]=useState(false);
+    const epoch=useRef(0);
+    const confirmed=useRef<FollowState|null>(null);
+    const follow=useFollowOperation(token,userId,state=>{if(state.targetUserId===targetId&&(!confirmed.current||state.followingVersion>=confirmed.current.followingVersion)){confirmed.current=state;setProfile(previous=>previous?{...previous,isFollowing:state.isFollowing}:null);}});
+    useEffect(()=>{
+        const generation=++epoch.current,abort=new AbortController();setLoading(true);setError('');setProfile(null);
+        void(async()=>{try{
+            const value=parsePublicProfile(await api(token,'/users/'+targetId,{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(30000)])}),targetId);
+            const state=parseFollowState(await api(token,'/users/me/follow-state/'+targetId,{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(30000)])}),userId,targetId);
+            if(epoch.current!==generation)return;
+            if(!state.targetExists){setError('friend.missing');return;}
+            if(!confirmed.current||state.followingVersion>=confirmed.current.followingVersion)confirmed.current=state;
+            setProfile({...value,isFollowing:confirmed.current.isFollowing});
+        }catch(err){if(epoch.current===generation&&!abort.signal.aborted)setError(err instanceof ApiFailure&&err.status===404?'friend.missing':'friend.readError');}
+        finally{if(epoch.current===generation)setLoading(false);}})();
+        return()=>{epoch.current++;abort.abort();};
+    },[token,targetId,reload]);
+    const renderField=(label:string,value:string|null,Icon:ComponentType<{className?:string}>)=><div className={'flex min-w-0 items-center gap-4 rounded-lg border p-4 '+(value===null?'bg-gray-50 border-gray-100':'bg-white border-muji-border')}>
+        <Icon className="h-5 w-5 shrink-0 text-gray-500" /><div className="min-w-0"><p className="text-xs text-gray-500">{label}</p><p className="break-words font-medium">{value===null?t('friend.hidden'):value||t('friend.notSet')}</p></div></div>;
+    return <div className="mx-auto max-w-2xl space-y-6 p-4 pb-20">
+        <div className="flex items-center gap-3 border-b py-3"><Link aria-label={t('friend.backFriends')} className="inline-flex min-h-11 min-w-11 items-center justify-center" to="/social"><ArrowLeft className="h-6 w-6" /></Link><h1 className="text-lg font-bold">{t('friend.title')}</h1></div>
+        <FollowRecovery operation={follow} />
+        {loading&&<p role="status">{t('common.processing')}</p>}
+        {error&&<div role="alert"><p>{t(error)}</p><Button className="mt-2 min-h-11" onClick={()=>setReload(n=>n+1)}>{t('friend.retry')}</Button></div>}
+        {profile&&<Card><CardHeader><CardTitle>{t('friend.basicInfo')}</CardTitle></CardHeader><CardContent className="space-y-6">
+            <div className="flex justify-center"><div className="flex h-32 w-32 flex-col items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-500"><SocialAvatar url={profile.avatarUrl} name={profile.name??t('social.anonymous')} compact={false} fallback={<><EyeOff className="h-6 w-6" aria-hidden="true" /><span className="text-xs">{t('friend.photoUnavailable')}</span></>} /></div></div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {renderField(t('settings.displayName'),profile.name,User)}
+                {renderField(t('settings.nickname'),profile.nicknames,Tag)}
+                {renderField(t('settings.realName'),profile.realName,User)}
+                {renderField(t('settings.phone'),profile.phoneNumber,Smartphone)}
+                {renderField(t('settings.address'),profile.address,MapPin)}
+                {renderField(t('settings.birthday'),profile.birthday?.slice(0,10)??null,Calendar)}
             </div>
-        );
-    };
-
-    const handleFollow = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/${id}/follow`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                setProfile(prev => prev ? { ...prev, isFollowing: true } : null);
-            }
-        } catch (err) { console.error(err); }
-    };
-
-    const handleUnfollow = async () => {
-        try {
-            const res = await fetch(`${API_URL}/users/${id}/follow`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                setProfile(prev => prev ? { ...prev, isFollowing: false } : null);
-            }
-        } catch (err) { console.error(err); }
-    };
-
-    return (
-        <div className="max-w-2xl mx-auto space-y-6 pb-20">
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b mb-6 px-4 py-3 flex items-center shadow-sm">
-                <Button variant="ghost" className="p-0 mr-4 h-auto hover:bg-transparent" onClick={() => navigate(-1)}>
-                    <ArrowLeft className="w-6 h-6 text-gray-600" />
-                </Button>
-                <h1 className="text-lg font-bold text-muji-primary">Profile</h1>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Link to={'/users/'+targetId+'/wishlists'} className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-muji-primary p-3 text-white"><Gift className="h-5 w-5" />{t('friend.viewWishlist')}</Link>
+                {userId!==targetId&&<Button className="min-h-11" variant="outline" disabled={follow.locked} onClick={()=>profile.isFollowing?setConfirm(true):void follow.change(targetId,true)}>{profile.isFollowing?<UserMinus className="mr-2 h-5 w-5" />:<UserPlus className="mr-2 h-5 w-5" />}{profile.isFollowing?t('social.unfollow'):t('social.follow')}</Button>}
             </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>{t('friend.basicInfo')}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Avatar Section */}
-                    <div className="flex justify-center mb-8">
-                        <div className="w-32 h-32 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-sm relative">
-                            {profile.avatarUrl ? (
-                                <img src={`${API_BASE_URL}${profile.avatarUrl}`} alt="Avatar" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
-                                    <User className="w-16 h-16" />
-                                    {/* Overlay for hidden explicitly? API returns null if hidden, so we just show default */}
-                                    {profile.avatarUrl === null && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 backdrop-blur-sm text-gray-500">
-                                            <EyeOff className="w-6 h-6 mb-1 opacity-50" />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('friend.hidden')}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {renderField(t('settings.displayName'), profile.name, User)}
-                        {renderField(t('settings.nickname'), profile.nicknames, Tag)}
-                        {renderField(t('settings.realName'), profile.realName, User)}
-                        {renderField(t('settings.phone'), profile.phoneNumber, Smartphone)}
-                        {renderField(t('settings.address'), profile.address, MapPin)}
-                    </div>
-
-                    <div className="pt-6 grid grid-cols-2 gap-3">
-                        {/* View Wishlist - Primary Action */}
-                        <Link to={`/users/${id}/wishlists`} className="block w-full">
-                            <button className="w-full bg-muji-primary text-white py-3 rounded-md font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
-                                <Gift className="w-5 h-5" />
-                                {t('friend.viewWishlist')}
-                            </button>
-                        </Link>
-
-                        {/* Follow Button - Secondary Action */}
-                        {profile.isFollowing ? (
-                            <button
-                                onClick={handleUnfollow}
-                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-md font-medium hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center gap-2 border border-gray-200"
-                            >
-                                <UserMinus className="w-5 h-5" />
-                                {t('social.unfollow')}
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleFollow}
-                                className="w-full bg-white text-pink-500 border border-pink-500 py-3 rounded-md font-medium hover:bg-pink-50 transition-colors flex items-center justify-center gap-2"
-                            >
-                                <UserPlus className="w-5 h-5" />
-                                {t('social.follow')}
-                            </button>
-                        )}
-                    </div>
-
-                </CardContent >
-            </Card >
-        </div >
-    );
+        </CardContent></Card>}
+        {confirm&&<MarketplaceDialog title={t('social.unfollow')} closeLabel={t('social.closeDialog')} onClose={()=>{if(!follow.busy)setConfirm(false);}}><p>{t('social.confirmUnfollow').replace('{name}',profile?.name??t('social.anonymous'))}</p><div className="mt-4 flex flex-wrap gap-2"><Button className="min-h-11" variant="destructive" disabled={follow.locked} onClick={()=>{setConfirm(false);void follow.change(targetId,false);}}>{t('common.confirm')}</Button><Button className="min-h-11" variant="outline" onClick={()=>setConfirm(false)}>{t('common.cancel')}</Button></div></MarketplaceDialog>}
+    </div>;
 }
-

@@ -13,6 +13,8 @@ model User {
   phoneNumber       String    @unique
   password          String
   authVersion       Int       @default(0)
+  profileVersion    Int       @default(0)
+  followingVersion  Int       @default(0)
   apiKey            String?   @unique
   name              String?
   nicknames         String?
@@ -27,6 +29,7 @@ model User {
   isRealNameVisible Boolean   @default(false)
   isAddressVisible  Boolean   @default(false)
   isBirthdayVisible Boolean   @default(false)
+  marketingEmailsEnabled Boolean @default(false)
   isPremium         Boolean   @default(false)
   maxWishlistItems  Int       @default(100)
   maxFollowing      Int       @default(100)
@@ -60,11 +63,22 @@ model User {
   purchases       Purchase[]
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
+  legacyWishCreateReceipts LegacyWishCreateReceipt[]
+  wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
+  profileUpdateReceipts ProfileUpdateReceipt[]
+  followOperationReceipts FollowOperationReceipt[]
+  listingCreateReceipts ListingCreateReceipt[]
+  listingManagementReceipts ListingManagementReceipt[]
+  photoRemovalReceipts PhotoRemovalReceipt[]
+  photoUploadReceipts PhotoUploadReceipt[]
+  sellerDraftReceipts SellerDraftReceipt[]
   listings        Listing[]
   listingReports  ListingReport[]
   listingReportOperations ListingReportOperation[]
   listingMedia    ListingMedia[]
   marketingJobs   MarketingJob[]
+  marketingRequestReceipts MarketingRequestReceipt[]
+  marketingApprovalReceipts MarketingApprovalReceipt[]
   buyerConversations Conversation[] @relation("ConversationBuyer")
   sellerConversations Conversation[] @relation("ConversationSeller")
   conversationParticipants ConversationParticipant[]
@@ -121,6 +135,43 @@ enum MarketingJobStatus {
   FAILED
 }
 
+// Immutable request identity survives physical source/job erasure; only the
+// owning account relation cascades. Terminal state constraints live in SQL.
+model MarketingRequestReceipt {
+  id              String @id @default(uuid())
+  userId          Int
+  clientRequestId String
+  sourceMediaId   String
+  requestHash     String
+  state           String
+  jobId           String?
+  createdAt       DateTime @default(now())
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientRequestId])
+}
+
+// Immutable approval proof survives later revisions and job/source erasure.
+// A partial SQL unique index permits at most one APPLIED receipt per job.
+model MarketingApprovalReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientActionId String @db.Uuid
+  jobId String @db.Uuid
+  sourceMediaId String @db.Uuid
+  listingId String? @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  reason String?
+  appliedVersion Int?
+  selectedMediaIds Json?
+  copy String?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientActionId])
+  @@index([userId, jobId])
+}
+
 // A delivered job contains four privately stored images and seller-editable
 // copy. Only explicit seller selection may publish generated media.
 model MarketingJob {
@@ -156,6 +207,45 @@ model MarketingJob {
   @@index([ownerUserId, quotaPeriodStart, status])
   @@index([listingId, createdAt])
   @@index([sourceMediaId])
+}
+
+// No FK to Listing: physical erasure must not free its creation identity.
+model SellerDraftReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientActionId String @db.Uuid
+  mediaId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  appliedVersion Int?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientActionId])
+}
+
+model PhotoUploadReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientUploadId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  mediaId String? @db.Uuid
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientUploadId])
+}
+
+model ListingCreateReceipt {
+  id              String   @id @default(uuid())
+  userId          Int
+  clientListingId String   @db.Uuid
+  requestHash     String   @db.VarChar(64)
+  state           String   @db.VarChar(10)
+  listingId       String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientListingId])
 }
 
 model Listing {
@@ -631,6 +721,7 @@ model MediaErasureTask {
   // Persist the remote identity before the media row is erased.
   flickrPhotoId String?
   attempts  Int      @default(0)
+  notBefore DateTime @default(now())
   createdAt DateTime @default(now())
   identityHash String? @db.VarChar(64)
   clientActionId String? @db.Uuid
@@ -672,6 +763,21 @@ model AccountErasureReceipt {
 // Not a relation to the created resource: deleting a wish/list must retain the
 // request tombstone so delayed retries cannot resurrect it. Erasing the owning
 // account cascades these receipts. No payload or credential is stored here.
+// A resource/parent may later be deleted; retain original history until account erasure.
+model LegacyWishCreateReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientRequestId String @db.VarChar(36)
+  kind String @db.VarChar(8)
+  wishlistId Int
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(10)
+  resourceId Int?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientRequestId])
+}
+
 model WishCreateReceipt {
   id              String   @id @default(uuid())
   userId          Int
@@ -683,6 +789,72 @@ model WishCreateReceipt {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientRequestId])
+}
+
+// The original upload ID is the stable removal operation identity. This is not
+// a relation to media: its owner-scoped tombstone survives logical/physical
+// photo erasure and prevents a delayed original upload from resurrecting it.
+model WishPhotoRemovalReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientUploadId String   @db.Uuid
+  mediaId        String   @db.Uuid
+  removedAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientUploadId])
+}
+
+// Immutable, hash-only owner management evidence; survives listing removal.
+model ListingManagementReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientActionId String   @db.Uuid
+  listingId      String   @db.Uuid
+  kind           String   @db.VarChar(12)
+  expectedVersion Int
+  requestHash    String   @db.VarChar(64)
+  state          String   @db.VarChar(12)
+  reason         String?  @db.VarChar(32)
+  appliedVersion Int?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
+}
+
+// Hash-only profile operation journal; no personal values or credentials.
+// Terminal abandoned/conflict receipts prevent delayed retries overwriting data.
+model ProfileUpdateReceipt {
+  id             String   @id @default(uuid())
+  userId         Int
+  clientActionId String   @db.Uuid
+  requestHash    String   @db.VarChar(64)
+  state          String   @db.VarChar(12)
+  appliedVersion Int?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
+}
+
+// Immutable account-scoped follow receipts; no names, contacts or credentials.
+// Target ID is deliberately not a foreign key: removing the target must not
+// destroy evidence of an already-committed operation.
+model FollowOperationReceipt {
+  id              String   @id @default(uuid())
+  userId          Int
+  clientActionId  String   @db.Uuid
+  requestHash     String   @db.VarChar(64)
+  targetUserId    Int?
+  wanted          Boolean?
+  expectedVersion Int?
+  state           String   @db.VarChar(16)
+  appliedVersion  Int?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientActionId])
 }
 
 model Wishlist {
@@ -800,6 +972,22 @@ model SubmissionReceipt {
   notificationCheckedAt DateTime?
   createdAt DateTime @default(now())
   @@index([createdAt, id])
+}
+
+
+// Immutable history survives photo/job deletion; account erasure cascades it.
+model PhotoRemovalReceipt {
+  id String @id @default(uuid())
+  userId Int
+  clientActionId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  state String @db.VarChar(11)
+  mediaId String? @db.Uuid
+  expectedVersion Int?
+  removedIds String[] @db.Uuid
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientActionId])
 }
 
 // Research leads are never Listings or verified available inventory.

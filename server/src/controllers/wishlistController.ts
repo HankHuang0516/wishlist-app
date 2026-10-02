@@ -9,6 +9,7 @@ interface AuthRequest extends Request {
 }
 
 export const getWishlists = async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'private, no-store');
     try {
         const userId = req.user.id;
         const wishlists = await prisma.wishlist.findMany({
@@ -129,6 +130,7 @@ export const getWishlist = async (req: AuthRequest, res: Response) => {
 };
 
 export const updateWishlist = async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'private, no-store');
     try {
         const userId = req.user.id;
         const { id } = req.params;
@@ -181,6 +183,7 @@ export const updateWishlist = async (req: AuthRequest, res: Response) => {
 };
 
 export const deleteWishlist = async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'private, no-store');
     try {
         const userId = req.user.id;
         const { id } = req.params;
@@ -207,7 +210,7 @@ export const deleteWishlist = async (req: AuthRequest, res: Response) => {
             await tx.wishlist.delete({ where: { id: Number(id) } });
         });
 
-        res.json({ message: 'Wishlist deleted successfully' });
+        res.json({ message: 'Wishlist deleted successfully', id: Number(id), deleted: true });
     } catch (error) {
         console.error('Error deleting wishlist:', error);
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

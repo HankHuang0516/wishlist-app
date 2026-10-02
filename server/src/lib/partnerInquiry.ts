@@ -5,7 +5,8 @@ export const PARTNER_CATEGORIES = ['FURNITURE', 'BOOKS', 'ELECTRONICS', 'CAMERA'
 export const PARTNER_UPDATE_METHODS = ['API', 'CSV', 'MANUAL', 'OTHER'] as const;
 
 export class PartnerInquiryInputError extends Error {
-    constructor(readonly field: string) { super('合作資料格式不正確'); }
+    readonly field: string;
+    constructor(field: string) { super('合作資料格式不正確'); this.field = field; }
 }
 
 function text(raw: unknown, field: string, min: number, max: number, multiline = false) {

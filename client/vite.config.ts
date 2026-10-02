@@ -35,15 +35,20 @@ export default defineConfig({
         ]
       },
       workbox: {
+        importScripts: ['/pwa-cache-policy.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],  // Don't serve index.html for /api/* routes
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.destination === 'image',
+            // Cache only bundled public artwork, never product/owner photos.
+            // CacheFirst would otherwise bypass API no-store after removal/logout.
+            urlPattern: ({ request, url, sameOrigin }) => request.destination === 'image' &&
+              sameOrigin && !url.search &&
+              ['/features/feature1.png', '/features/feature2.png', '/features/feature3.png', '/features/feature4.png', '/logo.png', '/favicon.ico', '/apple-touch-icon.png', '/masked-icon.svg'].includes(url.pathname),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'images',
+              cacheName: 'wishlist-public-artwork-v1',
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 30, // 30 Days

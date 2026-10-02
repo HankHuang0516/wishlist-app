@@ -1,0 +1,27 @@
+import { getDisplayLocale } from '../utils/localization';
+const english={
+ '提出合作意向':'Submit a partnership inquiry',
+ '先討論雙北 3–10 件在售二手商品。提交本表不構成商品、圖文或 AI 處理授權；取得逐件許可後才私人預檢與審核。':'Start with 3–10 second-hand items currently for sale in Taipei or New Taipei. This inquiry does not authorize item, image, text or AI processing. Each item needs permission before private checks and review.',
+ '正在安全讀取原合作操作…':'Reading the original partnership operation safely…',
+ '尚未安全讀取恢復資料，暫停送出；請重試讀取。':'Recovery data could not be read safely. Sending is paused. Retry reading.',
+ '無法安全保存原操作；沒有送出。請保留內容並重試讀取。':'The original operation could not be saved safely. Nothing was sent. Keep your content and retry reading.',
+ '請核對必填欄位、Email、公開 HTTPS 連結與聯絡同意。':'Check required fields, email, public HTTPS links and contact consent.',
+ '尚未確認收件；原內容與識別碼已保留。重開只查核，不會自動重送。':'Receipt is unconfirmed. Original content and identity are retained. Reopening only checks the receipt without resending.',
+ '原收件結果已確認；本機恢復紀錄尚未清理，只需重試清理。':'The original receipt is verified. Its local recovery journal needs cleanup. Retry cleanup only.',
+ '另一份合作操作仍存在；請重新讀取。':'Another partnership operation remains. Read it again.',
+ '原操作識別碼：{id}':'Original operation ID: {id}',
+ '只查核原收件結果':'Check original receipt only','明確重試原合作操作':'Retry original partnership operation','重試清理恢復紀錄':'Retry recovery journal cleanup','重試安全讀取':'Retry safe reading',
+ '合作意向已保存':'Partnership inquiry saved','收件編號：{id}':'Receipt number: {id}',
+ '通知已交付郵件服務，尚不代表收件匣送達。':'Notification was accepted by the mail service; inbox delivery is not confirmed.',
+ '通知尚未確認，資料已保存供管理端追蹤。':'Notification is unconfirmed. The inquiry is saved for the team to track.',
+ '我們會透過您提供的 Email 回覆；請保留此編號。':'We will reply using your supplied email. Keep this receipt number.',
+ '商家／來源名稱':'Business or source name','聯絡人':'Contact name','回覆 Email':'Reply email','官方網站（選填 HTTPS）':'Official website (Optional HTTPS)',
+ '商品類別':'Item category','家具':'Furniture','書籍':'Books','3C':'Electronics','相機':'Cameras','樂器':'Musical instruments','玩具':'Toys','服飾精品':'Fashion','其他':'Other',
+ '在售件數（選填，可填 0）':'Active item count (Optional, 0 is allowed)',
+ '售出／撤回更新方式':'Sold or withdrawn update method','手動更新':'Manual updates','CSV 檔案':'CSV file','API 串接':'API integration',
+ '樣本商品 HTTPS 連結（選填，最多3個；以空白分隔）':'Sample item HTTPS links (Optional, up to 3, separated by whitespace)',
+ '合作說明、實際行政區／門市／取貨及更新方式':'Partnership details, actual district, shop, pickup and update method',
+ '同意 Wishlist.ai 為本次合作詢問保存資料並透過 Email 聯絡；不需提供密碼。':'I consent to Wishlist.ai saving this inquiry and contacting me by email for this partnership request. No password is needed.',
+ '保存中…':'Saving…','送出合作意向':'Send partnership inquiry',
+}as const;
+export function partnerText(key:keyof typeof english,values:Record<string,string|number>={}){return(getDisplayLocale().startsWith('zh')?key:english[key]).replace(/\{(\w+)\}/g,(whole,name:string)=>String(values[name]??whole));}

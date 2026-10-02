@@ -1,4 +1,5 @@
 import express from 'express';
+import { createServer } from 'http';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createHash, randomUUID } from 'crypto';
@@ -13,8 +14,15 @@ if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error(
 
 const adminKey = 'synthetic-external-intake-integration-key-not-a-production-secret';
 const app = express(); app.set('trust proxy', 1); app.use(express.json());
+// Each test represents an independent synthetic public visitor. Preserve
+// explicit security/rate-limit test IPs and the production limiter unchanged.
+let publicVisitor = 0;
+beforeEach(() => { publicVisitor++; });
+app.use((req, _res, next) => { req.headers['x-forwarded-for'] ??= '192.0.2.' + publicVisitor; next(); });
 app.use('/api/external-intake', createExternalIntakeRoutes(() => adminKey));
 app.use('/api/external-listings', externalListingRoutes);
+const server=createServer(app);
+beforeAll(async()=>{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});});
 const url = '/api/external-intake';
 const sourceBody = { name: 'Synthetic Taipei partner', kind: 'PARTNER_FEED', canonicalHost: 'partner.example.com',
     imageHost: 'images.example.com', authorizationRef: 'contract:synthetic-test-2026', textReuseAllowed: true,
@@ -26,6 +34,7 @@ const candidate = () => ({ sourceItemId: 'test-1', canonicalUrl: 'https://partne
     expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() });
 let sourceId: string;
 afterAll(async () => {
+    await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
     if (sourceId) {
         await prisma.externalCandidateReviewEvent.deleteMany({ where: { candidate: { sourceId } } });
         await prisma.externalListingCandidate.deleteMany({ where: { sourceId } });
@@ -40,7 +49,7 @@ describe('admin-only attributed external supply staging', () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         const previousAiFlag = process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.121');
         const source = await admin('/sources').send({ ...sourceBody,
             name: 'Synthetic AI-reviewed source', aiProcessingAllowed: true });
@@ -61,31 +70,31 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingCandidate.update({ where: { id }, data: { aiStatus: 'COMPLETED',
                 aiInputHash: first.contentHash, aiDraft: { title: 'AI 建議標題', description: supplement,
                     confidence: 0.85, evidence: ['橘色燈罩', '金屬底座'] } } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             const invalid = await admin(`/candidates/${id}/approve`).send({ ...approval, useAiSupplement: 'yes' });
             expect(invalid.status).toBe(400);
             const approved = await admin(`/candidates/${id}/approve`).send(approval);
             expect(approved.status).toBe(200);
-            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({
+            expect((await request(server).get(`/api/external-listings/${id}`)).body).toMatchObject({
                 aiSupplement: null, aiDerivedPublicFields: false });
             process.env.EXTERNAL_AI_SUPPLEMENT_PUBLIC_ENABLED = '1';
-            const publicItem = (await request(app).get(`/api/external-listings/${id}`)).body;
+            const publicItem = (await request(server).get(`/api/external-listings/${id}`)).body;
             expect(publicItem).toMatchObject({ title: candidate().title, description: candidate().description,
                 priceTwd: '590', condition: 'USED', aiSupplement: supplement, aiDerivedPublicFields: true });
             expect(publicItem).not.toHaveProperty('aiDraft');
-            expect((await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items)
+            expect((await request(server).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items)
                 .toEqual([expect.objectContaining({ decision: 'APPROVED', reason: 'AI_SUPPLEMENT_ACCEPTED' })]);
             expect((await admin(`/sources/${aiSourceId}/candidates`).send({ items: [candidate()] })).body.items[0])
                 .toMatchObject({ status: 'APPROVED', changed: false });
-            expect((await request(app).get(`/api/external-listings/${id}`)).body.aiSupplement).toBe(supplement);
+            expect((await request(server).get(`/api/external-listings/${id}`)).body.aiSupplement).toBe(supplement);
             await prisma.externalListingSource.update({ where: { id: aiSourceId }, data: { aiProcessingAllowed: false } });
-            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({
+            expect((await request(server).get(`/api/external-listings/${id}`)).body).toMatchObject({
                 aiSupplement: null, aiDerivedPublicFields: false, priceTwd: '590' });
             await prisma.externalListingSource.update({ where: { id: aiSourceId }, data: { aiProcessingAllowed: true } });
             const revised = await admin(`/sources/${aiSourceId}/candidates`).send({ items: [{ ...candidate(),
                 title: '二手新版檯燈合成測試' }] });
             expect(revised.body.items[0]).toMatchObject({ status: 'PENDING_REVIEW', changed: true });
-            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            expect((await request(server).get(`/api/external-listings/${id}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 approvedAiSupplement: null, approvedAiInputHash: null });
         } finally {
@@ -102,7 +111,7 @@ describe('admin-only attributed external supply staging', () => {
     it('hides approved items and blocks new intake immediately when source authorization expires', async () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.212');
         const rightsEnd = new Date(Date.now() + 86_400_000).toISOString();
         const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic expiring rights source',
@@ -119,19 +128,19 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${row.id}/approve`).send({ expectedContentHash: row.contentHash,
                 authorizationRef: sourceBody.authorizationRef, reviewRef: 'review:expiring-rights-test',
                 confirmRights: true, confirmItem: true })).status).toBe(200);
-            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(200);
+            expect((await request(server).get(`/api/external-listings/${row.id}`)).status).toBe(200);
             await prisma.externalListingSource.update({ where: { id: expiringSourceId }, data: {
                 authorizationExpiresAt: new Date(Date.now() - 1000),
             } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
-            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get(`/api/external-listings/${row.id}`)).status).toBe(404);
             expect((await admin(`/sources/${expiringSourceId}/validate-candidates`).send({
                 authorizationRef: sourceBody.authorizationRef, items: [candidate()],
             })).status).toBe(404);
             expect((await admin(`/sources/${expiringSourceId}/candidates`).send({ items: [candidate()] })).status).toBe(404);
             expect((await expireExternalCandidates()).valueOf()).toBeGreaterThanOrEqual(1);
             expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('STALE');
-            expect((await request(app).get(`/api/external-listings/${row.id}`)).status).toBe(404);
+            expect((await request(server).get(`/api/external-listings/${row.id}`)).status).toBe(404);
         } finally {
             if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
             else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
@@ -142,59 +151,59 @@ describe('admin-only attributed external supply staging', () => {
         }
     });
     it('is closed without the header and requires separate authorization activation', async () => {
-        expect((await request(app).get(url + '/sources')).status).toBe(401);
-        expect((await request(app).get(url + '/sources?key=' + encodeURIComponent(adminKey)).set('x-admin-key', adminKey)).status).toBe(400);
-        const created = await request(app).post(url + '/sources').set('x-admin-key', adminKey).send(sourceBody);
+        expect((await request(server).get(url + '/sources')).status).toBe(401);
+        expect((await request(server).get(url + '/sources?key=' + encodeURIComponent(adminKey)).set('x-admin-key', adminKey)).status).toBe(400);
+        const created = await request(server).post(url + '/sources').set('x-admin-key', adminKey).send(sourceBody);
         expect(created.status).toBe(201); sourceId = created.body.id;
         expect(created.body).toMatchObject({ enabled: false, authorizationRef: sourceBody.authorizationRef });
-        expect((await request(app).get(`${url}/sources/${sourceId}`)).status).toBe(401);
-        expect((await request(app).get(`${url}/sources/not-a-source`).set('x-admin-key', adminKey)).status).toBe(404);
-        const sourceRead = await request(app).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey);
+        expect((await request(server).get(`${url}/sources/${sourceId}`)).status).toBe(401);
+        expect((await request(server).get(`${url}/sources/not-a-source`).set('x-admin-key', adminKey)).status).toBe(404);
+        const sourceRead = await request(server).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey);
         expect(sourceRead.status).toBe(200);
         expect(sourceRead.headers['cache-control']).toBe('private, no-store');
         expect(sourceRead.body).toMatchObject({ id: sourceId, enabled: false, authorizationRef: sourceBody.authorizationRef,
             canonicalHost: sourceBody.canonicalHost });
-        expect((await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
-        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
+        expect((await request(server).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
             .send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] })).status).toBe(404);
-        expect((await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
             .send({ authorizationRef: 'contract:wrong', confirmRights: true })).status).toBe(400);
-        const enabled = await request(app).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
+        const enabled = await request(server).post(`${url}/sources/${sourceId}/activate`).set('x-admin-key', adminKey)
             .send({ authorizationRef: sourceBody.authorizationRef, confirmRights: true });
         expect(enabled.status).toBe(200); expect(enabled.body.enabled).toBe(true);
-        expect((await request(app).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey)).body)
+        expect((await request(server).get(`${url}/sources/${sourceId}`).set('x-admin-key', adminKey)).body)
             .toMatchObject({ id: sourceId, enabled: true, enabledAt: expect.any(String) });
-        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`)
+        expect((await request(server).post(`${url}/sources/${sourceId}/validate-candidates`)
             .send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] })).status).toBe(401);
     });
     it('atomically stages sourced records and never inserts public seller listings', async () => {
         const originalCount = await prisma.listing.count();
-        const preflight = await request(app).post(`${url}/sources/${sourceId}/validate-candidates`)
+        const preflight = await request(server).post(`${url}/sources/${sourceId}/validate-candidates`)
             .set('x-admin-key', adminKey).send({ authorizationRef: sourceBody.authorizationRef, items: [candidate()] });
         expect(preflight.status).toBe(200);
         expect(preflight.body).toEqual({ validCount: 1, publicCount: 0, persistedCount: 0 });
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(0);
         expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(0);
-        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
             .send({ authorizationRef: 'contract:wrong', items: [candidate()] })).status).toBe(400);
-        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
             .send({ authorizationRef: sourceBody.authorizationRef, items: [{ ...candidate(), district: '高雄區' }] })).status).toBe(400);
-        const bad = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)
+        const bad = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)
             .send({ items: [candidate(), { ...candidate(), sourceItemId: 'test-2', canonicalUrl: 'https://evil.example/items/2' }] });
         expect(bad.status).toBe(400);
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(0);
         expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(0);
-        const staged = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
+        const staged = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(staged.status).toBe(202); expect(staged.body).toMatchObject({ publicCount: 0,
             intakeBatchId: expect.any(String),
             items: [{ sourceItemId: 'test-1', status: 'PENDING_REVIEW', aiStatus: 'NOT_ELIGIBLE', changed: true }] });
-        expect((await request(app).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/sources/${sourceId}/validate-candidates`).set('x-admin-key', adminKey)
             .send({ authorizationRef: sourceBody.authorizationRef, items: [{ ...candidate(),
                 observedAt: new Date(Date.now() - 60_000).toISOString() }] })).status).toBe(400);
-        expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`)).status).toBe(401);
-        expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
+        expect((await request(server).get(`${url}/sources/${sourceId}/intake-batches`)).status).toBe(401);
+        expect((await request(server).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
             .query({ cursor: 'not-a-uuid' })).status).toBe(400);
-        const history = await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey);
+        const history = await request(server).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey);
         expect(history.status).toBe(200);
         expect(history.headers['cache-control']).toBe('private, no-store');
         expect(history.body).toMatchObject({ nextCursor: null, items: [{ id: staged.body.intakeBatchId,
@@ -207,12 +216,12 @@ describe('admin-only attributed external supply staging', () => {
         expect(JSON.stringify(history.body.items[0].observations)).not.toContain('test-1');
         expect(JSON.stringify(history.body.items[0].observations)).not.toContain('https://partner.example.com/items/1');
         expect(await prisma.listing.count()).toBe(originalCount);
-        const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
+        const repeated = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(repeated.status).toBe(202);
         expect(repeated.body.items[0].changed).toBe(false);
         expect(await prisma.externalListingCandidate.count({ where: { sourceId } })).toBe(1);
         expect(await prisma.externalIntakeBatch.count({ where: { sourceId } })).toBe(2);
-        const rows = await request(app).get(url + '/candidates').set('x-admin-key', adminKey);
+        const rows = await request(server).get(url + '/candidates').set('x-admin-key', adminKey);
         expect(rows.status).toBe(200); expect(rows.headers['cache-control']).toBe('private, no-store');
         expect(rows.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ sourceId, canonicalUrl: 'https://partner.example.com/items/1' })]));
     });
@@ -227,17 +236,17 @@ describe('admin-only attributed external supply staging', () => {
                 sourceEnabledAt: source.enabledAt!, receivedAt: new Date(Date.now() - index * 1000),
                 itemCount: 1, observations: [{ sourceItemIdSha256: createHash('sha256').update(`synthetic-${index}`).digest('hex') }],
             })) });
-            const page = await request(app).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey);
+            const page = await request(server).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey);
             expect(page.status).toBe(200);
             expect(page.body.items).toHaveLength(25);
             expect(page.body.nextCursor).toEqual(page.body.items[24].id);
-            const later = await request(app).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey)
+            const later = await request(server).get(`${url}/sources/${source.id}/intake-batches`).set('x-admin-key', adminKey)
                 .query({ cursor: page.body.nextCursor });
             expect(later.status).toBe(200);
             expect(later.body.items).toHaveLength(1);
             expect(later.body.nextCursor).toBeNull();
             expect(page.body.items.map((row: { id: string }) => row.id)).not.toContain(later.body.items[0].id);
-            expect((await request(app).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
+            expect((await request(server).get(`${url}/sources/${sourceId}/intake-batches`).set('x-admin-key', adminKey)
                 .query({ cursor: page.body.nextCursor })).status).toBe(400);
         } finally {
             await prisma.externalIntakeBatch.deleteMany({ where: { sourceId: source.id } });
@@ -265,9 +274,9 @@ describe('admin-only attributed external supply staging', () => {
                     contentHash: createHash('sha256').update(sourceItemId).digest('hex') };
             });
             await prisma.externalListingCandidate.createMany({ data: records });
-            const list = (query: Record<string, string> = {}) => request(app).get(`${url}/candidates`)
+            const list = (query: Record<string, string> = {}) => request(server).get(`${url}/candidates`)
                 .set('x-admin-key', adminKey).query({ status: 'PENDING_REVIEW', sourceId: source.id, limit: '40', ...query });
-            expect((await request(app).get(`${url}/candidates`).query({ sourceId: source.id })).status).toBe(401);
+            expect((await request(server).get(`${url}/candidates`).query({ sourceId: source.id })).status).toBe(401);
             const first = await list();
             expect(first.status).toBe(200);
             expect(first.headers['cache-control']).toBe('private, no-store');
@@ -294,7 +303,7 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingCandidate.update({ where: { id: first.body.nextCursor },
                 data: { status: 'APPROVED' } });
             expect((await list({ cursor: first.body.nextCursor })).status).toBe(400);
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
         } finally {
             await prisma.externalListingCandidate.deleteMany({ where: { sourceId: source.id } });
             await prisma.externalListingSource.delete({ where: { id: source.id } });
@@ -303,7 +312,7 @@ describe('admin-only attributed external supply staging', () => {
     it('withdraws sold source items immediately and requires a new review after re-import', async () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.93');
         const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic sold-item source' });
         expect(created.status).toBe(201);
@@ -319,18 +328,18 @@ describe('admin-only attributed external supply staging', () => {
             const review = { expectedContentHash: row.contentHash, authorizationRef: sourceBody.authorizationRef,
                 reviewRef: 'review:synthetic-sold-item', confirmRights: true, confirmItem: true };
             expect((await admin(`/candidates/${id}/approve`).send(review)).status).toBe(200);
-            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
+            expect((await request(server).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             const endpoint = `/sources/${soldSourceId}/withdraw`;
-            expect((await request(app).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
+            expect((await request(server).post(url + endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).status).toBe(401);
             expect((await admin(endpoint).send({ sourceItemIds: ['sold-item', 'sold-item'], reason: 'SOLD' })).status).toBe(400);
             const unstableSoldId = await admin(endpoint).send({ sourceItemIds: ['sold-item '], reason: 'SOLD' });
             expect(unstableSoldId.status).toBe(400);
-            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
+            expect((await request(server).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(true);
             const withdrawn = await admin(endpoint).send({ sourceItemIds: ['sold-item', 'missing'], reason: 'SOLD' });
             expect(withdrawn.status).toBe(200);
             expect(withdrawn.body).toMatchObject({ withdrawn: 1, unknown: 1, intakeBatchId: expect.any(String), publicCount: 0 });
-            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
-            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            expect((await request(server).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
+            expect((await request(server).get(`/api/external-listings/${id}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 status: 'STALE', approvalRef: null, approvedContentHash: null, aiStatus: 'NOT_ELIGIBLE' });
             const receipt = await prisma.externalIntakeBatch.findUniqueOrThrow({ where: { id: withdrawn.body.intakeBatchId } });
@@ -346,7 +355,7 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(endpoint).send({ sourceItemIds: ['sold-item'], reason: 'SOLD' })).body).toMatchObject({ withdrawn: 0, unknown: 0 });
             const refreshed = await admin(`/sources/${soldSourceId}/candidates`).send({ items: [first] });
             expect(refreshed.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', changed: false });
-            expect((await request(app).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
+            expect((await request(server).get('/api/external-listings')).body.items.some((item: { id: string }) => item.id === id)).toBe(false);
         } finally {
             if (previousFlag === undefined) delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
             else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = previousFlag;
@@ -361,16 +370,16 @@ describe('admin-only attributed external supply staging', () => {
             data: { expiresAt: new Date(Date.now() - 1_000) } });
         expect(await expireExternalCandidates()).toBe(1);
         expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } } })).status).toBe('STALE');
-        const refreshed = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
+        const refreshed = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(refreshed.body.items[0].status).toBe('PENDING_REVIEW');
         const current = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-1' } } });
         const rejection = { expectedContentHash: current.contentHash, reason: 'ITEM_UNVERIFIED', reviewRef: 'review:synthetic-test-2026' };
-        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).send(rejection)).status).toBe(401);
-        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/candidates/${current.id}/reject`).send(rejection)).status).toBe(401);
+        expect((await request(server).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
             .send({ ...rejection, expectedContentHash: '0'.repeat(64) })).status).toBe(409);
-        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
+        expect((await request(server).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey)
             .send({ ...rejection, reviewRef: 'private raw notes' })).status).toBe(400);
-        expect((await request(app).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey).send(rejection)).status).toBe(200);
+        expect((await request(server).post(`${url}/candidates/${current.id}/reject`).set('x-admin-key', adminKey).send(rejection)).status).toBe(200);
         expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: current.id } })).toMatchObject({
             status: 'REJECTED', rejectionRef: rejection.reviewRef, rejectionReason: rejection.reason,
             rejectedContentHash: current.contentHash, rejectedAt: expect.any(Date), aiStatus: 'NOT_ELIGIBLE',
@@ -380,19 +389,19 @@ describe('admin-only attributed external supply staging', () => {
             expect.objectContaining({ decision: 'REJECTED', contentHash: current.contentHash,
                 reviewRef: rejection.reviewRef, reason: rejection.reason }),
         ]);
-        const repeated = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
+        const repeated = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] });
         expect(repeated.body.items[0].status).toBe('REJECTED');
-        const second = await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)
+        const second = await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey)
             .send({ items: [{ ...candidate(), sourceItemId: 'test-2', canonicalUrl: 'https://partner.example.com/items/2' }] });
         expect(second.status).toBe(202);
-        expect((await request(app).post(`${url}/sources/${sourceId}/pause`).set('x-admin-key', adminKey).send({})).status).toBe(204);
+        expect((await request(server).post(`${url}/sources/${sourceId}/pause`).set('x-admin-key', adminKey).send({})).status).toBe(204);
         expect(await expireExternalCandidates()).toBe(0);
         expect((await prisma.externalListingCandidate.findUniqueOrThrow({ where: { sourceId_sourceItemId: { sourceId, sourceItemId: 'test-2' } } })).status).toBe('STALE');
-        expect((await request(app).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
+        expect((await request(server).post(`${url}/sources/${sourceId}/candidates`).set('x-admin-key', adminKey).send({ items: [candidate()] })).status).toBe(404);
     });
     it('requires a separate AI-processing authorization confirmation and keeps image jobs private', async () => {
         const publicListingCount = await prisma.listing.count();
-        const aiAdmin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const aiAdmin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.70');
         const source = await aiAdmin('/sources')
             .send({ ...sourceBody, name: 'Synthetic AI-authorized partner', aiProcessingAllowed: true });
@@ -411,6 +420,7 @@ describe('admin-only attributed external supply staging', () => {
             expect(row).toMatchObject({ aiInputHash: row.contentHash, aiDraft: null, aiJobId: null, aiAttempts: 0 });
             const repeated = await aiAdmin(`/sources/${aiSourceId}/candidates`)
                 .send({ items: [candidate()] });
+            expect({ status: repeated.status, error: repeated.body.error, errorCode: repeated.body.errorCode }).toMatchObject({ status: 202 });
             expect(repeated.body.items[0]).toMatchObject({ changed: false, aiStatus: 'PENDING' });
             const changed = await aiAdmin(`/sources/${aiSourceId}/candidates`)
                 .send({ items: [{ ...candidate(), title: '二手橘色檯燈合成測試' }] });
@@ -436,7 +446,7 @@ describe('admin-only attributed external supply staging', () => {
     it('revokes an unobserved 24-hour approval and requires a new private AI/review cycle', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.71');
         const created = await admin('/sources').send({ ...sourceBody,
             name: 'Synthetic daily refresh partner', aiProcessingAllowed: true });
@@ -454,14 +464,14 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
             await prisma.externalListingCandidate.update({ where: { id }, data: {
                 observedAt: new Date(Date.now() - 25 * 3_600_000) } });
-            expect((await request(app).get('/api/external-listings')).body.items
+            expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             // A same-content feed refresh can arrive before the 15-minute
             // expiry cycle; it must not silently restore yesterday's review.
             const immediate = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
             expect(immediate.status).toBe(202);
             expect(immediate.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', aiStatus: 'PENDING', changed: false });
-            expect((await request(app).get('/api/external-listings')).body.items
+            expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval,
                 reviewRef: 'review:synthetic-refresh-second' })).status).toBe(200);
@@ -474,7 +484,7 @@ describe('admin-only attributed external supply staging', () => {
             const reobserved = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
             expect(reobserved.status).toBe(202);
             expect(reobserved.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', aiStatus: 'PENDING', changed: false });
-            expect((await request(app).get('/api/external-listings')).body.items
+            expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             expect((await prisma.externalCandidateReviewEvent.count({ where: { candidateId: id } }))).toBe(2);
         } finally {
@@ -489,7 +499,7 @@ describe('admin-only attributed external supply staging', () => {
     it('never revives an expired approval or accepts an older replayed observation', async () => {
         const previousFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.72');
         const created = await admin('/sources').send({ ...sourceBody, name: 'Synthetic expiry and replay partner' });
         expect(created.status).toBe(201);
@@ -505,7 +515,7 @@ describe('admin-only attributed external supply staging', () => {
                 reviewRef: 'review:synthetic-expiry-first', confirmRights: true, confirmItem: true };
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
             await prisma.externalListingCandidate.update({ where: { id }, data: { expiresAt: new Date(Date.now() - 1000) } });
-            expect((await request(app).get('/api/external-listings')).body.items
+            expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             // The expiry worker has not run yet. A same-content refresh must
             // still require review instead of silently restoring publication.
@@ -515,7 +525,7 @@ describe('admin-only attributed external supply staging', () => {
             expect(refreshed.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', changed: false });
             const current = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
             expect(current).toMatchObject({ approvalRef: null, approvedContentHash: null });
-            expect((await request(app).get('/api/external-listings')).body.items
+            expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             const receiptsBeforeReplay = await prisma.externalIntakeBatch.count({ where: { sourceId: replaySourceId } });
             const replayed = await admin(`/sources/${replaySourceId}/candidates`).send({ items: [
@@ -543,21 +553,22 @@ describe('admin-only attributed external supply staging', () => {
         process.env.JWT_SECRET = 'synthetic-external-wish-match-test-only';
         const testUsers: number[] = [];
         const sellerListingCount = await prisma.listing.count();
-        const admin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+        const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
             .set('x-forwarded-for', '203.0.113.90');
         const source = await admin('/sources').send({ ...sourceBody, name: 'Synthetic reviewed source' });
         expect(source.status).toBe(201);
         const reviewSourceId: string = source.body.id;
         try {
-            expect((await request(app).get('/api/external-listings')).body).toMatchObject({ items: [], enabled: false });
+            expect((await request(server).get('/api/external-listings')).body).toMatchObject({ items: [], enabled: false });
             expect((await admin(`/sources/${reviewSourceId}/activate`).send({ authorizationRef: sourceBody.authorizationRef,
                 confirmRights: true })).status).toBe(200);
             const staged = await admin(`/sources/${reviewSourceId}/candidates`).send({ items: [candidate()] });
+            expect(staged.body).toMatchObject({ items: expect.any(Array) });
             expect(staged.status).toBe(202);
             const { id } = staged.body.items[0];
             const first = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
             process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             const approval = { expectedContentHash: first.contentHash, authorizationRef: sourceBody.authorizationRef,
                 reviewRef: 'review:synthetic-approved-2026', confirmRights: true, confirmItem: true };
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, expectedContentHash: '0'.repeat(64) })).status).toBe(409);
@@ -571,10 +582,10 @@ describe('admin-only attributed external supply staging', () => {
             const wishlist = await prisma.wishlist.create({ data: { userId: buyer.id, title: '合成私密檯燈願望',
                 items: { create: { name: '檯燈', maxPrice: 600, priceCurrency: 'TWD' } } }, include: { items: true } });
             const wishItemId = wishlist.items[0].id;
-            const match = (userId: number, query: Record<string, string> = {}) => request(app)
+            const match = (userId: number, query: Record<string, string> = {}) => request(server)
                 .get('/api/external-listings/matches').set('Authorization', 'Bearer ' + jwt.sign({ id: userId },
                     process.env.JWT_SECRET!, { algorithm: 'HS256' })).query({ wishItemId: String(wishItemId), ...query });
-            expect((await request(app).get('/api/external-listings/matches').query({ wishItemId })).status).toBe(401);
+            expect((await request(server).get('/api/external-listings/matches').query({ wishItemId })).status).toBe(401);
             expect((await match(other.id)).status).toBe(404);
             const matched = await match(buyer.id, { bbox: '121.44,25.00,121.48,25.03' });
             expect(matched.status).toBe(200);
@@ -587,23 +598,23 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.item.update({ where: { id: wishItemId }, data: { maxPrice: 500 } });
             expect((await match(buyer.id)).body.items).toEqual([]);
             await prisma.item.update({ where: { id: wishItemId }, data: { maxPrice: 600 } });
-            expect((await request(app).get(`/api/external-listings/${id}`)).body).toMatchObject({ id,
+            expect((await request(server).get(`/api/external-listings/${id}`)).body).toMatchObject({ id,
                 canonicalUrl: candidate().canonicalUrl, locationPrecision: 'DISTRICT_ONLY' });
-            expect((await request(app).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
+            expect((await request(server).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
                 minPrice: '590', maxPrice: '590' })).body.items).toHaveLength(1);
-            expect((await request(app).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
+            expect((await request(server).get('/api/external-listings').query({ bbox: '121.44,25.00,121.48,25.03',
                 minPrice: '591' })).body.items).toEqual([]);
-            expect((await request(app).get('/api/external-listings').query({ bbox: '121.50,25.00,121.52,25.03' })).body.items).toEqual([]);
-            expect((await request(app).get('/api/external-listings').query({ bbox: '121.48,25.03,121.44,25.00' })).status).toBe(400);
-            const reviews = await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey);
+            expect((await request(server).get('/api/external-listings').query({ bbox: '121.50,25.00,121.52,25.03' })).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings').query({ bbox: '121.48,25.03,121.44,25.00' })).status).toBe(400);
+            const reviews = await request(server).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey);
             expect(reviews.status).toBe(200);
             expect(reviews.body.items).toEqual([expect.objectContaining({ decision: 'APPROVED',
                 contentHash: first.contentHash, reviewRef: approval.reviewRef,
                 authorizationRef: sourceBody.authorizationRef })]);
-            expect((await request(app).get(`${url}/candidates/${id}/reviews`)).status).toBe(401);
-            const approvedAdmin = await request(app).get(url + '/candidates?status=APPROVED').set('x-admin-key', adminKey);
+            expect((await request(server).get(`${url}/candidates/${id}/reviews`)).status).toBe(401);
+            const approvedAdmin = await request(server).get(url + '/candidates?status=APPROVED').set('x-admin-key', adminKey);
             expect(approvedAdmin.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ id })]));
-            const takedownAdmin = (path: string) => request(app).post(url + path).set('x-admin-key', adminKey)
+            const takedownAdmin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
                 .set('x-forwarded-for', '203.0.113.91');
             const secondItem = { ...candidate(), sourceItemId: 'test-2',
                 canonicalUrl: 'https://partner.example.com/items/2', title: '二手檯燈待撤下合成測試' };
@@ -634,24 +645,24 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.item.update({ where: { id: wishItemId }, data: { name: 'a' } });
             expect((await match(buyer.id, { limit: '1', cursor: firstMatchPage.body.nextCursor })).status).toBe(400);
             await prisma.item.update({ where: { id: wishItemId }, data: { name: '檯燈' } });
-            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(2);
-            const firstPage = await request(app).get('/api/external-listings').query({ limit: '1' });
+            expect((await request(server).get('/api/external-listings')).body.items).toHaveLength(2);
+            const firstPage = await request(server).get('/api/external-listings').query({ limit: '1' });
             expect(firstPage.body.items).toHaveLength(1);
             expect(firstPage.body.nextCursor).toBe(firstPage.body.items[0].id);
-            const secondPage = await request(app).get('/api/external-listings').query({ limit: '1', cursor: firstPage.body.nextCursor });
+            const secondPage = await request(server).get('/api/external-listings').query({ limit: '1', cursor: firstPage.body.nextCursor });
             expect(secondPage.body.items).toHaveLength(1);
             expect(secondPage.body.items[0].id).not.toBe(firstPage.body.items[0].id);
             expect((await takedownAdmin(`/candidates/${secondId}/reject`).send({ expectedContentHash: second.contentHash,
                 reviewRef: 'review:synthetic-second-takedown', reason: 'ITEM_UNVERIFIED' })).status).toBe(200);
             expect((await match(buyer.id)).body.items).toHaveLength(1);
             expect((await match(buyer.id, { cursor: secondId })).status).toBe(400);
-            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
-            expect((await request(app).get(`/api/external-listings/${secondId}`)).status).toBe(404);
+            expect((await request(server).get('/api/external-listings')).body.items).toHaveLength(1);
+            expect((await request(server).get(`/api/external-listings/${secondId}`)).status).toBe(404);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: secondId } })).toMatchObject({
                 status: 'REJECTED', approvalRef: null, approvedAuthorizationRef: null, approvedContentHash: null,
                 rejectionReason: 'ITEM_UNVERIFIED',
             });
-            expect((await request(app).get(`${url}/candidates/${secondId}/reviews`).set('x-admin-key', adminKey)).body.items)
+            expect((await request(server).get(`${url}/candidates/${secondId}/reviews`).set('x-admin-key', adminKey)).body.items)
                 .toEqual(expect.arrayContaining([
                     expect.objectContaining({ decision: 'APPROVED', contentHash: second.contentHash }),
                     expect.objectContaining({ decision: 'REJECTED', contentHash: second.contentHash,
@@ -659,7 +670,7 @@ describe('admin-only attributed external supply staging', () => {
                 ]));
             const repeatedSecond = await takedownAdmin(`/sources/${reviewSourceId}/candidates`).send({ items: [secondItem] });
             expect(repeatedSecond.body.items[0].status).toBe('REJECTED');
-            const publicPage = await request(app).get('/api/external-listings').query({ county: '新北市', district: '板橋區', q: '檯燈' });
+            const publicPage = await request(server).get('/api/external-listings').query({ county: '新北市', district: '板橋區', q: '檯燈' });
             expect(publicPage.status).toBe(200);
             expect(publicPage.headers['cache-control']).toBe('no-store');
             expect(publicPage.body.items).toEqual([expect.objectContaining({ id, title: candidate().title,
@@ -674,44 +685,45 @@ describe('admin-only attributed external supply staging', () => {
                 expect(publicPage.body.items[0]).not.toHaveProperty(privateField);
             await prisma.externalListingCandidate.update({ where: { id }, data: { aiStatus: 'COMPLETED',
                 aiDraft: { title: 'AI 假建議不可公開', description: '模型私人文字' } } });
-            const afterAi = await request(app).get('/api/external-listings');
+            const afterAi = await request(server).get('/api/external-listings');
+            expect(afterAi.status).toBe(200);
             expect(afterAi.body.items[0]).toMatchObject({ title: candidate().title, description: candidate().description,
                 priceTwd: '590', aiDerivedPublicFields: false });
             expect(JSON.stringify(afterAi.body)).not.toContain('AI 假建議不可公開');
             process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '0';
-            expect((await request(app).get('/api/external-listings')).body).toMatchObject({ items: [], enabled: false });
+            expect((await request(server).get('/api/external-listings')).body).toMatchObject({ items: [], enabled: false });
             expect((await match(buyer.id)).body).toMatchObject({ items: [], enabled: false });
             process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: '0'.repeat(64) } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             expect((await match(buyer.id)).body.items).toEqual([]);
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedContentHash: first.contentHash } });
             await prisma.externalListingCandidate.update({ where: { id }, data: { thumbnailUrl: null } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
-            expect((await request(app).get(`/api/external-listings/${id}`)).status).toBe(404);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get(`/api/external-listings/${id}`)).status).toBe(404);
             await prisma.externalListingCandidate.update({ where: { id }, data: { thumbnailUrl: candidate().thumbnailUrl } });
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedAuthorizationRef: 'contract:other-rights' } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             await prisma.externalListingCandidate.update({ where: { id }, data: { approvedAuthorizationRef: sourceBody.authorizationRef } });
             await prisma.externalListingSource.update({ where: { id: reviewSourceId }, data: { imageReuseAllowed: false } });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             await prisma.externalListingSource.update({ where: { id: reviewSourceId }, data: { imageReuseAllowed: true } });
             const repeat = await admin(`/sources/${reviewSourceId}/candidates`).send({ items: [candidate()] });
             expect(repeat.body.items[0]).toMatchObject({ status: 'APPROVED', changed: false });
-            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
+            expect((await request(server).get('/api/external-listings')).body.items).toHaveLength(1);
             const revised = await admin(`/sources/${reviewSourceId}/candidates`).send({ items: [{ ...candidate(), title: '二手白色檯燈合成測試' }] });
             expect(revised.body.items[0]).toMatchObject({ status: 'PENDING_REVIEW', changed: true });
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             const changed = await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } });
             expect(changed).toMatchObject({ approvedContentHash: null, approvedAuthorizationRef: null,
                 approvalRef: null, approvedAt: null });
-            expect((await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items)
+            expect((await request(server).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items)
                 .toEqual([expect.objectContaining({ decision: 'APPROVED', contentHash: first.contentHash })]);
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval, expectedContentHash: changed.contentHash })).status).toBe(200);
-            expect((await request(app).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items).toHaveLength(2);
-            expect((await request(app).get('/api/external-listings')).body.items).toHaveLength(1);
+            expect((await request(server).get(`${url}/candidates/${id}/reviews`).set('x-admin-key', adminKey)).body.items).toHaveLength(2);
+            expect((await request(server).get('/api/external-listings')).body.items).toHaveLength(1);
             expect((await admin(`/sources/${reviewSourceId}/pause`).send({})).status).toBe(204);
-            expect((await request(app).get('/api/external-listings')).body.items).toEqual([]);
+            expect((await request(server).get('/api/external-listings')).body.items).toEqual([]);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 status: 'STALE', approvedContentHash: null, approvedAuthorizationRef: null,
                 approvalRef: null, approvedAt: null,

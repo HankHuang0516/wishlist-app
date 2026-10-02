@@ -3,11 +3,13 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { getMe, updateMe, getUserProfile, uploadAvatar, updatePassword, getPurchasedItems, getPurchaseHistory, getAiUsage, generateUserApiKey, getUserApiKey, getDeliveryInfo, generateAiPrompt } from '../controllers/userController';
 import { paymentTemporarilyUnavailable } from '../controllers/paymentAvailabilityController';
+import { getCurrentAiPrompt } from '../controllers/apiIntegrationController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
 import { revokeSessions } from '../controllers/accountSecurityController';
 import { securityLimiter } from '../middleware/rateLimiter';
+import { getProfileOperation, submitProfileOperation, abandonProfileOperation } from '../controllers/profileUpdateController';
 import { getAccountDeletionImpact, authenticateErasureSession, deleteMyAccount, getMyErasureReceipt, abandonMyErasure } from '../controllers/accountDeletionController';
 
 const router = Router();
@@ -31,10 +33,14 @@ router.delete('/me', authenticateErasureSession, securityLimiter, deleteMyAccoun
 router.get('/me/deletion-operations/:clientActionId', authenticateErasureSession, erasureRecoveryLimiter, getMyErasureReceipt);
 router.post('/me/deletion-operations/:clientActionId/abandon', authenticateErasureSession, erasureRecoveryLimiter, abandonMyErasure);
 router.put('/me', authenticateToken, updateMe);
+router.get('/me/profile-operations/:clientActionId', authenticateToken, getProfileOperation);
+router.post('/me/profile-operations/:clientActionId', authenticateToken, submitProfileOperation);
+router.post('/me/profile-operations/:clientActionId/abandon', authenticateToken, abandonProfileOperation);
 router.put('/me/password', authenticateToken, securityLimiter, updatePassword);
 router.post('/me/sessions/revoke', authenticateToken, securityLimiter, revokeSessions);
-router.get('/me/purchases', authenticateToken, getPurchasedItems);
-router.get('/me/transaction-history', authenticateToken, getPurchaseHistory);
+const privateHistory: import('express').RequestHandler = (_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); };
+router.get('/me/purchases', privateHistory, authenticateToken, getPurchasedItems);
+router.get('/me/transaction-history', privateHistory, authenticateToken, getPurchaseHistory);
 router.get('/me/ai-usage', authenticateToken, getAiUsage);
 router.post('/me/subscription', authenticateToken, paymentTemporarilyUnavailable);
 router.post('/me/subscription/cancel', authenticateToken, paymentTemporarilyUnavailable);
@@ -44,11 +50,12 @@ router.post('/me/avatar', authenticateToken, upload.single('avatar'), uploadAvat
 router.get('/:id', authenticateToken, getUserProfile);
 
 // API Key Management
-router.post('/me/apikey', authenticateToken, generateUserApiKey);
-router.get('/me/apikey', authenticateToken, getUserApiKey);
+router.post('/me/apikey', privateHistory, authenticateToken, generateUserApiKey);
+router.get('/me/apikey', privateHistory, authenticateToken, getUserApiKey);
 
 // AI Prompt (One-click copy for AI assistants)
-router.post('/me/ai-prompt', authenticateToken, generateAiPrompt);
+router.post('/me/ai-prompt', privateHistory, authenticateToken, generateAiPrompt);
+router.get('/me/ai-prompt', privateHistory, authenticateToken, getCurrentAiPrompt);
 
 // Gift Delivery (Mutual Friends Only)
 router.get('/:id/delivery-info', authenticateToken, getDeliveryInfo);

@@ -4,8 +4,9 @@ import { sendEmail } from './emailService';
 export class SubmissionConflict extends Error {}
 export const validSubmissionId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 export const escapeSubmissionHtml = (text: string) => text.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+export const submissionRequestHash = (kind: 'PARTNER' | 'FEEDBACK', payload: unknown) => createHash('sha256').update(JSON.stringify({kind,payload})).digest('hex');
 export async function receiveSubmission(kind: 'PARTNER' | 'FEEDBACK', clientSubmissionId: string, payload: unknown, save: (tx: any) => Promise<string>, summary: string, replyTo?: string) {
- const requestHash = createHash('sha256').update(JSON.stringify({kind,payload})).digest('hex');
+ const requestHash = submissionRequestHash(kind,payload);
  const existing = await prisma.submissionReceipt.findUnique({where:{clientSubmissionId}});
  if (existing) { if(existing.requestHash !== requestHash) throw new SubmissionConflict(); return existing; }
  let receipt;

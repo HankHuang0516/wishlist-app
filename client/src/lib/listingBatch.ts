@@ -99,26 +99,44 @@ export function parseSellerDraft(value: unknown): SellerDraft | null {
 
 export type PublishDetails = { county: string; district: string; latitude: string; longitude: string;
   meetup: boolean; shipping: boolean; negotiable: boolean; expiryDate: string; consent: boolean };
-export function buildPublishedListing(draft: SellerDraft, mediaId: string, details: PublishDetails) {
+export type ListingPublishField = ListingField | 'photo' | 'county' | 'district' | 'latitude' | 'longitude' | 'delivery' | 'consent' | 'expiryDate';
+export type ListingPublishIssue = { field: ListingPublishField; message: string };
+
+/** The review checkbox and publication share one actionable validation contract. */
+export function firstListingPublishIssue(draft: SellerDraft, mediaId: string, details: PublishDetails, now = new Date()): ListingPublishIssue | null {
   const form = draft.form;
-  if (!isUuid(mediaId) || !isUuid(draft.clientListingId)) throw new Error('照片或草稿識別碼不正確');
-  if (!form.title.trim() || form.title.length > 100 || !form.description.trim() || form.description.length > 3000 ||
-      form.brand.length > 60 || !listingCategories.some(([key]) => key === form.category) || !['NEW', 'USED'].includes(form.condition)) throw new Error('請檢查商品名稱、說明、品牌與分類');
-  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(form.price) || Number(form.price) > 9_999_999_999.99) throw new Error('請填寫有效售價');
+  if (!form.title.trim() || form.title.trim().length > 100) return { field: 'title', message: '請填寫 100 字內的商品名稱。' };
+  if (!form.description.trim() || form.description.trim().length > 3000) return { field: 'description', message: '請填寫 3000 字內的商品狀況與說明。' };
+  if (form.brand.trim().length > 60) return { field: 'brand', message: '品牌最多 60 字。' };
+  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(form.price) || Number(form.price) > 9_999_999_999.99) return { field: 'price', message: '請填寫有效售價；贈送請填 0，最多兩位小數。' };
+  if (!isUuid(mediaId) || !isUuid(draft.clientListingId)) return { field: 'photo', message: '照片或草稿識別碼不正確' };
+  if (!['NEW', 'USED'].includes(form.condition)) return { field: 'condition', message: '請選擇新品或二手。' };
+  if (!listingCategories.some(([key]) => key === form.category)) return { field: 'category', message: '請選擇商品分類。' };
   const latitude = Number(details.latitude), longitude = Number(details.longitude);
-  if (!details.county.trim() || !details.district.trim() || details.county.length > 30 || details.district.length > 30 ||
-      !details.latitude.trim() || !details.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-      latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8) throw new Error('請完成台灣縣市、行政區與有效位置');
-  if (!details.meetup && !details.shipping) throw new Error('請選擇至少一種交付方式');
-  if (!details.consent) throw new Error('請確認同意公開商品至地圖');
+  const locationMessage = '請完成台灣縣市、行政區與有效位置';
+  if (!details.county.trim() || details.county.trim().length > 30) return { field: 'county', message: locationMessage };
+  if (!details.district.trim() || details.district.trim().length > 30) return { field: 'district', message: locationMessage };
+  if (!details.latitude.trim() || !Number.isFinite(latitude) || latitude < 20 || latitude > 26.6) return { field: 'latitude', message: locationMessage };
+  if (!details.longitude.trim() || !Number.isFinite(longitude) || longitude < 117 || longitude > 123.8) return { field: 'longitude', message: locationMessage };
+  if (!details.meetup && !details.shipping) return { field: 'delivery', message: '請選擇至少一種交付方式' };
+  if (!details.consent) return { field: 'consent', message: '請確認同意公開商品至地圖' };
   if (details.expiryDate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(details.expiryDate)) throw new Error('請選擇未來的失效日期');
+    const issue: ListingPublishIssue = { field: 'expiryDate', message: '請選擇未來的失效日期' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(details.expiryDate)) return issue;
     const end = new Date(`${details.expiryDate}T23:59:59.999+08:00`);
-    if (!Number.isFinite(end.getTime())) throw new Error('請選擇未來的失效日期');
+    if (!Number.isFinite(end.getTime())) return issue;
     const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(end);
     const localDate = `${parts.find(part => part.type === 'year')?.value}-${parts.find(part => part.type === 'month')?.value}-${parts.find(part => part.type === 'day')?.value}`;
-    if (localDate !== details.expiryDate || end <= new Date()) throw new Error('請選擇未來的失效日期');
+    if (localDate !== details.expiryDate || end <= now) return issue;
   }
+  return null;
+}
+
+export function buildPublishedListing(draft: SellerDraft, mediaId: string, details: PublishDetails) {
+  const issue = firstListingPublishIssue(draft, mediaId, details);
+  if (issue) throw new Error(issue.message);
+  const form = draft.form;
+  const latitude = Number(details.latitude), longitude = Number(details.longitude);
   // The server also snaps to the same ~2 km grid. Snap before transport so
   // neither the publication request nor its idempotency journal has exact GPS.
   const publicLatitude = Number(Math.min(26.59, Math.floor(latitude / 0.02) * 0.02 + 0.01).toFixed(2));

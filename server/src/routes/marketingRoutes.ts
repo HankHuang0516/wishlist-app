@@ -2,11 +2,19 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth';
 import { approveMarketingJob, createMarketingJob, createMarketingRevision, getMarketingJob, latestMarketingJob, marketingAvailability } from '../controllers/marketingController';
+import { readMarketingRequest, submitMarketingRequest, abandonMarketingRequest } from '../controllers/marketingRequestController';
+import { readMarketingApproval, submitMarketingApproval, abandonMarketingApproval } from '../controllers/marketingApprovalController';
 
 const router = Router();
 const writes = rateLimit({ windowMs: 60_000, limit: 8, standardHeaders: true, legacyHeaders: false,
     message: { error: '行銷操作過於頻繁，請稍後再試', errorCode: 'MARKETING_RATE_LIMIT' } });
 router.get('/availability', authenticateToken, marketingAvailability);
+router.get('/approvals/:clientActionId', authenticateToken, readMarketingApproval);
+router.post('/approvals/:clientActionId', authenticateToken, writes, submitMarketingApproval);
+router.post('/approvals/:clientActionId/abandon', authenticateToken, writes, abandonMarketingApproval);
+router.get('/requests/:clientRequestId', authenticateToken, readMarketingRequest);
+router.post('/requests/:clientRequestId', authenticateToken, writes, submitMarketingRequest);
+router.post('/requests/:clientRequestId/abandon', authenticateToken, writes, abandonMarketingRequest);
 router.post('/jobs', authenticateToken, writes, createMarketingJob);
 router.get('/jobs', authenticateToken, latestMarketingJob);
 router.get('/jobs/:id', authenticateToken, getMarketingJob);

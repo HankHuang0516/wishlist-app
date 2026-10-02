@@ -16,6 +16,10 @@ const mockItemCreate = jest.fn();
 const mockItemUpdate = jest.fn();
 const mockItemFindUnique = jest.fn();
 const mockWishlistFindUnique = jest.fn();
+const mockWishlistUpdate = jest.fn();
+const mockItemCount = jest.fn();
+const mockQueryRaw = jest.fn();
+const mockUserFindUnique = jest.fn();
 jest.mock('../lib/prisma', () => ({
     __esModule: true,
     default: {
@@ -23,8 +27,12 @@ jest.mock('../lib/prisma', () => ({
             create: (...a: any[]) => mockItemCreate(...a),
             update: (...a: any[]) => mockItemUpdate(...a),
             findUnique: (...a: any[]) => mockItemFindUnique(...a),
+            count: (...a: any[]) => mockItemCount(...a),
         },
-        wishlist: { findUnique: (...a: any[]) => mockWishlistFindUnique(...a) },
+        wishlist: { findUnique: (...a: any[]) => mockWishlistFindUnique(...a), update: (...a: any[]) => mockWishlistUpdate(...a) },
+        user: { findUnique: (...a: any[]) => mockUserFindUnique(...a) },
+        $queryRaw: (...a: any[]) => mockQueryRaw(...a),
+        $transaction: (run: any) => run(require('../lib/prisma').default),
     },
 }));
 
@@ -42,12 +50,16 @@ function mockRes() {
     res.statusCode = 200;
     res.status = jest.fn((c: number) => { res.statusCode = c; return res; });
     res.json = jest.fn((b: any) => { res.body = b; return res; });
+    res.setHeader = jest.fn(() => res);
     return res;
 }
 
 beforeEach(() => {
     jest.clearAllMocks();
-    mockWishlistFindUnique.mockResolvedValue({ id: 1, userId: 99, isPublic: true });
+    mockWishlistFindUnique.mockResolvedValue({ id: 1, userId: 99, isPublic: true, maxItems: 10 });
+    mockQueryRaw.mockResolvedValue([{ id: 99 }]);
+    mockUserFindUnique.mockResolvedValue({ id: 99, authVersion: 0, apiKey: 'unit-only' });
+    mockItemCount.mockResolvedValue(0);
     mockItemCreate.mockResolvedValue({ id: 123, name: 'ok' });
 });
 
@@ -105,6 +117,7 @@ describe('createItem — a logged-in USER path still verifies an eclaw: proxy id
         verifyPublicCodeSpy.mockResolvedValue({ ok: false, reason: 'not_found' } as any);
         const req: any = {
             user: { id: 99 },
+            headers: { 'x-api-key': 'unit-only' },
             params: { wishlistId: '1' },
             body: { name: 'Cheap iPhone', proxy_end_user_id: 'eclaw:zzzzzz' },
         };
@@ -118,6 +131,7 @@ describe('createItem — a logged-in USER path still verifies an eclaw: proxy id
         verifyPublicCodeSpy.mockResolvedValue({ ok: false, reason: 'upstream_error' } as any);
         const req: any = {
             user: { id: 99 },
+            headers: { 'x-api-key': 'unit-only' },
             params: { wishlistId: '1' },
             body: { name: 'x', proxy_end_user_id: 'eclaw:tbwb9e' },
         };
@@ -130,6 +144,7 @@ describe('createItem — a logged-in USER path still verifies an eclaw: proxy id
     it('stores an opaque NON-eclaw proxy id as-is (user path, never trusted for identity)', async () => {
         const req: any = {
             user: { id: 99 },
+            headers: { 'x-api-key': 'unit-only' },
             params: { wishlistId: '1' },
             body: { name: 'x', proxy_end_user_id: 'shopify-cust-42' },
         };

@@ -3,6 +3,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('HTML content security policy', () => {
+  it('keeps third-party SDKs out of the main document and suppresses full URL referrers', () => {
+    const html=readFileSync(join(process.cwd(),'index.html'),'utf8');
+    expect(html).toContain('<meta name="referrer" content="no-referrer"');
+    expect(html).not.toMatch(/<script[^>]*src="https?:/);
+    expect(html).not.toContain("gtag('config'");
+    const frame=readFileSync(join(process.cwd(),'public/analytics-frame.html'),'utf8');
+    expect(frame).toContain('no-referrer');expect(frame).toContain("frame-src 'none'");
+  });
   it('allows browser-local private image previews only for images', () => {
     const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
     const meta = html.match(/<meta http-equiv="Content-Security-Policy"\s+content="([^"]+)"/);

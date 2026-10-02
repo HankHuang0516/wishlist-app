@@ -14,7 +14,7 @@ const exact = (value: Record<string, unknown>, keys: readonly string[]) => {
     if (Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.prototype.hasOwnProperty.call(value, key))) throw new ListingSellerDraftError();
 };
 const text = (value: unknown, max: number) => {
-    if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new ListingSellerDraftError();
+    if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || Buffer.from(value).toString('utf8') !== value) throw new ListingSellerDraftError();
     return value;
 };
 

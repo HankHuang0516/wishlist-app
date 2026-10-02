@@ -1,8 +1,120 @@
+## 2026-10-02 Birthday projection and production-order recovery authentication
+
+Upcoming birthdays select only the original six public response fields for current follows with birthday visibility, masking hidden avatars and excluding private contact/auth fields. UTC calendar boundaries include today through30 days and preserve Feb29 rollover; failures are bounded and never pretend an empty result. Social responses are private/no-store before authentication. Web birthday reads are independently validated and retried, with timeout/abort, owner/token remount and late-response fencing; no private birthday data is persisted.
+
+The production mount order shares /api/users between Social and User routers. Social's former global authentication prevented original-JWT deletion receipt/retry/abandon recovery after the user disappeared. Each of the ten Social endpoints now retains current-user authentication before its write limiter, while unmatched paths reach their existing specific User verifier. Production-order real HTTP regression first reproduced six failures; the repair passes all original deletion tests plus explicit401/no-store checks for all ten Social endpoints using a deleted user's JWT. Original receipt identity/version binding, expiry, current-password admission and other User authentication stay intact. Actual HTTP/PostgreSQL and full gates pass; no APP/schema, real credential, provider or production change is claimed.
+
+## 2026-10-02 Retained history privacy and account isolation
+
+The original gift-claim endpoint no longer spreads an Item and its private parent into a purchaser response. It projects display fields under a repeatable-read snapshot, respects owner avatar visibility, and redacts outsider content when the current wish is hidden or its parent is private. A minimal ID/time/unavailable reminder retains the claim without treating it as lasting access. Actual owners retain their own private display. Account transactions select only original display values and deterministically order same-time rows. Both history routes apply private/no-store before authentication, retaining the existing personal-key capability and owner binding. Failures use bounded messages without raw database details.
+
+The Web treats these as two independent reads, validates complete projections and never substitutes an empty list for HTTP/network/schema failure. Account/token changes remount the view, abort outstanding reads and fence late JSON. No history is persisted locally; transport has no-store, redirect rejection and a30s deadline. Unsafe external link/photo schemes or embedded credentials receive no rendered target. Claim membership is current state, not a historical receipt, payment claim or delivery claim; no checkout, APP source or schema migration is changed. Automated and browser acceptance remains separate from production deployment.
+
+## 2026-10-02 Mail diagnostic admission and recovery
+
+The previously unauthenticated mail-debug endpoint now requires a live current-version user JWT and an explicit valid server operator ID allowlist plus a separate enable flag. Personal API keys, JWT roles, frontend phones and client identity/recipient/content overrides never grant admission. Revocation and current policy are reread immediately before dispatch. Both methods remain private/no-store; configuration/storage failures are bounded. Rate limits use the authenticated user rather than a caller-supplied IP, and unresolved provider calls retain a process-local slot beyond the8s HTTP deadline. These controls are not cross-replica durable mail receipts. The fixed original diagnostic remains available to intended configured administrators; public feedback/receipts are unchanged.
+
+Only strict provider success with a bounded ID becomes minimal ACCEPTED, without implying inbox delivery. Provider errors/logs/IDs, recipient and stack traces are not exposed. Web controls use matching server admission and immutable encrypted local evidence before POST, exact CAS before dispatch/cleanup, safe rereading of newer evidence and account/departure fences. Unknown work never automatically resends, and manual reminder cleanup explicitly requires checking the mail service because this endpoint has no historical receipt. Verified cleanup faults remain cleanup-only. Marker storage has no token or mail content, and language reload cannot interrupt active dispatch/cleanup. Tests and browser QA use explicit mail stubs only; no external delivery or APP/migration change is claimed. Production admission configuration and full parity still require final preflight.
+
+## 2026-10-02 Durable public partner form recovery
+
+Partner form dispatch now requires the original encrypted API-scoped journal before POST and strict matching receipt identity/hash/status. Public partner evidence is separate from feedback and owners and stores no token. Unknown responses retain the original body/ID, reopening only GETs and explicit retry uses the original. Synchronous gates, departure fences, safe rereading after storage/CAS faults and exact cleanup protect old/new operations; verified cleanup failure never resends. Bounded bilingual notices hide raw provider/storage diagnostics. Original contact consent and non-authorization terms are preserved; successful cleanup opens a blank new form with consent unchecked.
+
+34 new Web cases and full gates pass. Real Chrome/compiled handler/PostgreSQL proves original commit502 followed by GET-only receipt and one record/stub notification, then encrypted cleanup and blank Chinese form. No external mail, APP or migration change. The server error class uses an equivalent explicit field declaration for direct parser compatibility; normalization/authority unchanged. Shared guest header/footer targets and landing localization remain pending alongside production/full parity.
+
+## 2026-10-02 Original partner receipt capability read
+
+The public partner inquiry API now exposes private no-store original receipt recovery using the original random client ID and canonical request hash in a header. It projects only five receipt fields, never contact/content/provider diagnostics; wrong kind/hash/missing/deleted record is uniformly unconfirmed, and malformed or URL-query credentials are rejected. POST retains legacy201 fields with additive original ID/hash and rejects an optional false hash before writing. Existing immutable transaction/mail-only-winner, three-per-hour POST limit, honeypot202 and admin listing/status authority stay intact.
+
+15 real HTTP/PostgreSQL cases pass with full gates: HTTP577, Web1489/build, Server913 plus3 skips, Native852/typecheck/Expo and44 migrations/schema/cleanup. Explicit mail stub only, no external message. No APP/Web source or migration change. The existing frontend still needs encrypted journal/strict receipt/reload/localization/browser work; production and full parity remain pending.
+
+## 2026-10-02 Encrypted deletion recovery and immutable publication
+
+Dedicated AES-GCM IndexedDB deletion recovery keeps only the original API, owner, operation ID and original session; never password or typed confirmation. It exposes only immutable get/save/exact-clear and survives ordinary owner-data erasure until verified final cleanup. New cooperating tabs use transactional CAS to preserve one original operation. Legacy plaintext is removed only after encrypted round-trip and exact original-record verification. Conflict or storage failure freezes new mutation and retains evidence; safe rereading restores the original, and confirmed cleanup failure retries only cleanup. Original JWT expiry/identity authority is unchanged. Already-running old PWA/localStorage clients cannot participate in the new transaction; upgrade/mixed-version acceptance remains open. Same-origin encryption does not claim hardware or XSS protection.
+
+24 new Web cases, real IndexedDB/WebCrypto concurrency and page failure/departure/cleanup tests pass, along with full isolated gates. Chrome compiled handlers prove migration, original GET-only recovery in two tabs, actual safe-abandonment receipt and encrypted cleanup, with all14 API requests GET and no browser credentials, permanent deletion or external calls. Initial desktop screenshots are labeled accurately; two final product captures are measured390×844. APP/backend unchanged; production acceptance pending.
+
+## 2026-10-02 Deletion page authority and departure fencing
+
+Account/token keyed sessions discard old password and typed-confirmation state on authority change. Lifecycle generations stop dispatch after a late current-account proof and fence late mutation/lookup/abandon replies from new-account UI or cleanup. Busy fields lock through proof and the synchronous gate prevents duplicate confirmation. Only bounded proof/storage/unknown notices render. Existing global journals are checked before publication and compared to the exact original before removal; this is not a cross-tab atomic lock, and journal storage/races require further audit. The original deletion journal/session recovery contract is preserved.
+
+Fourteen new Web cases and full isolated gates pass. A new-origin Chrome fixture performs only real impact/receipt GETs with blank credentials, confirms unknown404 does not prove erasure and ABANDONED means account retained. No APP/backend source change, browser DELETE, new credential entry or external calls. Full browser permanent deletion and credential handoff acceptance remain pending.
+
+## 2026-10-02 Feedback original receipt and recovery isolation
+
+Feedback journals are encrypted before sending and bound to API plus the actual owner or a distinct anonymous feedback scope. No token or plaintext fallback. Exact receipt identity/hash and minimal projections prevent malformed HTTP success or raw provider details from becoming a success claim. Original read-only restoration, immutable retries, synchronous dispatch gates, account/departure generations and compare-and-swap cleanup preserve unknown operations. Newer tab journals freeze controls until reread; confirmed account erasure fences late signed-in feedback writes without clearing anonymous or another owner.
+
+The additive private no-store GET requires the original UUID and hash header plus the original owner/anonymous context, returns only receipt facts, and rejects wrong kind/hash/owner and removed records. Legacy POST201 fields and optional unkeyed callers remain compatible. Fifteen real PostgreSQL/HTTP cases and40 Web cases cover races, scope, ACK/storage faults and recovery. Chrome proves a real local commit followed by synthetic502 and GET-only recovery; mail is explicitly stubbed. This is not real delivery, provider/production acceptance or APP modification. The existing manual mail-debug route was not changed or called.
+
+## 2026-10-02 Settings reload and safe error presentation
+
+Language switching consults synchronous profile, avatar and security gates before saving the preference or scheduling reload. Unsent or invalid drafts prevent reload; drafts covered by the original persisted operation can reopen through GET-only verification. Inputs lock during the reload delay and unmount clears the timer. A failed language write leaves controls usable. Optional locale reads fall back to English without weakening recovery storage checks. Unknown failures before persistence freeze autosave, keep text and display a bounded message rather than raw implementation details.
+
+Settings, benefits and security translate fixed presentation text and confirmations, preserving payloads, original journal/hash/identity, user content, paused purchases and current-avatar limitations. New regression cases and an isolated compiled-handler Chrome flow verify original profile receipt recovery after language change and one local synthetic avatar upload. No APP/backend source changed. Avatar server validation/provider durability, other features, PWA and production acceptance remain pending in docs/web-app-parity.md.
+
+## 2026-10-02 Shared Web and marketing recovery localization
+
+Shared navigation/header/footer and marketing presentation now follow the saved Chinese/English locale without changing routes, permissions, backend payloads, receipt identity or internal notice comparisons. Original user copy and revision prompts remain verbatim, including braces and Chinese text. Marketing recovery errors translate known safe messages rather than surfacing raw provider/storage responses. Locale-storage failures retain a usable English navigation and private-thumbnail status. Photo authentication, cache/redirect restrictions, MIME/size validation and object URL cleanup are unchanged.
+
+English tests preserve same-operation retry, historical receipt/order, paused generation, unverified paid availability and exact CAS cleanup protections. An isolated compiled-handler Chrome flow verified original approval APPLIED version4 after a lost reply, GET-only reopening and one total approval POST. Full Web/server/HTTP/native and schema/cleanup checks passed. Remaining Settings/feedback/policy translations, real providers, PWA and production acceptance remain explicitly pending in docs/web-app-parity.md.
+
+## 2026-10-02 Owned management cursor and stale-response follow-up
+
+The private management endpoint resolves a cursor only among the authenticated owner's listings and reads its keyset page in the same RepeatableRead snapshot. Foreign, missing and deleted IDs receive the same bounded input error; they cannot silently skip the owner's inventory. Private no-store headers precede authentication, including rejected sessions. Existing item projections, native limit100 and items/nextCursor contracts remain intact; no migration or native change was added.
+
+The Web management page rejects repeated/cyclic or nonadvancing cursors, retains successful pages after failures, deduplicates overlaps without downgrading verified versions, and fences superseded mount replies and cleanup gates. Core English/Chinese UI and calendar controls reuse the original encrypted journal, receipt verification and CAS recovery semantics. Unknown edit errors do not surface raw provider/storage details. Actual 107-row PostgreSQL/Chrome paging, lost edit acknowledgement and original receipt recovery are recorded in docs/web-app-parity.md. Global navigation, nested marketing translations, provider/device/PWA and production acceptance remain pending.
+
+## 2026-10-02 Legacy multipart and managed clone-photo lifecycle follow-up
+
+Legacy multipart now uses a bounded memory parser and the controlled photo encoders/providers, preserving user/verified-agent authorization and the existing unkeyed 201 contract. Typed fields reject coerced proxy identities, invalid prices and unknown shapes. Owner/parent locks recheck capacity and final user-session validity. Provider work runs outside these short transactions; an exact independent cleanup task precedes allocation, with a five-minute lease and locked commit check. Expired preparations and late rejected writes retain cleanup targets. In-flight preparations participate in account erasure's original cleanup receipt under the owner lock.
+
+Clones independently own app-managed photos, rechecking source visibility/image identity and destination/session/receipt after copying. Source item/account deletion preserves the target image; a missing source asset fails without a broken wish. External product images remain external references. Unknown Flickr upload responses before a provider ID is available still require opaque-tag reconciliation; local/stub evidence is not proof of that window or real provider behavior. Actual PostgreSQL/storage cases and Chrome lost-ACK/reload/source-erasure/restart evidence are recorded in docs/web-app-parity.md. Native APP was not changed and production deployment remains pending.
+
 # Security Audit Report (Vibe Coding Shield)
 
 **Project Info:** Wishlist App (Node.js/Express + React + Prisma)
 **Auditor:** Code Guardian Aegis (AI Agent)
 **Date:** 2026-01-01
+
+## 2026-10-02 Legacy wish create receipt and controlled-photo follow-up
+
+Legacy link/text creation validates the exact source and field schema, preserves the original unkeyed entry, and writes durable owner/UUID/kind/parent/content-hash receipts atomically under actor and parent locks shared with native capacity enforcement. The new owned-media photo entry additionally locks and rechecks unused media ownership and rejects marketing-only media. Stops serialize with creates, preserve existing resources, and fence late requests; deleted-resource tombstones survive parent deletion, while account deletion cascades the receipt. Migration43 adds a distinct legacy receipt namespace; it does not imply global UUID uniqueness across native and legacy tables.
+
+The browser stores only minimal encrypted creation identities and list-bound photo/removal journals before dispatch. It performs original-receipt reads on recovery, does not automatically upload/create/remove again, validates exact acknowledgements, and uses CAS to protect newer photos. Explicit MANUAL_PHOTO use does not broaden the default BATCH_ITEM upload validator. Existing metadata stripping, bounded image processing, controlled storage and provider erasure/removal contracts are reused; preview uses an authenticated no-store thumbnail. Confirmation survives cleanup failure. Verified-agent proxy binding and verifier outage are exercised through the real middleware with an isolated verifier stub.
+
+PostgreSQL and Chrome evidence covers capacity contention, duplicate/changed requests, foreign/used/marketing photos, native attachment races, original-resource deletion, stop/create races, commit-then-502 recovery and stopped late POST410. Chrome used local synthetic photos; removal was opened and cancelled in the browser. The legacy multipart disk path, independently durable clone images, real external provider/device/PWA and final production checks remain pending. Native APP source was not changed.
+
+## 2026-10-02 Permission-aware wish clone and detail follow-up
+
+Legacy cloning now locks the actor, sorted source/destination parents and source item before rechecking source visibility, destination ownership and native list capacity. Private/hidden outsider sources cannot be enumerated; in-flight jobs are rejected. Separate budgets/reference prices, original wisher and actual stable processing states are retained, while purchase/hide/proxy state and provider diagnostics are not copied. Item deletion rechecks ownership under transactional locks, retains the erasure queue and returns additive exact identity/deletion acknowledgement after commit.
+
+Existing owner/request-unique WishCreateReceipt records use distinct CLONE/CLONE_STOP kinds and a source-target hash. Native-kind or changed-input reuse is denied. Read-only history preserves original creation identity and later deletion tombstones; an explicit stop fences a delayed POST and never deletes an existing clone. No migration or automatic recovery mutation was added. The pure detail dialog shares the account/API-scoped encrypted gate and exact field acknowledgement checks, including explicit zero/null; failed restoration disables all modal writes. Only clone has new historical receipts; current-state reads for other legacy actions are explicitly not history.
+
+Actual PostgreSQL tests cover privacy/hidden changes after proven lock waits, native-create capacity contention, concurrent same-key clone/stop, cross-kind reuse, stop/tombstones and deletion ownership. DEV Chrome proves commit-then-502 receipt recovery and stopped delayed POST 410; permanent deletion was cancelled in the browser. Image-provider/erasure durability, legacy URL/photo creation and final production/PWA/device checks remain pending. Native APP source was not changed.
+
+## 2026-10-02 Legacy detail operation follow-up
+
+Detail list edits preserve children when the legacy ACK omits them; gift/hide actions validate exact identity and requested booleans against the actual item endpoint. Account/API encrypted minimal markers, synchronous gates and scoped late-response guards prevent automatic mutation replay after unknown responses. Current-state reads are explicitly not historical receipts. Public DTOs do not invent private AI status or capacity. Share links omit query/fragment parameters, and cancelling native share no longer copies automatically. Source-blocked help retains only a sanitized 403 marker.
+
+Local page/store tests and real-handler browser evidence cover commit-then-502 reload recovery and third-party purchase conflicts. Remaining legacy modal edit/delete, URL/photo creation, clone, provider and production/PWA/device checks are not covered by this batch's claim; no native or server code changed.
+
+## 2026-10-02 Legacy wishlist operation follow-up
+
+The dashboard persists minimal encrypted account/API-scoped list mutation markers before sending and uses a synchronous gate across privacy/delete operations. Local operation IDs fence stale CAS cleanup without pretending to be server receipts. Privacy responses must match list, owner and requested visibility. Deletion adds `id`/`deleted` after the existing transaction, preserving the old message; own list read/update/delete responses are private/no-store. Unknown results survive reload and only offer current-state read plus explicit acknowledgment/cleanup, with the absence of historical receipts clearly stated. No automatic mutation replay or plaintext fallback was added.
+
+Capacity no longer defaults after profile read failure; fresh own identity and native creation bounds are checked. Wish edit/toggle responses must match requested fields. Late account replies cannot modify the replacement view or clear the original marker. Real storage/CAS/isolation and HTTP owner-denial/deletion-ACK regressions passed. DEV browser evidence includes commit-then-502 recovery and manual wish changes; permanent deletion was only cancelled in the browser, and production/PWA/native-device checks remain pending.
+
+## 2026-10-02 Web account flow follow-up
+
+Web login now verifies the returned session identity against a fresh private profile before admission. Verification links require explicit confirmation and discard returned JWTs instead of replacing the active account. Registration discards unverified JWTs and validates expected-email delivery evidence. Reset validates the complete revocation acknowledgement; unknown outcomes cannot be replayed from that page. Password policy matches the existing server/APP and supports confirmation, without storing passwords or recovery tokens.
+
+Public auth requests reject redirects, avoid caches, hold duplicate-dispatch gates and ignore replies after departure or link changes. Known error codes map to local copy instead of displaying arbitrary provider/credential text. Historical auth receipts and real browser password-entry/real email delivery remain outside this batch's proof. Nine existing HTTP suites now use owned IPv4 listeners after intermittent local transport failures, with original assertions/deadlines preserved and marketing request setup additionally verified. No production server or native APP behavior was changed by the listener fixes.
+
+## 2026-10-02 Web analytics privacy follow-up
+
+The previous global analytics bootstrap and route tracker could expose URL queries through default metadata. The web now loads the SDK inside an opaque, script-only sandbox with no referrer, receives coarse allowlisted events through a private channel, and supplies generic titles, empty referrers and sanitized locations. DNT/GPC skips initialization. Unused global payment SDK loading was removed while its component remains available. Auth query contracts and native APP code remain unchanged.
+
+Regression tests exercise the real public bridge, malformed messages, privacy flags, provider failure and queue bounds. Synthetic browser QA verifies parent access raises `SecurityError` and verification tokens still reach only the original auth request. This is a local mitigation awaiting deployment, not evidence of historical disclosure or deletion, Google receipt, infrastructure-log sanitization, PWA-upgrade privacy or universal SDK compatibility.
 
 ## 1. High Risk - Production Database Data Loss
 *   **Risk Level:** **HIGH (Disaster Class)**
@@ -46,3 +158,15 @@
 ---
 **Summary:**
 The most critical issue is the `start` script command. Please fix it immediately to prevent accidental data deletion.
+
+## 2026-10-02 AI instructions and API-key lifecycle
+
+Original API-key reads/rotation and instruction get-or-create are private/no-store before auth. User row gates serialize allocation, explicit rotation and account-security updates; actual JWT/authVersion or original personal key is rechecked under the gate. Concurrent allocation reuses the winning key. Current-instruction GET never creates and is not a durable receipt. Strict configured base validation precedes allocation; bounded errors omit raw credentials.
+
+Web journals hold only version/local UUID/time, never token/key/prompt. Complete prompt proof and pre/post request marker checks precede clipboard or explicit manual display, with account/token/departure fencing and CAS cleanup. Manual secrets are ephemeral. An already-started clipboard write cannot be revoked. Actual HTTP/PG12 and Web36 new regressions pass; final full615/1616/913 plus3 skips/Native852, no APP/migration or production credential/provider changes. See canonical parity evidence for browser stub and source-timing limits.
+
+## 2026-10-02 Legacy PWA private image cache retirement
+
+Workbox precache cleanup does not delete the legacy catch-all runtime `images` cache. The generated worker now imports a policy that deletes this entire cache on activation and navigation without migrating any responses. A new runtime cache accepts only eight exact same-origin public artwork paths and prunes private/external/query injections. Unrelated caches, precache, sessions and encrypted recovery journals remain intact; no replay or automatic reload is added.
+
+Cache deletion errors propagate and can retry on navigation. Late work in a retired worker can recreate its cache until the next navigation, and activation notifications can precede completed cleanup. This is not atomic erasure or removal of already-decoded images/HTTP cache. Seven actual-script regressions and synthetic real-built-worker browser offline/upgrade checks pass; Web1623, HTTP615, Server913 plus3 skips and Native852 pass locally. Production install/update, mixed-version recovery and all remaining parity gates remain open; APP, migrations and real providers are unchanged.

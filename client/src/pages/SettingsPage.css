@@ -1,0 +1,68 @@
+/* Settings-only layout: retain the original neutral web tokens, not native UI. */
+.settings-hub > .rounded-lg h3, .settings-hub > fieldset .rounded-lg h3 { font-size: 1rem; line-height: 1.5; }
+.settings-language { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem; }
+.settings-language > div { padding: 0; }
+.settings-language > div:first-child p { display: none; }
+.settings-language > div:last-child { display: flex; flex-wrap: wrap; gap: .5rem; }
+.settings-language button { flex: none; min-width: 7rem; white-space: nowrap; }
+.settings-avatar > div { padding: .75rem; }
+.settings-avatar > div:first-child { padding-bottom: .75rem; }
+.settings-avatar > div:first-child > div:last-child { margin-top: .5rem; padding: .5rem .75rem; }
+.settings-avatar > div:last-child { padding-top: 0; }
+.settings-private { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1rem; }
+.settings-private > h2 { grid-column: 1 / -1; }
+.settings-private > div { grid-column: span 2; border: none; box-shadow: none; min-width: 0; }
+.settings-private > div > div { padding: 0; }
+.settings-contact { grid-column: 1 / -1; border-top: 1px solid #e5e7eb; }
+.settings-contact-fields > div { border: none; box-shadow: none; min-width: 0; }
+.settings-contact-fields > div > div { padding: 0; }
+.settings-contact summary:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 2px; }
+.settings-contact[open] > summary > svg:last-child { transform: rotate(90deg); }
+.settings-private .flex.items-end { gap: .25rem; }
+.settings-private .flex-1 { min-width: 0; }
+.settings-private label { font-size: .75rem; }
+.settings-private input { font-size: .8125rem; padding-left: .5rem; padding-right: .5rem; }
+.settings-private button { width: 2rem; flex-shrink: 0; }
+.settings-private button svg { width: 1rem; }
+.settings-advanced[open] > summary > svg:last-child { transform: rotate(90deg); }
+.settings-advanced > summary:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 4px; }
+.settings-hub > section[aria-labelledby="settings-actions"], .settings-private, .settings-advanced { padding: .75rem; }
+.settings-hub > section[aria-labelledby="settings-actions"] h2 { margin-bottom: .5rem; }
+.settings-hub > section[aria-label="帳號安全"] > button { padding: .75rem; }
+.settings-notifications > div { padding: .5rem .75rem; }
+.settings-notifications > div > * { margin-top: 0; margin-bottom: 0; }
+.settings-hub .settings-notifications h3 { font-size: .875rem; line-height: 1.25rem; }
+.settings-notifications p { font-size: .75rem; line-height: 1rem; }
+.settings-private h2 { font-size: .875rem; }
+.settings-private { gap: .5rem; }
+.settings-avatar input { font-size: .8125rem; }
+.settings-avatar-upload:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 4px; }
+.settings-avatar-upload[aria-disabled="true"] { cursor: not-allowed; }
+.account-benefits summary:focus-visible { outline: 2px solid #2d2d2d; outline-offset: 2px; }
+.account-benefits details[open] > summary > svg:last-child { transform: rotate(90deg); }
+@media (min-width: 640px) {
+  /* The approved desktop board uses small, consistent gaps between cards.
+     Do not compress expanded forms, feedback, or the mobile touch targets. */
+  .settings-hub.space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: .5rem; }
+  .settings-hub > section[aria-labelledby="settings-actions"] h2 { font-size: .875rem; line-height: 1.25rem; }
+  .settings-hub > fieldset .settings-avatar h3 { font-size: .875rem; line-height: 1.25rem; }
+  .settings-hub > section[aria-labelledby="settings-actions"] a { min-height: 2rem; padding-top: .25rem; padding-bottom: .25rem; font-size: .75rem; }
+  .settings-hub > section[aria-label="帳號安全"] > button { padding: .5rem .75rem; font-size: .875rem; }
+  .settings-language button { height: 2rem; min-width: 9rem; }
+  .settings-avatar > div:first-child { padding-bottom: .5rem; }
+  .settings-avatar label { display: block; font-size: .75rem; line-height: 1rem; }
+  .settings-avatar > div:last-child > div:last-child > div > * + * { margin-top: .25rem; }
+  .settings-avatar input, .settings-private input { height: 2rem; }
+  .settings-private label { display: block; line-height: 1rem; }
+  .settings-private .space-y-2 > * + * { margin-top: .25rem; }
+  .settings-private .flex.justify-between.items-center.mt-2 { margin-top: .25rem; }
+  .settings-hub .account-benefits summary { min-height: 2rem; font-size: .75rem; }
+}
+@media (max-width: 639px) {
+  .settings-language button, .settings-avatar input:not([type="checkbox"]), .settings-private input { min-height: 2.75rem; }
+  .settings-avatar label[for="avatar-toggle"] { display: inline-flex; min-height: 2.75rem; align-items: center; }
+  .settings-language { align-items: flex-start; }
+  .settings-private { grid-template-columns: minmax(0, 1fr); }
+  .settings-private > div { grid-column: 1; }
+  .settings-private button { width: 2.75rem; min-height: 2.75rem; }
+}

@@ -1,0 +1,20 @@
+.wishlist-map .maplibregl-ctrl-group button {
+  width: 44px;
+  height: 44px;
+}
+.wishlist-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  min-width: 44px;
+  min-height: 44px;
+  padding-right: 44px;
+}
+.wishlist-map .maplibregl-ctrl-attrib-button {
+  width: 44px;
+  height: 44px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.wishlist-map .maplibregl-ctrl-attrib-inner a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}

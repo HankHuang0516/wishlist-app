@@ -1,27 +1,22 @@
 import express from 'express';
-import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
-import { createFeedback } from '../controllers/feedbackController';
-import { sendEmail } from '../lib/emailService';
+import { optionalAuthenticateToken } from '../middleware/auth';
+import rateLimit from 'express-rate-limit';
+import { createFeedback, getFeedbackReceipt } from '../controllers/feedbackController';
+import { authenticateEmailDiagnostics, getEmailDiagnosticsCapability, requireEmailDiagnosticsAdmission, sendEmailDiagnostic } from '../controllers/emailDiagnosticsController';
+import { AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
 // Allow anonymous feedback, but track user if logged in
+router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
+router.get('/submissions/:clientSubmissionId', optionalAuthenticateToken, getFeedbackReceipt);
 router.post('/', optionalAuthenticateToken, createFeedback);
 
-// Debug Route: Test Email (Auth Required)
-router.post('/test', async (req, res) => {
-    try {
-        console.log('[Debug] Manual Email Test Triggered');
-        const result = await sendEmail(
-            'hankhuang0516@gmail.com',
-            'Live Debug Test Email',
-            '<p>This is a manual test triggered from Settings Page. <br>System Status: <b>Online</b></p>'
-        );
-        res.json(result);
-    } catch (error: any) {
-        console.error('[Debug] Manual Email Test Failed:', error);
-        res.status(500).json({ success: false, error: error.message, stack: error.stack });
-    }
-});
+// Operator admission is server-owned; public feedback above stays unchanged.
+const diagnosticLimit = rateLimit({ windowMs: 60000, limit: 1, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: req => String((req as AuthRequest).user!.id),
+    message: { errorCode: 'EMAIL_DIAGNOSTICS_RATE_LIMIT' } });
+router.get('/test', authenticateEmailDiagnostics, getEmailDiagnosticsCapability);
+router.post('/test', authenticateEmailDiagnostics, requireEmailDiagnosticsAdmission, diagnosticLimit, sendEmailDiagnostic);
 
 export default router;

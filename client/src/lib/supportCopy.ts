@@ -1,0 +1,25 @@
+import { getDisplayLocale } from '../utils/localization';
+const english={
+ 'Wishlist.ai 支援與聯絡':'Wishlist.ai support and contact',
+ '願望、二手刊登、帳號登入與隱私相關協助。':'Help with wishes, second-hand listings, account access and privacy.',
+ '需要協助？':'Need help?',
+ '請按下方按鈕送出問題與回覆用 Email；不必先登入。請勿提供密碼或完整付款資料。':'Use the form below to describe the issue and leave an email for a reply. You can submit without signing in. Never include passwords or full payment details.',
+ '開啟意見回饋':'Contact support','商家合作意向（專用收件表單）':'Partnership inquiries (dedicated form)',
+ '常用協助':'Quick links','忘記密碼':'Reset password','刪除帳號與資料':'Delete account and data','隱私權政策':'Privacy policy',
+ '返回':'Go back','回覆 Email（未登入時必填）':'Email (Required for reply)','問題與回饋內容':'Issue or feedback',
+ '正在安全讀取原回饋操作…':'Reading the original feedback operation safely…',
+ '尚未安全讀取恢復資料，暫停送出；請重試讀取。':'Recovery data could not be read safely. Sending is paused. Retry reading.',
+ '請輸入有效的回覆 Email 與 1–5000 字內容。':'Enter a valid reply email and 1–5000 characters of feedback.',
+ '尚未確認收件；原內容與識別碼已保留。重開只查核，不會自動重送。':'Receipt is unconfirmed. Original content and identity are retained. Reopening only checks the receipt without resending.',
+ '無法安全保存原操作；沒有送出。請保留文字並重試讀取。':'The original operation could not be saved safely. Nothing was sent. Keep your text and retry reading.',
+ '原收件結果已確認；本機恢復紀錄尚未清理，只需重試清理。':'The original receipt is verified. Its local recovery journal needs cleanup. Retry cleanup only.',
+ '另一份回饋操作仍存在；請重新讀取。':'Another feedback operation remains. Read it again.',
+ '已保存，請保留收件編號。我們會由人工查閱與回覆。':'Saved. Keep the receipt number. Our team will review it and reply.',
+ '收件編號：{id}':'Receipt number: {id}', '原操作識別碼：{id}':'Original operation ID: {id}',
+ '通知已交付郵件服務（不代表收件匣送達）':'Notification was accepted by the mail service; inbox delivery is not confirmed.',
+ '收件已保存；通知尚未確認，由管理端追蹤':'Feedback was saved. Notification delivery is unconfirmed and will be tracked by the team.',
+ '只查核原收件結果':'Check original receipt only','明確重試原回饋操作':'Retry original feedback operation',
+ '重試清理恢復紀錄':'Retry recovery journal cleanup','重試安全讀取':'Retry safe reading',
+ '暫時關閉（保留原操作）':'Close for now (keep original operation)',
+}as const;
+export function supportText(key:keyof typeof english,values:Record<string,string|number>={}){return(getDisplayLocale().startsWith('zh')?key:english[key]).replace(/\{(\w+)\}/g,(whole,name:string)=>String(values[name]??whole));}

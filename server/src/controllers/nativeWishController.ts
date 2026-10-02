@@ -7,6 +7,7 @@ import { NativeWishError, nativeListCreate, nativeWishCreate, nativeWishlistPatc
 import { WishItemUpdateError } from '../lib/wishItemUpdate';
 import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
 import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
+import { isListingId } from '../lib/listingRules';
 const itemSelect = { id: true, wishlistId: true, name: true, notes: true, link: true, imageUrl: true, aiStatus: true, price: true, currency: true, aiLink: true, maxPrice: true, priceCurrency: true, isHidden: true, isPurchased: true, updatedAt: true } as const;
 const listSelect = { id: true, title: true, description: true, isPublic: true, maxItems: true, updatedAt: true, _count: { select: { items: true } } } as const;
 type Tx = Prisma.TransactionClient;
@@ -46,6 +47,22 @@ export const getNativeList = endpoint(async (req, userId) => {
         if (!list) throw new NativeWishError(404);
         const rows = await tx.item.findMany({ where: { wishlistId: id, ...(after ? { id: { gt: after } } : {}) }, take: 51, orderBy: { id: 'asc' }, select: itemSelect });
         const items = rows.slice(0, 50); return { list, items, nextCursor: rows.length > 50 ? items[items.length - 1].id : null };
+    }, { isolationLevel: 'RepeatableRead' });
+});
+// Read-only recovery: opening a browser must never resend a create operation.
+export const getNativeWishReceipt = endpoint(async (req, userId) => {
+    const requestedId = req.params.clientRequestId;
+    if (!isListingId(requestedId) || Object.keys(req.query).length) throw new NativeWishError(400);
+    const clientRequestId = requestedId.toLowerCase();
+    return prisma.$transaction(async tx => {
+        const receipt = await tx.wishCreateReceipt.findUnique({ where: { userId_clientRequestId: { userId, clientRequestId } } });
+        if (!receipt) throw new NativeWishError(404);
+        const resource = receipt.kind === 'LIST'
+            ? await tx.wishlist.findFirst({ where: { id: receipt.resourceId, userId }, select: listSelect })
+            : await tx.item.findFirst({ where: { id: receipt.resourceId, wishlist: { userId } }, select: itemSelect });
+        // Return an explicit tombstone, not a 404 that could be mistaken for
+        // "not committed". Replay can never create a replacement resource.
+        return { clientRequestId, kind: receipt.kind, resourceId: receipt.resourceId, deleted: resource === null, resource };
     }, { isolationLevel: 'RepeatableRead' });
 });
 async function replay(tx: Tx, userId: number, clientRequestId: string, requestHash: string, kind: string) {

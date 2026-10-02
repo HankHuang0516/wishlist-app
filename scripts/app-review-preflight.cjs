@@ -2,6 +2,26 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
+
+function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTree) {
+    assert.equal(receipt.versionId, result.versionId);
+    assert.equal(receipt.demoUserId, result.demoUserId);
+    assert.equal(receipt.sceneLifecycleVerified, true);
+    assert.equal(receipt.buildId, selectedBuildId, 'Evidence must match the selected build');
+    assert(receipt.buildNumber && receipt.artifactSha256);
+    assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Evidence is stale');
+    if (receipt.mode === 'unchanged-native-binary') {
+        // A backend/data-only correction can use Apple's actual review of the
+        // selected binary as its UI baseline. It must not claim a new UI run.
+        assert.equal(receipt.nativeGitTree, currentNativeTree, 'Changed native source requires a fresh UI run');
+        assert.equal(receipt.appleReviewConfirmedLogin, true);
+        assert(receipt.appleScreenshotProofs?.length >= 2, 'Require the actual App Review screenshots');
+    } else {
+        for (const step of ['login', 'socialInbox', 'buyerChat', 'sellerChat', 'meetup', 'wishes', 'account'])
+            assert.equal(receipt.checks?.[step], true, `Missing native UI check ${step}`);
+    }
+}
 
 function assertDemoReady(snapshot, now = Date.now()) {
     assert.equal(snapshot.userId, snapshot.expectedUserId, 'Review login must use the intended demo identity');
@@ -68,15 +88,12 @@ async function main() {
     if (args.includes('--submit')) {
         assert(args.includes('--submission-id') && args.includes('--item-id') && args.includes('--ui-receipt'), 'Submission requires item, submission and native UI evidence');
         const receipt = JSON.parse(fs.readFileSync(get('--ui-receipt'), 'utf8'));
-        assert.equal(receipt.versionId, result.versionId);
-        assert.equal(receipt.demoUserId, id);
-        assert.equal(receipt.sceneLifecycleVerified, true);
-        assert(receipt.buildId && receipt.buildNumber && receipt.artifactSha256);
-        assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Native UI verification is stale');
-        for (const step of ['login', 'socialInbox', 'buyerChat', 'sellerChat', 'meetup', 'wishes', 'account'])
-            assert.equal(receipt.checks[step], true, `Missing native UI check ${step}`);
         const version = asc('versions', 'view', '--version-id', result.versionId, '--include-build');
-        assert.equal(version.data.relationships.build.data.id, receipt.buildId, 'Native proof must match the selected build');
+        const nativeTree = execFileSync('git', ['rev-parse', 'HEAD:mobile'], { encoding: 'utf8' }).trim();
+        assertNativeEvidence(receipt, result, version.data.relationships.build.data.id, nativeTree);
+        const hashFile = path => createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+        assert.equal(hashFile(receipt.artifactPath), receipt.artifactSha256, 'Submitted artifact changed');
+        for (const proof of receipt.appleScreenshotProofs || []) assert.equal(hashFile(proof.path), proof.sha256, 'Review baseline changed');
         asc('validate', '--app', '6468950847', '--version-id', result.versionId);
         asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
         asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
@@ -84,7 +101,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, checkLive };
+module.exports = { assertDemoReady, assertNativeEvidence, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

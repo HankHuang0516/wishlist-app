@@ -27,13 +27,18 @@ export default function SourceLeadMapPage() {
   const current=()=>currentScope.current===requestScope;
   async function request(path:string,body?:unknown,actionPost=false){const r=await fetch(`${API_URL}${path}`,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth}`},body:body===undefined?undefined:JSON.stringify(body)});if(!r.ok)throw Object.assign(Error('操作未完成，請讀取最新收件狀態；不代表已送給賣家'),{httpStatus:r.status,actionPost});return r.json();}
   try{
-   if(kind!=='CANCEL')await request(`/source-leads/${id}`);
-   let active:Room=await request(`/source-leads/${id}/inquiry`,{});if(!current())return;
+   let existing:Room|null=await request(`/source-leads/${id}/inquiry`);if(!current())return;
+   const priorJournal=savedRequest();
+   if(!existing){privateScope.current=requestScope;setRoom(null);if(kind==='READ'){setError(priorJournal?'上次操作結果仍待確認；請勿新增重複問題':'尚無已存詢問；填寫內容後按保存問題才會建立');return;}if(kind!=='ASK'||priorJournal)throw Error('尚無可處理的詢問，請讀取確認；不建立重複紀錄');await request(`/source-leads/${id}`);existing=await request(`/source-leads/${id}/inquiry`,{});if(!current())return;}
+   if(!existing)throw Error("收件回應無效，請讀取確認；不重送");
+   let active:Room=existing;
    privateScope.current=requestScope;setRoom(active);
    const journal=savedRequest();if(journal&&active.events.some((e:any)=>e.requestId===journal.requestId)){sessionStorage.removeItem(journalKey);pending.current=null;setQuestion('');if(kind!=='CANCEL')return;}
    if(kind==='READ'){if(journal)setError('上次操作結果仍待確認；可重新讀取或撤回，請勿新增重複問題');return;}
    if(journal&&!pending.current&&kind!=='CANCEL')throw Error('上次操作結果待確認，請讀取已存詢問或撤回；不重送新問題');
    if(pending.current?.scope===requestScope){const old=pending.current.payload;if(active.events.some((e:any)=>e.requestId===old.requestId)){pending.current=null;setQuestion('');return;}if(old.action!==kind&&kind!=='CANCEL')throw Error('上次操作結果待確認，請先重試同一操作');}
+   if(kind==='CONSENT'&&!pending.current&&privateRoom?.transferHash!==active.transferHash)throw Error('問題內容已更新，請重新閱讀後再次確認同意');
+   if(kind!=='CANCEL')await request(`/source-leads/${id}`);
    const payload=pending.current?.scope===requestScope&&pending.current.payload.action===kind?pending.current.payload:kind==='ASK'?{requestId:crypto.randomUUID(),action:kind,text:draft}:kind==='CONSENT'?{requestId:crypto.randomUUID(),action:kind,consent:true,transferHash:active.transferHash}:{requestId:crypto.randomUUID(),action:kind};
    pending.current={scope:requestScope,payload};sessionStorage.setItem(journalKey,JSON.stringify({requestId:payload.requestId,action:payload.action}));
    active=await request(`/source-leads/${id}/inquiry/${active.id}/actions`,payload,true);

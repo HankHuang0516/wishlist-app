@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:"2.0.445",date:"2026-10-02",title:"讀取詢問不建立空白收件",type:"Fullstack",items:[{type:"Fix",content:"讀取改用唯讀 GET，沒有紀錄時明確提示；只有按保存問題才建立收件，保留既有詢問歷史。"}]},
  {version:"2.0.444",date:"2026-10-02",title:"來源詢問回執與帳號隔離",type:"Frontend",items:[{type:"Fix",content:"未知結果沿用原請求並讀回已存詢問，切換帳號清除私人狀態，刷新到期線索。"}]},
     {version:"2.0.443",date:"2026-10-02",title:"來源線索地圖與可撤回詢問",type:"Fullstack",items:[{type:"New",content:"公共地點来源線索獨立於商品與結帳，支援同意後人工轉交詢問；不代表庫存或授權已核實。"}]},
     { version: "2.0.442", date: "2026-10-01", title: "公開願望清單隱私修補", type: "Backend", items: [

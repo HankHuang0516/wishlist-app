@@ -103,7 +103,7 @@ async function main() {
     const id = Number(get('--demo-user-id'));
     assert(Number.isSafeInteger(id) && id > 0, 'Invalid demo user ID');
     const result = await checkLive(get('--version-id'), id);
-    if (args.includes('--submit')) {
+    if (args.includes('--submit') || args.includes('--prepare-submission')) {
         assert(args.includes('--submission-id') && args.includes('--item-id') && args.includes('--ui-receipt') && args.includes('--privacy-receipt'), 'Submission requires item, submission, binary and published App Privacy evidence');
         const receipt = JSON.parse(fs.readFileSync(get('--ui-receipt'), 'utf8'));
         const version = asc('versions', 'view', '--version-id', result.versionId, '--include-build');
@@ -118,9 +118,11 @@ async function main() {
         assert.equal(hashFile(privacy.axPath), privacy.axSha256, 'App Privacy evidence changed');
         assert.equal(hashFile(privacy.screenshotPath), privacy.screenshotSha256, 'App Privacy screenshot changed');
         asc('validate', '--app', '6468950847', '--version-id', result.versionId);
-        asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
-        asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
-        result.submitted = true;
+        if (args.includes('--submit')) {
+            asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
+            asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
+            result.submitted = true;
+        } else result.prepared = true;
     }
     console.log(JSON.stringify(result, null, 2));
 }

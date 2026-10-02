@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {assertDemoReady} = require('./app-review-preflight.cjs');
+const {assertDemoReady,assertNativeEvidence} = require('./app-review-preflight.cjs');
 const now = Date.parse('2026-10-02T12:00:00Z');
 function ready() {
     const room = (buyerUserId, sellerUserId, status) => ({buyerUserId, sellerUserId, archived:false, blocked:false, listingAvailable:true,
@@ -23,3 +23,18 @@ for (const [name,mutate] of [
     ['payment enabled without updated answers',s=>s.marketing.paidPurchasesAvailable=true],
     ['new subscription',s=>s.subscriptionCount=1],['new IAP',s=>s.iapCount=1],['missing business answer',s=>s.notes=s.notes.replace('Business model Q5:', 'Removed:')],
 ]) test(`blocks ${name}`,()=>{const s=ready();mutate(s);assert.throws(()=>assertDemoReady(s,now));});
+
+function unchangedBinary() {return {mode:'unchanged-native-binary',versionId:'version',demoUserId:946,
+    buildId:'build12',buildNumber:'12',artifactSha256:'known-artifact',verifiedAt:new Date().toISOString(),
+    sceneLifecycleVerified:true,nativeGitTree:'known-native-tree',appleReviewConfirmedLogin:true,
+    appleScreenshotProofs:[{path:'social.png'},{path:'account.png'}]};}
+test('accepts an unchanged reviewed binary for a backend-only correction without inventing fresh UI results',()=>
+    assert.doesNotThrow(()=>assertNativeEvidence(unchangedBinary(),{versionId:'version',demoUserId:946},'build12','known-native-tree')));
+test('requires new UI evidence when native source changes',()=>
+    assert.throws(()=>assertNativeEvidence(unchangedBinary(),{versionId:'version',demoUserId:946},'build12','changed-tree')));
+test('rejects evidence from a different selected build',()=>
+    assert.throws(()=>assertNativeEvidence(unchangedBinary(),{versionId:'version',demoUserId:946},'build13','known-native-tree')));
+test('rejects missing App Review screenshots for the existing binary baseline',()=>{
+    const r=unchangedBinary();r.appleScreenshotProofs=[];
+    assert.throws(()=>assertNativeEvidence(r,{versionId:'version',demoUserId:946},'build12','known-native-tree'));
+});

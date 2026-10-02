@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
 import { AUTH_SESSION_KEY, persistSession, readSession } from '../lib/authSession';
 import { getFullApiUrl } from '../config';
+import { api } from '../lib/marketplaceApi';
 const old = { id: 42, phoneNumber: 'synthetic-old', name: '舊合成買家' }, next = { id: 43, phoneNumber: 'synthetic-new', name: '新合成賣家' };
 const ok = (user: unknown = old) => ({ ok: true, status: 200, json: async () => user });
 const fetcher = vi.fn();
@@ -17,7 +18,7 @@ const mount = (path = '/settings', strict = false) => {
   const tree = <MemoryRouter initialEntries={[path]}><AuthProvider><Probe /></AuthProvider></MemoryRouter>;
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
 };
-beforeEach(() => { localStorage.clear(); fetcher.mockReset().mockResolvedValue(ok()); vi.stubGlobal('fetch', fetcher); });
+beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'zh-TW'); fetcher.mockReset().mockResolvedValue(ok()); vi.stubGlobal('fetch', fetcher); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const seed = () => persistSession(localStorage, { token: 'old-fixture', user: old }, getFullApiUrl());
 describe('real provider session restoration and isolation', () => {
@@ -28,13 +29,13 @@ describe('real provider session restoration and isolation', () => {
   it('migrates valid legacy data after a confirmed identity read without storing extra private fields', async () => {
     localStorage.setItem('token', 'old-fixture'); localStorage.setItem('user', JSON.stringify(old)); fetcher.mockResolvedValue(ok({ ...old, name: '最新確認名稱', apiKey: 'SYNTHETIC_DO_NOT_STORE' })); mount();
     await screen.findByText('42:最新確認名稱:old-fixture'); expect(readSession(localStorage, getFullApiUrl())?.user.name).toBe('最新確認名稱'); expect(localStorage.getItem(AUTH_SESSION_KEY)).not.toContain('DO_NOT_STORE'); expect(localStorage.getItem('token')).toBeNull();
-    expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/\/users\/me$/), expect.objectContaining({ cache: 'no-store', redirect: 'error', headers: { Authorization: 'Bearer old-fixture' } }));
+    expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/\/users\/me$/), expect.objectContaining({ cache: 'no-store', redirect: 'error', headers: { Authorization: 'Bearer old-fixture', 'Content-Type': 'application/json' } }));
   });
   it.each([200, 401])('ignores delayed previous-account HTTP %i after login switches', async status => {
     seed(); let finish!: (value: unknown) => void;
     fetcher.mockImplementation((_url, init) => init.headers.Authorization === 'Bearer old-fixture' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(ok(next))); mount();
     await waitFor(() => expect(finish).toBeDefined()); fireEvent.click(screen.getByRole('button', { name: '切換帳號' })); await screen.findByText('43:新合成賣家:new-fixture');
-    await act(async () => finish(status === 200 ? ok(old) : { ok: false, status })); expect(screen.getByTestId('identity')).toHaveTextContent('43:新合成賣家:new-fixture'); expect(readSession(localStorage, getFullApiUrl())?.user.id).toBe(43); expect(screen.getByTestId('route')).toHaveTextContent('/settings');
+    await act(async () => finish(status === 200 ? ok(old) : new Response('{}', { status }))); expect(screen.getByTestId('identity')).toHaveTextContent('43:新合成賣家:new-fixture'); expect(readSession(localStorage, getFullApiUrl())?.user.id).toBe(43); expect(screen.getByTestId('route')).toHaveTextContent('/settings');
   });
   it('does not revive a logged-out account after a delayed response body', async () => {
     seed(); let finish!: (value: unknown) => void; fetcher.mockResolvedValue({ ...ok(), json: () => new Promise(resolve => { finish = resolve; }) }); mount();
@@ -48,7 +49,7 @@ describe('real provider session restoration and isolation', () => {
     expect(screen.getByTestId('identity')).toHaveTextContent('較新確認'); expect(readSession(localStorage, getFullApiUrl())?.user.name).toBe('較新確認');
   });
   it('expires only the current session and preserves a validated chat return destination', async () => {
-    const room = 'c11fde58-d143-423c-99f1-a13d60068f58'; seed(); localStorage.setItem('pending-fixture', 'KEEP'); fetcher.mockResolvedValue({ ok: false, status: 401 }); mount('/chat?room=' + room);
+    const room = 'c11fde58-d143-423c-99f1-a13d60068f58'; seed(); localStorage.setItem('pending-fixture', 'KEEP'); fetcher.mockResolvedValue(new Response('{}', { status: 401 })); mount('/chat?room=' + room);
     await waitFor(() => {
       expect(screen.getByTestId('identity')).toHaveTextContent('signed-out');
       expect(screen.getByTestId('route')).toHaveTextContent('/login?next=' + encodeURIComponent('/chat?room=' + room));
@@ -69,7 +70,7 @@ describe('real provider session restoration and isolation', () => {
   it('synchronizes an atomic account change from another tab and ignores previous requests', async () => {
     seed(); let finish!: (value: unknown) => void; fetcher.mockImplementation((_url, init) => init.headers.Authorization === 'Bearer old-fixture' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(ok(next))); mount();
     await waitFor(() => expect(finish).toBeDefined()); persistSession(localStorage, { token: 'new-fixture', user: next }, getFullApiUrl()); act(() => window.dispatchEvent(new StorageEvent('storage', { key: AUTH_SESSION_KEY })));
-    await screen.findByText('43:新合成賣家:new-fixture'); await act(async () => finish({ ok: false, status: 401 })); expect(screen.getByTestId('identity')).toHaveTextContent('43:新合成賣家:new-fixture');
+    await screen.findByText('43:新合成賣家:new-fixture'); await act(async () => finish(new Response('{}', { status: 401 }))); expect(screen.getByTestId('identity')).toHaveTextContent('43:新合成賣家:new-fixture');
     persistSession(localStorage, null, getFullApiUrl()); act(() => window.dispatchEvent(new StorageEvent('storage', { key: AUTH_SESSION_KEY }))); expect(screen.getByTestId('identity')).toHaveTextContent('signed-out');
   });
   it('cleans up safely through StrictMode mount replay and still accepts fresh identity', async () => {
@@ -95,5 +96,35 @@ describe('real provider session restoration and isolation', () => {
     seed(); mount(); await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1)); fetcher.mockResolvedValue(ok({ ...old, name: '伺服器確認' }));
     persistSession(localStorage, { token: 'old-fixture', user: { ...old, name: '另頁暫存' } }, getFullApiUrl()); act(() => window.dispatchEvent(new StorageEvent('storage', { key: AUTH_SESSION_KEY })));
     await screen.findByText('42:伺服器確認:old-fixture'); expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it('renders English recovery without translating identity or leaking network diagnostics', async () => {
+    seed(); localStorage.setItem('user-locale', 'en-US'); fetcher.mockRejectedValue(new Error('SYNTHETIC_PRIVATE_DIAGNOSTIC')); mount();
+    await screen.findByText(/The last verified data is shown/);
+    expect(screen.getByTestId('identity')).toHaveTextContent('42:舊合成買家:old-fixture');
+    expect(screen.queryByText(/SYNTHETIC_PRIVATE_DIAGNOSTIC/)).not.toBeInTheDocument();
+    fetcher.mockResolvedValue(ok({ ...old, name: '原中文名字' })); fireEvent.click(screen.getByRole('button', { name: 'Recheck account' }));
+    await screen.findByText('42:原中文名字:old-fixture'); expect(screen.queryByRole('button', { name: 'Recheck account' })).not.toBeInTheDocument();
+  });
+  it('uses English expiry notices while keeping pending operations for a confirmed current 404', async () => {
+    seed(); localStorage.setItem('user-locale', 'en-US'); localStorage.setItem('pending-fixture', 'KEEP'); fetcher.mockResolvedValue(new Response('{}', { status: 404 })); mount();
+    await screen.findByText(/Your session has expired/); expect(screen.getByTestId('identity')).toHaveTextContent('signed-out'); expect(localStorage.getItem('pending-fixture')).toBe('KEEP');
+  });
+  it('falls back to English when reading the locale fails without losing the account', async () => {
+    seed(); const read = localStorage.getItem.bind(localStorage);
+    vi.spyOn(localStorage, 'getItem').mockImplementation(key => { if (key === 'user-locale') throw new Error('denied'); return read(key); });
+    fetcher.mockRejectedValue(new Error('offline')); mount(); await screen.findByRole('button', { name: 'Recheck account' });
+    expect(screen.getByTestId('identity')).toHaveTextContent('42:舊合成買家:old-fixture');
+  });
+  it('shares the origin cooldown with chat and requires a fresh explicit account read after expiry', async () => {
+    seed(); localStorage.setItem('user-locale', 'en-US'); localStorage.setItem('pending-fixture', 'KEEP');
+    let now = Date.now(); vi.spyOn(Date, 'now').mockImplementation(() => now);
+    fetcher.mockResolvedValueOnce(new Response('{"errorCode":"RATE_LIMIT_EXCEEDED","error":"SYNTHETIC_PRIVATE_DIAGNOSTIC"}', { status: 429, headers: { 'Retry-After': '120' } })).mockResolvedValue(ok()); mount();
+    await screen.findByText(/Account requests are temporarily limited/);
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck account' }));
+    await act(async () => { await expect(api('other-fixture', '/chat/conversations')).rejects.toMatchObject({ status: 429, code: 'RATE_LIMIT_COOLDOWN' }); });
+    expect(fetcher).toHaveBeenCalledTimes(1); expect(readSession(localStorage, getFullApiUrl())?.user.id).toBe(42); expect(localStorage.getItem('pending-fixture')).toBe('KEEP');
+    expect(screen.queryByText(/SYNTHETIC_PRIVATE_DIAGNOSTIC/)).not.toBeInTheDocument();
+    now += 120_000; await act(async () => {}); expect(fetcher).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck account' })); await waitFor(() => expect(screen.queryByText(/Account requests are temporarily limited/)).not.toBeInTheDocument()); expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });

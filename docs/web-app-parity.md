@@ -12,11 +12,27 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行。第六十五批v2.0.547已正式發布，原登入Chrome541頁實際提示547，取消保留未傳送的合成草稿，明確確認後同一QA聊天室載入547英文介面；英文面交表單原文保留並清空本agent合成輸入，沒有提交。IAB舊534正常reload兩次後載入547。手機Chrome390×844實際排版正常，但後續聊天／面交讀取429，已保存錯誤且未冒稱資料流程通過；第66批修正請求等待。IAB手機圖與DOM量測矛盾保留排除，不能推定所有瀏覽器通過。第六十二批736×952首頁／設定90/90保留為534歷史證據，不冒稱547重評；真訊息／面交異動、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+目前狀態：目標持續進行。第六十六批v2.0.550已正式發布，原登入Chrome547頁實際提示550，明確確認後載入550；探索地圖／8件列表、聊天收件匣／同一QA空聊天室／面交詳情正常讀取，手機390×844收件匣實際畫布通過。前批541→547取消保留合成未傳送文字、英文Chat／未提交Meetup原文保留及IAB534兩次正常reload到547證據保持。v547手機429錯誤與IAB手機圖／DOM矛盾保留，不宣稱所有瀏覽器／所有限流現場都已通過。第六十二批736×952首頁／設定90/90保留為534歷史證據，不冒稱550重評；真訊息／面交異動、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
+
+## 2026-10-03 第六十七批：帳號重讀與全站限流一致、雙語恢復
+
+- v550原IAB帳號／設定失敗保留為歷史；新自有診斷分頁僅觀察Network response／failure，users/me、ai-usage、marketing availability與版本GET均200。原tab先明確重試設定，再明確重新核對帳號，最新個人資料與永久餘額0可見，帳號未確認提示消失。沒有清cache／登入／journal或提交資料；最初失敗原因未確定，不以恢復後200推定原因。唯讀observer關閉、自有診斷tab關閉、原tab保留。
+- AuthProvider原直接fetch繞過第66批shared Retry-After等待。現在同API純記憶deadline，等待期間重按帳號核對也不fetch，期限到達沒有自動request／mutation；需下一次明確核對才讀。只有已核實current401／404或身份不符才登出；離頁、切帳號及晚到JSON仍由原generation／sequence／abort fence保護，未知讀取保留身份與原pending。
+- 帳號恢復、跨分頁、儲存失敗及重新核對按鈕依既有繁中／英文偏好，locale讀取失敗fallback English。closed notice key不存後台diagnostic，姓名／journal／session原值保持。候選依HEAD552＋1進版v553，APP／server／migration不改。
+- focused4檔70項通過，新增英文恢復／404保留pending／locale fault及跨chat-account cooldown實測。401 mock改成真Response以驗HTTP status；原嚴格identity／return／cache／late-body斷言保持。完整Web111檔1765項、TypeScript／Vite build及真worker postbuild已通過；精確三CI及正式UI依增量發布授權接續，未冒称已部署或全目標完成。
+
+## 第六十六批正式發布與新版畫面驗收
+
+- PR98 exact head35d1a8be909c360e7e2010191b64a2fde7d3aa2e，CI37026478391三項all success；正常merge34a69f57e94dbc8bada7104ae0ddf4cb9c31e72a、空觸發65e7c1af1c2c136424817ba030a069f18966d96a。Gitce9de029-6824-4abd-b9f7-eeb8fa3f1e9c WAITING後同乾淨checkout直接部署既有wishlist-app production，031c9159-e390-4721-ac1a-bf719b62b33e SUCCESS。uploads mount、環境、DB service、APP及server／migration程式樹保持；1761 Web／build／worker postbuild與精確三CI均已完成。
+- 正式metadata／index／bundle550一致，Explore／Chat／SourceLeadMap／Settings四chunks200、健康200與未登入私有API401，公開marketplaceApi真正bytes含RATE_LIMIT_COOLDOWN／Retry-After／global code。公開worker入口activation1／claim1、legacy bootstrap200同原JS SHA。v544／547各96precache真URL歷史proof保留；此批只驗改動相關資源及實際新畫面，沒有再次大量讀取96URL去耗用正式額度，也沒有假寫成550全96重測。
+- 原生Chrome547設定透過內建check→ready547→550、明確已保存reload→550，繁中語言還原。Chat收件匣1既有QA room，原中文商品／QA聯絡人／NT165／台灣時間保持，空history／disabled傳送及無預約readable。Explore地圖／列表8件正常，手機390×844Chat inbox實際畫布正常；未建立room／傳訊／提約／封鎖／修改帳號或刊登。429 cooldown由回歸驗證，不因部署重啟後讀取成功冒稱正式端已重現並走完429等待期限。
+- v547原Settings429後明確Retry reading已恢復，再還原繁中；不需要清storage或登入資料。全目標保持active；最新Home／Settings相似度仍引用534既有人工90/90，沒有重新審查550。
+- 手機390×844原生同QA room已讀到空history／disabled Send，面交詳情亦讀到無預約，原AX／JPEG另存。自有單分頁Chrome視窗關閉，原App Store Connect多分頁視窗未操作；device toolbar／DevTools收起，正常Actual Size與繁中還原。
+- 原IAB547 ready550後明確確認及重試fresh proof仍提示「暫時無法核對更新」，安全留547。無未保存輸入下正常reload後可見550，但帳號／Settings資料明確重試仍失敗，不能算IAB safe update或profile成功；原錯誤DOM／PNG保留，原因尚未確認，不把它推定為與Native同429。viewport reset、繁中還原、原tab維持active goal handoff。此缺口與全部未完矩陣持續處理。
 
 ## 2026-10-02 第六十六批：聊天長時間開啟後的限流等待
 
-- v547原生Chrome390×844畫布正常顯示英文Chat／Meetup，但持續讀取後遇429，設定讀取也429；原生DevTools可見 `/api/chat/conversations/...` 與 `/api/users/me` Too Many Requests，未操作Console程式／storage／安全開關。production既有限制每IP全路由500次／15分鐘，本輪兩版本各96資源讀取及真頁面操作也共享該額度，不能歸因為正常單一聊天輪詢必定超限。
+- v547原生Chrome390×844畫布正常顯示英文Chat／Meetup，但持續讀取後遇429，設定讀取也429；原生DevTools可見 `/api/chat/conversations/...` 與 `/api/users/me` Too Many Requests，未操作Console程式／storage／安全開關。production既有限制每IP全路由500次／15分鐘，每個資源讀取都計入其出口IP額度；沒有比對GUI與HTTP驗收出口IP，不宣稱兩者必定同額度，更不能歸因為正常單一聊天輪詢必定超限。公開metadata在15:24:18讀到remaining182／reset452，作為當時HTTP端額度證據保存。
 - Web API收到429即依Retry-After秒數或HTTP-date記住純記憶deadline，其他route／account亦不再發出請求，無有效header時保守等60秒；期限到達不會自行重送任何mutation。只保留期限、不存token／response／journal；原訊息及預約pending identity／body保持。Chat／Meetup顯示中英文等待提示，不把失敗說成空紀錄。未放寬或移除伺服器限制。
 - 面交詳情開啟時由對話與詳情重複讀取meetup，移除parent重複呼叫，仍讀最新room／messages及詳情appointment。回歸涵蓋跨route／account cooldown、期限前零fetch、原操作明確重試、日期／非JSON／缺header、401不誤暫停、原草稿保留與一次輪詢僅一筆meetup read。
 - 第一次新輪詢測試因fake timers在render後才啟動而未攔既有interval失敗；改在render前只攔interval，不改timeout／不略過斷言。候選HEAD count549＋1為v550；完整Web／build／精確CI及正式更新另驗收，不以本機通過代替正式流程。全目標保持active。
@@ -497,8 +513,8 @@
 | 保留既有Web來源線索地圖／委託詢問 | main7db05da獨立Web功能；不冒稱APP已驗證商品或付款 | 第58批原target／撤回／unknown／late scope保留；第60批中英文與native44px point／Space真UI、空GET不配置、ASK與CONSENT各真commit502→reload GET同room／原中文問題／WAITING_ROUTE、B null不建room，35requests只有原配置／ASK／CONSENT3POST；新Web1／focused16／HTTP9通過、45migration diff0 | 完整來源／核實原賣家路由／人工delivery證據／正式端仍待；最小request marker不是原body durable history，不把來源線索算已驗證商品達成率 |
 | 願望交叉比對／外部來源／自有商品預覽 | ExploreScreen、wishMatch、externalListingSearch | 本機實作；漫畫地圖4件含1件自有預覽；正式後台外部來源仍未開放 | 回傳分數及來源不混淆；外部頁／來源詳情與跨站HTML縮圖標記有合成測試，不把失敗顯示0件 |
 | 商品檢舉與聊天入口 | ExploreScreen、ListingReportSheet | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
-| 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
-| 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
+| 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 已正式部署550；繁中桌面／390手機收件匣、QA空history及547英文原文介面通過，隔離HTTP／DB與瀏覽器發送、未知回應、121則分頁證據保持；正式雙方送達／跨端仍待 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
+| 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 已正式部署550；QA無預約詳情、547英文未提交表單原文通過；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成有UI／HTTP測試；正式双方面交異動待 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
 | 保留既有Web朋友搜尋／追蹤／公開資料 | Social／public-profile／follow-operations；APP社交以ChatInbox為基準 | 第25／26批server privacy及原回執保留；第56批雙語原生日／photo failure-retry／公開與mask欄位、真取消commit502→reload及換帳號返回GET同回執／CAS清理、profile503恢復已Chrome本機驗證，原users逐欄不變 | 原HTTPS照片provider／跨端及正式站仍待；null不提供隱藏個資，calendar原值不依browser timezone換日 |
 | 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；第55批native-contract願望UI雙語／GET-only跨語言恢復／原decimal及dated fixed-rate estimate真Chrome核對；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |

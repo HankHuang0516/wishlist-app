@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Account recovery and shared request limits — 2026-10-03
+
+Account rechecks use the same in-memory Retry-After cooldown as chat and meetups. Expiry alone sends no request; a new explicit recheck is required. Confirmed current401/404 or mismatched identity expires the session, while transport failures keep the last verified identity and original pending operations. Existing abort and account/request generation fences remain in force. Account notices and recheck controls follow Chinese/English with English storage-fault fallback; original names and session/journal data are unchanged.
+
 ## Bilingual chat and meetups — 2026-10-02
 
 Chat and meetup controls, statuses, accessibility labels and recovery notices follow the existing Chinese/English preference, with English fallback when locale storage is unavailable. Item titles, contact names, messages, place names, notes, amounts and immutable recovery bodies retain their original content. Only the generated archived-item placeholder is translated. Dates keep explicit Taiwan time in either language; prices remain TWD.

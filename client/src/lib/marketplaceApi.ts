@@ -21,6 +21,7 @@ export async function api<T>(token: string, path: string, init: RequestInit = {}
     throw new Error('無效的 API 路徑。');
   const remaining = limitedUntil - Date.now();
   if (remaining > 0) throw new ApiFailure('請求暫時受限，請稍後再試。', 429, 'RATE_LIMIT_COOLDOWN', remaining);
+  limitedUntil = 0;
   const response = await fetch(`${API_URL}${path}`, { ...init, cache: 'no-store', headers: {
     Authorization: `Bearer ${token}`, ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers,
   }, signal: init.signal ?? AbortSignal.timeout(30_000), redirect: 'error' });

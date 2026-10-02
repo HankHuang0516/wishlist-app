@@ -2,7 +2,8 @@ import { useEffect,useRef,useState,type ComponentType } from 'react';
 import { Link,useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api,ApiFailure } from '../lib/marketplaceApi';
-import { parsePublicProfile,socialAvatar,type PublicProfile } from '../lib/socialWeb';
+import { parsePublicProfile,type PublicProfile } from '../lib/socialWeb';
+import SocialAvatar from '../components/SocialAvatar';
 import { useFollowOperation } from '../lib/useFollowOperation';
 import { parseFollowState,type FollowState } from '../lib/followWeb';
 import FollowRecovery from '../components/FollowRecovery';
@@ -44,7 +45,7 @@ function ProfileSession({token,userId,targetId}:{token:string;userId:number;targ
         {loading&&<p role="status">{t('common.processing')}</p>}
         {error&&<div role="alert"><p>{t(error)}</p><Button className="mt-2 min-h-11" onClick={()=>setReload(n=>n+1)}>{t('friend.retry')}</Button></div>}
         {profile&&<Card><CardHeader><CardTitle>{t('friend.basicInfo')}</CardTitle></CardHeader><CardContent className="space-y-6">
-            <div className="flex justify-center"><div className="flex h-32 w-32 flex-col items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-500">{profile.avatarUrl?<img src={socialAvatar(profile.avatarUrl)} referrerPolicy="no-referrer" alt={profile.name??t('social.anonymous')} className="h-full w-full object-cover" />:<><EyeOff className="h-6 w-6" aria-hidden="true" /><span className="text-xs">{t('friend.photoUnavailable')}</span></>}</div></div>
+            <div className="flex justify-center"><div className="flex h-32 w-32 flex-col items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-500"><SocialAvatar url={profile.avatarUrl} name={profile.name??t('social.anonymous')} compact={false} fallback={<><EyeOff className="h-6 w-6" aria-hidden="true" /><span className="text-xs">{t('friend.photoUnavailable')}</span></>} /></div></div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {renderField(t('settings.displayName'),profile.name,User)}
                 {renderField(t('settings.nickname'),profile.nicknames,Tag)}

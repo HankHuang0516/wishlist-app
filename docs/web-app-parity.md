@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十六批：保留朋友功能的原生日與照片恢復（仍未部署）
+
+- APP社交入口是ChatInbox；本批核對並保留既有Web朋友搜尋／追蹤／公開個人頁，不虛構APP朋友欄位。SocialPage搜尋及追蹤卡片直接顯示已嚴格驗證的原YYYY-MM-DD，與FriendProfile一致；原2000-01-01在America/Los_Angeles曾被local Date顯示12/31/1999，新中英文回歸保留原曆日。server公開旗標／最小投影、電話／birthday／avatar null遮罩、原追蹤契約與加密journal不改，search Input局部min44px，不改shared Input預設。
+- SocialAvatar只讀既有驗證URL，維持no-referrer；失敗明示繁中／English並有原URL明確重試，不拼query或改原個資、不從隱藏欄位／第三方fallback推測。每原URL／attempt獨立元件生命週期，舊圖片error不能污染新URL或retry；null沿原未提供／未公開fallback，未把讀取失败說成隱私設定。新增Web7，focused31共4檔；最初新增assert誤寫未公開，改核對原已隱藏3欄，沒有刪除或降斷言。
+- 完整隔離pre-push退出0：Server56檔913＋既有3skip、HTTP40檔630、Web105檔1695＋build、Native42檔852＋typecheck／Expo、45migration schema diff0與required cleanup0。主JS350.92KB、PWA95entries6087.27KiB，原map／worker warnings保留；APP／server／migration未改。
+- 新loopback5235／API5236／獨立UTF8 DB45migrations／三synthetic users與compiled handlers，native CUA Chrome自有無痕實測：英文搜尋原birthday與另一人mask、追蹤兩人、公開profile生日／nickname／phone及私密realName／address；照片404→原頁保留→輔助fixture恢復同URL→明確Retry成功，沒有profile／follow write。390×844下search503→原query重試成功；Following確認取消A→B真commit後QA502，reload GET原APPLIEDv1／Not following，B只見自己的1人且無A marker；返回A繁中GET同回執→明確CAS清理，中文原生日保留／following剩maskC，Cprofile birthday／phone／photo仍遮罩。公開profile503不稱不存在，explicit retry回原欄位與照片。
+- 最終31產品請求：30GET含28×200、2注入503；只有1原POST502，原b4c2d29f-d4c6-42f7-8a4b-4c770cfa2421回執GET2×200。真DB follow3→2／receipt1 APPLIEDv1 wanted=false、原三人name／nickname／birthday／avatar／visibility逐欄不變；photo7讀含3×404及4×200的本機合成PNG，外部mutation0／real credentials false。Trace path是mounted router相對路徑，攔截503保留完整/api/users，沒有完整URL/query／headers/token紀錄。14原PNG／完整native AX／trace保存；native不是full-page、birthday時區反例由Intl／React證明，未覆寫browser timezone，照片不是真Flickr／持久服務。没有DOM geometry、新全controls44px實測或fresh90/90聲明。
+- DevTools初AX width typeText變9999，當即由可見欄位貼上390並讀回；不把該attempt當手機驗收。最後尺寸1301×627 visibly還原、device mode off／DevTools關、只關自有window及輔助tab，bookmark bar未改；自有API／Vite／PG停、DB／原素材／他人工作保留。精確新HEAD CI另回讀，PR82 draft／goal active、未部署。全逐欄權限、source-lead新增Web語系／browser、真provider跨端、avatar持久／unknownFlickr、PWA install／production update／mixed-version CAS／效能、真credentials／permanent browser、freshHome／Settings各90及migration／merge／Railway／live仍待。
+
 ## 2026-10-02 第五十五批：願望介面雙語與原始價格精度（仍未部署）
 
 - `/wishes` 的清單、表單、照片、AI狀態、pending／local-cleanup／未知更新及刪除警示提供繁中／English，157項typed display copy；固定已知errors翻譯，未知診斷採bounded fallback。原name／notes／photo bytes／request ID-body／placeholder及原API契約不翻譯，分享入口正名願望詳情，沒有新增APP不存在的editable tags。原valid HTTP/HTTPS商品link保留，帶帳密或不安全link不建立可點連結但editor原值仍保留；主要details／links／checkbox label44px、dialog close明確語系及busy gate，name排序依目前display locale。
@@ -357,6 +366,7 @@
 | 商品檢舉與聊天入口 | ExploreScreen、ProductNotice | 探索及公開商品入口本機實作；本人商品進管理，重複／失聯建房與登入返回測試通過 | 對象正確、重複點擊不重建對話；檢舉非立即下架 |
 | 商品聊天收件匣／未讀／分頁／發送恢復 | ChatScreen；chat/conversations | 本機實作；真實隔離HTTP／DB與瀏覽器驗證發送、未知回應、121則分頁；正式端待部署驗收 | clientMessageId、單次發送、重連、不跨帳號洩漏 |
 | 封鎖／解除／面交預約 | ChatScreen；chat/blocks、meetup | 本機實作；隔離買賣家確認／改期／封鎖／取消與重開恢復已驗證，完成流程有UI及HTTP測試 | 雙方權限、提案／接受／取消／完成、狀態衝突；實際APP與後台沒有訊息檢舉操作，不能虛構此能力 |
+| 保留既有Web朋友搜尋／追蹤／公開資料 | Social／public-profile／follow-operations；APP社交以ChatInbox為基準 | 第25／26批server privacy及原回執保留；第56批雙語原生日／photo failure-retry／公開與mask欄位、真取消commit502→reload及換帳號返回GET同回執／CAS清理、profile503恢復已Chrome本機驗證，原users逐欄不變 | 原HTTPS照片provider／跨端及正式站仍待；null不提供隱藏個資，calendar原值不依browser timezone換日 |
 | 願望清單與願望建立／編輯／刪除；AI標籤備註 | WishScreen／wishManagement及Prisma Item無editable tags欄；AI preview及notes行保留 | `/wishes` 共用原生契約；第35–39批真browser手動／網址／照片、名稱備註、參考價與獨立預算0/null、隱藏／完成、原clone回執／safe stop及來源刪除後distinct圖片核對。legacy list/privacy/delete有加密標記；舊API只讀目前值不冒稱歷史。第54批Dashboard／Detail雙語、未知原操作重開／只GET、分享stub及訪客權限真Chrome核對；AI tags由queue附notes並原值讀回，非獨立分類；第55批native-contract願望UI雙語／GET-only跨語言恢復／原decimal及dated fixed-rate estimate真Chrome核對；完整逐欄／永久刪除UI最終submit／跨端仍待 | 同帳號兩端與原許願者、私人／隱藏／容量權限、價格幣別；不增造不存在的APP分類 |
 | 願望照片拍攝／上傳／AI queue／恢復 | WishScreen、wishPhoto* | 瀏覽器真實照片上傳／建立／失聯重開／狀態回讀、未使用照片移除回執與防重建已在隔離後台驗證；MiniMax實際識別、跨端及正式端仍待補 | 同照片正確識別、私密圖、價格說明不稱保證 |
 | 帳號安全合併展開 | AccountSecurityScreen | 本機已實作 | 欄位標籤、預設收合、安全確認與busy gate |

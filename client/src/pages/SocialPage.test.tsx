@@ -19,6 +19,25 @@ const submit=(query='合成')=>{fireEvent.change(input(),{target:{value:query}})
 beforeEach(()=>{journals.clear();vi.stubGlobal('crypto',webcrypto);localStorage.setItem('user-locale','zh-TW');});
 afterEach(()=>{localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('actual friends page, safe reads and uncertain mutations',()=>{
+    it.each(['zh-TW','en-US'])('search and following preserve the original public calendar date in %s west of UTC',async locale=>{
+        localStorage.setItem('user-locale',locale);
+        const west=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles'});
+        const originalDate='2000-01-01T00:00:00.000Z';
+        expect(west.format(new Date(originalDate))).toBe('12/31/1999');
+        vi.spyOn(Date.prototype,'toLocaleDateString').mockImplementation(function(this:Date){return west.format(this);});
+        vi.stubGlobal('fetch',vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[{...friend,birthday:originalDate},{...friend,id:21,name:'Hidden birthday friend'}])));
+        render(view());
+        const chinese=locale==='zh-TW';
+        const query=screen.getByRole('textbox',{name:chinese?'姓名、手機號碼或電子信箱':'Name, phone number, or email'});
+        fireEvent.change(query,{target:{value:'original'}});
+        fireEvent.click(screen.getByRole('button',{name:chinese?'搜尋使用者':'Search Users'}));
+        await screen.findByText((chinese?'生日: ':'Birthday: ')+'2000-01-01');
+        expect(screen.queryByText(/12\/31\/1999/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button',{name:chinese?'追蹤中':'Following',exact:true}));
+        await screen.findByText((chinese?'生日: ':'Birthday: ')+'2000-01-01');
+        expect(screen.getAllByText(/2000-01-01/)).toHaveLength(1);
+        expect(screen.queryByText(/12\/31\/1999/)).not.toBeInTheDocument();
+    });
     it('successful cards retain hidden contacts and non-nested labelled profile/wish links',async()=>{
         vi.stubGlobal('fetch',vi.fn(async(url:string)=>ok(url.endsWith('/me')?self:[friend])));render(view());submit();
         await screen.findByText('合成朋友');expect(screen.getByText('聯絡資料未公開')).toBeInTheDocument();

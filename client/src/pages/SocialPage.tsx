@@ -9,7 +9,8 @@ import MarketplaceDialog from '../components/MarketplaceDialog';
 import { Link } from "react-router-dom";
 
 import { api } from '../lib/marketplaceApi';
-import { parseSocialUsers, socialAvatar, type SocialUser as User } from '../lib/socialWeb';
+import { parseSocialUsers, type SocialUser as User } from '../lib/socialWeb';
+import SocialAvatar from '../components/SocialAvatar';
 import { t } from "../utils/localization";
 import { useFollowOperation } from '../lib/useFollowOperation';
 import FollowRecovery from '../components/FollowRecovery';
@@ -146,7 +147,7 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                 value={searchQuery}
                                 onChange={(e) => { searchSeq.current++; searchAbort.current?.abort(); setSearchQuery(e.target.value); setSearchResults([]); setHasSearched(false); setSearchError(''); setLoading(false); }}
                                 maxLength={100}
-                                className="pl-10 pr-11"
+                                className="min-h-11 pl-10 pr-11"
                             />
                             {searchQuery && (
                                 <button
@@ -180,13 +181,11 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                 <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                                     <div className="flex min-w-0 items-center gap-3">
                                         <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                                            {user.avatarUrl ? (
-                                                <img src={socialAvatar(user.avatarUrl)} referrerPolicy="no-referrer" alt={user.name ?? t('social.anonymous')} className="w-full h-full object-cover" />
-                                            ) : (
+                                            <SocialAvatar url={user.avatarUrl} name={user.name ?? t('social.anonymous')} fallback={
                                                 <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 font-bold">
                                                     {user.name?.[0]?.toUpperCase() || "U"}
                                                 </div>
-                                            )}
+                                            } />
                                         </div>
                                         <div className="min-w-0 break-all">
                                             <p className="font-medium text-lg">{user.name || t('social.anonymous')}</p>
@@ -195,7 +194,7 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                             </p>
                                             {user.birthday && (
                                                 <p className="text-xs text-pink-500 font-medium">
-                                                    {t('social.birthdayPrefix')}{new Date(user.birthday).toLocaleDateString()}
+                                                    {t('social.birthdayPrefix')}{user.birthday.slice(0, 10)}
                                                 </p>
                                             )}
                                         </div>
@@ -250,13 +249,11 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                     {/* Left: Avatar */}
                                     <div className="flex min-w-0 items-center gap-3">
                                         <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden border border-gray-100 flex-shrink-0">
-                                            {user.avatarUrl ? (
-                                                <img src={socialAvatar(user.avatarUrl)} referrerPolicy="no-referrer" alt={user.name ?? t('social.anonymous')} className="w-full h-full object-cover" />
-                                            ) : (
+                                            <SocialAvatar url={user.avatarUrl} name={user.name ?? t('social.anonymous')} fallback={
                                                 <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 font-bold text-xl">
                                                     {user.name?.[0]?.toUpperCase() || "U"}
                                                 </div>
-                                            )}
+                                            } />
                                         </div>
 
                                         {/* Name & Info */}
@@ -274,7 +271,7 @@ function SocialSession({ token, userId }: { token: string; userId: number }) {
                                             </p>
                                             {user.birthday && (
                                                 <p className="text-xs text-pink-500 font-medium">
-                                                    {t('social.birthdayPrefix')}{new Date(user.birthday).toLocaleDateString()}
+                                                    {t('social.birthdayPrefix')}{user.birthday.slice(0, 10)}
                                                 </p>
                                             )}
                                         </div>

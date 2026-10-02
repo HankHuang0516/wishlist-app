@@ -37,8 +37,9 @@ router.post('/me/profile-operations/:clientActionId', authenticateToken, submitP
 router.post('/me/profile-operations/:clientActionId/abandon', authenticateToken, abandonProfileOperation);
 router.put('/me/password', authenticateToken, securityLimiter, updatePassword);
 router.post('/me/sessions/revoke', authenticateToken, securityLimiter, revokeSessions);
-router.get('/me/purchases', authenticateToken, getPurchasedItems);
-router.get('/me/transaction-history', authenticateToken, getPurchaseHistory);
+const privateHistory: import('express').RequestHandler = (_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); };
+router.get('/me/purchases', privateHistory, authenticateToken, getPurchasedItems);
+router.get('/me/transaction-history', privateHistory, authenticateToken, getPurchaseHistory);
 router.get('/me/ai-usage', authenticateToken, getAiUsage);
 router.post('/me/subscription', authenticateToken, paymentTemporarilyUnavailable);
 router.post('/me/subscription/cancel', authenticateToken, paymentTemporarilyUnavailable);

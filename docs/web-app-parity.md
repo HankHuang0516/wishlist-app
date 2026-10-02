@@ -27,6 +27,16 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第五十批：保留交易與送禮紀錄的權限及獨立讀取（仍未部署）
+
+- 原GET users/me/transaction-history與purchases、array路由及personal API-key capability保留；帳號交易只select原display欄位，原amount／currency／status／同時刻ID排序不改。送禮認領依目前purchasedById、repeatable-read snapshot投影；本人仍可看自己的私人／隱藏願望，他人目前private／hidden則僅id／updatedAt／unavailable提醒，不因過去認領取得持續權限。保留筆數但不洩漏notes／AI error／proxy／private parent／隱藏avatar。清單刪除或取消認領可能不再列出，不冒稱durable ledger／付款／送達。private no-store在auth前設定、故障bounded。
+- Web兩區分別loading／failure／retry／confirmed empty，任何HTTP／network／schema失敗不再冒充空清單；未確認區不混用另一區結果。GET用no-store／redirect error／30s；user/token key remount＋abort／sequence擋late JSON、不保存history至瀏覽器。原金額精度、0／negative refund、unknown type/status保持，只有真正COMPLETED用success styling；LIMIT_FOLLOWING有正確追蹤人數標籤。繁中／英文＋安全locale fallback、mobile cards／desktop table、完整長名稱／無600px強制寬，unsafe links／photos無target。Settings原API／history Link保留，移除nested Button為唯一44px target，未改全站Button預設。
+- 新HTTP11（真routes／PostgreSQL，105筆不截斷、私密／隱藏／本人／他人／personal key／revoked／query spoof／資料庫fail）與Web23；focused59／3檔。最新完整隔離pre-push退出0：Server56檔913＋3skip、HTTP37檔603、Web96檔1580＋build、Native42檔852＋typecheck／Expo、44migrations schema diff0／required cleanup0。JS350.51KB、PWA91entries6029.93KiB、既有warnings保留，APP／migration未改。
+- Chrome新origin5220、獨立UTF8 DB44migrations、三syntheticowners／真compiled GET：原Settings→history，3transactions／4claims（2 unavailable），USD123.4567／negative1.125／TWD0保留、Failed非綠。手機390×844 doc375／full name；desktop1024×900 doc1009真3-row table。一次合成accountGET503時claims仍可閱覽；failure trace11→retry trace12仅增加account GET200，沒有重讀claims。第二空帳號中文正確empty、无舊內容、doc390；return Settings唯一入口44px／無nested、logout→guest login-return且沒有新private GET。最终20GET（19×200＋1synthetic503）／product write0／external0，fixture3transactions／4claims未改。
+- 六原JPEG、四幾何JSON、full／failed／retried traces與wishlist-web-purchase-history-evidence-20261002.json保存，功能證據不重新宣稱Home／Settings90/90。client initial build的erasableSyntaxOnly拒絕parameter property已改explicit field；語系測試初用錯storage key/prototype，修fixture而非改產品或弱化斷言。自有API／Vite／PG結束、tab關閉及viewport还原；DB／fixtures／他人worktree保留。
+- Browser在最後Object.hasOwn status guard之前保存，標準fixture狀態／layout及server handlers未改；__proto__／constructor以新增Web回歸驗證，不宣稱另有未知status browser證据。新回歸通過後重新跑完整gate退出0（最新1580）；原先1579及失敗fixture logs保留。
+- 下一工作保留AI指令的copy/departure／get-or-create key競態、API介紹／文件的語系／URL／契約與paused UCP文案，全feature／social／Home語系、完整逐欄權限、avatar／unknownFlickr／真provider跨端、PWA／效能、credential／permanent browser、管理diagnostic正式config核對、fresh Home／Settings各90及正式preflight／merge／Railway／live回讀。PR82 draft、goal active、未部署；精確HEAD CI另核對。
+
 ## 2026-10-02 第四十九批：管理郵件診斷權限與未知結果（仍未部署）
 
 - 修正既有POST feedback/test只有註解宣稱Auth Required、實際沒有驗證的缺口；要求live JWT與當前authVersion，不接受personal API key、frontend電話、JWT role或request欄位作管理權限。後台EMAIL_DIAGNOSTICS_ADMIN_USER_IDS嚴格解析與EMAIL_DIAGNOSTICS_ENABLED=true雙條件，缺失／錯誤設定預設不可寄。正式enable前須核對當前帳號ID；本批不改正式env、不授權真實寄信。
@@ -308,7 +318,8 @@
 | 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；第48批landing中英文／安全locale讀取／原form入口真browser已核對 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
 | 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
 | 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |
-| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
+| 既有帳號交易與送禮認領紀錄 | Web既有功能；APP沒有此頁 | 第50批actual HTTP11／Web23與Chrome populated／empty／single-read503→retry／guest；105筆完整、private current claim minimal reminder、原amount／0／refund／status、雙語mobile／desktop及single44px Settings entry核對 | Current claims不是付款／送達或durable history；對方私人／隱藏立即依新讀取遮蔽；正式端待驗 |
+| 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；交易／送禮已第50批實際回歸；API copy／文件與PWA仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 
 ## 平台替代策略
 

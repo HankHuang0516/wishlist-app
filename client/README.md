@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Retained account transactions and gift claims — 2026-10-02
+
+`/purchase-history` retains both original authenticated reads with independent loading, bounded failure and explicit retry states. A failed read is never an empty history. Each account/token change remounts the private view and aborts old reads; request generations also fence late JSON. Reads use no-store, redirect rejection and a30s deadline, with no browser persistence of history. Chinese/English copy remains available when locale storage fails. Original amounts and currencies retain precision, zero and negative refund values; only actual COMPLETED status gets completed styling. Unknown transaction types/statuses remain labelled without claiming success or adding checkout.
+
+The account endpoint selects display fields only. Gift claims are current `purchasedById` memberships, not durable payment or delivery receipts. Current private/hidden outsider wishes return only ID/time/unavailable, preserving their count without revealing content; the actual owner can still read their own wish. A repeatable-read database snapshot keeps nested privacy decisions consistent. Visible rows omit AI/provider/proxy/private-parent data and respect avatar visibility. The original array routes and personal API-key read capability are retained; neither client query identities nor API keys from another owner grant access. Removed lists or released claims can disappear because no historical ledger is invented. Mobile claim cards no longer force a600px width, and unsafe external links/photos receive no target. Settings API/history entries have a single44px Link target rather than a nested Button.
+
 ## Server-admitted mail diagnostics — 2026-10-02
 
 The existing Settings diagnostic is available from More features only after a matching live server capability read. A phone number in the frontend no longer grants admission. The server requires a current user JWT, rejects personal API keys and client role/recipient overrides, rechecks the session and operator policy before sending, and returns only bounded acceptance/refusal/unknown facts. Public feedback and its receipt protocol are unchanged.

@@ -161,6 +161,8 @@ describe('settings hub retains web-only functionality while adding app actions',
     const advanced = screen.getByText('進階功能').closest('details')!;
     expect(advanced).not.toHaveAttribute('open'); advanced.setAttribute('open', '');
     expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ })).toHaveAttribute('href', '/purchase-history');
+    expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ }).querySelector('button')).toBeNull();
+    expect(screen.getByRole('link', { name: /查看 API 文件/ }).querySelector('button')).toBeNull();
     expect(screen.getByRole('button', { name: /一鍵複製 AI 指令/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上傳大頭照' })).toHaveAttribute('tabindex', '0');
   });

@@ -605,11 +605,9 @@ function SettingsSession() {
                                 <span className="mr-2">📋</span>
                                 {st("一鍵複製 AI 指令")}
                             </Button>
-                            <Link to="/api-showcase" className="flex-1">
-                                <Button variant="outline" className="w-full">
-                                    <span className="mr-2">📖</span>
-                                    {st("查看 API 文件")}
-                                </Button>
+                            <Link to="/api-showcase" className="flex min-h-11 flex-1 items-center justify-center rounded-md border border-muji-border px-4 py-2 text-sm text-muji-primary hover:bg-muji-bg">
+                                <span className="mr-2">📖</span>
+                                {st("查看 API 文件")}
                             </Link>
                         </div>
                     </CardContent>
@@ -700,10 +698,8 @@ function SettingsSession() {
                 {/* Purchase History Link */}
                 <div className="mt-6 pt-6 border-t">
                     <h3 className="text-lg font-medium mb-2">{t('settings.historyTitle')}</h3>
-                    <Link to="/purchase-history">
-                        <Button variant="outline" className="w-full md:w-auto">
-                            {t('settings.viewHistory')}
-                        </Button>
+                    <Link to="/purchase-history" className="flex min-h-11 w-full items-center justify-center rounded-md border border-muji-border px-4 py-2 text-sm text-muji-primary hover:bg-muji-bg md:w-auto">
+                        {t('settings.viewHistory')}
                     </Link>
                 </div>
 

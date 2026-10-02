@@ -272,43 +272,7 @@ export const updateSubscription = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// Purchase History
-export const getPurchasedItems = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const items = await prisma.item.findMany({
-            where: { purchasedById: userId },
-            include: {
-                wishlist: {
-                    include: {
-                        user: {
-                            select: { name: true, nicknames: true, avatarUrl: true, id: true }
-                        }
-                    }
-                }
-            },
-            orderBy: { updatedAt: 'desc' }
-        });
-        res.json(items);
-    } catch (error) {
-        res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
-
-// Get Account Purchase History (Premium, Limits)
-export const getPurchaseHistory = async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user.id;
-        const history = await prisma.purchase.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' }
-        });
-        res.json(history);
-    } catch (error) {
-        console.error('Fetch History Error:', error);
-        res.status(500).json({ error: 'Failed to fetch history', errorCode: API_ERROR_CODES.INTERNAL_ERROR });
-    }
-};
+export { getPurchasedItems, getPurchaseHistory } from './purchaseHistoryController';
 
 // Get AI Usage Info
 export const getAiUsage = async (req: AuthRequest, res: Response) => {

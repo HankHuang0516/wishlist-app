@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,8 @@ export default function SourceLeadMapPage() {
  const savedRequest=()=>{try{const x=JSON.parse(sessionStorage.getItem(journalKey)??'null');return x&&typeof x.requestId==='string'&&['ASK','CONSENT','CANCEL'].includes(x.action)?x:null;}catch{return null}};
  useEffect(()=>{let stopped=false;let loading=false;async function refresh(){if(loading)return;loading=true;try{const all:Lead[]=[];let cursor:string|null=null;const seen=new Set<string>();do{const r:Response=await fetch(`${API_URL}/source-leads${cursor?'?cursor='+encodeURIComponent(cursor):''}`);if(!r.ok)throw Error(text('readFailed'));const data=await r.json();if(!Array.isArray(data.items))throw Error(text('invalidResponse'));all.push(...data.items);cursor=data.nextCursor;if(cursor&&seen.has(cursor))throw Error(text('cursorStalled'));if(cursor)seen.add(cursor);}while(cursor);if(!stopped){setItems(all.filter(r=>currentLead(r)));setLoaded(true);setError('');}}catch(e){if(!stopped){setItems([]);setLoaded(false);setError((e as Error).message);}}finally{loading=false;}}
  const foreground=()=>{if(document.visibilityState==='visible')void refresh()};void refresh();const timer=setInterval(()=>void refresh(),30000);document.addEventListener('visibilitychange',foreground);return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',foreground)};},[]);
- useEffect(()=>{setRoom(null);setQuestion('');setBusy(false);privateScope.current='';pending.current=null;},[scope]);
+ // Finish resetting the previous scope before the new source can accept input.
+ useLayoutEffect(()=>{setRoom(null);setQuestion('');setBusy(false);privateScope.current='';pending.current=null;},[scope]);
  async function action(kind:'ASK'|'CONSENT'|'CANCEL'|'READ') {
   if(!targetId||!token||busy||requestBusy.current===scope||(kind==='ASK'||kind==='CONSENT')&&!selected)return;requestBusy.current=scope;const requestScope=scope;const id=targetId;const auth=token;setBusy(true);setError('');
   const current=()=>currentScope.current===requestScope;

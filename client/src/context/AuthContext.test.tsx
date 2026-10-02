@@ -49,7 +49,11 @@ describe('real provider session restoration and isolation', () => {
   });
   it('expires only the current session and preserves a validated chat return destination', async () => {
     const room = 'c11fde58-d143-423c-99f1-a13d60068f58'; seed(); localStorage.setItem('pending-fixture', 'KEEP'); fetcher.mockResolvedValue({ ok: false, status: 401 }); mount('/chat?room=' + room);
-    await screen.findByText('signed-out'); expect(screen.getByTestId('route')).toHaveTextContent('/login?next=' + encodeURIComponent('/chat?room=' + room)); expect(localStorage.getItem('pending-fixture')).toBe('KEEP'); expect(readSession(localStorage, getFullApiUrl())).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId('identity')).toHaveTextContent('signed-out');
+      expect(screen.getByTestId('route')).toHaveTextContent('/login?next=' + encodeURIComponent('/chat?room=' + room));
+    });
+    expect(localStorage.getItem('pending-fixture')).toBe('KEEP'); expect(readSession(localStorage, getFullApiUrl())).toBeNull();
   });
   it('treats network/server failure as unverified, not as logout or a successful update', async () => {
     seed(); fetcher.mockRejectedValue(new Error('offline')); mount(); await screen.findByText(/目前顯示上次確認內容/); expect(screen.getByTestId('identity')).toHaveTextContent('42:舊合成買家:old-fixture');

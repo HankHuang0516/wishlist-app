@@ -25,14 +25,14 @@ export default function Layout() {
                             <span>Wishlist.ai</span>
                         </Link>
                         {isAuthenticated && isPremium && (
-                            <div title={webShellText('premium')} className="hidden sm:flex items-center gap-1.5 px-3 py-1 ml-2 rounded-full bg-amber-50 border border-amber-200 shadow-sm">
+                            <div title={webShellText('premium')} className="hidden lg:flex items-center gap-1.5 px-3 py-1 ml-2 rounded-full bg-amber-50 border border-amber-200 shadow-sm">
                                 <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />
                                 <span className="text-xs font-bold text-amber-700">{webShellText('premium')}</span>
                             </div>
                         )}
-                        {/* Mobile view icon only */}
+                        {/* Compact membership badge keeps tablet navigation on one row. */}
                         {isAuthenticated && isPremium && (
-                            <div title={webShellText('premium')} className="sm:hidden flex items-center justify-center -mt-1 ml-1 w-6 h-6 rounded-full bg-amber-100 border border-amber-300">
+                            <div title={webShellText('premium')} className="lg:hidden flex items-center justify-center -mt-1 ml-1 w-6 h-6 rounded-full bg-amber-100 border border-amber-300">
                                 <Crown className="w-3 h-3 text-amber-600 fill-amber-600" />
                             </div>
                         )}

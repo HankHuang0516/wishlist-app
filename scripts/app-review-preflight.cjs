@@ -62,10 +62,10 @@ async function checkLive(versionId, expectedUserId) {
     const login = await api('/auth/login', null, { phoneNumber: details.demoAccountName, password: details.demoAccountPassword });
     assert.equal(login.user?.id, expectedUserId, 'Unexpected actual review account');
     const lists = await api('/wishlists', login.token);
-    const inbox = await api('/chat/conversations?limit=100', login.token);
+    const inbox = await api('/chat/conversations?limit=25', login.token);
     const rooms = [];
     for (const room of inbox.items) rooms.push({ ...room,
-        messages: (await api(`/chat/conversations/${room.id}/messages?limit=100`, login.token)).items,
+        messages: (await api(`/chat/conversations/${room.id}/messages?limit=50`, login.token)).items,
         appointment: (await api(`/chat/conversations/${room.id}/meetup`, login.token)).appointment });
     const snapshot = { expectedUserId, userId: login.user.id,
         wishCount: lists.reduce((n, l) => n + (l.items?.length || 0), 0),

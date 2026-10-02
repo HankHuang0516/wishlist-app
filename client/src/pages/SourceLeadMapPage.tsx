@@ -25,20 +25,20 @@ export default function SourceLeadMapPage() {
  async function action(kind:'ASK'|'CONSENT'|'CANCEL'|'READ') {
   if(!selected||!token||busy||requestBusy.current===scope)return;requestBusy.current=scope;const requestScope=scope;const id=selected.id;const auth=token;setBusy(true);setError('');
   const current=()=>currentScope.current===requestScope;
-  async function request(path:string,body?:unknown){const r=await fetch(`${API_URL}${path}`,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth}`},body:body===undefined?undefined:JSON.stringify(body)});if(!r.ok)throw Object.assign(Error('操作未完成，請讀取最新收件狀態；不代表已送給賣家'),{httpStatus:r.status});return r.json();}
+  async function request(path:string,body?:unknown,actionPost=false){const r=await fetch(`${API_URL}${path}`,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth}`},body:body===undefined?undefined:JSON.stringify(body)});if(!r.ok)throw Object.assign(Error('操作未完成，請讀取最新收件狀態；不代表已送給賣家'),{httpStatus:r.status,actionPost});return r.json();}
   try{
    if(kind!=='CANCEL')await request(`/source-leads/${id}`);
    let active:Room=await request(`/source-leads/${id}/inquiry`,{});if(!current())return;
    privateScope.current=requestScope;setRoom(active);
-   const journal=savedRequest();if(journal&&active.events.some((e:any)=>e.requestId===journal.requestId)){sessionStorage.removeItem(journalKey);pending.current=null;setQuestion('');return;}
+   const journal=savedRequest();if(journal&&active.events.some((e:any)=>e.requestId===journal.requestId)){sessionStorage.removeItem(journalKey);pending.current=null;setQuestion('');if(kind!=='CANCEL')return;}
    if(kind==='READ'){if(journal)setError('上次操作結果仍待確認；可重新讀取或撤回，請勿新增重複問題');return;}
    if(journal&&!pending.current&&kind!=='CANCEL')throw Error('上次操作結果待確認，請讀取已存詢問或撤回；不重送新問題');
    if(pending.current?.scope===requestScope){const old=pending.current.payload;if(active.events.some((e:any)=>e.requestId===old.requestId)){pending.current=null;setQuestion('');return;}if(old.action!==kind&&kind!=='CANCEL')throw Error('上次操作結果待確認，請先重試同一操作');}
    const payload=pending.current?.scope===requestScope&&pending.current.payload.action===kind?pending.current.payload:kind==='ASK'?{requestId:crypto.randomUUID(),action:kind,text:draft}:kind==='CONSENT'?{requestId:crypto.randomUUID(),action:kind,consent:true,transferHash:active.transferHash}:{requestId:crypto.randomUUID(),action:kind};
    pending.current={scope:requestScope,payload};sessionStorage.setItem(journalKey,JSON.stringify({requestId:payload.requestId,action:payload.action}));
-   active=await request(`/source-leads/${id}/inquiry/${active.id}/actions`,payload);
+   active=await request(`/source-leads/${id}/inquiry/${active.id}/actions`,payload,true);
    if(!current())return;privateScope.current=requestScope;setRoom(active);pending.current=null;sessionStorage.removeItem(journalKey);if(kind==='ASK')setQuestion('');
-  }catch(e){if(current()){const status=(e as Error&{httpStatus?:number}).httpStatus;if(status&&status>=400&&status<500){pending.current=null;sessionStorage.removeItem(journalKey);}setError((e as Error).message);}}finally{if(requestBusy.current===requestScope)requestBusy.current='';if(current())setBusy(false);}
+  }catch(e){if(current()){const status=(e as Error&{httpStatus?:number}).httpStatus;if((e as Error&{actionPost?:boolean}).actionPost&&status&&status>=400&&status<500){pending.current=null;sessionStorage.removeItem(journalKey);}setError((e as Error).message);}}finally{if(requestBusy.current===requestScope)requestBusy.current='';if(current())setBusy(false);}
  }
  const points=Array.from(new Map(items.map(i=>[`${i.latitude},${i.longitude}`,i])).values());
  return <main className="max-w-6xl mx-auto p-4 space-y-4"><h1 className="text-2xl font-bold">來源線索地圖</h1><p>庫存、圖文權利與交易仍待確認；來源線索不計入已驗證商品達成率。公共面交點不是賣家或現貨所在地。</p><p>{loaded?`${items.length} 件來源線索・${points.length} 個公共地點`:'讀取中…'}</p>{error&&<p role="alert">{error}</p>}

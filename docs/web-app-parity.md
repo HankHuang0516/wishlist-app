@@ -14,6 +14,13 @@
 
 目前狀態：目標持續進行。第六十二批v2.0.534已正式發布及回讀，736×952真實尊榮會員狀態的首頁與設定依核准概念圖重新人工加權審查，各90/100；這是單一agent設計評分，非獨立／像素相似度。手機390與中英文導覽、來源輸入、探索／既有QA聊天讀取已核對；真訊息／面交異動、PWA自動升級與安全更新流程、跨端／provider及完整矩陣未完項仍active。APP2.0.12不改。
 
+## 第六十三批正式更新驗收：兩個真實正式版本
+
+- PR94精確head `6b9cedfa981b12318a580fad6b16a8187afd4a54` 的CI37014922457三項全success；完整Web1730及build通過。v2.0.538正常合併後空提交觸發，Git部署WAITING改用相同乾淨checkout／既有wishlist-app production直接部署，deployment `bb55de96-5308-4e59-b686-81115fbe3f20` 為SUCCESS，原uploads volume保留、環境／DB service未改。
+- 正式HTTP538已回讀：version JSON、index meta與main bundle一致，Explore／Chat／Settings／SourceLead資源200，原cache policy保留，私有API未登入401。自有Chrome新視窗載入538並查核目前已是可用版本，首次同版沒有banner。IAB舊534分頁三次reload及新分頁仍534，實際DOM仍引用registerSW.js，而538不生成此舊入口；此相容缺口待修，沒有把Chrome新開成功當IAB舊頁已升級。
+- 正常發布下一個build `2.0.541`，補回舊bundle所需的registerSW.js入口並阻擋換頁後的晚到確認重載，server／APP／migration不再變更。保持自有Chrome538頁面與未送出的「更新驗收草稿，未傳送 250.7500 USD」，核對真worker準備／提示、取消保留草稿、清空自有測試文字後明確確認reload與版號。訊息紀錄仍空，沒有傳送訊息／提出預約；第二个真實正式版本的驗收未完成前不把538→下一版標通過。完整Web／精確CI與本次正式手機／雙語／視覺另回讀。
+- 換頁後確認核對晚到的回歸，先在未修runtime重現reload1（`/tmp/wishlist-live63-route-before-fix-20261002.log`），再以路徑／query／hash／history key的layout effect取消確認及counter fence，原輸入／marker保留且reload0。最初selector同名兩個check按鈕，改保留原設定control參照；未放寬時間。舊入口在load未完成時只註冊一次、load已完成時立即prepare，unsupported／denied／offline保持可用，storage與reload不觸碰。focused27、完整Web541的109檔1736項及build通過；公開bridge原bytes保留、worker precache含bridge、new HTML不注入、版本JSON不cache且meta同541。正式538的舊bridge HTTP確為200 HTML fallback，原HTTP proof保留；最初測試import.meta被Vite重寫HTTP URL，改讀實際cwd public檔，產品碼與assertions不改。
+
 ## 2026-10-02 第六十三批：可見且由使用者確認的網站更新
 
 - 第62批正式瀏覽器兩次仍524、第三次才534，證明發布成功不能代替既有頁面更新。現有autoUpdate只注入原生registerSW，沒有UI回呼；官方與已安裝套件的virtual autoUpdate會自動reload並可能失去表單，因此保留worker自動準備相容舊版，只由新的WebUpdateProvider註冊、監測controllerchange／返回前景／online及5分鐘檢查，不使用會強制reload的virtual模組。

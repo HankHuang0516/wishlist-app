@@ -1,10 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { probeWebUpdate, webUpdateNavigation, type WebUpdateState } from '../lib/webUpdate';
 type Updates = { state: WebUpdateState; manual: boolean; busy: boolean; confirming: boolean; check: () => void; requestReload: () => void; cancelReload: () => void; confirmReload: () => void };
 const Context = createContext<Updates | null>(null);
 export const useWebUpdate = () => useContext(Context);
 
 export default function WebUpdateProvider({ children }: { children: ReactNode }) {
+  const route = useLocation();
   const [state, setState] = useState<WebUpdateState>({ status: 'idle' });
   const [manual, setManual] = useState(false), [busy, setBusy] = useState(false), [confirming, setConfirming] = useState(false);
   const active = useRef(false), checking = useRef(false), queued = useRef(false), confirmation = useRef(0);
@@ -38,6 +40,7 @@ export default function WebUpdateProvider({ children }: { children: ReactNode })
     }
   }, []);
   perform.current = check;
+  useLayoutEffect(() => { confirmation.current++; setConfirming(false); }, [route.key, route.pathname, route.search, route.hash]);
   useEffect(() => {
     active.current = true;
     let container: ServiceWorkerContainer | null = null;

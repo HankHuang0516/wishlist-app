@@ -3,15 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebUpdateProvider from './WebUpdateContext';
 import WebUpdateNotice, { WebsiteUpdateControls } from '../components/WebUpdateNotice';
 import { webUpdateNavigation } from '../lib/webUpdate';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 const current = __APP_VERSION__, next = '2.0.9001', latest = '2.0.9002';
 let advertised: string, installed: string, container: EventTarget, registration: { update: ReturnType<typeof vi.fn> }, reload: ReturnType<typeof vi.spyOn>;
 function served(path: string, value: string) {
   return { status: 200, redirected: false, url: location.origin + path, headers: new Headers({ 'Content-Type': path.endsWith('.json') ? 'application/json' : 'text/html' }), text: async () => value };
 }
 function metadata(url: string) { return Promise.resolve(url.endsWith('.json') ? served('/web-version.json', JSON.stringify({ version: advertised })) : served('/index.html', `<meta name="wishlist-web-version" content="${installed}">`)); }
+function RouteFixture() {
+  const navigate=useNavigate(),where=useLocation();
+  return <><button onClick={()=>navigate('/another-feature?draft=kept#section')}>Navigate to another feature</button><output aria-label="Current route">{where.pathname+where.search+where.hash}</output></>;
+}
 function start(worker = true) {
   if (!worker) Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: undefined });
-  return render(<WebUpdateProvider><WebUpdateNotice/><WebsiteUpdateControls/><input aria-label="Original unsaved draft" defaultValue="original 250.7500 USD"/></WebUpdateProvider>);
+  return render(<MemoryRouter><RouteFixture/><WebUpdateProvider><WebUpdateNotice/><WebsiteUpdateControls/><input aria-label="Original unsaved draft" defaultValue="original 250.7500 USD"/></WebUpdateProvider></MemoryRouter>);
 }
 beforeEach(() => {
   advertised = installed = current;localStorage.setItem('user-locale', 'en-US');localStorage.setItem('synthetic-original-journal', 'immutable-original-marker');
@@ -55,6 +60,20 @@ describe('explicit website update lifecycle', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Continue my current work' }));
     await act(async () => finish(served('/web-version.json', JSON.stringify({ version: next }))));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Check for website updates' })).toBeEnabled());expect(reload).not.toHaveBeenCalled();
+  });
+  it('route changes cancel confirmation and fence a late ready reply from reloading another feature',async()=>{
+    advertised=installed=next;start();const updateButton=await screen.findByRole('button',{name:'Update website'});
+    const checkButton=screen.getByRole('button',{name:'Check for website updates'});fireEvent.click(updateButton);
+    let finish!:(value:ReturnType<typeof served>)=>void;
+    vi.stubGlobal('fetch',vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockImplementation(metadata));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'I have saved my work, reload'}));
+    await waitFor(()=>expect(finish).toBeDefined());fireEvent.click(screen.getByRole('button',{name:'Navigate to another feature'}));
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/another-feature?draft=kept#section');
+    await act(async()=>finish(served('/web-version.json',JSON.stringify({version:next}))));
+    await waitFor(()=>expect(checkButton).toBeEnabled());
+    expect(reload).not.toHaveBeenCalled();expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('textbox',{name:'Original unsaved draft'})).toHaveValue('original 250.7500 USD');
+    expect(localStorage.getItem('synthetic-original-journal')).toBe('immutable-original-marker');
   });
   it('failed verification is not current or ready, retains drafts, and succeeds after manual retry without worker support', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(Error('synthetic offline')));start(false);fireEvent.click(screen.getByRole('button', { name: 'Check for website updates' }));

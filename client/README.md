@@ -269,3 +269,7 @@ Fresh external details now load the verified original and thumbnail, promote onl
 ### Chat and meetup manual read recovery (v574)
 
 A 401 or 429 pauses inbox, conversation and appointment automatic reads and automatic read acknowledgements. Timers, foreground/online events and cooldown expiry cannot resume them. An explicit successful update on the current page resumes reads; a failed update keeps the pause. A later parallel preview failure cannot be cleared by an earlier successful read, and a limited appointment pauses its parent room. Original message journals, unsent text and private appointment terms remain. APP and backend contracts are unchanged.
+
+### Source search manual recovery (v589)
+
+The source layer in the original Explore page stops automatic updates after any failed or malformed read, retaining its last complete page. Source throttling now uses the existing search wait indicator and disables retries until the shared deadline ends. Waiting never dispatches a request. The explicit bilingual Search again action applies the current keywords and map scope; it does not send an inquiry or change a chat. Each source-page read has a bounded timeout and is cancelled on departure. Five regressions cover actual HTTP 429, cooldown expiry, network failure with retained rows, invalid pagination, and Chinese/English page controls. Native source and backend contracts are unchanged.

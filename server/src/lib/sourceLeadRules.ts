@@ -1,4 +1,6 @@
+import {publicCommentRoute} from './sourcePublicComment';
 import { createHash } from 'crypto';
+import { sourceLeadMediaDTO } from './sourceLeadMedia';
 import type { ExternalSourceLead } from '@prisma/client';
 import { archiveGate } from './sourceLeadDateGate';
 import { TAIWAN_DISTRICTS } from './taiwanAdministrativeDistricts';
@@ -30,7 +32,7 @@ export function parseLead(input: unknown, now = new Date()) {
     const b = object(input);
     exact(b, ['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'evidence']);
     const e = object(b.evidence);
-    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion']);
+    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media']);
     if (!text(b.archiveItemId, 160) || !/^libfile_[a-f0-9]{32}$/.test(b.libraryFileId) || !Number.isSafeInteger(b.archiveVersion) || b.archiveVersion < 0 || !/^[a-f0-9]{64}$/.test(b.archiveSha256))
         throw new LeadError('ARCHIVE_IDENTITY_REQUIRED');
     const canonicalUrl = publicUrl(b.canonicalUrl);
@@ -69,7 +71,13 @@ export function leadCurrent(row: ExternalSourceLead, now = new Date()) {
         return false;
     }
 }
-export function leadDTO(r: ExternalSourceLead) { return { id: r.id, kind: 'SOURCE_LEAD', title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: '來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。' }; }
+export function contactRoutingDTO(lead:ExternalSourceLead,now=new Date()) {
+    if(routeCurrent(lead,now))return {status:'VERIFIED',reason:'原賣家收訊路由已有獨立核實，仍需逐次核對有效性及外送回執。',checkedAt:object(lead.sellerRoute).verifiedAt};
+    const r=lead.sellerRoute&&object(lead.sellerRoute);
+    if(r&&['UNAVAILABLE','UNVERIFIED'].includes(r.status)&&r.leadId===lead.id&&r.sourceUrl===lead.canonicalUrl&&r.contentHash===lead.contentHash&&ref(r.identityEvidenceRef)&&ref(r.routeEvidenceRef)&&typeof r.reason==='string'&&r.reason.length<=240&&!privateContactField({title:r.reason})&&Number.isFinite(Date.parse(r.checkedAt))&&Date.parse(r.checkedAt)<=now.getTime()&&now.getTime()-Date.parse(r.checkedAt)<48*3600000)return {status:r.status,reason:r.reason,checkedAt:r.checkedAt};
+    return {status:'UNVERIFIED',reason:'原貼文與作者身份不等於可收訊路由；尚未核實原賣家可用的聯絡入口，未外送。',checkedAt:null};
+}
+export function leadDTO(r: ExternalSourceLead, presentation = false) { return { ...(presentation ? {media: sourceLeadMediaDTO(r),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: '來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。' }; }
 export type LeadEvent = {
     requestId: string;
     action: string;
@@ -82,7 +90,7 @@ export type LeadEvent = {
 export function transferSnapshot(lead: ExternalSourceLead, events: LeadEvent[]) { return { leadId: lead.id, contentHash: lead.contentHash, canonicalUrl: lead.canonicalUrl, questions: events.filter(e => e.action === 'ASK').map(e => ({ requestId: e.requestId, text: e.text })) }; }
 export function routeCurrent(lead: ExternalSourceLead, now = new Date()) { try {
     const r = object(lead.sellerRoute);
-    return r.leadId === lead.id && r.contentHash === lead.contentHash && r.sourceUrl === lead.canonicalUrl && ['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(r.channel) && ref(r.identityEvidenceRef) && ref(r.routeEvidenceRef) && publicUrl(r.publicRouteUrl) && date(r.verifiedAt) <= now && now.getTime() - date(r.verifiedAt).getTime() < 24 * 3600000;
+    return (r.routeKind===undefined||publicCommentRoute(r,lead.canonicalUrl)) && r.leadId === lead.id && r.contentHash === lead.contentHash && r.sourceUrl === lead.canonicalUrl && ['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(r.channel) && ref(r.identityEvidenceRef) && ref(r.routeEvidenceRef) && publicUrl(r.publicRouteUrl) && date(r.verifiedAt) <= now && now.getTime() - date(r.verifiedAt).getTime() < 24 * 3600000;
 }
 catch {
     return false;

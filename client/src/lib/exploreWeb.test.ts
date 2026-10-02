@@ -7,8 +7,8 @@ import { marketplaceOrigin } from './marketplaceUrl';
 const scope = (): ExploreQuery => ({ filters: { ...emptySearchFilters }, bounds: TAIWAN_BOUNDS, wishId: null, radius: '', serial: 1 });
 describe('web map query parity and public response contracts', () => {
   it('accepts only safe wish and listing navigation IDs', () => {
-    const id = uuid(); expect(parseExploreIntent(`?wish=814&listing=${id}`)).toEqual({ wishId: 814, listingId: id, q: '' });
-    expect(parseExploreIntent('')).toEqual({ wishId: null, listingId: null, q: '' });
+    const id = uuid(); expect(parseExploreIntent(`?wish=814&listing=${id}`)).toEqual({ wishId: 814, listingId: id, sourceId:null, q: '' });
+    expect(parseExploreIntent('')).toEqual({ wishId: null, listingId: null, sourceId:null, q: '' });
     for (const input of ['?wish=0', '?wish=2147483648', '?wish=1&wish=2', '?listing=bad', '?redirect=https://evil.invalid']) expect(() => parseExploreIntent(input)).toThrow();
   });
   it('accepts a single bounded search and rejects duplicate, oversized or control-character inputs', () => {

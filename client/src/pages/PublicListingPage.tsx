@@ -1,3 +1,4 @@
+import { ListingPhoto } from '../components/ListingPhoto';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { MapPin, Share2 } from 'lucide-react';
@@ -88,7 +89,7 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     <Link className="mt-6 inline-block text-blue-700 underline" to="/">{text('回首頁')}</Link></div>;
 
   return <><article className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
-    <div className="flex overflow-x-auto">{listing.media.map((photo, index) => <img key={photo.id} className="aspect-square w-full flex-none bg-stone-100 object-contain sm:aspect-video" src={photo.imageUrl} referrerPolicy="no-referrer" alt={publicListingPhotoLabel(listing.title, index + 1)} />)}</div>
+    <div className="flex overflow-x-auto">{listing.media.map((photo, index) => <div key={photo.id} className="w-full flex-none"><ListingPhoto src={photo.imageUrl} alt={publicListingPhotoLabel(listing.title,index+1)} detail/></div>)}</div>
     <div className="space-y-5 p-5 sm:p-8">
       <div className="flex flex-wrap items-center gap-2 text-sm text-stone-600">
         <span className="rounded-full bg-stone-100 px-3 py-1">{text(listing.condition === 'USED' ? '二手' : '新品')}</span>

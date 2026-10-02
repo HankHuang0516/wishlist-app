@@ -1,4 +1,7 @@
 import { chatMessage, chatRoomPrice, chatRoomTitle, chatText, chatTime } from '../lib/chatCopy';
+import {parseLead,parseContactRouting} from '../lib/sourceLeadData';
+import {TAIWAN_DISTRICTS} from '../lib/taiwanAdministrativeDistricts';
+import SourceContactChat,{type SourceProductContext} from '../components/SourceContactChat';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +20,15 @@ function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
   const id = privateChatPhotoId(room, getFullApiUrl());
   return id ? <PrivatePhoto id={id} token={token} label={chatText("聊天商品照片")} compact /> : <div role="img" aria-label={chatText("聊天商品照片未提供或已停止公開")} className="flex h-16 w-16 items-center rounded-xl bg-gray-100 p-2 text-xs">{room.listingAvailable ? chatText("照片未提供") : chatText("已停止公開")}</div>;
 }
+function storedSourceContext(value:unknown):SourceProductContext {
+  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('來源對話資料不正確。');
+  const row=value as SourceProductContext;
+  if(!isUuid(row.id)||typeof row.title!=='string'||!row.title.trim()||row.title.length>100||!row.county||!row.district||!TAIWAN_DISTRICTS[row.county]?.has(row.district))throw new Error('來源對話資料不正確。');
+  const url=new URL(row.canonicalUrl);if(url.protocol!=='https:'||url.username||url.password||url.port||url.search||url.hash)throw new Error('來源對話連結不正確。');
+  if(row.publicFacts!=null&&(typeof row.publicFacts.priceText!=='string'||row.publicFacts.priceText.length>300))throw new Error('來源對話售價不正確。');
+  // Saved history remains readable after expiry, but stale media never gains display permission.
+  return {id:row.id,title:row.title,canonicalUrl:row.canonicalUrl,county:row.county,district:row.district,publicFacts:row.publicFacts??undefined,contactRouting:row.contactRouting?parseContactRouting(row.contactRouting):undefined,media:[]};
+}
 export default function ChatPage() {
   const { user, token } = useAuth(), location = useLocation();
   if (!token || !user) return <section className="space-y-4"><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p>{chatText("登入後與商品買家或賣家聯絡。")}</p><Link className="text-green-800 underline" to={'/login?next=' + encodeURIComponent('/chat' + location.search)}>{chatText("登入")}</Link></section>;
@@ -24,9 +36,16 @@ export default function ChatPage() {
 }
 function ChatSession({ token, userId }: { token: string; userId: number }) {
   const location = useLocation(), navigate = useNavigate(), params = new URLSearchParams(location.search);
-  const invalidIntent = params.size > 1 || params.size === 1 && (!params.has('room') || !isUuid(params.get('room')));
+  const invalidIntent = params.size > 1 || params.size === 1 && (!params.has('room')&&!params.has('source') || !isUuid(params.get('room')??params.get('source')));
+  const sourceId=invalidIntent?null:params.get('source');
+  const [source,setSource]=useState<SourceProductContext|null>(null),[sourceIssue,setSourceIssue]=useState(''),[sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceProductContext}[]>([]);
   const activeRoom = invalidIntent ? null : params.get('room')?.toLowerCase() ?? null;
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]), [cursor, setCursor] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [loaded, setLoaded] = useState(false);
+  useEffect(()=>{let valid=true;setSource(null);setSourceIssue('');
+    void (async()=>{try{const all:{id:string;state:string;context:SourceProductContext}[]=[];let cursor:string|null=null;const seen=new Set<string>();do{const p:{items:typeof all;nextCursor:string|null}=await api<{items:typeof all;nextCursor:string|null}>(token,'/source-leads/inquiries/mine'+(cursor?'?cursor='+cursor:''));if(!Array.isArray(p.items)||p.items.length>25||!(p.nextCursor===null||isUuid(p.nextCursor)))throw Error();all.push(...p.items.map(t=>{if(!isUuid(t.id)||typeof t.state!=='string')throw Error();return {...t,context:storedSourceContext(t.context)};}));cursor=p.nextCursor;if(cursor&&seen.has(cursor))throw Error();if(cursor)seen.add(cursor);if(all.length>2500)throw Error();}while(cursor);if(valid)setSourceThreads(all);
+      if(sourceId){const old=all.find(x=>x.context.id===sourceId);try{const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1'));if(current.id!==sourceId)throw Error();if(valid)setSource({...current,publicFacts:current.publicFacts??undefined});}catch{if(!old)throw Error();if(valid)setSource(old.context);}}
+    }catch{if(valid)setSourceIssue('來源對話暫時無法讀取；不會改接其他商品，請返回收件匣重試。');}})();return()=>{valid=false;};
+  },[token,sourceId]);
   const active = useRef(true), gate = useRef(false), seq = useRef(0), seen = useRef(new Set<string>());
   const autoPause = useChatReadPause();
   const roomIntent = useRef(activeRoom); roomIntent.current = activeRoom;
@@ -50,8 +69,8 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
   useEffect(() => { if (!activeRoom && loaded) void load(); }, [activeRoom]);
   return <section className="mx-auto max-w-3xl space-y-4 pb-20"><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header>
     {invalidIntent && <div role="alert" className="rounded-xl bg-red-50 p-3">{chatText("聊天連結無效，不會使用不明識別碼查詢。")}<button className={button} onClick={() => navigate('/chat', { replace: true })}>{chatText("返回收件匣")}</button></div>}
-    {activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
+    {sourceId ? <>{sourceIssue&&<p role="alert">{sourceIssue}</p>}{source?<SourceContactChat key={`${userId}:${source.id}`} source={source} onBack={()=>navigate('/explore?source='+source.id)}/>:!sourceIssue&&<p role="status">正在讀取這件商品的對話…</p>}</> : activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
+      {sourceIssue&&<p role="alert">{sourceIssue}</p>}<div className="space-y-3"><h2 className="font-semibold">Wishlist AI 代問</h2>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {t.state==='WAITING_ROUTE'?'待核實原賣家，未送出':t.state==='DELIVERED'?'已代轉，查看原賣家回覆':t.state==='CANCELLED'?'已取消':'查看問題與下一步'}</span></span></button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
       {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
       <div className="space-y-3">{rooms.map(room => <button key={room.id} type="button" className="flex w-full min-w-0 items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm" onClick={() => navigate('/chat?room=' + room.id)} aria-label={chatText('{title}，與{name}聊天{unread}', { title: chatRoomTitle(room), name: (room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText('商品聯絡人'), unread: room.unreadCount ? chatText('，{count} 則未讀', { count: room.unreadCount }) : '' })}>
         <span className="w-16 flex-none overflow-hidden rounded-xl"><RoomPhoto room={room} token={token} /></span><span className="min-w-0 flex-1"><span className="block break-words font-semibold">{chatRoomTitle(room)}</span><span className="block text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || (room.archived ? chatText("已移除的帳號") : chatText("商品聯絡人"))} · {chatRoomPrice(room)}</span>

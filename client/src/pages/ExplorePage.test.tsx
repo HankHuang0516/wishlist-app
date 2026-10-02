@@ -28,7 +28,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     (call[1] as RequestInit | undefined)?.method && (call[1] as RequestInit).method !== 'GET')).toBe(false);
 
   it('preserves entered keywords and original enum values across a display-language change, querying only on explicit apply', async () => {
-    english(); const item = makeListing('原商品 {title} $& 漫畫'), fetch = sellerFetch(item); vi.stubGlobal('fetch', fetch);
+    english(); const item = makeListing('原商品 {title} $& 漫畫'), fetch = sellerFetch(item); stubFetch(fetch);
     const mounted = render(view('/explore?q=' + encodeURIComponent('三國演義 & {name}')));
     await screen.findByRole('button', { name: `View item details: ${item.title}` });
     expect(screen.getByLabelText('Item keywords')).toHaveValue('三國演義 & {name}');
@@ -63,10 +63,10 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     const fetch = vi.fn(async (url:string) => responseOk(url.includes('match-wishes') ? {items:[wish],nextCursor:null}
       : url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null}
         : { items:[match],nextCursor:null,scannedCandidates:1,ordering:'RECENT_CANDIDATES_PAGE_SCORE',notice:'已包含自己刊登的配對預覽；自己的商品不能向自己購買。圖片不直接比對，文字吻合不保證同一型號或真偽。' }));
-    vi.stubGlobal('fetch',fetch); render(view('/explore?wish=814'));
+    stubFetch(fetch); render(view('/explore?wish=814'));
     await screen.findByText(/1 in-app items \(including 1 own-listing previews\)/);
     expect(screen.getByText('Comparing wish: 願望 {name} $&')).toBeInTheDocument();
-    expect(screen.getByText(/My listing preview/)).toBeInTheDocument();
+    expect(await screen.findByText(/My listing preview/)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(`Match score ${match.score}`))).toHaveTextContent('Approximately 3.2 km');
     const reasons = screen.getByText(/Name or brand includes wish keywords: 三國、\{name\}/);
     expect(reasons).toHaveTextContent('Budget currency differs; no conversion or price match is claimed');
@@ -81,7 +81,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     english(); let failed = true; const item=makeListing(), raw='private provider diagnostic fixture';
     const fetch=vi.fn(async (url:string) => { if(url.includes('match-wishes')) return responseOk({items:[],nextCursor:null});
       if(failed) throw new Error(raw); return responseOk(url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null} : {items:[item],nextCursor:null}); });
-    vi.stubGlobal('fetch',fetch); render(view());
+    stubFetch(fetch); render(view());
     expect(await screen.findAllByRole('alert')).toHaveLength(2);
     expect(screen.getAllByText(/Item data could not be read or verified/)).toHaveLength(2);
     expect(screen.queryByText(raw)).not.toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   it('translates invalid price and radius feedback before dispatch and leaves the original inputs intact', async () => {
     english(); const wish=makeWish(814), fetch=vi.fn(async (url:string) => responseOk(url.includes('match-wishes') ? {items:[wish],nextCursor:null}
       : url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null} : makeMatchPage([])));
-    vi.stubGlobal('fetch',fetch); render(view('/explore?wish=814')); await screen.findByText(/Loaded in this area/);
+    stubFetch(fetch); render(view('/explore?wish=814')); await screen.findByText(/Loaded in this area/);
     fireEvent.click(screen.getByText('Filters and wish comparison (optional)'));
     fireEvent.change(screen.getByLabelText('Minimum price (NT$)'),{target:{value:'500'}});
     fireEvent.change(screen.getByLabelText('Maximum price (NT$)'),{target:{value:'100'}}); const before=fetch.mock.calls.length;
@@ -111,7 +111,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   });
 
   it('keeps original authoritative details and report destination while translating every seller control', async () => {
-    english(); const item={...makeListing('漫畫 {title} $&'),description:'原說明 {name} $&',status:'RESERVED'},fetch=sellerFetch(item);vi.stubGlobal('fetch',fetch);
+    english(); const item={...makeListing('漫畫 {title} $&'),description:'原說明 {name} $&',status:'RESERVED'},fetch=sellerFetch(item);stubFetch(fetch);
     render(view());fireEvent.click(await screen.findByRole('button',{name:`View item details: ${item.title}`}));
     const dialog=await screen.findByRole('dialog',{name:'Item details'}); await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText(item.description)).toBeInTheDocument();expect(within(dialog).getByText('Used · Reserved')).toBeInTheDocument();
@@ -126,7 +126,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('keeps external source facts and URL separate from in-app contact controls in English', async () => {
     english();const item={...makeExternalListing(),title:'來源 {host} $&'},fetch=vi.fn(async (url:string) => responseOk(url.endsWith(`/external-listings/${item.id}`) ? item
-      : url.includes('/external-listings?') ? {enabled:true,items:[item],nextCursor:null} : {items:[],nextCursor:null}));vi.stubGlobal('fetch',fetch);
+      : url.includes('/external-listings?') ? {enabled:true,items:[item],nextCursor:null} : {items:[],nextCursor:null}));stubFetch(fetch);
     render(view());fireEvent.click(await screen.findByRole('button',{name:`View source details: ${item.title}`}));
     const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText('Source price NT$ 590')).toBeInTheDocument();expect(within(dialog).getByText(/not an in-app seller/)).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     english();let success!:PositionCallback,deny!:PositionErrorCallback;
     const locate=vi.fn((ready:PositionCallback,failed:PositionErrorCallback) => {success=ready;deny=failed;});
     vi.stubGlobal('navigator',{language:'en-US',geolocation:{getCurrentPosition:locate}});
-    const fetch=sellerFetch();vi.stubGlobal('fetch',fetch);render(view());await screen.findByText(/Loaded in this area/);const before=fetch.mock.calls.length;
+    const fetch=sellerFetch();stubFetch(fetch);render(view());await screen.findByText(/Loaded in this area/);const before=fetch.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'Move to my location'}));
     expect(screen.getByText(/Reading location; it is not sent directly/)).toBeInTheDocument();
     act(() => deny({message:'private location failure'} as GeolocationPositionError));
@@ -161,7 +161,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('provides an English list fallback after a real component render failure without hiding loaded items', async () => {
     english();mapState.failed=true;vi.spyOn(console,'error').mockImplementation(() => {});
-    const item=makeListing(),fetch=sellerFetch(item);vi.stubGlobal('fetch',fetch);render(view());
+    const item=makeListing(),fetch=sellerFetch(item);stubFetch(fetch);render(view());
     await screen.findByRole('button',{name:`View item details: ${item.title}`});
     expect(screen.getByText(/The interactive map is unavailable. Switch to Item list/)).toBeInTheDocument();const before=fetch.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'Item list'}));
@@ -170,24 +170,26 @@ describe('bilingual exploration keeps original filters and verified facts', () =
 
   it('falls back to English with inaccessible locale storage while guest access keeps its original return path and makes no private read', () => {
     vi.spyOn(localStorage,'getItem').mockImplementation(() => {throw new Error('blocked locale storage');});
-    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);render(view('/explore',{...auth,token:null,user:null} as unknown as typeof auth));
+    const fetch=vi.fn();stubFetch(fetch);render(view('/explore',{...auth,token:null,user:null} as unknown as typeof auth));
     expect(screen.getByRole('heading',{name:'Explore the item map'})).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Sign in'})).toHaveAttribute('href','/login?next=%2Fexplore');expect(fetch).not.toHaveBeenCalled();
   });
 });
+// Existing native/external regression fixtures explicitly keep the optional source layer disabled.
+const stubFetch=(fetch:any)=>vi.stubGlobal('fetch',(url:string,...args:any[])=>url.includes('/source-leads')?Promise.resolve(responseOk({enabled:false,items:[],nextCursor:null})):fetch(url,...args));
 describe('APP-equivalent map and list exploration', () => {
   it('applies the homepage search to the input and actual seller query on first read', async () => {
-    const fetch = vi.fn(async () => responseOk({ items: [], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    const fetch = vi.fn(async () => responseOk({ items: [], nextCursor: null })); stubFetch(fetch);
     render(view('/explore?q=' + encodeURIComponent('三國演義 & 漫畫')));
     await waitFor(() => expect(screen.getByLabelText('商品關鍵字')).toHaveValue('三國演義 & 漫畫'));
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/listings?') && new URL(url).searchParams.get('q') === '三國演義 & 漫畫')).toBe(true));
   });
   it('requires login before requesting private wishlist matching data', () => {
-    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch); render(view('/explore', { ...auth, token: null, user: null } as unknown as typeof auth));
+    const fetch = vi.fn(); stubFetch(fetch); render(view('/explore', { ...auth, token: null, user: null } as unknown as typeof auth));
     expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login?next=%2Fexplore'); expect(fetch).not.toHaveBeenCalled();
   });
   it('auto frames a single result and only commits a new viewport on explicit search', async () => {
-    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); stubFetch(fetch);
     render(view()); await screen.findByRole('button', { name: `查看${item.title}商品詳情` });
     await waitFor(() => expect(screen.getByTestId('map-frame')).toHaveTextContent('"kind":"single"'));
     const before = fetch.mock.calls.length; fireEvent.click(screen.getByRole('button', { name: '模擬移動地圖' })); fireEvent.click(screen.getByRole('button', { name: '商品列表' }));
@@ -198,29 +200,29 @@ describe('APP-equivalent map and list exploration', () => {
   });
   it('finds a matching comic and labels own preview rather than falsely returning zero', async () => {
     const item = { ...makeListing(), owner: { id: 19, name: '本人' } };
-    const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish(814)], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : makeMatchPage([makeMatch(814, item)]))); vi.stubGlobal('fetch', fetch);
+    const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish(814)], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : makeMatchPage([makeMatch(814, item)]))); stubFetch(fetch);
     render(view('/explore?wish=814')); await screen.findByText(/1 件站內商品（含 1 件自有預覽）/);
-    expect(screen.getByText(/我的刊登預覽/)).toBeInTheDocument();
+    expect(await screen.findByText(/我的刊登預覽/)).toBeInTheDocument();
     const url = fetch.mock.calls.find(([url]) => url.includes('/listings/matches?'))![0]; expect(new URL(url).searchParams.get('includeOwnPreview')).toBe('1');
   });
   it('focuses a freshly fetched deep-link product and checks the requested identity', async () => {
-    const item = makeListing(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })));
+    const item = makeListing(); stubFetch(vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })));
     render(view(`/explore?listing=${item.id}`)); await screen.findByRole('button', { name: `查看${item.title}商品詳情` });
     await waitFor(() => expect(screen.getByTestId('map-frame')).toHaveTextContent('"zoom":13'));
   });
   it('shows errors separately, never equates failed queries to an empty marketplace', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('match-wishes')) return responseOk({ items: [], nextCursor: null }); throw new Error('offline'); }));
+    stubFetch(vi.fn(async (url: string) => { if (url.includes('match-wishes')) return responseOk({ items: [], nextCursor: null }); throw new Error('offline'); }));
     render(view()); const errors = await screen.findAllByRole('alert'); expect(errors.length).toBe(2);
     expect(screen.queryByText(/目前地圖範圍沒有符合/)).not.toBeInTheDocument();
   });
   it('keeps a clicked cluster list scoped to its actual leaves, then can return to all results', async () => {
-    const first = makeListing('測試漫画甲'), second = makeListing('測試漫畫乙'); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [first, second], nextCursor: null })));
+    const first = makeListing('測試漫画甲'), second = makeListing('測試漫畫乙'); stubFetch(vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [first, second], nextCursor: null })));
     render(view()); await screen.findByRole('button', { name: `查看${first.title}商品詳情` }); fireEvent.click(screen.getByRole('button', { name: '模擬群聚點擊' }));
     expect(screen.getByRole('heading', { name: '此群聚的商品' })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: `查看${second.title}商品詳情` })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '顯示全部已載入結果' })); expect(screen.getByRole('button', { name: `查看${second.title}商品詳情` })).toBeInTheDocument();
   });
   it('reloads authoritative details and renders every photo with labelled delivery, price and expiry', async () => {
-    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); stubFetch(fetch);
     render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}商品詳情` })); const dialog = await screen.findByRole('dialog', { name: '商品詳情' });
     await within(dialog).findByRole('heading', { name: item.title }); expect(within(dialog).getByText('交付：')).toBeInTheDocument(); expect(within(dialog).getByText('失效時間：')).toBeInTheDocument();
     expect(within(dialog).getByRole('link', { name: '開啟可分享商品頁' })).toHaveAttribute('href', `/listings/${item.id}`);
@@ -228,38 +230,38 @@ describe('APP-equivalent map and list exploration', () => {
     expect(fetch.mock.calls.filter(([url]) => url.endsWith(`/listings/${item.id}`))).toHaveLength(1);
   });
   it('blocks looping pagination without adding duplicate rows', async () => {
-    const item = makeListing(), cursor = item.id; vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: cursor })));
+    const item = makeListing(), cursor = item.id; stubFetch(vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: cursor })));
     render(view()); fireEvent.click(await screen.findByRole('button', { name: '載入更多站內商品' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('分頁重複'); expect(screen.getAllByRole('button', { name: `查看${item.title}商品詳情` })).toHaveLength(1);
   });
   it('offers reports only for another app seller, and replaces rather than nests the product dialog', async () => {
-    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.includes('/listing-reports/mine') ? { items: [], nextCursor: null } : url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    const item = makeListing(); const fetch = vi.fn(async (url: string) => responseOk(url.includes('/listing-reports/mine') ? { items: [], nextCursor: null } : url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })); stubFetch(fetch);
     render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}商品詳情` }));
     fireEvent.click(await screen.findByRole('button', { name: '檢舉此商品' }));
     expect(await screen.findByRole('dialog', { name: `檢舉商品：${item.title}` })).toBeInTheDocument(); expect(screen.getAllByRole('dialog')).toHaveLength(1);
     expect(fetch.mock.calls.some(call => (call as unknown[])[1] && ((call as unknown[])[1] as RequestInit).method === 'POST')).toBe(false);
   });
   it('routes own-product details to management instead of self-report', async () => {
-    const item = { ...makeListing(), owner: { id: 19, name: '本人' } }; vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })));
+    const item = { ...makeListing(), owner: { id: 19, name: '本人' } }; stubFetch(vi.fn(async (url: string) => responseOk(url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null })));
     render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}商品詳情` }));
     expect(await screen.findByRole('link', { name: '管理我的商品' })).toHaveAttribute('href', '/my-listings'); expect(screen.queryByRole('button', { name: '檢舉此商品' })).not.toBeInTheDocument();
   });
   it('ignores delayed old-session listings after switching accounts', async () => {
     const item = makeListing(); let resolve!: (value: unknown) => void;
-    vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => url.includes('/listings?') && (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
+    stubFetch(vi.fn((url: string, init: RequestInit) => url.includes('/listings?') && (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
       ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null }))));
     const mounted = render(view()); await waitFor(() => expect(resolve).toBeDefined()); mounted.rerender(view('/explore', { ...auth, token: 'next', user: { id: 20, phoneNumber: 'next' } }));
     await screen.findByText(/目前地圖範圍沒有符合/); await act(async () => resolve(responseOk({ items: [item], nextCursor: null })));
     expect(screen.queryByRole('button', { name: `查看${item.title}商品詳情` })).not.toBeInTheDocument();
   });
   it('rejects invalid price bounds before sending a new search', async () => {
-    const fetch = vi.fn(async (url: string) => responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null })); vi.stubGlobal('fetch', fetch);
+    const fetch = vi.fn(async (url: string) => responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null })); stubFetch(fetch);
     render(view()); await screen.findByText(/目前地圖範圍沒有符合/); fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
     fireEvent.change(screen.getByLabelText('最低售價（NT$）'), { target: { value: '500' } }); fireEvent.change(screen.getByLabelText('最高售價（NT$）'), { target: { value: '100' } });
     const before = fetch.mock.calls.length; fireEvent.click(screen.getByRole('button', { name: '套用條件' })); expect(await screen.findByRole('alert')).toHaveTextContent('最高價不可小於最低價'); expect(fetch.mock.calls.length).toBe(before);
   });
   it('keeps external sources separate from app sellers and links to a freshly verified original website', async () => {
-    const item = makeExternalListing(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.endsWith(`/external-listings/${item.id}`) ? item : url.includes('/external-listings?') ? { enabled: true, items: [item], nextCursor: null } : { items: [], nextCursor: null })));
+    const item = makeExternalListing(); stubFetch(vi.fn(async (url: string) => responseOk(url.endsWith(`/external-listings/${item.id}`) ? item : url.includes('/external-listings?') ? { enabled: true, items: [item], nextCursor: null } : { items: [], nextCursor: null })));
     render(view()); fireEvent.click(await screen.findByRole('button', { name: `查看${item.title}來源詳情` }));
     const dialog = await screen.findByRole('dialog', { name: '外部來源商品' }); await within(dialog).findByRole('heading', { name: item.title });
     expect(within(dialog).getByText('來源售價 NT$ 590')).toBeInTheDocument(); expect(within(dialog).getByText(/非站內賣家/)).toBeInTheDocument();

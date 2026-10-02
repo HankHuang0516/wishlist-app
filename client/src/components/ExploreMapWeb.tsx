@@ -8,14 +8,15 @@ import { externalGeoJSON, externalPrice, type ExternalListing } from '../lib/ext
 import { clusterLeafIds, type ResultCamera } from '../lib/exploreMapView';
 import { mapText } from '../lib/mapText';
 import './ExploreMapWeb.css';
+import type {SourceLead} from '../lib/sourceLeadData';
 
 // MapLibre v6 requires Vite to bundle the worker with its shared imports.
 setWorkerUrl(workerUrl);
 
-export type MapSelection = { kind: 'seller' | 'external'; id: string };
+export type MapSelection = { kind: 'seller' | 'external' | 'source'; id: string };
 export type MapFrame = { serial: number; camera: ResultCamera };
 type Props = {
-  items: PublicListing[]; external: ExternalListing[]; frame: MapFrame | null; visible: boolean;
+  items: PublicListing[]; external: ExternalListing[]; sourceLeads?: SourceLead[]; frame: MapFrame | null; visible: boolean;
   preview?: boolean;
   previewNotice?: string;
   onViewport: (bounds: Bounds) => void; onSelect: (item: MapSelection) => void;
@@ -74,12 +75,16 @@ export default function ExploreMapWeb(props: Props) {
       map.on('load', () => {
         if (!active) return;
         window.clearTimeout(watchdog);
-        for (const kind of ['seller', 'external'] as const) {
+        for (const kind of ['seller', 'external', 'source'] as const) {
           map.addSource(kind, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, cluster: true, clusterRadius: 48, clusterMaxZoom: 20 });
           map.addLayer({ id: kind + '-clusters', type: 'circle', source: kind, filter: ['has', 'point_count'],
-            paint: { 'circle-color': kind === 'seller' ? '#327458' : '#a96022', 'circle-radius': 24, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
+            paint: { 'circle-color': kind === 'seller' ? '#327458' : kind === 'source' ? '#426f91' : '#a96022', 'circle-radius': 24, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
           map.addLayer({ id: kind + '-counts', type: 'symbol', source: kind, filter: ['has', 'point_count'],
             layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Regular'], 'text-size': 14, 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } });
+          if(kind==='source'){
+            map.addLayer({id:'source-points',type:'circle',source:kind,filter:['!', ['has','point_count']],paint:{'circle-color':'#426f91','circle-radius':12,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+            continue;
+          }
           map.addLayer({ id: kind + '-photos', type: 'symbol', source: kind, filter: ['!', ['has', 'point_count']],
             layout: { 'icon-image': ['get', 'icon'], 'icon-size': 0.9, 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
         }
@@ -89,7 +94,7 @@ export default function ExploreMapWeb(props: Props) {
         const seq = ++clusterRequest;
         const generation = dataGeneration.current;
         if (!map.getLayer('seller-photos')) return;
-        const feature = map.queryRenderedFeatures(event.point, { layers: ['seller-photos', 'seller-clusters', 'external-photos', 'external-clusters'] })[0];
+        const feature = map.queryRenderedFeatures(event.point, { layers: ['seller-photos', 'seller-clusters', 'external-photos', 'external-clusters', 'source-points', 'source-clusters'] })[0];
         if (!feature || feature.geometry.type !== 'Point') return;
         const kind = feature.source as MapSelection['kind'];
         if (feature.properties.cluster) {
@@ -101,11 +106,11 @@ export default function ExploreMapWeb(props: Props) {
               map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom: Math.min(zoom, 19), duration: 500 });
             } else {
               const leaves = await source.getClusterLeaves(feature.properties.cluster_id, 500, 0);
-              if (active && seq === clusterRequest && generation === dataGeneration.current) latest.current.onCluster(kind, clusterLeafIds(leaves, kind === 'seller' ? 'listingId' : 'externalId'));
+              if (active && seq === clusterRequest && generation === dataGeneration.current) latest.current.onCluster(kind, clusterLeafIds(leaves, kind === 'seller' ? 'listingId' : kind === 'source' ? 'sourceId' : 'externalId'));
             }
           } catch { if (active) setError(mapText('cluster')); }
         } else {
-          const id = feature.properties[kind === 'seller' ? 'listingId' : 'externalId'];
+          const id = feature.properties[kind === 'seller' ? 'listingId' : kind === 'source' ? 'sourceId' : 'externalId'];
           if (typeof id === 'string') latest.current.onSelect({ kind, id });
         }
       });
@@ -117,14 +122,15 @@ export default function ExploreMapWeb(props: Props) {
     const map = mapRef.current; if (!ready || !map) return;
     const sellerSource = map.getSource('seller') as GeoJSONSource | undefined;
     const externalSource = map.getSource('external') as GeoJSONSource | undefined;
-    if (!sellerSource || !externalSource) return;
+    const sourceSource=map.getSource('source') as GeoJSONSource|undefined;
+    if (!sellerSource || !externalSource || !sourceSource) return;
     dataGeneration.current++;
     const controller = new AbortController(); let active = true;
     const photos = [...props.items.map(item => ({ key: 'photo-' + item.media[0].id, url: item.media[0].thumbnailUrl })),
       ...props.external.map(item => ({ key: 'external-' + item.id, url: item.thumbnailUrl }))];
     const keys = new Set(photos.map(photo => photo.key));
     for (const photo of photos) if (!map.hasImage(photo.key)) map.addImage(photo.key, placeholder());
-    void Promise.all([sellerSource.setData(listingGeoJSON(props.items)), externalSource.setData(externalGeoJSON(props.external))]).then(() => {
+    void Promise.all([sellerSource.setData(listingGeoJSON(props.items)), externalSource.setData(externalGeoJSON(props.external)),sourceSource.setData({type:'FeatureCollection',features:(props.sourceLeads??[]).map(lead=>({type:'Feature',geometry:{type:'Point',coordinates:[lead.longitude,lead.latitude]},properties:{sourceId:lead.id}}))})]).then(() => {
       if (!active) return;
       // Remove old images only after workers have replaced the source data.
       for (const key of map.listImages()) if ((key.startsWith('photo-') || key.startsWith('external-')) && !keys.has(key)) { map.removeImage(key); loadedPhotos.current.delete(key); }
@@ -147,35 +153,35 @@ export default function ExploreMapWeb(props: Props) {
       if (active && failures) setPhotoError(mapText('photos'));
     });
     return () => { active = false; controller.abort(); };
-  }, [ready, props.items, props.external]);
+  }, [ready, props.items, props.external,props.sourceLeads]);
   useEffect(() => {
     const map = mapRef.current; if (!ready || !map || !map.getLayer('external-photos')) return;
     let active = true; const markers = new Map<string, Marker>();
-    const items = new Map(props.external.map(item => [item.id, item]));
+    const items = new Map<string,{id:string;title:string;price:string;thumbnailUrl:string;location:{longitude:number;latitude:number};kind:'external'|'source'}>([...props.external.map(item => [item.id,{id:item.id,title:item.title,price:externalPrice(item),thumbnailUrl:item.thumbnailUrl,location:item.location,kind:'external' as const}] as const),...(props.sourceLeads??[]).filter(item=>item.media?.[0]?.thumbnailUrl).map(item=>[item.id,{id:item.id,title:item.title,price:item.publicFacts?.priceText||'售價待詢問',thumbnailUrl:item.media![0].thumbnailUrl,location:{longitude:item.longitude,latitude:item.latitude},kind:'source' as const}] as const)]);
     function syncMarkers() {
       if (!active) return;
       const visible = new Set<string>();
-      for (const feature of map!.queryRenderedFeatures({ layers: ['external-photos'] })) {
-        const id = feature.properties.externalId;
+      for (const feature of map!.queryRenderedFeatures({ layers: ['external-photos','source-points'] })) {
+        const id = feature.source==='source'?feature.properties.sourceId:feature.properties.externalId;
         const item = typeof id === 'string' ? items.get(id) : undefined;
         if (!item || visible.has(item.id)) continue;
         visible.add(item.id);
         if (markers.has(item.id)) continue;
         const button = document.createElement('button'); button.type = 'button';
         button.className = 'h-14 w-14 overflow-hidden rounded-xl border-2 border-amber-700 bg-white shadow-md';
-        button.setAttribute('aria-label', mapText('external', { name: item.title, price: externalPrice(item) }));
+        button.setAttribute('aria-label', mapText('external', { name: item.title, price: item.price }));
         const image = document.createElement('img'); image.alt = ''; image.setAttribute('referrerpolicy', 'no-referrer');
         image.className = 'h-full w-full object-cover';
         image.onerror = () => { if (active) { button.textContent = '▧'; setPhotoError(mapText('externalPhotos')); } };
         image.src = item.thumbnailUrl;
-        button.append(image); button.onclick = event => { event.stopPropagation(); latest.current.onSelect({ kind: 'external', id: item.id }); };
+        button.append(image); button.onclick = event => { event.stopPropagation(); latest.current.onSelect({ kind: item.kind, id: item.id }); };
         markers.set(item.id, new Marker({ element: button }).setLngLat([item.location.longitude, item.location.latitude]).addTo(map!));
       }
       for (const [id, marker] of markers) if (!visible.has(id)) { marker.remove(); markers.delete(id); }
     }
     map.on('render', syncMarkers); syncMarkers();
     return () => { active = false; map.off('render', syncMarkers); for (const marker of markers.values()) marker.remove(); };
-  }, [ready, props.external]);
+  }, [ready, props.external,props.sourceLeads]);
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map || !props.frame || !props.visible) return;

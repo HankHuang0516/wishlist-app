@@ -14,6 +14,7 @@ const view = () => <MemoryRouter><AuthContext.Provider value={auth}><ExplorePage
 const limited = (seconds: number, code = 'RATE_LIMIT_EXCEEDED') => ({ ok: false, status: 429,
   headers: new Headers({ 'Retry-After': String(seconds) }), json: async () => ({ error: 'private limiter diagnostic', errorCode: code }) });
 const advance = async (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+const stubFetch=(fetch:any)=>vi.stubGlobal('fetch',(url:string,...args:any[])=>url.includes('/source-leads')?Promise.resolve(responseOk({enabled:false,items:[],nextCursor:null})):fetch(url,...args));
 let locale: string | null;
 beforeEach(() => {
   locale = localStorage.getItem('user-locale'); localStorage.setItem('user-locale', 'zh-TW');
@@ -30,7 +31,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
     const fetch = vi.fn(async (url: string) => url.includes('match-wishes') ? responseOk({ items: [], nextCursor: null })
       : fail ? limited(url.includes('external-listings') ? 5 : 2)
         : responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null }));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(view()); });
+    stubFetch(fetch); await act(async () => { render(view()); });
     expect(screen.getByRole('status', { name: '搜尋等待時間' })).toHaveTextContent('5 秒');
     expect(screen.queryByText('private limiter diagnostic')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
@@ -56,7 +57,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
       : url.includes('external-listings') ? responseOk({ enabled: false, items: [], nextCursor: null })
         : new URL(url).searchParams.has('cursor') ? fail ? limited(3) : responseOk({ items: [second], nextCursor: null })
           : responseOk({ items: [first], nextCursor: first.id }));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(view()); });
+    stubFetch(fetch); await act(async () => { render(view()); });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '載入更多站內商品' })); });
     expect(screen.getByRole('button', { name: `查看${first.title}商品詳情` })).toBeDisabled();
     expect(screen.getByRole('img', { name: first.title })).toBeInTheDocument();
@@ -76,7 +77,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
     const fetch = vi.fn(async (url: string) => url.endsWith('/listings/' + item.id) ? fail ? limited(2) : responseOk(item)
       : responseOk(url.includes('match-wishes') ? { items: [], nextCursor: null } : url.includes('external-listings')
         ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null }));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(view()); });
+    stubFetch(fetch); await act(async () => { render(view()); });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: `View item details: ${item.title}` })); });
     const dialog = screen.getByRole('dialog', { name: 'Item details' });
     expect(within(dialog).getByRole('button', { name: 'Check this item again' })).toBeDisabled();
@@ -93,7 +94,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
     const wish = makeWish(814); let fail = true;
     const fetch = vi.fn(async (url: string) => url.includes('match-wishes') ? fail ? limited(2) : responseOk({ items: [wish], nextCursor: null })
       : responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null }));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(view()); });
+    stubFetch(fetch); await act(async () => { render(view()); });
     expect(screen.getByRole('button', { name: '重新讀取願望選單' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('商品關鍵字'), { target: { value: '保留搜尋草稿' } });
     const before = fetch.mock.calls.length; await advance(2000); expect(fetch.mock.calls).toHaveLength(before); fail = false;
@@ -106,7 +107,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
 
   it('does not present a transport countdown for route-specific 429 responses without a transport deadline', async () => {
     const fetch = vi.fn(async (url: string) => url.includes('match-wishes') ? responseOk({ items: [], nextCursor: null }) : limited(5, 'PRODUCT_CAPACITY'));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(view()); });
+    stubFetch(fetch); await act(async () => { render(view()); });
     expect(screen.getAllByRole('alert')).toHaveLength(2); expect(screen.queryByRole('status', { name: '搜尋等待時間' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '搜尋', exact: true })).toBeEnabled();
     expect(screen.queryAllByText(/依畫面等待提示/)).toHaveLength(0);
@@ -115,7 +116,7 @@ describe('explicit recovery from transport limiting in Explore', () => {
   it('restores the wish read after StrictMode aborts the first effect instead of leaving its synchronous gate locked', async () => {
     const wish = makeWish(814), fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [wish], nextCursor: null }
       : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null }));
-    vi.stubGlobal('fetch', fetch); await act(async () => { render(<StrictMode>{view()}</StrictMode>); });
+    stubFetch(fetch); await act(async () => { render(<StrictMode>{view()}</StrictMode>); });
     fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
     expect(screen.getByRole('option', { name: `${wish.name} · ${wish.wishlist.title}` })).toHaveValue('814');
     const reads = fetch.mock.calls.filter(([url]) => url.includes('match-wishes'));

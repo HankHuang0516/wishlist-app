@@ -1,3 +1,4 @@
+import { type SourceChatContext } from './src/SourceLeadExplorer';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -57,6 +58,9 @@ export default function App() {
 }
 
 function NativeApp({ apiUrl }: { apiUrl: string }) {
+  const [activeSourceChat,setActiveSourceChat]=useState<SourceChatContext|null>(null);
+  const [focusSource,setFocusSource]=useState<string|null>(null);
+
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [booting, setBooting] = useState(true);
@@ -120,7 +124,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     setBusy(true); setError('');
     try {
       const result = await admitLogin(value, apiUrl, saved => createApi(apiUrl, () => saved, __DEV__)('/users/me'), encoded => SecureStore.setItemAsync(SESSION_KEY, encoded, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }), __DEV__);
-      authEpoch.current++; setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      authEpoch.current++; setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setToken(result.token); setUser(result.user); setSessionIssue(null);
       setAuthLink(current => current === authLink ? null : current);
     }
@@ -132,12 +136,12 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     authRunning.current = true; setBusy(true);
     authEpoch.current++;
     if (revokedMessage) {
-      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      setToken(null); setUser(null); setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setError(revokedMessage); setSessionIssue('expired');
     }
     try {
       await SecureStore.deleteItemAsync(SESSION_KEY);
-      setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
+      setToken(null); setUser(null); setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setError(revokedMessage ?? ''); setSessionIssue(revokedMessage ? 'expired' : null); setBusy(false);
     } catch {
       if (revokedMessage) { setSessionIssue('expired-storage-unavailable'); setError(revokedMessage + '\n' + sessionIssueMessage('expired-storage-unavailable')); }
@@ -190,7 +194,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   }, [api, token, user?.id, deletionOpen, deletionJournal, deletionProblem]);
 
   function erasePrivateViews() {
-    authEpoch.current++; setToken(null); setUser(null); setActiveRoom(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setAuthLink(null); setTab('首頁');
+    authEpoch.current++; setToken(null); setUser(null); setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setAuthLink(null); setTab('首頁');
   }
   function openDeletion() {
     if (authRunning.current || recoveryOperation.isRunning() || accountOperation.isRunning() || deletionActive.current) { Alert.alert('帳號操作尚未結束', '請先確認目前操作結果。'); return; }
@@ -214,7 +218,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => { setActiveRoom(id); setTab('社交'); }} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} /> :
+    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialSourceId={focusSource} onInitialSourceHandled={()=>setFocusSource(null)} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => {setActiveSourceChat(null);setFocusSource(null); setActiveRoom(id); setTab('社交'); }} onOpenSourceChat={context=>{setActiveRoom(null);setActiveSourceChat(context);setTab('社交');}} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} activeSourceChat={activeSourceChat} onSourceChatChange={context=>{if(!context&&activeSourceChat){setFocusSource(activeSourceChat.id);setExploreWishId(undefined);setTab('探索');}setActiveSourceChat(context);}} /> :
       <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
     <View style={styles.tabs}>{TABS.map(item => {
       const selected = item === tab;

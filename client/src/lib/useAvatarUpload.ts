@@ -86,5 +86,5 @@ export function useAvatarUpload(token: string | null, userId: number | undefined
     } catch { if (generation.current === epoch) setNotice('無法清理本機提醒；不會再次上傳。請重試清理。'); }
     finally { if (generation.current === epoch) { lock.current = false; setBusy(false); } }
   };
-  return {busy,notice,pending,checked,clearConfirm,setClearConfirm,storageError,upload,read,clear,retryRead:()=>setReload(n=>n+1),locked:!ready || busy || !!pending || storageError};
+  return {busy,notice,pending,checked,clearConfirm,setClearConfirm,storageError,upload,read,clear,retryRead:()=>setReload(n=>n+1),canReload:()=>!lock.current,locked:!ready || busy || !!pending || storageError};
 }

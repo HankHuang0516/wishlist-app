@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十二批：設定英文介面與安全語言切換（仍未部署）
+
+- Settings profile／avatar／privacy／app entries／advanced、原profile／avatar恢復notice、AccountBenefits及AccountSecurityPanel提供繁中／英文。使用者文字、原payload／ID／hash／encrypted journal／notice狀態不變；付款保持paused，TWD90/月及USD1/10次是原價格的英文標示，不換幣。iOS／Android／desktop安装說明補齊，沒有安裝選項仍可使用網站；不是PWA實際安裝或offline驗收。
+- 語言偏好write failure不再卡在changingLang，安全顯示錯誤並保留目前語言。Profile／avatar／security在同步gate未釋放前禁止語言reload；未保存或invalid draft亦保留本頁／阻擋切換。已保存於原journal的unknown操作允許語言切換，重開只讀原回執、不重送；另一欄未保存草稿仍阻擋。Reload等待期間profile／avatar／security輸入鎖定，unmount清理timer。Optional locale read failure採英文render，其他儲存契約不變。未知pre-persist failure不顯示raw Error，冻结autosave保留文字，安全重讀後才能再送。
+- 新Web17項：完整English privacy／readonly聯絡與原功能入口；locale read/write failure、未保存draft／invalid nickname、persist-before-HTTP gate及unknown原journal跨語言GET-only恢復、另一欄unsent draft、未知store failure不送；avatar active／unknown、security等待／拒絕清除credentials；English confirm取消不送、benefits GET-only retry与payments保持停止；desktop／Android／iOS語言分支。初次AST重複包contact-status翻譯導致5測試失敗及3render errors，移除double call且原斷言保留；後focused40／44／最後49全通過。最後完整isolated pre-push0：Server56檔913＋3skip／HTTP33檔547／Web88檔1411＋build／Native42檔852＋typecheck／Expo；44 migrations schema一致與required cleanup0。主JS332.88KB／PWA93entries5984.32KiB，既有map／worker warnings保留。
+- Chrome390×844／document375／Settings navigation1，compiled production handlers＋batch42独立UTF8 DB由41合成fixtures複製，41原資料未改。實際zh nickname「中文草稿42」保存APPLIEDv1後QA回502；UI切English reload只GET原9d3e7b37-9f5e-4d9a-9eb6-e6717b1bca75回執、journal清理，原POST1／GET1／receipt1、內容保持原文及version1。Invalid6nicknames保留，切繁中被阻擋且沒有POST；手動修回原值只顯示No changes。另明確synthetic local avatar真Multer／handler POST200一次，重新載入真320×240；Flickr明確stub、avatar寫入独立/tmp sandbox，未寫repo public/uploads。最初QA Vite缺/uploads proxy造成broken preview，僅重啟Vite補proxy，API全程未重啟；失敗及修正圖均留。進階區真browser發現English pwa.* keys，補字典及5分支測試後reload可讀，初期圖／DOM留作歷史。總POST2／DELETE或PUT0／外部AI-mail-Flickr0；security僅展開空白欄位、付款未操作。
+- 10張原JPEG／DOM／單一synthetic HTTP journal及outputs/wishlist-web-settings-language-evidence-20261002.json保留，初期失敗圖不冒稱成功。僅自有API／Vite／PG停、browser tab關／viewport還原，DB與素材／他人worktree保留；APP／backend未改。新commit精確CI與PR讀回另記JSON／roadmap。
+- 全矩陣、其他feature／feedback／policy-support語系、avatar server安全及provider耐久性、Flickr unknown reconciliation、真MiniMax／Flickr／mail／跨端、PWA upgrade/offline／效能、憑證及正式migration audit／合併Railway／首頁與設定各90%正式驗收仍續作。PR82 draft／未部署、goal active及100%可適用功能門檻不變。
+
 ## 2026-10-02 第四十一批：共用導覽與行銷操作英文介面（仍未部署）
 
 - 共用六項導覽、accessible descriptions、header登入／登出／feedback與premium、footer六個原目的地及feedback依saved locale顯示繁中／英文；兩種語言都保留唯一帶標籤Settings navigation與原routes／CSS。locale storage無法讀取時上述控制仍可用英文。Settings正文、其他features、feedback回執細節與政策客服正文仍待逐項驗收，沒有全站英文完成聲明。

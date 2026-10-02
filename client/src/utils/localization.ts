@@ -98,16 +98,16 @@ const translations: Record<string, Record<string, string>> = {
         'settings.securityMandatory': '(系統強制)',
 
         // PWA
-        'pwa.installTitle': '安裝 App',
+        'pwa.installTitle': '安裝網頁 App',
         'pwa.android': 'Android',
         'pwa.desktop': '電腦版',
-        'pwa.noButton': "Don't see the button?",
-        'pwa.manual': 'Manually install:',
-        'pwa.step1': 'Tap the Menu icon (three dots)',
-        'pwa.step2': 'Tap "Install App" or "Add to Home screen"',
-        'pwa.step3': 'Tap "Install"',
+        'pwa.noButton': '沒有看到安裝按鈕？',
+        'pwa.manual': '瀏覽器提供安裝選項時，可依以下步驟操作：',
+        'pwa.step1': '點選瀏覽器選單（三個點）',
+        'pwa.step2': '選擇「安裝應用程式」或「加入主畫面」',
+        'pwa.step3': '點選「安裝」',
         'pwa.howTo': '如何安裝？',
-        'pwa.desktopDesc': '請檢查網址列右側的安裝圖示',
+        'pwa.desktopDesc': '請檢查網址列右側的安裝圖示，或瀏覽器選單中的安裝選項。沒有安裝選項時仍可直接使用網站。',
 
         // Wishlist Detail
         'wishlist.emptyOwner': '此清單目前是空的。點擊 + 新增項目！',
@@ -436,6 +436,16 @@ const translations: Record<string, Record<string, string>> = {
 
     },
     'en-US': {
+        'pwa.installTitle': 'Install Web app',
+        'pwa.android': 'Android',
+        'pwa.desktop': 'Desktop',
+        'pwa.noButton': 'No install button?',
+        'pwa.manual': 'If your browser offers installation, follow these steps:',
+        'pwa.step1': 'Open the browser menu with three dots',
+        'pwa.step2': 'Choose Install app or Add to Home screen',
+        'pwa.step3': 'Choose Install',
+        'pwa.howTo': 'How to install',
+        'pwa.desktopDesc': 'Look for the install icon on the right of the address bar or an install option in the browser menu. You can still use the website if installation is unavailable.',
         'route.loading': 'Loading page…',
         'route.unavailable': 'This page is temporarily unavailable',
         'route.loadFailed': 'Page resources could not be loaded. Check your connection and retry.',
@@ -789,7 +799,8 @@ const translations: Record<string, Record<string, string>> = {
 };
 
 export const t = (key: string): string => {
-    const locale = getUserLocale();
+    let locale = 'en-US';
+    try { locale = getUserLocale(); } catch { /* Optional language storage must not break page rendering. */ }
     const lang = locale.startsWith('zh') ? 'zh-TW' : 'en-US';
     return translations[lang]?.[key] || translations['en-US'][key] || key;
 };

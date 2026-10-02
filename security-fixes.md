@@ -1,3 +1,9 @@
+## 2026-10-02 Settings reload and safe error presentation
+
+Language switching consults synchronous profile, avatar and security gates before saving the preference or scheduling reload. Unsent or invalid drafts prevent reload; drafts covered by the original persisted operation can reopen through GET-only verification. Inputs lock during the reload delay and unmount clears the timer. A failed language write leaves controls usable. Optional locale reads fall back to English without weakening recovery storage checks. Unknown failures before persistence freeze autosave, keep text and display a bounded message rather than raw implementation details.
+
+Settings, benefits and security translate fixed presentation text and confirmations, preserving payloads, original journal/hash/identity, user content, paused purchases and current-avatar limitations. New regression cases and an isolated compiled-handler Chrome flow verify original profile receipt recovery after language change and one local synthetic avatar upload. No APP/backend source changed. Avatar server validation/provider durability, other features, PWA and production acceptance remain pending in docs/web-app-parity.md.
+
 ## 2026-10-02 Shared Web and marketing recovery localization
 
 Shared navigation/header/footer and marketing presentation now follow the saved Chinese/English locale without changing routes, permissions, backend payloads, receipt identity or internal notice comparisons. Original user copy and revision prompts remain verbatim, including braces and Chinese text. Marketing recovery errors translate known safe messages rather than surfacing raw provider/storage responses. Locale-storage failures retain a usable English navigation and private-thumbnail status. Photo authentication, cache/redirect restrictions, MIME/size validation and object URL cleanup are unchanged.

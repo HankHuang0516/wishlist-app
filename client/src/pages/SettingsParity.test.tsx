@@ -20,6 +20,114 @@ beforeEach(() => {
   vi.mocked(privatePendingStore.get).mockReset().mockImplementation(async key => pending.get(key) ?? null);
 });
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+describe('settings language preserves recoverable operations and unsent drafts', () => {
+  it.each([
+    ['en-US','Desktop browser','Install Web app (Desktop)','Look for the install icon'],
+    ['en-US','Android','Install Web app (Android)','Choose Install app or Add to Home screen'],
+    ['zh-TW','Android','安裝網頁 App (Android)','選擇「安裝應用程式」或「加入主畫面」'],
+    ['en-US','iPhone','Install App (iOS)','Tap the Share button'],
+    ['zh-TW','iPhone','安裝應用程式 (iOS)','點一下「分享」按鈕'],
+  ])('installation help is readable for %s on %s',async(locale,agent,title,step)=>{
+    localStorage.setItem('user-locale',locale);vi.spyOn(navigator,'userAgent','get').mockReturnValue(agent);
+    vi.stubGlobal('fetch',vi.fn(async()=>ok(profile)));render(view());await screen.findByLabelText(locale==='zh-TW'?'暱稱':'Nicknames');
+    screen.getByText(locale==='zh-TW'?'進階功能':'More features').closest('details')!.setAttribute('open','');
+    expect(screen.getByRole('heading',{name:title,exact:true})).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(step))).toBeInTheDocument();expect(document.body.textContent).not.toMatch(/pwa\./);
+  });
+  const preventReload = () => {
+    const original=window.setTimeout.bind(window), reloads:unknown[]=[];
+    vi.spyOn(window,'setTimeout').mockImplementation((handler,delay,...args)=>{
+      if(delay===500){reloads.push(handler);return 0;}
+      return original(handler,delay,...args);
+    }); return reloads;
+  };
+  it('English profile, permissions and original features preserve typed private values', async () => {
+    localStorage.setItem('user-locale','en-US');
+    vi.stubGlobal('fetch',vi.fn(async()=>ok({...profile,realName:'使用者姓名',address:'使用者地址',email:'synthetic@example.invalid'})));
+    render(view()); await screen.findByRole('heading',{name:'Personal profile'});
+    expect(screen.getByLabelText('Real Name')).toHaveValue('使用者姓名');
+    expect(screen.getByLabelText('Email')).toBeDisabled(); expect(screen.getByLabelText('Phone Number')).toBeDisabled();
+    expect(screen.getByText('Phone Hidden · Email Hidden')).toBeInTheDocument();
+    for(const label of ['Show real name','Show birthday','Show delivery address','Show phone number','Show email address'])expect(screen.getByRole('button',{name:label,hidden:true})).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'My listings · View and manage'})).toHaveAttribute('href','/my-listings');
+    expect(screen.getByRole('button',{name:'Upload avatar'})).toHaveAttribute('tabindex','0');
+    expect(screen.getByText('More features').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByRole('button',{name:'Account security'})).toBeInTheDocument();
+  });
+  it('blocked optional locale storage still renders safely and a failed write leaves buttons usable',async()=>{
+    const read=vi.spyOn(window.localStorage,'getItem').mockImplementation(()=>{throw new Error('unavailable');});
+    vi.stubGlobal('fetch',vi.fn(async()=>ok(profile)));render(view());await screen.findByRole('heading',{name:'Personal profile'});
+    read.mockRestore(); localStorage.setItem('user-locale','en-US');
+    vi.spyOn(window.localStorage,'setItem').mockImplementation(()=>{throw new Error('unavailable');});
+    const reloads=preventReload(); fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));
+    await screen.findByText('Your language preference could not be saved. The current language is retained. Retry later.');
+    expect(screen.getByRole('button',{name:'English'})).toBeEnabled();expect(reloads).toHaveLength(0);
+    expect(localStorage.getItem('user-locale')).toBe('en-US');
+  });
+  it('an unsent draft blocks reload without sending or discarding that text',async()=>{
+    const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);const reloads=preventReload();render(view());
+    const address=await screen.findByLabelText('寄送地址'); fireEvent.change(address,{target:{value:'保留未保存地址'}});
+    fireEvent.click(screen.getByRole('button',{name:'English'}));await screen.findByText(/請先完成保存/);
+    expect(address).toHaveValue('保留未保存地址'); expect(localStorage.getItem('user-locale')).toBe('zh-TW'); expect(reloads).toHaveLength(0);
+    expect(fetcher.mock.calls.every(call=>call[1]?.method!=='POST')).toBe(true);
+  });
+  it('active persistence blocks locale switching before HTTP, then an unknown journal allows GET-only English recovery',async()=>{
+    let persist!:()=>void,receipt:unknown;
+    vi.mocked(privatePendingStore.save).mockImplementationOnce((key,raw)=>new Promise<void>(resolve=>{persist=()=>{pending.set(key,raw);resolve();};}));
+    const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method==='POST'){const journal=await parseProfileJournal([...pending.values()][0]);receipt={receipt:{clientActionId:journal.clientActionId,requestHash:journal.requestHash,state:'APPLIED',appliedVersion:1,createdAt:new Date().toISOString()},profile:{...profile,profileVersion:1,nicknames:'原文暱稱'}};throw new Error('lost reply');}
+      return ok(url.includes('/profile-operations/')?receipt:profile);
+    });vi.stubGlobal('fetch',fetcher);const reloads=preventReload();const mounted=render(view());
+    const input=await screen.findByLabelText('暱稱');fireEvent.change(input,{target:{value:'原文暱稱'}});fireEvent.blur(input);
+    await waitFor(()=>expect(persist).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'English'})).toBeDisabled();
+    expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(0);expect(reloads).toHaveLength(0);
+    await act(async()=>persist());await screen.findByText(/尚未確認儲存結果/);const raw=[...pending.values()][0];
+    fireEvent.click(screen.getByRole('button',{name:'English'}));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(raw);
+    expect(screen.getByLabelText('Nicknames')).toBeDisabled();mounted.unmount();render(view());
+    await screen.findByText('The server confirmed the save.');expect(screen.getByLabelText('Nicknames')).toHaveValue('原文暱稱');
+    expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);expect(pending.size).toBe(0);
+  });
+  it('an unrelated unsent draft still blocks locale switching when another change has a journal',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='POST')throw new Error('lost');return ok(profile);}));
+    const reloads=preventReload();render(view());const input=await screen.findByLabelText('暱稱');fireEvent.change(screen.getByLabelText('寄送地址'),{target:{value:'沒有保存的地址'}});
+    fireEvent.change(input,{target:{value:'已保存的草稿'}});fireEvent.blur(input);await screen.findByText(/尚未確認儲存結果/);
+    fireEvent.click(screen.getByRole('button',{name:'English'}));await screen.findByText(/請先完成保存/);expect(reloads).toHaveLength(0);expect(pending.size).toBe(1);
+    expect(screen.getByLabelText('寄送地址')).toHaveValue('沒有保存的地址');
+  });
+  it('unexpected pre-persist failure freezes autosave without exposing implementation details',async()=>{
+    localStorage.setItem('user-locale','en-US');vi.mocked(privatePendingStore.save).mockRejectedValueOnce(new Error('private implementation detail'));
+    const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);render(view());const input=await screen.findByLabelText('Nicknames');
+    fireEvent.change(input,{target:{value:'保留文字'}});fireEvent.blur(input);await screen.findByText('Saving failed; nothing was sent. Keep your text, then retry safe reading.');
+    expect(input).toBeDisabled();expect(input).toHaveValue('保留文字');expect(screen.queryByText('private implementation detail')).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(0);
+  });
+  it('English validation retains the invalid draft and does not send or allow a reload',async()=>{
+    localStorage.setItem('user-locale','en-US'); const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);
+    const reloads=preventReload();render(view());const input=await screen.findByLabelText('Nicknames');
+    fireEvent.change(input,{target:{value:'a,b,c,d,e,f'}});fireEvent.blur(input);await screen.findByText('Use up to 5 nicknames, each no longer than 50 characters.');
+    expect(input).toBeEnabled();expect(input).toHaveValue('a,b,c,d,e,f');fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));
+    await screen.findByText(/Language switching is paused/);expect(reloads).toHaveLength(0);expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(0);
+  });
+  it('English avatar upload blocks reload while active and preserves an unknown reminder across language change',async()=>{
+    localStorage.setItem('user-locale','en-US');let fail!:(error:Error)=>void;
+    const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise((_resolve,reject)=>{fail=reject;}):ok(profile));vi.stubGlobal('fetch',fetcher);
+    const reloads=preventReload();render(view());const upload=await screen.findByRole('button',{name:'Upload avatar'});
+    fireEvent.change(upload.querySelector('input[type=file]')!,{target:{files:[new File(['synthetic image'],'fixture.png',{type:'image/png'})]}});
+    await waitFor(()=>expect(fail).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(reloads).toHaveLength(0);
+    await act(async()=>fail(new Error('lost reply')));await screen.findByText('The avatar upload is unconfirmed; the server may have saved it. Read the current avatar. Nothing is resent automatically.');
+    const journal=[...pending.values()][0];fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(journal);
+    expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
+  });
+  it('pending security confirmation disables language switching until rejection clears credentials',async()=>{
+    localStorage.setItem('user-locale','en-US');let finish!:(value:unknown)=>void;vi.spyOn(window,'confirm').mockReturnValue(true);
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise(resolve=>{finish=resolve;}):ok(profile)));
+    const reloads=preventReload();render(view());await screen.findByRole('heading',{name:'Personal profile'});fireEvent.click(screen.getByRole('button',{name:'Account security'}));
+    fireEvent.change(screen.getByLabelText('Current password'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'Revoke all device sessions'}));
+    expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(reloads).toHaveLength(0);
+    await act(async()=>finish({ok:false,status:401,json:async()=>({errorCode:'INVALID_CREDENTIALS'})}));await screen.findByText('The current password is incorrect. No changes are confirmed.');
+    expect(screen.getByRole('button',{name:'繁體中文'})).toBeEnabled();expect(screen.getByLabelText('Current password')).toHaveValue('');
+  });
+});
 describe('settings hub retains web-only functionality while adding app actions', () => {
   it('has one birthday field and accessible visibility labels alongside app and legacy entries', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ok(url.endsWith('/availability') ? { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 0, paidPurchasesAvailable: false }

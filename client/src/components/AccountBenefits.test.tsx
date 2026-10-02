@@ -1,13 +1,26 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../context/AuthContext';
 import AccountBenefits, { parseAllowance } from './AccountBenefits';
 const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture-session', login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
 const allowance = { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 7, paidPurchasesAvailable: false };
 const ok = (value: unknown) => ({ ok: true, json: async () => value });
 const view = (token = auth.token) => <AuthContext.Provider value={{ ...auth, token }}><AccountBenefits /></AuthContext.Provider>;
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => localStorage.setItem('user-locale','zh-TW'));
+afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
 describe('same-backend membership and permanent credits', () => {
+  it('English retry keeps unavailable balances distinct from zero and payments paused', async () => {
+    localStorage.setItem('user-locale','en-US'); const fetch=vi.fn().mockRejectedValue(new Error('offline')); vi.stubGlobal('fetch',fetch);
+    render(view()); await screen.findByRole('alert');
+    expect(screen.getByText('Permanent credits remaining: Temporarily unverified')).toBeInTheDocument();
+    expect(screen.getByText('Premium subscription · TWD 90/month')).toBeInTheDocument();
+    expect(screen.getByText('Marketing credits · USD 1/10 uses')).toBeInTheDocument();
+    fetch.mockImplementation(async(url:string)=>ok(url.endsWith('/users/me')?{isPremium:true}:{...allowance,paidPurchasesAvailable:true}));
+    fireEvent.click(screen.getByRole('button',{name:'Recheck benefits'}));
+    await screen.findByText('Permanent credits remaining: 7 uses');
+    expect(screen.getByText('Purchases and subscriptions are paused')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument(); expect(fetch.mock.calls.every(([,init])=>!init.method)).toBe(true);
+  });
   it('shows verified credits and paused pricing without exposing free monthly quotas early', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ok(url.endsWith('/users/me') ? { isPremium: true } : allowance)));
     render(view());

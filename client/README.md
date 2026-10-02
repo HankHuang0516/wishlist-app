@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Settings language and reload safety — 2026-10-02
+
+Settings profile, privacy, recovery, avatar, benefits and account security now follow Chinese/English preferences while preserving user text and original operation identities. Language storage failures remain usable; synchronous gates and unsent drafts prevent reload before safe persistence. Unknown operations already covered by the original journal may switch language and reopen with receipt GET only. Unexpected pre-persist failures freeze autosave without exposing implementation details. Desktop/Android/iOS installation help has readable translations and an explicit browser fallback.
+
+Batch42 adds17 Web cases and passes the final isolated gate: Web88 files/1,411 tests and build, Server913 plus3 skipped, actual HTTP547, Native852/typecheck/Expo, 44 migrations/schema consistency and required cleanup0. Chrome390×844 verified lost profile reply → language switch → original APPLIEDv1 GET-only recovery, one profile POST, unsent invalid-draft protection and one synthetic local avatar upload/reload. The avatar provider was stubbed and storage isolated; real Flickr durability, other feature/policy translations, PWA and production acceptance remain pending. See `docs/web-app-parity.md` for exact evidence and QA fixture corrections. APP and backend source were unchanged.
+
 ## Owner management parity verification — 2026-10-02
 
 `MyListingsPage` loads owned inventory in pages of 50 and labels partial status counts as loaded counts. Repeated/cyclic cursors are rejected, successful pages survive a failed continuation, and overlapping rows retain the higher verified version. Lifecycle generations fence superseded page/editor responses. Core management, edit-draft recovery, original-operation comparison, sharing and Taiwan expiry controls support Chinese and English using the saved locale.

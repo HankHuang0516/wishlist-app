@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { API_URL } from '../config';
 import { api } from './marketplaceApi';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from './webPendingStore';
-import { abandonProfileOperation, normalizeProfilePatch, parseOwnProfile, parseProfileJournal, profileJournal, readProfileOperation, sendProfileOperation, type OwnProfile, type ProfileField, type ProfilePatch, type ProfileResult } from './profileWeb';
+import { abandonProfileOperation, normalizeProfilePatch, parseOwnProfile, parseProfileJournal, profileJournal, readProfileOperation, sendProfileOperation, ProfileError, type OwnProfile, type ProfileField, type ProfilePatch, type ProfileResult } from './profileWeb';
 
 /** Single scoped operation at a time. Persist before HTTP; reopens only GET.
  * Unsent fields remain drafts and never become acknowledged by another field.
@@ -86,7 +86,8 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
       if (generation.current !== epoch) return;
       if (persisted && raw) { markPending(raw); setNotice('尚未確認儲存結果；請查核原回執，或明確重試同一操作。'); }
       else if (error instanceof PendingStoreError) { setStorageError(true); setNotice(error.message); }
-      else setNotice(error instanceof Error ? error.message : '無法保存；尚未送出。');
+      else if (error instanceof ProfileError) setNotice(error.message);
+      else { setStorageError(true); setNotice('無法保存；尚未送出。請先保留文字，再重試安全讀取。'); }
     } finally { if (generation.current === epoch) { locked.current = false; setBusy(false); } }
   };
   const recover = async (mode: 'read' | 'retry' | 'abandon' | 'cleanup') => {
@@ -99,7 +100,17 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
     } catch { if (generation.current === epoch) setNotice('原儲存結果仍未確認；不會改用新操作，也不會自動重送。'); }
     finally { if (generation.current === epoch) { locked.current = false; setBusy(false); } }
   };
-  return { profile, loading, busy, pending, notice, savedField, storageError, discardConfirm, setDiscardConfirm,
+  const canReload = () => {
+    if (locked.current) return false;
+    try {
+      const submitted: ProfilePatch = pendingRef.current ? JSON.parse(pendingRef.current).updates : {};
+      return Object.entries(drafts.current).every(([field,value]) => {
+        const key = field as ProfileField, normalized = normalizeProfilePatch({[key]:value})[key];
+        return normalized === confirmed.current?.[key] || Object.hasOwn(submitted,key) && normalized === submitted[key];
+      });
+    } catch { return false; }
+  };
+  return { profile, loading, busy, pending, notice, savedField, storageError, discardConfirm, setDiscardConfirm, canReload,
     locked: loading || busy || !!pending || storageError, emailReadOnly: !!confirmed.current?.email,
     edit,update,recover, retryRead: () => setReload(value => value+1),
     patchDisplay: (patch: Partial<OwnProfile>) => setProfile(prev => prev ? {...prev,...patch} : null),

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let api: typeof import('./marketplaceApi').api;
+let publicApi: typeof import('./marketplaceApi').publicApi;
 let ApiFailure: typeof import('./marketplaceApi').ApiFailure;
 const fetchMock = vi.fn();
 beforeEach(async () => {
-  vi.resetModules(); ({ api, ApiFailure } = await import('./marketplaceApi'));
+  vi.resetModules(); ({ api, publicApi, ApiFailure } = await import('./marketplaceApi'));
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-02T15:00:00Z'));
   fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
 });
@@ -11,6 +12,25 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const rejected = (header?: string, body = '{"errorCode":"RATE_LIMIT_EXCEEDED"}') => new Response(body, { status: 429, headers: header ? { 'Retry-After': header } : {} });
 const success = () => new Response('{"ok":true}', { status: 200 });
 describe('origin request cooldown', () => {
+  it('shares public and account cooldowns but never sends credentials for the public read', async () => {
+    fetchMock.mockResolvedValueOnce(rejected('120')).mockResolvedValue(success());
+    await expect(publicApi('/listings/public-item')).rejects.toMatchObject({ status: 429, retryAfterMs: 120_000 });
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'omit', cache: 'no-store', redirect: 'error' });
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
+    await expect(api('synthetic-next', '/users/me')).rejects.toMatchObject({ code: 'RATE_LIMIT_COOLDOWN' });
+    await expect(publicApi('/listings/another-item')).rejects.toMatchObject({ code: 'RATE_LIMIT_COOLDOWN' });
+    await vi.advanceTimersByTimeAsync(120_000); expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(publicApi('/listings/public-item')).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('Authorization');
+  });
+  it('refuses write bodies and supplied authorization on a public read without fetching', async () => {
+    await expect(publicApi('/listings/item', { method: 'POST', body: '{}' })).rejects.toThrow();
+    await expect(publicApi('/listings/item', { body: '{}' })).rejects.toThrow();
+    await expect(publicApi('/listings/item', { headers: new Headers({ authorization: 'Bearer synthetic' }) })).rejects.toThrow();
+    await expect(publicApi('//untrusted.example')).rejects.toThrow('無效的 API 路徑。');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it('honors Retry-After across routes and accounts without fetching or replaying a pending mutation', async () => {
     fetchMock.mockResolvedValueOnce(rejected('120')).mockResolvedValue(success());
     await expect(api('synthetic-a', '/chat/conversations')).rejects.toMatchObject({ status: 429, code: 'RATE_LIMIT_EXCEEDED', retryAfterMs: 120_000 });

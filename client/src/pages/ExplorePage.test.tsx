@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../context/AuthContext';
 import { makeListing, makeMatch, makeMatchPage, makeWish, makeExternalListing, responseOk } from '../__tests__/fixtures/marketplace';
 import type { Bounds } from '../lib/listingSearch';
@@ -10,7 +10,11 @@ vi.mock('../components/ExploreMapWeb', () => ({ default: (props: { items: { id: 
   <div><output data-testid="map-frame">{JSON.stringify(props.frame)}</output><button type="button" onClick={() => props.onViewport([121.5, 25, 121.6, 25.1])}>模擬移動地圖</button><button type="button" onClick={() => props.onCluster('seller', props.items.slice(0, 1).map(item => item.id))}>模擬群聚點擊</button></div> }));
 const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture', isAuthenticated: true, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn() };
 const view = (path = '/explore', value = auth) => <MemoryRouter initialEntries={[path]}><AuthContext.Provider value={value}><ExplorePage /></AuthContext.Provider></MemoryRouter>;
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+let originalLocale: string | null;
+beforeEach(() => { originalLocale = localStorage.getItem('user-locale'); localStorage.setItem('user-locale', 'zh-TW'); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals();
+  if (originalLocale === null) localStorage.removeItem('user-locale'); else localStorage.setItem('user-locale', originalLocale);
+});
 describe('APP-equivalent map and list exploration', () => {
   it('applies the homepage search to the input and actual seller query on first read', async () => {
     const fetch = vi.fn(async () => responseOk({ items: [], nextCursor: null })); vi.stubGlobal('fetch', fetch);

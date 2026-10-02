@@ -325,12 +325,17 @@ describe('native-equivalent owner management', () => {
 
 describe('complete owner paging and English recovery', () => {
   it('ignores a superseded editor restoration failure in StrictMode', async () => {
+    // Resolve scope keys in effect order. Real WebCrypto completion order can
+    // otherwise attach the deliberately stale failure to the current effect.
+    vi.spyOn(await import('../lib/webPendingStore'), 'pendingRequestKey').mockImplementation(async (_origin, userId, scope) => `fixture.${userId}.${scope}`);
     vi.stubGlobal('fetch',vi.fn(async()=>ok({items:[row],nextCursor:null})));
     render(<StrictMode>{view()}</StrictMode>);await ready();
     let reject!:(error:Error)=>void;
     const old=new Promise<string|null>((_resolve,no)=>{reject=no;});
     vi.mocked(privatePendingStore.get).mockImplementationOnce(()=>old);
+    const reads = vi.mocked(privatePendingStore.get).mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'編輯資訊'}));await waitFor(()=>expect(screen.getByLabelText('商品名稱')).toBeEnabled());
+    expect(privatePendingStore.get).toHaveBeenCalledTimes(reads + 2);
     await act(async()=>{reject(Error('superseded restoration'));await old.catch(()=>null);});
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();expect(screen.getByLabelText('商品名稱')).toHaveValue(row.title);expect(screen.getByRole('button',{name:'儲存修改'})).toBeEnabled();
   });

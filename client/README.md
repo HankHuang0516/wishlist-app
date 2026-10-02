@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Public item destinations and versioned previews — 2026-10-03
+
+Public item pages and contact/share controls follow Chinese/English, including bounded loading, unavailable, rate-limit and retry notices. Original titles, descriptions, seller names, areas and share payloads remain unchanged; prices stay in TWD and dates keep Taiwan time. A pending native share accepts one action, and cancellation does not become failure. The nested report workflow still has its separately tracked Chinese-only copy.
+
+Public API reads use the existing data cooldown with credentials omitted. They cannot carry Authorization, a write method or a body; expiration of Retry-After does not trigger a read or mutation. The public parser, account/departure fences and current expiry checks remain in force. Server-rendered Open Graph and Twitter URLs carry the current stored item version, matching the native share URL convention without trusting the request's query version. Original seller thumbnails, no-store and exclusion of private/unavailable goods are retained. Native APP, permissions, payment and migrations are unchanged; exact production preview and browser proof are recorded in the parity matrix.
+
 ## Website build and data request budgets — 2026-10-03
 
 Published build GET/HEAD resources and all other requests use separate server counters, each retaining500/IP/15minutes. PWA downloads no longer spend account/chat request slots; saturated data reads cannot block the recovery shell. Only actual allowlisted build files qualify, with missing/private/encoded paths and writes still in the original data budget. Route-specific authentication, security, chat and upload limits stay in force. Both counters are process-local, as before;429 and Retry-After remain possible.

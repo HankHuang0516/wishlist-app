@@ -1,5 +1,13 @@
 # React + TypeScript + Vite
 
+## Explicit website updates — 2026-10-02
+
+The UI owns native worker registration with updateViaCache none; existing autoUpdate worker activation stays compatible with older clients, but no virtual module reloads an active form. Settings More features exposes a bilingual update check. The public build version JSON is excluded from precaching, while the version meta in the worker-served index proves which shell is actually ready. Two bounded, credential-free no-store GETs must agree before readiness; malformed/redirected/foreign responses fail closed, legacy markers remain preparing, and the actual Workbox revision query is admitted only for the index.
+
+A prepared update shows a labelled global notice. Reload requires an explicit save-work confirmation and fresh proof. Cancellation, departure, deadlines and a superseding release prevent late reload. Inputs and journals are untouched until the user's deliberate page navigation; unpersisted input is not promised to survive that navigation. Old bundles without this UI must first save work and reopen the website. Automatic first installation never forces a reload. See the canonical parity matrix for actual browser and production upgrade evidence and remaining gates.
+
+The existing native APP, image-cache retirement, authorization, payment and request recovery protocols stay unchanged. This follows the [official autoUpdate behavior](https://vite-pwa-org.netlify.app/guide/auto-update), without importing its automatic page-reload module.
+
 ## Retained account transactions and gift claims — 2026-10-02
 
 `/purchase-history` retains both original authenticated reads with independent loading, bounded failure and explicit retry states. A failed read is never an empty history. Each account/token change remounts the private view and aborts old reads; request generations also fence late JSON. Reads use no-store, redirect rejection and a30s deadline, with no browser persistence of history. Chinese/English copy remains available when locale storage fails. Original amounts and currencies retain precision, zero and negative refund values; only actual COMPLETED status gets completed styling. Unknown transaction types/statuses remain labelled without claiming success or adding checkout.

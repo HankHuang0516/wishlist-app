@@ -16,6 +16,7 @@ import './SettingsPage.css';
 import { settingsText as st, settingsMessage, settingsChinese } from '../lib/settingsCopy';
 import { useSettingsProfile } from '../lib/useSettingsProfile';
 import { useAvatarUpload } from '../lib/useAvatarUpload';
+import { WebsiteUpdateControls } from '../components/WebUpdateNotice';
 
 export default function SettingsPage() {
     const { token, user } = useAuth();
@@ -464,6 +465,7 @@ function SettingsSession() {
             <details onToggle={event => setAdvancedOpen(event.currentTarget.open)} className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 sm:min-h-0"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block text-sm font-semibold leading-5">{st("進階功能")}</span><span className="block text-xs leading-4 text-gray-500">{st("AI 整合・交易紀錄・安裝網頁 App・好友與送禮")}</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
                 <div className="mt-4 space-y-3">
+                    <WebsiteUpdateControls />
                     <Link to="/dashboard" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">{st("原願望清單 · 分享與送禮")}</Link>
                     <Link to="/social" className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm text-blue-700"><Users className="h-4 w-4" aria-hidden="true" />{st("好友與社交")}</Link>
                     <Link to="/reports" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">{st("我的商品檢舉 · 查看處理狀態")}</Link>

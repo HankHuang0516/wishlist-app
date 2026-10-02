@@ -9,6 +9,7 @@ vi.mock('../lib/webPendingStore', async original => ({ ...await original<typeof 
 const props = { token: 'fixture', userId: 42, room: makeRoom(), onClose: vi.fn() }, key = `42.meetup.${props.room.id}`;
 let appointment: MeetupRecord | null;
 beforeEach(() => {
+  localStorage.setItem('user-locale', 'zh-TW');
   data.clear(); api.mockReset(); appointment = null;
   store.get.mockReset().mockImplementation(async (key: string) => data.get(key) ?? null);
   store.save.mockReset().mockImplementation(async (key: string, body: string) => { if (data.has(key) && data.get(key) !== body) throw new Error('conflict'); data.set(key, body); });
@@ -27,6 +28,36 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private meetup web parity', () => {
+  it('uses English appointment controls but sends the original private terms and Taiwan instant', async () => {
+    localStorage.setItem('user-locale', 'en-US'); render(<MeetupWeb {...props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Propose meetup' }));
+    fireEvent.change(screen.getByLabelText('Meetup date and time (Taiwan time)'), { target: { value: '2099-10-02T14:00' } });
+    fireEvent.change(screen.getByLabelText('Private meetup place'), { target: { value: '原中文集合點 {version}' } });
+    fireEvent.change(screen.getByLabelText('Meetup notes (optional, up to 1000 characters)'), { target: { value: '保留原文與小數 250.7500 USD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Propose these terms (changes require new approval)' }));
+    await screen.findByText('Proposed · Version 1'); expect(posts()).toHaveLength(1);
+    expect(JSON.parse(posts()[0][2].body)).toMatchObject({ action: 'PROPOSE', expectedVersion: 0, terms: { startsAt: '2099-10-02T06:00:00.000Z', timeZone: 'Asia/Taipei', durationMinutes: 60, placeName: '原中文集合點 {version}', notes: '保留原文與小數 250.7500 USD' } });
+    expect(screen.getByText('Buyer: agreed · Seller: not yet agreed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument(); expect(data.has(key)).toBe(false);
+  });
+  it('translates old-version recovery without changing the original pending operation or approving newer terms', async () => {
+    localStorage.setItem('user-locale', 'en-US'); appointment = makeMeetup({ version: 2 });
+    const req = { clientActionId: crypto.randomUUID(), action: 'CONFIRM', expectedVersion: 1 }, body = JSON.stringify(req); data.set(key, body);
+    render(<MeetupWeb {...props} />); await screen.findByText('Proposed · Version 2'); expect(posts()).toHaveLength(0); expect(data.get(key)).toBe(body);
+    api.mockImplementation(async (_token: string, _path: string, init?: RequestInit) => init?.method ? { replayed: true, appointment, receipt: { ...req, abandoned: false, resultingVersion: 1, actorUserId: 42, conversationId: props.room.id } } : { appointment });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry original operation' }));
+    await screen.findByText('The original version 1 operation is verified. Review the current version 2 separately.');
+    expect(posts()).toHaveLength(1); expect(posts()[0][2].body).toBe(body); expect(screen.getByText('Buyer: not yet agreed · Seller: agreed')).toBeInTheDocument();
+  });
+  it('preserves unsent original place when an English appointment refresh detects newer terms', async () => {
+    localStorage.setItem('user-locale', 'en-US'); appointment = makeMeetup(); render(<MeetupWeb {...props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Propose a new time or place' }));
+    fireEvent.change(screen.getByLabelText('Private meetup place'), { target: { value: '本人未送出中文草稿' } });
+    appointment = makeMeetup({ version: 2, placeName: '對方新的集合點' }); fireEvent.click(screen.getByRole('button', { name: 'Update appointment status only' }));
+    await screen.findByText('Proposed · Version 2'); expect(screen.getByLabelText('Private meetup place')).toHaveValue('本人未送出中文草稿');
+    expect(screen.getByRole('button', { name: 'Propose these terms (changes require new approval)' })).toBeDisabled(); expect(posts()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Load latest version and edit again' })); expect(screen.getByLabelText('Private meetup place')).toHaveValue('對方新的集合點');
+  });
   it('proposes explicit Taiwan time, units, private place and coordinates exactly once after durable save', async () => {
     render(<MeetupWeb {...props} />); fireEvent.click(await screen.findByRole('button', { name: '提出面交邀約' }));
     fireEvent.change(screen.getByLabelText('面交日期與時間（台灣時間）'), { target: { value: '2099-10-02T14:00' } });

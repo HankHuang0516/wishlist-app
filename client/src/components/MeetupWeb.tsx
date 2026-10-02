@@ -1,10 +1,11 @@
+import { chatMessage, chatText, chatTime } from '../lib/chatCopy';
 import { useEffect, useRef, useState } from 'react';
 import MarketplaceDialog from './MarketplaceDialog';
 import { getFullApiUrl } from '../config';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import type { ChatRoomRecord } from '../lib/chatData';
 import { meetupRequest, parseMeetup, type MeetupAction, type MeetupRecord } from '../lib/meetupData';
-import { fromTaipeiInput, meetupActionLabels, meetupLabels, submitMeetupAction, taipeiInput, taipeiTime } from '../lib/chatWeb';
+import { fromTaipeiInput, meetupActionLabels, meetupLabels, submitMeetupAction, taipeiInput } from '../lib/chatWeb';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 const input = 'mt-2 min-h-11 w-full rounded-xl border p-3';
@@ -78,33 +79,33 @@ export default function MeetupWeb({ token, userId, room, onClose }: { token: str
   const mineCompleted = appointment && (room.buyerUserId === userId ? appointment.buyerCompletedAt : appointment.sellerCompletedAt);
   const frozen = !ready || !loaded || busy || !!pending || room.archived, changed = editing && editVersion !== (appointment?.version ?? 0);
   const pendingAction = pending ? meetupRequest(JSON.parse(pending)) : null;
-  return <MarketplaceDialog title="面交預約" onClose={onClose}><div className="space-y-4">
-    <p className="text-sm text-gray-600">僅買賣雙方可見。預約不代表付款、交易保障或自動保留商品；請優先選擇安全的公共場所。</p>
-    {room.archived && <p role="alert">聊天室已封存，無法新增或調整面交。</p>}{!room.listingAvailable && !room.archived && <p>商品已停止刊登，請先與賣家確認；仍可取消既有預約。</p>}{room.blocked && <p>已封鎖，不能新增或確認面交；仍可取消既有預約。</p>}
-    {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{error}</p>}{notice && <p role="status" className="rounded-xl bg-green-50 p-3">{notice}</p>}
-    {restoreIssue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{restoreIssue}</p>}
-    {appointment ? <section aria-label="目前面交預約" className="space-y-2 rounded-xl border p-4"><h3 className="font-semibold">{meetupLabels[appointment.status]} · 第{appointment.version}版</h3><p>{taipeiTime(appointment.startsAt)} 至 {taipeiTime(appointment.endsAt)}（台灣時間）</p><p className="break-words">{appointment.placeName}</p>
-      {appointment.latitude !== null && <p className="text-sm">雙方私密座標：{appointment.latitude}, {appointment.longitude}</p>}{appointment.notes && <p className="whitespace-pre-wrap break-words">{appointment.notes}</p>}
-      <p className="text-sm">買家{appointment.buyerConfirmedAt ? '已同意' : '尚未同意'} · 賣家{appointment.sellerConfirmedAt ? '已同意' : '尚未同意'}</p>{(appointment.buyerCompletedAt || appointment.sellerCompletedAt) && <p className="text-sm">買家{appointment.buyerCompletedAt ? '已回報完成' : '尚未回報'} · 賣家{appointment.sellerCompletedAt ? '已回報完成' : '尚未回報'}</p>}
-    </section> : loaded ? <p>{pending ? '上次讀取尚無預約；目前有待確認操作，請更新狀態核對，不能據此認定邀約未成立。' : '尚無面交預約，先與對方討論時間再提出邀約。'}</p> : <p role="status">正在讀取面交預約…</p>}
-    {!ready && <button className={button} disabled={busy} onClick={() => void restore()}>重試恢復待確認預約</button>}
-    {pendingAction && <section aria-label="待確認面交操作" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-semibold">有一個尚未確認結果的操作</h3><p>原操作：{meetupActionLabels[pendingAction.action]} · 原第{pendingAction.expectedVersion}版。重試沿用相同識別碼、版本與條件，不會自動改為同意新版本。</p>{pendingAction.terms && <p>{taipeiTime(pendingAction.terms.startsAt)}（台灣時間） · {pendingAction.terms.placeName}</p>}
-      <div className="flex flex-wrap gap-2"><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => void act(pendingAction.action)}>明確重試原操作</button><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => setConfirmFence(true)}>安全放棄待確認操作</button></div>
-      {confirmFence && <div className="space-y-2"><p>若原操作已完成，只確認原結果；不會取消已成立預約。只有未完成的操作會被封存。</p><button className={button} disabled={busy} onClick={() => void act(pendingAction.action, true)}>確認安全放棄（不取消現有預約）</button><button className={button} disabled={busy} onClick={() => setConfirmFence(false)}>返回查核</button></div>}
+  return <MarketplaceDialog title={chatText("面交預約")} closeLabel={chatText("關閉")} onClose={onClose}><div className="space-y-4">
+    <p className="text-sm text-gray-600">{chatText("僅買賣雙方可見。預約不代表付款、交易保障或自動保留商品；請優先選擇安全的公共場所。")}</p>
+    {room.archived && <p role="alert">{chatText("聊天室已封存，無法新增或調整面交。")}</p>}{!room.listingAvailable && !room.archived && <p>{chatText("商品已停止刊登，請先與賣家確認；仍可取消既有預約。")}</p>}{room.blocked && <p>{chatText("已封鎖，不能新增或確認面交；仍可取消既有預約。")}</p>}
+    {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{notice && <p role="status" className="rounded-xl bg-green-50 p-3">{chatMessage(notice)}</p>}
+    {restoreIssue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(restoreIssue)}</p>}
+    {appointment ? <section aria-label={chatText("目前面交預約")} className="space-y-2 rounded-xl border p-4"><h3 className="font-semibold">{chatMessage(meetupLabels[appointment.status])} {chatText("· 第")}{appointment.version}{chatText("版")}</h3><p>{chatTime(appointment.startsAt)} {chatText("至")} {chatTime(appointment.endsAt)}{chatText("（台灣時間）")}</p><p className="break-words">{appointment.placeName}</p>
+      {appointment.latitude !== null && <p className="text-sm">{chatText("雙方私密座標：")}{appointment.latitude}, {appointment.longitude}</p>}{appointment.notes && <p className="whitespace-pre-wrap break-words">{appointment.notes}</p>}
+      <p className="text-sm">{chatText("買家")}{appointment.buyerConfirmedAt ? chatText("已同意") : chatText("尚未同意")} {chatText("· 賣家")}{appointment.sellerConfirmedAt ? chatText("已同意") : chatText("尚未同意")}</p>{(appointment.buyerCompletedAt || appointment.sellerCompletedAt) && <p className="text-sm">{chatText("買家")}{appointment.buyerCompletedAt ? chatText("已回報完成") : chatText("尚未回報")} {chatText("· 賣家")}{appointment.sellerCompletedAt ? chatText("已回報完成") : chatText("尚未回報")}</p>}
+    </section> : loaded ? <p>{pending ? chatText("上次讀取尚無預約；目前有待確認操作，請更新狀態核對，不能據此認定邀約未成立。") : chatText("尚無面交預約，先與對方討論時間再提出邀約。")}</p> : <p role="status">{chatText("正在讀取面交預約…")}</p>}
+    {!ready && <button className={button} disabled={busy} onClick={() => void restore()}>{chatText("重試恢復待確認預約")}</button>}
+    {pendingAction && <section aria-label={chatText("待確認面交操作")} className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-semibold">{chatText("有一個尚未確認結果的操作")}</h3><p>{chatText("原操作：")}{chatMessage(meetupActionLabels[pendingAction.action])} {chatText("· 原第")}{pendingAction.expectedVersion}{chatText("版。重試沿用相同識別碼、版本與條件，不會自動改為同意新版本。")}</p>{pendingAction.terms && <p>{chatTime(pendingAction.terms.startsAt)}{chatText("（台灣時間） ·")} {pendingAction.terms.placeName}</p>}
+      <div className="flex flex-wrap gap-2"><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => void act(pendingAction.action)}>{chatText("明確重試原操作")}</button><button className={button} disabled={!ready || !loaded || busy || room.archived} onClick={() => setConfirmFence(true)}>{chatText("安全放棄待確認操作")}</button></div>
+      {confirmFence && <div className="space-y-2"><p>{chatText("若原操作已完成，只確認原結果；不會取消已成立預約。只有未完成的操作會被封存。")}</p><button className={button} disabled={busy} onClick={() => void act(pendingAction.action, true)}>{chatText("確認安全放棄（不取消現有預約）")}</button><button className={button} disabled={busy} onClick={() => setConfirmFence(false)}>{chatText("返回查核")}</button></div>}
     </section>}
     {editing && !pending && <form className="space-y-3 rounded-xl bg-gray-50 p-4" onSubmit={event => { event.preventDefault(); void act(editVersion ? 'REVISE' : 'PROPOSE'); }}>
-      <h3 className="font-semibold">{editVersion ? '改期／重新提議' : '提出面交邀約'}</h3>{changed && <div role="alert"><p>對方已更新預約。原表單不會被自動覆蓋，請重新核對。</p><button type="button" className={button} onClick={edit}>載入最新版本後重新編輯</button></div>}
-      <fieldset disabled={frozen || changed} className="space-y-3"><label className="block">面交日期與時間（台灣時間）<input className={input} type="datetime-local" value={date} onChange={event => setDate(event.target.value)} required /></label>
-        <label className="block">面交時間長度（分鐘，15至240）<input className={input} inputMode="numeric" value={duration} maxLength={3} onChange={event => setDuration(event.target.value)} required /></label>
-        <label className="block">私密面交地點名稱<input className={input} maxLength={160} value={place} onChange={event => setPlace(event.target.value)} placeholder="公共場所名稱、出口或集合點" required /></label>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="block">私密面交緯度（選填）<input className={input} inputMode="decimal" value={latitude} onChange={event => setLatitude(event.target.value)} /></label><label className="block">私密面交經度（選填，須與緯度同填）<input className={input} inputMode="decimal" value={longitude} onChange={event => setLongitude(event.target.value)} /></label></div>
-        <label className="block">面交備註（選填，最多1000字元）<textarea className={input} maxLength={1000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
-      </fieldset><button type="submit" className={`${button} bg-green-800 text-white`} disabled={frozen || changed || room.blocked || !room.listingAvailable}>提出此版本（改期需對方重新同意）</button><button type="button" className={button} disabled={busy} onClick={() => setEditing(false)}>關閉編輯</button>
+      <h3 className="font-semibold">{editVersion ? chatText("改期／重新提議") : chatText("提出面交邀約")}</h3>{changed && <div role="alert"><p>{chatText("對方已更新預約。原表單不會被自動覆蓋，請重新核對。")}</p><button type="button" className={button} onClick={edit}>{chatText("載入最新版本後重新編輯")}</button></div>}
+      <fieldset disabled={frozen || changed} className="space-y-3"><label className="block">{chatText("面交日期與時間（台灣時間）")}<input className={input} type="datetime-local" value={date} onChange={event => setDate(event.target.value)} required /></label>
+        <label className="block">{chatText("面交時間長度（分鐘，15至240）")}<input className={input} inputMode="numeric" value={duration} maxLength={3} onChange={event => setDuration(event.target.value)} required /></label>
+        <label className="block">{chatText("私密面交地點名稱")}<input className={input} maxLength={160} value={place} onChange={event => setPlace(event.target.value)} placeholder={chatText("公共場所名稱、出口或集合點")} required /></label>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="block">{chatText("私密面交緯度（選填）")}<input className={input} inputMode="decimal" value={latitude} onChange={event => setLatitude(event.target.value)} /></label><label className="block">{chatText("私密面交經度（選填，須與緯度同填）")}<input className={input} inputMode="decimal" value={longitude} onChange={event => setLongitude(event.target.value)} /></label></div>
+        <label className="block">{chatText("面交備註（選填，最多1000字元）")}<textarea className={input} maxLength={1000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
+      </fieldset><button type="submit" className={`${button} bg-green-800 text-white`} disabled={frozen || changed || room.blocked || !room.listingAvailable}>{chatText("提出此版本（改期需對方重新同意）")}</button><button type="button" className={button} disabled={busy} onClick={() => setEditing(false)}>{chatText("關閉編輯")}</button>
     </form>}
-    <div className="flex flex-wrap gap-2">{!editing && !pending && appointment?.status !== 'COMPLETED' && <button className={button} disabled={frozen || room.blocked || !room.listingAvailable} onClick={edit}>{appointment ? '提議改期或修改地點' : '提出面交邀約'}</button>}
-      {!pending && appointment?.status === 'PROPOSED' && !mineConfirmed && <button className={`${button} bg-green-800 text-white`} disabled={frozen || room.blocked || !room.listingAvailable} onClick={() => void act('CONFIRM')}>同意第{appointment.version}版時間與地點</button>}
-      {!pending && appointment?.status === 'CONFIRMED' && !mineCompleted && Date.parse(appointment.startsAt) <= clock && <button className={button} disabled={frozen} onClick={() => void act('COMPLETE')}>我已完成面交（仍需對方回報）</button>}
-      {!pending && appointment && ['PROPOSED', 'CONFIRMED'].includes(appointment.status) && <button className={`${button} text-red-800`} disabled={frozen} onClick={() => void act('CANCEL')}>取消第{appointment.version}版預約</button>}
-      <button className={button} disabled={busy || room.archived} onClick={() => void refresh()}>只更新預約狀態</button></div>
+    <div className="flex flex-wrap gap-2">{!editing && !pending && appointment?.status !== 'COMPLETED' && <button className={button} disabled={frozen || room.blocked || !room.listingAvailable} onClick={edit}>{appointment ? chatText("提議改期或修改地點") : chatText("提出面交邀約")}</button>}
+      {!pending && appointment?.status === 'PROPOSED' && !mineConfirmed && <button className={`${button} bg-green-800 text-white`} disabled={frozen || room.blocked || !room.listingAvailable} onClick={() => void act('CONFIRM')}>{chatText("同意第")}{appointment.version}{chatText("版時間與地點")}</button>}
+      {!pending && appointment?.status === 'CONFIRMED' && !mineCompleted && Date.parse(appointment.startsAt) <= clock && <button className={button} disabled={frozen} onClick={() => void act('COMPLETE')}>{chatText("我已完成面交（仍需對方回報）")}</button>}
+      {!pending && appointment && ['PROPOSED', 'CONFIRMED'].includes(appointment.status) && <button className={`${button} text-red-800`} disabled={frozen} onClick={() => void act('CANCEL')}>{chatText("取消第")}{appointment.version}{chatText("版預約")}</button>}
+      <button className={button} disabled={busy || room.archived} onClick={() => void refresh()}>{chatText("只更新預約狀態")}</button></div>
   </div></MarketplaceDialog>;
 }

@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {assertDemoReady,assertNativeEvidence,selectedBuildId} = require('./app-review-preflight.cjs');
+const {assertDemoReady,assertNativeEvidence,assertPrivacyEvidence,requiredPrivacyTypes,selectedBuildId} = require('./app-review-preflight.cjs');
 const now = Date.parse('2026-10-02T12:00:00Z');
 function ready() {
     const room = (buyerUserId, sellerUserId, status) => ({buyerUserId, sellerUserId, archived:false, blocked:false, listingAvailable:true,
@@ -43,3 +43,7 @@ test('verifies the selected build from the asc summary and JSON API relationship
     assert.equal(selectedBuildId({data:{relationships:{build:{data:{id:'build12'}}}}}),'build12');
 });
 test('refuses to submit when the selected build cannot be verified',()=>assert.throws(()=>selectedBuildId({id:'version'})));
+function privacyReady(){return {appId:'6468950847',published:true,pending:false,nativeTree:'native',serverTree:'server',verifiedAt:new Date().toISOString(),declaredTypes:[...requiredPrivacyTypes],linkedCount:12,unlinkedPreview:false};}
+test('accepts published App Privacy labels matching the current collection and code',()=>assert.doesNotThrow(()=>assertPrivacyEvidence(privacyReady(),'native','server')));
+for (const [name,change] of [['unpublished privacy',r=>r.published=false],['pending declaration',r=>r.pending=true],['missing chat declaration',r=>r.declaredTypes=r.declaredTypes.filter(x=>x!=='電子郵件或訊息')],['legacy anonymous labels',r=>r.linkedCount=0],['new native collection',r=>r.nativeTree='old'],['new backend collection',r=>r.serverTree='old']])
+    test(`blocks ${name}`,()=>{const r=privacyReady();change(r);assert.throws(()=>assertPrivacyEvidence(r,'native','server'));});

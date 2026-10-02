@@ -3,6 +3,19 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
+const requiredPrivacyTypes = ['姓名', '電子郵件地址', '電話號碼', '實體地址', '精確位置', '粗略位置', '聯絡人', '電子郵件或訊息', '照片或影片', '客戶支援', '其他使用者內容', '使用者識別碼'];
+
+function assertPrivacyEvidence(receipt, nativeTree, serverTree) {
+    assert.equal(receipt.appId, '6468950847');
+    assert.equal(receipt.published, true, 'Publish current App Privacy labels before submission');
+    assert.equal(receipt.pending, false, 'Finish all pending App Privacy data types');
+    assert.equal(receipt.nativeTree, nativeTree, 'Reaudit privacy after native code changes');
+    assert.equal(receipt.serverTree, serverTree, 'Reaudit privacy after backend code changes');
+    assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'App Privacy publication evidence is stale');
+    for (const type of requiredPrivacyTypes) assert(receipt.declaredTypes?.includes(type), `Missing App Privacy declaration: ${type}`);
+    assert.equal(receipt.linkedCount, receipt.declaredTypes.length, 'Account data must not be declared anonymous');
+    assert.equal(receipt.unlinkedPreview, false, 'Reassess any new unlinked data collection');
+}
 
 function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTree) {
     assert.equal(receipt.versionId, result.versionId);
@@ -91,7 +104,7 @@ async function main() {
     assert(Number.isSafeInteger(id) && id > 0, 'Invalid demo user ID');
     const result = await checkLive(get('--version-id'), id);
     if (args.includes('--submit')) {
-        assert(args.includes('--submission-id') && args.includes('--item-id') && args.includes('--ui-receipt'), 'Submission requires item, submission and native UI evidence');
+        assert(args.includes('--submission-id') && args.includes('--item-id') && args.includes('--ui-receipt') && args.includes('--privacy-receipt'), 'Submission requires item, submission, binary and published App Privacy evidence');
         const receipt = JSON.parse(fs.readFileSync(get('--ui-receipt'), 'utf8'));
         const version = asc('versions', 'view', '--version-id', result.versionId, '--include-build');
         const nativeTree = execFileSync('git', ['rev-parse', 'HEAD:mobile'], { encoding: 'utf8' }).trim();
@@ -99,6 +112,11 @@ async function main() {
         const hashFile = path => createHash('sha256').update(fs.readFileSync(path)).digest('hex');
         assert.equal(hashFile(receipt.artifactPath), receipt.artifactSha256, 'Submitted artifact changed');
         for (const proof of receipt.appleScreenshotProofs || []) assert.equal(hashFile(proof.path), proof.sha256, 'Review baseline changed');
+        const privacy = JSON.parse(fs.readFileSync(get('--privacy-receipt'), 'utf8'));
+        const serverTree = execFileSync('git', ['rev-parse', 'HEAD:server'], { encoding: 'utf8' }).trim();
+        assertPrivacyEvidence(privacy, nativeTree, serverTree);
+        assert.equal(hashFile(privacy.axPath), privacy.axSha256, 'App Privacy evidence changed');
+        assert.equal(hashFile(privacy.screenshotPath), privacy.screenshotSha256, 'App Privacy screenshot changed');
         asc('validate', '--app', '6468950847', '--version-id', result.versionId);
         asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
         asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
@@ -106,7 +124,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, assertNativeEvidence, selectedBuildId, checkLive };
+module.exports = { assertDemoReady, assertNativeEvidence, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

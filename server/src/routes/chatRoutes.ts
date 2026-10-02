@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth';
 import { getConversation, getMessages, getMyMessageReceipt, listConversations, markConversationRead, openConversation, sendMessage, setUserBlock } from '../controllers/chatController';
-import { abandonMeetupAction, getMeetup, mutateMeetup } from '../controllers/meetupController';
+import { abandonMeetupAction, getMeetup, getMyMeetupReceipt, mutateMeetup } from '../controllers/meetupController';
 const router = Router();
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 const writes = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '聊天操作過於頻繁，請稍後重試', errorCode: 'CHAT_RATE_LIMIT' } });
@@ -15,6 +15,7 @@ router.get('/conversations/:id/messages/by-client-id/:clientMessageId', getMyMes
 router.post('/conversations/:id/messages', writes, sendMessage);
 router.post('/conversations/:id/read', writes, markConversationRead);
 router.get('/conversations/:id/meetup', getMeetup);
+router.get('/conversations/:id/meetup/operations/:clientActionId', getMyMeetupReceipt);
 router.post('/conversations/:id/meetup', writes, mutateMeetup);
 router.post('/conversations/:id/meetup/abandon', writes, abandonMeetupAction);
 router.post('/blocks/:userId', writes, setUserBlock);

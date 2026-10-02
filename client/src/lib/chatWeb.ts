@@ -3,6 +3,7 @@ import { meetupRequest, parseMeetupResult, type MeetupRequest } from './meetupDa
 import type { PendingStore } from './webPendingStore';
 import { isUuid } from './listingBatch';
 import { validateApiUrl } from './marketplaceUrl';
+import { PendingStoreError } from './webPendingStore';
 export type ChatApi = (path: string, init?: RequestInit) => Promise<unknown>;
 export function parsePendingMessage(body: string) {
   const value = JSON.parse(body);
@@ -49,6 +50,28 @@ export async function submitMeetupAction(read: ChatApi, room: ChatRoomRecord, us
   if (JSON.stringify(request) !== body || room.archived || ![room.buyerUserId, room.sellerUserId].includes(userId)) throw new ChatDataError();
   await store.save(key, body);
   const result = parseMeetupResult(await read(`/chat/conversations/${room.id}/meetup${abandon ? '/abandon' : ''}`, { method: 'POST', body }), room, request, userId);
+  return { ...result, pendingCleared: await clearAcknowledgedPending(store, key, body) };
+}
+export async function meetupRequestHash(request: MeetupRequest) {
+  const parsed = meetupRequest(request), original = parsed.terms;
+  // Match the server's normalized wire hash, including derived end time and
+  // explicit absent coordinates. The client operation UUID is bound separately.
+  const terms = original ? { startsAt: original.startsAt, endsAt: new Date(Date.parse(original.startsAt) + original.durationMinutes * 60_000).toISOString(), timeZone: original.timeZone, placeName: original.placeName,
+    latitude: original.latitude ?? null, longitude: original.longitude ?? null, notes: original.notes } : undefined;
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify({ action: parsed.action, expectedVersion: parsed.expectedVersion, terms })));
+  return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+export async function lookupMeetupAction(read: ChatApi, room: ChatRoomRecord, userId: number, store: PendingStore, key: string, body: string) {
+  const request = meetupRequest(JSON.parse(body));
+  if (JSON.stringify(request) !== body || room.archived || ![room.buyerUserId, room.sellerUserId].includes(userId)) throw new ChatDataError();
+  if (await store.get(key) !== body) throw new PendingStoreError();
+  const hash = await meetupRequestHash(request);
+  if (await store.get(key) !== body) throw new PendingStoreError();
+  const value = await read(`/chat/conversations/${room.id}/meetup/operations/${request.clientActionId}?requestHash=${hash}`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ChatDataError();
+  const response = value as { replayed?: unknown; receipt?: { requestHash?: unknown } };
+  if (response.replayed !== true || response.receipt?.requestHash !== hash) throw new ChatDataError();
+  const result = parseMeetupResult(value, room, request, userId);
   return { ...result, pendingCleared: await clearAcknowledgedPending(store, key, body) };
 }
 export const meetupLabels = { PROPOSED: '提議中', CONFIRMED: '雙方已確認', CANCELLED: '已取消', COMPLETED: '雙方已回報完成' };

@@ -40,6 +40,28 @@ export async function getMeetup(req: AuthRequest, res: Response) {
         return res.set('Cache-Control', 'private, no-store').json({ appointment });
     } catch (e) { return fail(res, e); }
 }
+export async function getMyMeetupReceipt(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    try {
+        const conversationId = chatIdentity(req.params.id), clientActionId = chatIdentity(req.params.clientActionId), actorUserId = req.user.id;
+        const requestHash = req.query.requestHash;
+        if (Object.keys(req.query).length !== 1 || typeof requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(requestHash)) throw new ChatInputError('原面交操作查核資料不正確');
+        // Membership, the actor-owned historical receipt and current terms
+        // come from one read-only snapshot. Never replay or fence a mutation.
+        const result = await prisma.$transaction(async tx => {
+            await member(tx, conversationId, actorUserId);
+            const receipt = await tx.meetupOperation.findUnique({
+                where: { conversationId_actorUserId_clientActionId: { conversationId, actorUserId, clientActionId } },
+                select: { conversationId: true, actorUserId: true, clientActionId: true, action: true, requestHash: true, resultingVersion: true, abandoned: true },
+            });
+            if (!receipt) return reject(404, 'MEETUP_RECEIPT_NOT_FOUND', '尚無原面交操作回執');
+            if (receipt.requestHash !== requestHash) return reject(409, 'MEETUP_ACTION_CONFLICT', '回執與原面交操作內容不符');
+            const appointment = await tx.meetupAppointment.findUnique({ where: { conversationId }, select });
+            return { appointment, receipt, replayed: true };
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 10_000 });
+        return res.set('Cache-Control', 'private, no-store').json(result);
+    } catch (e) { return fail(res, e); }
+}
 export async function mutateMeetup(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     try {

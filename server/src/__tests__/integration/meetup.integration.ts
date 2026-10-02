@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import prisma from '../../lib/prisma';
 import chatRoutes from '../../routes/chatRoutes';
 import listingRoutes from '../../routes/listingRoutes';
+import { parseMeetupAction } from '../../lib/meetupRules';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Explicit isolated DB required');
 const secret = 'meetup-integration-only-not-production'; process.env.JWT_SECRET = secret;
@@ -37,6 +38,43 @@ afterAll(async () => {
     await prisma.$disconnect();
 });
 describe('private meetup / real HTTP and PostgreSQL', () => {
+    it('reads the actor original receipt without replaying and separates later terms from the acknowledged version', async () => {
+        const input = { clientActionId: randomUUID(), action: 'PROPOSE', expectedVersion: 0, terms: t() };
+        await call('post', '/conversations/' + room + '/meetup').send(input);
+        await act('REVISE', 1, seller, t(3600000));
+        const before = await prisma.meetupOperation.count({ where: { conversationId: room } });
+        const result = await call('get', '/conversations/' + room + '/meetup/operations/' + input.clientActionId).query({ requestHash: parseMeetupAction(input).requestHash });
+        expect(result.status).toBe(200);
+        expect(result.body).toMatchObject({ replayed: true, receipt: { clientActionId: input.clientActionId, actorUserId: buyer, action: 'PROPOSE', resultingVersion: 1, abandoned: false, requestHash: parseMeetupAction(input).requestHash }, appointment: { version: 2, status: 'PROPOSED', buyerConfirmedAt: null } });
+        expect(result.headers['cache-control']).toBe('private, no-store');
+        expect(await prisma.meetupOperation.count({ where: { conversationId: room } })).toBe(before);
+    });
+    it('keeps historical receipt reads private and refuses a different original request hash', async () => {
+        const input = { clientActionId: randomUUID(), action: 'PROPOSE', expectedVersion: 0, terms: t() };
+        await call('post', '/conversations/' + room + '/meetup').send(input);
+        const path = '/conversations/' + room + '/meetup/operations/' + input.clientActionId;
+        const hash = parseMeetupAction(input).requestHash;
+        expect((await request(server).get('/api/chat' + path).query({ requestHash: hash })).status).toBe(401);
+        for (const actor of [seller, third]) {
+            const denied = await call('get', path, actor).query({ requestHash: hash });
+            expect(denied.status).toBe(404); expect(JSON.stringify(denied.body)).not.toContain(input.terms.placeName);
+        }
+        const mismatch = await call('get', path).query({ requestHash: 'f'.repeat(64) });
+        expect(mismatch.status).toBe(409); expect(mismatch.body.errorCode).toBe('MEETUP_ACTION_CONFLICT'); expect(mismatch.body).not.toHaveProperty('appointment');
+        for (const query of [{}, { requestHash: 'bad' }, { requestHash: [hash, hash] }, { requestHash: hash, actorUserId: seller }]) expect((await call('get', path).query(query)).status).toBe(400);
+    });
+    it('distinguishes unknown, abandoned and archived receipt reads without creating or changing an appointment', async () => {
+        const input = { clientActionId: randomUUID(), action: 'PROPOSE', expectedVersion: 0, terms: t() };
+        const path = '/conversations/' + room + '/meetup/operations/' + input.clientActionId;
+        const query = { requestHash: parseMeetupAction(input).requestHash };
+        const unknown = await call('get', path).query(query); expect(unknown.status).toBe(404); expect(unknown.body.errorCode).toBe('MEETUP_RECEIPT_NOT_FOUND');
+        expect(await prisma.meetupOperation.count({ where: { conversationId: room } })).toBe(0);
+        await call('post', '/conversations/' + room + '/meetup/abandon').send(input);
+        expect((await call('get', path).query(query)).body).toMatchObject({ appointment: null, receipt: { abandoned: true, resultingVersion: 0 } });
+        expect(await prisma.meetupAppointment.count({ where: { conversationId: room } })).toBe(0);
+        await prisma.conversation.update({ where: { id: room }, data: { archivedAt: new Date() } });
+        const archived = await call('get', path).query(query); expect(archived.status).toBe(409); expect(archived.body.errorCode).toBe('MEETUP_ARCHIVED'); expect(archived.body).not.toHaveProperty('receipt');
+    });
     it('requires auth and actual membership for reads and mutations', async () => {
         expect((await request(server).get('/api/chat/conversations/' + room + '/meetup')).status).toBe(401);
         expect((await call('get', '/conversations/' + room + '/meetup', third)).status).toBe(404); expect((await act('PROPOSE', 0, third, t())).status).toBe(404);

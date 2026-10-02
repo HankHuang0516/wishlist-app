@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Partnership landing and shared touch targets — 2026-10-02
+
+The retained partnership landing page supports Chinese and English, including the title, named principles region, five required item fields and existing inquiry routes. Permission, auction-price, withdrawal and no-password boundaries keep their original meaning. Field translations are resolved when rendered, so reopening after a language change does not retain a module-level translation. Locale storage faults fall back to English.
+
+Only Layout's header and footer controls gain 44px minimum touch targets; the shared Button defaults stay unchanged. Browser acceptance uses a synthetic owner and real compiled GET handlers in a new isolated PostgreSQL database with writes and external mail disabled. Mobile and desktop geometry, footer/help behavior and one labelled Settings link are recorded separately from whole-page visual similarity. The larger footer changes page height; historical 90/90 scores are not a fresh approval of this version. Full parity and production acceptance remain pending.
+
 ## Durable partnership inquiries — 2026-10-02
 
 The retained public partner form saves original input, ID, canonical hash and language in an API-isolated AES-GCM journal before POST. Receipt identity is strict; reopening only GETs, explicit retry uses the same body, storage/unknown results preserve text, and confirmed cleanup failures retry only cleanup. Synchronous gates and departure generations protect duplicate/late operations, while newer journals must be reread. Chinese/English controls preserve original input and the non-authorization notice. Optional active count distinguishes0/null; new forms never restore cleared consent. Shared header/footer touch targets and the partner landing page still need separate review.

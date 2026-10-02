@@ -20,11 +20,15 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [shareNotice, setShareNotice] = useState<PublicListingCopyKey | ''>(''), [report, setReport] = useState(false), [attempt, setAttempt] = useState(0);
   const [readLimited, setReadLimited] = useState(false), [sharing, setSharing] = useState(false);
+  const [manualShareVisible, setManualShareVisible] = useState(false);
   const shareGate = useRef(false);
+  const shareUrl = listing ? new URL(`/listings/${listing.id}?v=${listing.version}`, window.location.origin).toString() : '';
+  const shareDetails = listing ? `${listing.title}｜${publicListingPrice(listing.price)}` : '';
+  const shareText = `${shareDetails}\n${shareUrl}`;
   useEffect(() => {
     if (!id || !listingId.test(id)) { setState('unavailable'); return; }
     const controller = new AbortController();
-    setState('loading'); setReadLimited(false);
+    setState('loading'); setReadLimited(false); setManualShareVisible(false); setShareNotice(''); setReport(false); setListing(null);
     void publicApi<unknown>(`/listings/${id}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) })
       .then(row => {
         if (controller.signal.aborted) return;
@@ -51,28 +55,36 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', check); };
   }, []);
 
+  function reloadItem() {
+    if (shareGate.current) return;
+    setAttempt(value => value + 1);
+  }
+  function toggleManualShare() {
+    if (shareGate.current) return;
+    if (!listing || Date.parse(listing.expiresAt) <= Date.now()) { setShareNotice('商品已失效，請重新載入核對。'); return; }
+    setManualShareVisible(value => !value);
+  }
+
   async function share() {
     if (shareGate.current) return;
     if (!listing || Date.parse(listing.expiresAt) <= Date.now()) { setShareNotice('商品已失效，請重新載入核對。'); return; }
-    const url = new URL(`/listings/${listing.id}`, window.location.origin);
-    url.searchParams.set('v', String(listing.version));
-    const details = `${listing.title}｜${publicListingPrice(listing.price)}`;
     shareGate.current = true; setSharing(true); setShareNotice('');
     try {
-      if (navigator.share) await navigator.share({ title: details, text: details, url: url.toString() });
-      else { await navigator.clipboard.writeText(`${details}\n${url}`); setShareNotice('商品資訊與連結已複製'); }
+      if (navigator.share) await navigator.share({ title: shareDetails, text: shareDetails, url: shareUrl });
+      else { await navigator.clipboard.writeText(shareText); setShareNotice('商品資訊與連結已複製'); }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      setShareNotice('無法分享，請稍後重試。');
+      setManualShareVisible(true); setShareNotice('無法自動分享，請手動複製下方商品資訊與連結。');
     } finally { shareGate.current = false; setSharing(false); }
   }
 
   if (state === 'loading') return <p role="status" className="py-16 text-center text-stone-600">{text('正在載入商品…')}</p>;
   if (state === 'error') return <div role="alert" className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center">
-    <h1 className="text-xl font-bold">{text('暫時無法載入商品')}</h1><p className="mt-3 text-stone-600">{text(readLimited ? '請求暫時受限，請稍後再讀取；不代表商品已停止刊登。' : '請稍後再試。')}</p><button className="mt-3 min-h-11 rounded-xl border px-4" onClick={() => setAttempt(value => value + 1)}>{text('重新載入商品')}</button></div>;
+    <h1 className="text-xl font-bold">{text('暫時無法載入商品')}</h1><p className="mt-3 text-stone-600">{text(readLimited ? '請求暫時受限，請稍後再讀取；不代表商品已停止刊登。' : '請稍後再試。')}</p><button disabled={sharing} className="mt-3 min-h-11 rounded-xl border px-4 disabled:opacity-50" onClick={reloadItem}>{text('重新載入商品')}</button></div>;
   if (state === 'unavailable' || !listing) return <div className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center">
     <h1 className="text-xl font-bold">{text('商品已停止刊登或連結無效')}</h1>
     <p className="mt-3 text-stone-600">{text('這件商品目前不對外公開；如需確認，請聯絡原刊登者。')}</p>
+    <button type="button" disabled={sharing} onClick={reloadItem} className="mt-6 min-h-11 rounded-xl border px-4 disabled:opacity-50">{text('重新載入商品')}</button>
     <Link className="mt-6 inline-block text-blue-700 underline" to="/">{text('回首頁')}</Link></div>;
 
   return <><article className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
@@ -91,7 +103,14 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
       <ProductActionsWeb listing={listing} onReport={() => setReport(true)} />
       <Link to={`/explore?listing=${listing.id}`} className="inline-flex min-h-11 items-center rounded-xl border px-4">{text('在探索地圖定位此商品')}</Link>
       <button type="button" disabled={sharing} onClick={() => void share()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-5 text-white disabled:opacity-50"><Share2 className="h-4 w-4" aria-hidden="true" />{text(sharing ? '正在分享…' : '分享商品')}</button>
+      <button type="button" disabled={sharing} onClick={toggleManualShare} className="inline-flex min-h-11 items-center rounded-xl border px-4 disabled:opacity-50">{text(manualShareVisible ? '收合分享文字' : '顯示分享文字與連結')}</button>
+      <button type="button" disabled={sharing} onClick={reloadItem} className="inline-flex min-h-11 items-center rounded-xl border px-4 disabled:opacity-50">{text('重新載入商品')}</button>
       {shareNotice && <p role="status" className="text-sm text-stone-600">{text(shareNotice)}</p>}
+      {manualShareVisible && <label className="block space-y-2">
+        <span className="block text-sm font-semibold">{text('商品分享文字與連結')}</span>
+        <textarea aria-label={text('商品分享文字與連結')} readOnly rows={4} value={shareText} className="block w-full rounded-xl border border-stone-300 bg-stone-50 p-3 text-sm" />
+        <span className="block text-sm text-stone-600">{text('選取並複製文字，再貼到您要分享的地方。')}</span>
+      </label>}
     </div>
   </article>{report && token && userId && <ListingReportWeb key={`${userId}:${token}:${listing.id}`} token={token} userId={userId} listing={{ id: listing.id, title: listing.title, available: Date.parse(listing.expiresAt) > Date.now() }} onClose={() => setReport(false)} />}</>;
 }

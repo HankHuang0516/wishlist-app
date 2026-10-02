@@ -8,13 +8,15 @@ import type { MarketplaceRead } from './homeMatches';
 export type ExploreQuery = { filters: SearchFilters; bounds: Bounds; wishId: number | null; radius: string; serial: number };
 export function parseExploreIntent(search: string) {
   const params = new URLSearchParams(search), keys = [...params.keys()];
-  if (keys.some(key => !['wish', 'listing', 'q'].includes(key)) || new Set(keys).size !== keys.length)
+  if (keys.some(key => !['wish', 'listing', 'source', 'q'].includes(key)) || new Set(keys).size !== keys.length)
     throw new Error('探索連結參數不正確。');
+  const sourceId=params.get('source');if(sourceId!==null&&!isUuid(sourceId))throw new Error('來源連結參數不正確。');
   const rawWish = params.get('wish'), listingId = params.get('listing'), q = (params.get('q') ?? '').trim();
   if (q.length > 100 || /[\u0000-\u001f\u007f]/.test(q)) throw new Error('搜尋文字不正確。');
   if (rawWish !== null && (!/^[1-9]\d{0,9}$/.test(rawWish) || Number(rawWish) > 2147483647) || listingId !== null && !isUuid(listingId))
     throw new Error('探索連結參數不正確。');
-  return { wishId: rawWish === null ? null : Number(rawWish), listingId, q };
+  if(sourceId!==null&&(listingId!==null||rawWish!==null))throw new Error('來源連結不能混用其他商品條件。');
+  return { wishId: rawWish === null ? null : Number(rawWish), listingId, sourceId, q };
 }
 export function exploreSellerPath(query: ExploreQuery, cursor?: string) {
   if (cursor && !isUuid(cursor)) throw new Error('商品分頁識別碼不正確。');

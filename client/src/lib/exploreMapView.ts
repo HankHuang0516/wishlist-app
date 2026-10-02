@@ -29,7 +29,7 @@ export function expandedSearchBounds(bounds: Bounds): Bounds {
 }
 
 /** Keep a collapsed cluster's list scoped to its actual loaded leaves. */
-export function clusterLeafIds(features: Feature[], property: 'listingId' | 'externalId'): string[] {
+export function clusterLeafIds(features: Feature[], property: 'listingId' | 'externalId' | 'sourceId'): string[] {
   return [...new Set(features.map(feature => feature.properties?.[property])
     .filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }

@@ -63,7 +63,8 @@ export async function managementResult(value: unknown, raw: string): Promise<Man
 }
 export async function readManagement(token: string, raw: string) { const j = await parseManagementJournal(raw); return managementResult(await api(token, '/listings/management-operations/' + j.clientActionId), raw); }
 export async function sendManagement(token: string, raw: string, store: PendingStore, key: string, active: () => boolean) {
-  const j = await parseManagementJournal(raw); await store.save(key, raw); if (!active()) return fail();
+  const j = await parseManagementJournal(raw); if (!active()) return fail();
+  await store.save(key, raw); if (!active()) return fail();
   const value = await api(token, '/listings/management-operations/' + j.clientActionId, { method: 'POST', body: JSON.stringify(j.body) });
   if (!active()) return fail(); return managementResult(value, raw);
 }

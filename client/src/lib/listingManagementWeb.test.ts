@@ -47,6 +47,16 @@ describe('scoped immutable listing management journals',()=>{
     vi.mocked(saved.save).mockRejectedValueOnce(Error('safe store unavailable'));await expect(sendManagement('synthetic-session',raw,saved,'key',()=>true)).rejects.toThrow();
     await expect(sendManagement('synthetic-session',raw,saved,'key',()=>false)).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();
   });
+  it('departure during journal verification prevents a late storage write and any POST',async()=>{
+    const {raw}=await fixture(),saved=store(),fetch=vi.fn();vi.stubGlobal('fetch',fetch);
+    const verifiedHash=await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(body())));
+    let finish!:(value:ArrayBuffer)=>void,active=true;
+    vi.stubGlobal('crypto',{subtle:{digest:vi.fn(()=>new Promise<ArrayBuffer>(resolve=>{finish=resolve;}))}});
+    const operation=sendManagement('synthetic-session',raw,saved,'original-key',()=>active);
+    const rejected=expect(operation).rejects.toThrow();
+    expect(finish).toBeDefined();active=false;finish(verifiedHash);await rejected;
+    expect(saved.save).not.toHaveBeenCalled();expect(saved.clear).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
+  });
   it('explicit cancellation sends a hash-only tombstone and preserves already-applied evidence',async()=>{
     const {raw,receipt,j}=await fixture(),fetch=vi.fn(async(_url:string,_init?:RequestInit)=>({ok:true,status:200,json:async()=>({receipt})}));vi.stubGlobal('fetch',fetch);
     expect((await abandonManagement('synthetic-session',raw,()=>true)).state).toBe('APPLIED');const sent=JSON.parse(String(fetch.mock.calls[0][1]?.body));

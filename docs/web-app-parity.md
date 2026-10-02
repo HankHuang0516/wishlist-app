@@ -12,9 +12,30 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：目標持續進行；90%是每頁驗收門檻，不是整體完成聲明。第五十九批以內建瀏覽器736×952及原完整截圖重新人工加權審查，首頁90/100、設定90/100；這是單一agent設計評分，非獨立／像素相似度，正式網站尚未驗收。首頁完整高度1284、設定1184，仍高於概念圖；保留原願望metadata、生日／權限與實際功能差異。390×844沒有橫向溢出，手機Settings目標欄位／語言／頭像關聯label及地圖來源links44px，地圖224px避免來源與縮放重疊，不宣稱全站controls44px。原Chrome兩自有視窗與DevTools清理仍未完成。完整功能、CI及正式部署門檻保留。
+目前狀態：目標持續進行。第六十二批v2.0.534已正式發布及回讀，736×952真實尊榮會員狀態的首頁與設定依核准概念圖重新人工加權審查，各90/100；這是單一agent設計評分，非獨立／像素相似度。手機390與中英文導覽、來源輸入、探索／既有QA聊天讀取已核對；真訊息／面交異動、PWA自動升級與安全更新流程、跨端／provider及完整矩陣未完項仍active。APP2.0.12不改。
 
-## 最新正式發布：v2.0.524 探索／聊天已上線（2026-10-02）
+## 2026-10-02 第六十三批：可見且由使用者確認的網站更新
+
+- 第62批正式瀏覽器兩次仍524、第三次才534，證明發布成功不能代替既有頁面更新。現有autoUpdate只注入原生registerSW，沒有UI回呼；官方與已安裝套件的virtual autoUpdate會自動reload並可能失去表單，因此保留worker自動準備相容舊版，只由新的WebUpdateProvider註冊、監測controllerchange／返回前景／online及5分鐘檢查，不使用會強制reload的virtual模組。
+- build產生public `web-version.json`，明確排除precache；`index.html`加入本次build版本meta。以credentials omit、no-store、redirect error的兩個GET核對新鮮server版本與實際控制worker所提供的shell版本，一致才ready。legacy無meta或尚未裝完維持preparing；錯誤、外部／redirect／重複／無效metadata不當current或ready。允許只帶合法Workbox revision的index回應URL，無帳號／token／header／body。
+- 設定進階新增中英文「檢查網站更新」，ready時全站顯示目前／可用版本與更新入口。必須看過保存／未存內容可能失去提醒並明確確認，隨即再讀完整版本proof，仍ready才reload；取消、離開、10秒deadline、晚回覆與準備中均不reload。update不清理storage／journal、不重送產品請求、不保存input，也不宣稱未存內容跨重載保留。首次同版安装不提示；worker metadata取自實際precached HTML而非只看controllerchange或server JSON。
+- 尚未含這個入口的舊bundle無法事後注入UI，需先保存工作後重新開啟網站載入本版；保留原生成worker與圖片cache policy，不改native APP／API權限／付款／migration。正式兩版間更新、真browser保留未存文字與已保存journal、使用者確認重載、手機／英文與Home／Settings正式90需發布後另驗證，不能以單元mock或新檔名宣稱。
+- 新focused21：準備／ready／同版／rollback／舊meta／revision／bad metadata，以及首次安裝、保留draft／marker、明確確認／繼續操作、server更新競爭、取消中晚回、失敗恢復、hung update deadline／departure與中英文storage fallback。首輪重複狀態文字斷言改限定dialog，原意不變；typecheck抓到Navigator型別的always-defined條件，改用實際typeof能力判定，未放寬strict。完整Web v2.0.537：108檔1729項及TypeScript／Vite正式build退出0，公開版本JSON與index meta同537、JSON不precache、原cache policy import保留；主JS357.51KB、既有map1088.52KB與PWA95entries6104.55KiB警告保留。精確CI與正式升級另回讀。
+- 參考已安裝vite-plugin-pwa1.2.0來源及[官方自動更新說明](https://vite-pwa-org.netlify.app/guide/auto-update)；不引入新依賴或強制關閉使用者分頁。原完整目標仍active，每個完成增量通過必要檢查後直接部署既有Railway。
+- 首輪精確CI37014216631（head ae83fac44af01ed24c3a02a62a146372741f442d）Web1728通過／1個既有MyListings到期案例失敗，原DOM有上一例的待查核STATUS journal，沒有放寬timeout或重跑同提交。上一例曾只等比較區出現就結束，現在等待原回執流程完成且GET恢復可用，另確認POST1／journal1；runtime sendManagement補上非同步journal核對後、storage保存前的active fence，離開後不再發起晚到保存。新增控制hash晚到的回歸確定零保存／清除／POST，focused51通過；版本依新HEAD count更新為538，完整Web108檔1730項及正式build退出0、metadata checks通過；新的精確CI與發布另回讀。原失敗log `/tmp/wishlist-live63-ci-first-web-failure-20261002.log` 保留。
+
+## 最新正式發布：v2.0.534 導覽與來源输入修正（2026-10-02）
+
+- PR93正常合併，精確head `c054a2084dfc57de45639a64583cc506f20d5820` 的CI37010038047三項全部成功。Web1708及build通過；原Auth返回路徑與SourceLead初始化失敗log保留，沒有skip／重試／放寬timeout。合併 `e81dc3f9796f24ff6639791dcea0cd613bc3df4d`，空觸發提交 `735db4ee3049faf7489383dc719609d5a85ed100`；Git部署WAITING後由相同乾淨checkout直接部署，deployment `d365d8cd-fc0e-4387-9844-b56d5ab93153` 為SUCCESS。原uploads volume保留，環境變數／資料庫服務未改；server、mobile、migration樹與前版一致，沒有冒稱本輪重新查核所有生產DB件數。
+- 正式ZH736原圖：header由101→57px，首頁全高1280→1236、設定1228→1184；原style／單一Settings及全部功能保留。重新查看核准concept及原始實際圖後，Home90＝31＋24＋18＋12＋5，Settings90＝33＋24＋18＋10＋5，權重35／25／20／15／5。原願望metadata、聯絡公開權限、地圖controls／來源與頁長差異保留扣分；動態商品件數／照片／個資／範例餘額不計入。不宣稱像素90%或獨立評分。
+- Home／Settings中英文736及390、英文768／1024，以及Explore／Chat繁中390，沒有橫向溢出；六導覽與登出／help皆至少44px，Settings入口1。會員完整badge從1024顯示、以下保留既有crown及title。英文頁長不同不硬套中文分數；未宣稱全站全部controls或全Chat英文已驗收。
+- 正式SourceLead頁讀到30來源／2公共地點；以未提交合成文字核對原小數輸入保留、切換明確新來源清空旧草稿、新來源可輸入／保存可用，最後清空文字。沒有按保存或同意、配置inquiry或傳訊。原文保存／consent502／GET恢復契約由Web回歸驗證，不把本次正式未提交操作說成真送達。
+- 正式Explore仍讀8件站內商品；這輪先在524驗證套用書籍／二手／面交／50–60篩至3、無效70–60保留3並提示、清除恢復8、不存在品牌0、距離200.1拒絕／200通過與原願望4含1自有預覽。自有detail保留原照片／品牌／約略地點／期限及管理入口，沒有自購／檢舉action。分享頁原title／NT55／OpenGraph URL與thumbnail200已回讀；最初驗證腳本錯要求未實作的canonical link，核對原SSR契約後改為og:url並明記，不宣稱第三方實際預覽或跨端送達。
+- 534 Chat收件匣現在有1個既有QA room，於本輪期間出現，未歸因為本agent建立。實際開啟後原商品／價格／QA對象／空訊息紀錄與未填寫面交表單均可見；沒有傳訊、提出邀約、封鎖、同意／取消預約。本次不能替代真訊息／雙方預約異動驗收；524當時空收件匣保留為歷史。
+- 舊登入瀏覽器前兩次重載仍524，第三次才534；沒有宣稱自動PWA升級成功，安全可見的更新流程列下一缺口。語言已還原繁中，viewport reset，自有IAB tab7標為active goal的handoff供後續升級驗收；原Chrome兩視窗／DevTools未宣稱清理。語言重載中的手機圖與一次dialog關閉後異常完整圖，保留intermediate並排除驗收，補以載入完成的原圖及fresh Chat viewport；沒有加工截图。
+- 總紀錄 `wishlist-web-live62-evidence-20261002.json`、原圖／DOM／geometry及sha256索引 `wishlist-web-live62-artifact-index-20261002.json` 均在既有outputs；原129其他workspace改動逐檔hash保留。完整目標仍active，每個完成功能依Hank指示通過必要檢查後部署。
+
+## 前次正式發布：v2.0.524 探索／聊天已上線（2026-10-02）
 
 - PR82 已正常合併；release HEAD `7ba285c403bdfa2816de34e0e17a56256b2ea84c` 的 CI37006705477 三項全部成功。納入 main 後續 App Review 文件檢查腳本修正，其30項測試通過，client／server／mobile 的程式樹與已驗證 release 完全一致；APP 仍為2.0.12。
 - Git 空提交觸發停在 Railway WAITING，改由乾淨整合 checkout `258fef85cedb7eb9993f47436938cd109929b4dd` 直接部署既有 wishlist-app／production，deployment `3b4c63fc-c60d-420d-9ef5-dd778e7451d1` 為 SUCCESS。上傳 volume `/app/server/public/uploads` 保留；沒有修改環境變數或重新部署資料庫。

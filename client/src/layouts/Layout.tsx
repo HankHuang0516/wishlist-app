@@ -4,6 +4,7 @@ import { Gift, LogOut, CircleHelp, Crown } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import FeedbackModal from "../components/FeedbackModal";
 import WebNavigation from "../components/WebNavigation";
+import WebUpdateNotice from '../components/WebUpdateNotice';
 
 import { useAuth } from "../context/AuthContext";
 import { webShellText } from '../lib/webShellCopy';
@@ -47,6 +48,7 @@ export default function Layout() {
                     </div>
                 </div>
             </header>
+            <WebUpdateNotice />
 
             <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 

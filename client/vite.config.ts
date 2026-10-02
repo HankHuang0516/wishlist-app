@@ -10,8 +10,14 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'wishlist-release-metadata',
+      transformIndexHtml: { order: 'post', handler: () => [{ tag: 'meta', attrs: { name: 'wishlist-web-version', content: packageJson.version }, injectTo: 'head' }] },
+      generateBundle() { this.emitFile({ type: 'asset', fileName: 'web-version.json', source: JSON.stringify({ version: packageJson.version }) }); },
+    },
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // The UI owns registration and never automatically reloads forms.
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Wishlist.ai',
@@ -37,6 +43,7 @@ export default defineConfig({
       workbox: {
         importScripts: ['/pwa-cache-policy.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globIgnores: ['**/web-version.json'], // Read current server metadata, never the worker's old version.
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],  // Don't serve index.html for /api/* routes
         runtimeCaching: [

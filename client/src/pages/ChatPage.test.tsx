@@ -32,6 +32,105 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <ChatRoomWeb {...value} />;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it.each([429, 401])('requires manual inbox recovery after status %s even when timers and foreground events resume', async status => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const base = api.getMockImplementation()!;
+    render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);
+    await screen.findByRole('button', { name: /合成測試漫畫/ });
+    api.mockRejectedValue(new ApiFailure('private diagnostic', status, status === 429 ? 'RATE_LIMIT_EXCEEDED' : '', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: '重新載入收件匣' }));
+    await screen.findByText(status === 429 ? /請求暫時受限/ : /登入已失效/);
+    const pausedCalls = api.mock.calls.length;
+    api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls);
+    expect(screen.getByRole('button', { name: /合成測試漫畫/ })).toBeInTheDocument();
+    expect(screen.queryByText('private diagnostic')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新載入收件匣' }));
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(pausedCalls + 1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls + 2); expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
+  it('requires manual room recovery after a limited read and keeps the pause through an unsuccessful manual retry', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const base = api.getMockImplementation()!;
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const original = '尚未送出原文 {version} 250.7500 USD';
+    fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: original } });
+    api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' })); await screen.findByText(/請求暫時受限/);
+    const pausedCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls);
+    api.mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' })); await screen.findByText(/無法更新聊天/);
+    const failedRetryCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(api).toHaveBeenCalledTimes(failedRetryCalls);
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' }));
+    await waitFor(() => expect(api.mock.calls.length).toBeGreaterThan(failedRetryCalls));
+    await waitFor(() => expect(screen.getByRole('button', { name: '只更新聊天' })).toBeEnabled());
+    const recoveredCalls = api.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(api.mock.calls.length).toBeGreaterThan(recoveredCalls);
+    expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toHaveValue(original);
+    expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
+  });
+  it('does not resume room polling when a parallel meetup preview becomes limited after the room read starts', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const base = api.getMockImplementation()!; let failPreview!: () => void;
+    api.mockImplementation((...args) => args[1].endsWith('/meetup') ? new Promise((_resolve, reject) => { failPreview = () => reject(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000)); }) : base(...args));
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    await act(async () => failPreview()); await screen.findByText(/面交狀態暫時無法確認/);
+    const pausedCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls); expect(posts()).toHaveLength(0);
+  });
+  it('pauses both the open appointment and its parent room when the appointment read is limited', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const base = api.getMockImplementation()!;
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    fireEvent.click(screen.getByRole('button', { name: '查看或提議面交預約' })); await screen.findByText('尚無面交預約，先與對方討論時間再提出邀約。');
+    api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
+    fireEvent.click(screen.getByRole('button', { name: '只更新預約狀態' })); await screen.findByText(/請求暫時受限/);
+    const pausedCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls); expect(posts()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: '關閉', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls); expect(posts()).toHaveLength(0);
+  });
+  it('pauses visible-message read acknowledgements after a limited ACK until an explicit room read succeeds', async () => {
+    vi.useFakeTimers();
+    let callback!: IntersectionObserverCallback;
+    vi.stubGlobal('IntersectionObserver', class { constructor(cb: IntersectionObserverCallback) { callback = cb; } observe() {} disconnect() {} });
+    room = makeRoom({ lastMessageSequence: 1, unreadCount: 1 }); rows = [makeMessage(1, { senderUserId: 43 })];
+    const base = api.getMockImplementation()!;
+    render(roomView()); await act(async () => {}); expect(screen.getByText('合成測試訊息')).toBeInTheDocument();
+    const article = screen.getByRole('article', { name: '對方訊息' });
+    api.mockImplementation(async (...args) => { if (args[1].endsWith('/read')) throw new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000); return base(...args); });
+    act(() => callback([{ target: article, isIntersecting: true, intersectionRatio: 1 }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(posts()).toHaveLength(1); const pausedCalls = api.mock.calls.length; api.mockImplementation(base);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); window.dispatchEvent(new Event('online')); });
+    expect(api).toHaveBeenCalledTimes(pausedCalls); expect(posts()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' }));
+    await act(async () => {});
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(posts()).toHaveLength(2); expect(posts().every(call => call[1].endsWith('/read'))).toBe(true);
+  });
+  it('keeps the original pending message after an expired room read without starting receipt lookup automatically', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const body = JSON.stringify({ clientMessageId: crypto.randomUUID(), text: '原待確認訊息 250.7500 USD' }); data.set(key, body);
+    api.mockRejectedValue(new ApiFailure('expired', 401));
+    render(roomView()); await screen.findByText(/登入已失效/);
+    expect(api).toHaveBeenCalledTimes(1); expect(data.get(key)).toBe(body);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+    expect(api).toHaveBeenCalledTimes(1); expect(posts()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: '只查核原訊息回執' }));
+    expect(api).toHaveBeenCalledTimes(1); // No verified room yet; update the room before a receipt can be checked.
+    expect(data.get(key)).toBe(body);
+  });
   it('explains rate-limited inbox reads without declaring an empty inbox', async () => {
     localStorage.setItem('user-locale', 'en-US'); api.mockRejectedValue(new ApiFailure('limited', 429, 'RATE_LIMIT_EXCEEDED', 120_000));
     render(<MemoryRouter><AuthContext.Provider value={auth}><ChatPage /></AuthContext.Provider></MemoryRouter>);

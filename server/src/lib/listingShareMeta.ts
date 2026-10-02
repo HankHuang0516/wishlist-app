@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 export const listingShareSelect = {
-    id: true, title: true, description: true, condition: true, price: true,
+    id: true, title: true, description: true, condition: true, price: true, version: true,
     status: true, expiresAt: true,
     media: {
         where: { OR: [{ capturePurpose: { not: 'AI_MARKETING' as const } }, { marketingSelected: true }] },
@@ -32,7 +32,10 @@ export function renderListingShareHtml(template: string, listing: ListingShareDa
         throw new Error('Listing share metadata markers are missing or duplicated');
     }
     const origin = new URL(siteUrl).origin;
-    const url = `${origin}/listings/${listing.id}`;
+    if (!Number.isSafeInteger(listing.version) || listing.version < 1 || listing.version > 2147483647) {
+        throw new Error('Listing share version is invalid');
+    }
+    const url = `${origin}/listings/${listing.id}?v=${listing.version}`;
     const price = listing.price === null ? '價格洽詢' : Number(listing.price) === 0 ? '免費贈送' :
         `NT$ ${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(Number(listing.price))}`;
     const title = `${listing.title}｜${price}｜Wishlist.ai`;

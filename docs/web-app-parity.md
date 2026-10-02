@@ -12,7 +12,24 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式v553已發布，IAB550經明確確認更新到553，最新版首頁與設定各90/100人工審查、探索8件與手機Chat已驗證。隨後正式限流／Settings安全讀取失敗保留，第68批v557拆分更新檔與資料額度；完整矩陣、真provider／跨端／PWA與不可逆GUI待驗收仍active。APP2.0.12不改。
+目前狀態：正式v557已發布，原IAB553經新鮮ready proof及明確確認更新到557，設定／永久餘額0、探索8件map/list、同QA聊天空歷史與面交無預約讀取成功。兩份額度正式小量唯讀觀察相互獨立；553先前限流及安全讀取失敗保留，不推定全部根因。最新正式相似度評分仍為553首頁／設定各90/100，557同畫布佈局已回歸而未重新打分。聊天fullPage截圖窄列與DOM幾何矛盾保留，實際viewport截圖桌面正常、手機可讀。完整矩陣、真provider／跨端／mixed-version PWA與不可逆GUI驗收仍active；APP2.0.12不改。
+
+## 2026-10-03 第六十九批：商品分享預覽版號與公開頁雙語讀取
+
+- 原v557正式商品分享連結帶v1，但og:url及twitter:url均未帶版號，唯讀before證據已保存。現在metadata以後台目前version產生?v，不採用stale或任意query；同一真實照片／名稱／TWD價格、no-store、未公開或停售404保持。無APP／migration或公開權限變更。
+- 公開頁及聯絡／管理／分享控制使用繁中／英文，原商品名稱／說明／賣家／地區不翻譯，價格仍NT$、日期固定台灣時間；saved locale故障fallback English、未知後台訊息不直接呈現。分享進行中只接受一次原payload；取消不稱失敗。nested檢舉dialog的中文仍為另待完成項，不冒稱整條檢舉英文完成。
+- 公開GET使用共享data cooldown但不送Authorization／cookies；拒絕caller提供憑證、寫入方法與body，既有private api簽名與授權不改。Retry-After未到按重讀不fetch，到期也不自動讀或重送；須下一次明確重讀。404與429／失聯保持不同提示，原嚴格公開投影、切帳號／abort及失效時間保護保持。
+- 候選依HEAD559＋1為v560。新API／頁面操作與metadata測試初輪15個舊繁中locator因fixture未選語系而失敗，原log保留；fixture明確zh-TW，英文與storage故障另測，原身份／未知投影／取消／permission斷言不弱化。focused Web3檔45項與Server metadata12項通過；完整Web／Server build、精確三CI及正式新版／雙語瀏覽器／預覽回讀接續。全功能目標仍active，不以本批代替真provider／跨端或不可逆GUI驗收。
+
+- 第69批完整Web首輪1765項成功、ProductActions六個原繁中locator因獨立fixture未選語系失敗；原log保留。補明確zh fixture及真正English未知contact outcome，原防重建／錯身份／expiry／切帳號斷言不變。最終Web111檔1772項、Server58檔930項＋3skipped、兩端build及generated worker/version proof通過；新精確CI及正式回讀仍接續。
+
+## 第六十八批正式發布與既有分頁更新驗收
+
+- v557 PR100精確head130b68d1605fd0ee2295669fdda0857a8914b642，CI37035319484三项completed/success；正常merge6d799073b1f5fb9602137214f4219e2cea5e8ce0、空觸發c123945828e1e2d1b4b4cf3b0db1b1671da86151。Git552a89d7-aa9f-4b06-a1fb-d852fc23c38d WAITING後以同一乾淨checkout部署原service，b74b2fe2-89aa-4fe2-b967-ae0af129205e SUCCESS；client/server/mobile樹精確比對CI，uploads mount保留。原129workspace變更逐檔hash仍一致。
+- metadata/index/bundle557、四feature chunks200、health200、未登入private401；公開worker activation1/claim1及legacy入口200原bytes核對。正式少量無憑證唯讀序列，三個更新GET之間再讀一次data，data counter只減1；各header limit仍500。僅此觀察，不宣稱各客戶端、GUI出口IP、跨replica持久計數或正式500筆飽和測試。
+- 原IAB553設定先明確重試讀回本人資料及永久餘額0；手動檢查首次8秒定位更新button未就緒，下一次fresh DOM已ready553→557，保留此中間狀態而不放寬測試。只按已保存確認，之後同一tabfooter557、設定與餘額0正常；未清storage/cache、未強制worker message、未重送pending。736×952 raw Home/Settings已檢視，docWidth721、唯一Settings與header44px以上；90/90相似度仍以553最近正式評分為準，本批不冒稱新評分。
+- 正式探索地圖／列表讀到相同8件，外部來源未開放如實顯示；Chat同QA對象、空history、空輸入與disabled Send，面交dialog無預約。未傳訊／提约／封鎖／商品／帳號寫入。手機390×844room原fullPage可讀，desktop viewport inbox及loaded room可讀；手機viewport inbox可讀但截圖仍有更新／照片載入中，不當最終圖片成功證據。
+- 本批desktop room/inbox與一張mobile inbox的fullPage截圖仍窄列，與實際DOM section/header768px及h1 width280px矛盾。相同頁面改用fullPage:false，desktop viewport及mobile viewport讀到正常佈局；raw異常及尺寸全部保留、排除通過。沒有為截圖改產品CSS，不能由此確定所有capture內部原因。viewport reset／繁中保持、原tab保留；GUI leases全已釋放。完整provider品質／實際跨端送達與雙方預約、mixed-version PWA、憑證與不可逆GUI及矩陣未完項保留active。
 
 ## 2026-10-03 第六十八批：網站更新與資料讀取各自計算額度
 

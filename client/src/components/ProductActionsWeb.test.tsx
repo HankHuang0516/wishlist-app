@@ -15,9 +15,19 @@ const onReport = vi.fn();
 function Destination() { const location = useLocation(); return <p>已到達：{location.pathname + location.search}</p>; }
 function room() { const base = makeRoom(); return { ...base, sellerUserId: listing.owner.id, seller: { id: listing.owner.id, name: '合成賣家' }, listingId: listing.id, listing: { ...base.listing, id: listing.id } }; }
 const view = (value = auth, item = listing) => <MemoryRouter><AuthContext.Provider value={value}><Routes><Route path="/" element={<ProductActionsWeb listing={item} onReport={onReport} />} /><Route path="/chat" element={<Destination />} /></Routes></AuthContext.Provider></MemoryRouter>;
-beforeEach(() => { api.mockReset().mockResolvedValue(room()); onReport.mockReset(); });
-afterEach(() => vi.restoreAllMocks());
+let originalLocale: string | null;
+beforeEach(() => { originalLocale = localStorage.getItem('user-locale'); localStorage.setItem('user-locale', 'zh-TW'); api.mockReset().mockResolvedValue(room()); onReport.mockReset(); });
+afterEach(() => { vi.restoreAllMocks(); if (originalLocale === null) localStorage.removeItem('user-locale'); else localStorage.setItem('user-locale', originalLocale); });
 describe('product contact and report destinations', () => {
+  it('retains uncertain contact outcomes in English without exposing provider details or opening a report automatically', async () => {
+    localStorage.setItem('user-locale', 'en-US'); api.mockRejectedValueOnce(new Error('PRIVATE_PROVIDER_DETAIL'));
+    render(view()); fireEvent.click(screen.getByRole('button', { name: 'Contact seller / arrange meetup' }));
+    await screen.findByText(/The conversation is unconfirmed/);
+    expect(screen.getByRole('link', { name: 'View chat inbox' })).toHaveAttribute('href', '/chat');
+    expect(screen.getByRole('button', { name: 'Report this item' })).toBeEnabled();
+    expect(api).toHaveBeenCalledTimes(1); expect(onReport).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('PRIVATE_PROVIDER_DETAIL');
+  });
   it('keeps owner management instead of self-contact or self-report', () => {
     render(view({ ...auth, user: { ...auth.user, id: listing.owner.id } }));
     expect(screen.getByRole('link', { name: '管理我的商品' })).toHaveAttribute('href', '/my-listings');

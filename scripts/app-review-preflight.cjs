@@ -3,7 +3,7 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const requiredPrivacyTypes = ['姓名', '電子郵件地址', '電話號碼', '實體地址', '精確位置', '粗略位置', '聯絡人', '電子郵件或訊息', '照片或影片', '客戶支援', '其他使用者內容', '使用者識別碼'];
+const requiredPrivacyTypes = ['姓名', '電子郵件地址', '電話號碼', '實體地址', '精確位置', '粗略位置', '聯絡人', '電子郵件或訊息', '照片或影片', '客戶支援', '其他使用者內容', '使用者識別碼', '產品互動'];
 
 function assertPrivacyEvidence(receipt, nativeTree, serverTree) {
     assert.equal(receipt.appId, '6468950847');

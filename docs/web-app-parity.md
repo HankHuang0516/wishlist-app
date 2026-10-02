@@ -12,7 +12,24 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式v557已發布，原IAB553經新鮮ready proof及明確確認更新到557，設定／永久餘額0、探索8件map/list、同QA聊天空歷史與面交無預約讀取成功。兩份額度正式小量唯讀觀察相互獨立；553先前限流及安全讀取失敗保留，不推定全部根因。最新正式相似度評分仍為553首頁／設定各90/100，557同畫布佈局已回歸而未重新打分。聊天fullPage截圖窄列與DOM幾何矛盾保留，實際viewport截圖桌面正常、手機可讀。完整矩陣、真provider／跨端／mixed-version PWA與不可逆GUI驗收仍active；APP2.0.12不改。
+目前狀態：正式v561已發布並精確三CI／Runtime樹驗證，商品預覽og:url及twitter:url帶後台當前版號、stale query回目前值，公開照片200／invalid404保持。原IAB557經明確已保存確認更新561，公開商品繁中／英文原內容及探索／聊天入口回讀；語系偏好經原瀏覽器端Settings切换／恢复，源碼確認不涉及帳號API寫入。nested檢舉dialog英文仍待下一批。最近正式首頁／設定相似度評分仍553各90，完整provider／跨端／PWA與不可逆GUI及矩陣仍active；APP2.0.12不改。
+
+## 2026-10-03 第七十批：商品檢舉與私人紀錄雙語恢復
+
+- 正式v561公開頁檢舉按鈕已English，nested dialog及reports history仍中文。此批補齊雙語原因／review狀態／關閉／guest返回登入／待確認原回執查核／explicit replay／hash-only安全放棄、empty／讀取失敗與台灣時間；原商品title／details／UUID及不可變payload不翻譯。
+- error／notice保存封閉copy key而不是當時語系文句。已知receipt與input提示有明確對照，未知底層錯誤不直接呈現；pre-HTTP保存失敗不冒稱journal已保存。原store CAS、只有明確操作才POST、hash-only fence、已收件不稱撤回／下架、account／departure保護與private projection均保留，server／APP／migration不改。
+- focused四檔82項通過，包含英文401 pending切語系仍同原內容且POST0、explicit same-body replay成功、三種真實review status與原文／台灣時間、storage fault保留文字且POST0／raw diagnostics不顯示、locale inaccessible English且讀失敗不冒稱empty、English兩步abandon僅hash與guest route0 private reads。舊繁中fixture明確選zh-TW並restore；原storage failure斷言由直接顯示raw錯誤改bounded恢復提示，HTTP0斷言不變。
+- 候選依HEAD563＋1為v564，完整Web test/build與精確三CI、正式read-only雙語report dialog／history及既有PWA更新另驗。Explorer正文English仍為下一單獨功能發布；真provider／跨端、不可逆GUI與完整矩陣保持active，不以本批或局部mock當全100%完成。
+
+- 第70批追加真正PendingStoreError恢復案例：提交停用、原頁文字保留、明確恢復後可用但POST0；最新完整Web112檔1780項／build與worker版號通過、Server58檔930項＋3skipped／build通過，精確三CI接續。
+
+## 第六十九批正式發布與公開商品驗收
+
+- v561 PR101精確headf7ed4ca8239648f020487cbb9c18706961aac781，CI37040569831三項通過；normal merge200641ab80381d546bfb7dbca8b78115d540ecb1、empty trigger0b6c0efb6d93c2c4bef6c0062dca9d66961e5dba。Git9c7235ce-56b8-4542-b7d1-a81bbed04096 WAITING後同乾淨checkout上傳原service，部署b45de240-2ab1-4ef2-8ca6-2b6fe082abd0 SUCCESS，uploads mount與client/server/mobile runtime樹對齊CI，APP無修改。原129其他workspace變更hash保留。
+- 同QA公開商品v1原照片／名稱／NT$59保留，兩個預覽URL均?v=1；任意v999999仍回實際v1，no-store及invalid404、縮圖200核對。公開GET不送帳號cookies／Authorization，失聯／429不宣稱下架、不自動重送；完整Web1772／Server930+3skipped與兩端build通過。
+- 原IAB557明確檢查／ready／已保存確認更新561；英文公開商品欄位、share及原探索map deeplink驗收，繁中恢復及既有探索／聊天唯讀回歸保存raw DOM／geometry／viewport screenshots。語系切換使用原瀏覽器端偏好保存，具體回讀及源碼確認無帳號API寫入保留；無訊息／檢舉／面交提案提交。語系驗收不改原商品／賣家內容。
+- 首次8秒定位ready button未就緒，下一fresh DOM ready後才確認更新；英文及繁中公開頁首張capture照片尚未載入，raw保留而不當照片成功。另一early en-loaded圖736×414與DOM viewport736×1400不同，保留排除；固定画布後EN／ZH各736×1366完整畫面及同照片1200×1600成功、deep link選中同QA商品及附近6件、原繁中Explore範圍8件、Chat原QA對象照片載入，沒有新會話／訊息／提案。Settings首次餘額仍unverified，後續讀到本人永久餘額0，不把中間態當成功。正式share只核對可見控制及公開metadata，不把單元cancel／double-click當作真正分享送出或native sheet取消。
+- 最近已評分首頁／設定仍553各90，本批不新增相似度分數。nested檢舉dialog仍繁中；實際English preference的Explore正文／主要控制仍中文，map ARIA／footer已English，此新發現另外待修。全部真provider／兩方跨端與不可逆GUI及完整矩陣驗收仍active，不以本批代替全目標。
 
 ## 2026-10-03 第六十九批：商品分享預覽版號與公開頁雙語讀取
 

@@ -14,6 +14,14 @@
 
 目前狀態：目標持續進行。第六十三批v2.0.541已正式發布，原登入Chrome538頁面實際顯示541更新提示，取消後保留未傳送的合成草稿，明確確認後同一QA聊天室載入541；探索地圖／8件商品列表及設定的目前可用版本檢查通過。IAB舊534分頁仍未升級，不能推定所有舊瀏覽器通過。第六十二批736×952首頁／設定的單一agent人工90/90保留為534歷史證據，不冒稱541重新評分；真訊息／面交異動、手機／英文更新、完整PWA／跨端／provider及矩陣未完項仍active。APP2.0.12不改。
 
+## 2026-10-02 第六十五批：已下載新版仍等待啟用的實際更新缺口
+
+- 第64批v544已正常合併／三項CI成功／部署SUCCESS，HTTP metadata、index、bundle與四個feature chunks一致，96個真precache URLs含Workbox revision都200且content type／index version正確。但既有英文Chrome v541多次正常check、reload及返回前景仍preparing。只用原生DevTools讀到#221 activated／#222 waiting to activate、received22:44:07，沒有按skipWaiting／Update on reload／Bypass／Unregister或清storage。此結果保留raw AX／JPEG，不能把v544 HTTP通過當聊天英文正式UI已通過。
+- 安裝的vite-plugin-pwa1.2.0 `resolveOptions` 只有injectRegister auto/null且autoUpdate才設workbox.skipWaiting／clientsClaim；第63批injectRegister false因此關掉預設，生成worker只保留SKIP_WAITING message listener而無直接啟用／claim。修正以explicit workbox兩旗標準備新shell，由既有UI查核同版proof並經使用者確認reload，未導入virtual自動reload／未保存輸入不宣稱跨reload保留。
+- 新build postbuild執行實際生成worker入口，未發任何synthetic message／未關clients即要求skipWaiting1與clientsClaim1，原private image cache policy／bridge／version JSON排除仍核對。修正前v544 generated worker實測skipWaiting0並退出1；產品配置補齊後再跑完整Web／build／三项精確CI，正式v541→新版本與聊天雙語另回讀。來源：[Vite PWA更新設定](https://vite-pwa-org.netlify.app/guide/auto-update)、[Workbox generateSW選項](https://developer.chrome.com/docs/workbox/modules/workbox-build)。以本機已安裝源碼條件與真worker驗收為準，不照文件概述推定已啟用。
+- 一張原生390×844中間診斷圖保留，實際頁面沿用異常放大，不能當手機responsive驗收；已用正常Actual Size還原，正式手機最終圖另取。完整目標持續active，v544已完成功能依指示直接部署，發現阻礙可見新版的缺口接續修正並立即再次部署。
+- 新候選HEAD count546＋1為v2.0.547，完整Web110檔1745項及TypeScript／Vite build退出0；postbuild實際generated-worker activation1／claim1、原policy／bridge／metadata exclusion通過。沒有修改UI reload confirmation／wire／APP／後台／migration；新的精確CI與既有541頁面實際載入547另回讀。
+
 ## 2026-10-02 第六十四批：聊天與面交雙語介面
 
 - Chat收件匣／商品對象／訊息與面交詳情、預約表單、同意／改期／完成／取消及原操作恢復控制使用既有繁中／英文偏好，locale storage失敗仍可用英文。時間固定Asia/Taipei並明示台灣時間，價格保留NT$／TWD，不作匯率轉換。
@@ -21,6 +29,7 @@
 - 新驗收確認英文原訊息POST回覆遺失後，切繁中GET-only恢復同一原文及ID；英文舊版面交原操作explicit retry保留原expectedVersion／body，不把現在v2當舊v1同意；更新時未提交地點不覆蓋，須明確載入新版。訊息pre-dispatch validation原會被finally refresh立即清掉，現只在confirmed成功後更新，繁中／英文錯誤與原輸入保留且zero POST／journal。
 - 初輪新增fixture有完整商品標題後綴不符、錯spy Storage prototype；更正實際原標題與測試storage instance。第二輪仍抓到產品validation被refresh清空，修正runtime且保留原嚴格assertions，不放寬timeout／skip。完整Web／build、精確三項CI與v544正式雙語手機／桌面驗收待發布後回讀；全目標仍active。
 - 發布候選依HEAD count543＋1進版v2.0.544，focused6檔179項、完整Web110檔1745項及TypeScript／Vite正式build全退出0，metadata與index／bundle版本一致；version JSON不precache，原worker cache policy／legacy bridge保留。既有map1088.52KB及PWA96entries6120.51KiB警告記錄。精確CI／正式部署／畫面回讀尚待完成，不把本機通過當正式驗收。
+- v544正式發布：PR96 exact head f03c1dbb04964561036cdb71b110ee3d5176b4f3，CI37021144334三項all success，merge74cd3c97bd3fff05860b2c4bf0a8eee22896fdde、空觸發ff64bb99cac951d4891b168467df0c5f4823af5d。Git581bbecc-e48a-4a14-93a4-3a0a33b152d7 WAITING後同乾淨checkout直接部署原service，1c9d40a3-a6cb-4815-b7de-251097c7c0ce SUCCESS；uploads mount保留，APP／server／migration／環境及DB service不改。正式v541英文仍顯示中文Chat／Meetup的before原圖保存，v544瀏覽器未因HTTP成功冒稱通過，接續第65批worker修正。
 
 ## 第六十三批正式更新驗收：兩個真實正式版本
 

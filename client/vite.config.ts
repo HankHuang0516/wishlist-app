@@ -41,6 +41,11 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // injectRegister:false disables the plugin's automatic defaults.
+        // Prepare/claim the new shell without reloading any open form; the
+        // UI still requires explicit confirmation before page navigation.
+        skipWaiting: true,
+        clientsClaim: true,
         importScripts: ['/pwa-cache-policy.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         globIgnores: ['**/web-version.json'], // Read current server metadata, never the worker's old version.

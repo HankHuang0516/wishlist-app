@@ -27,6 +27,15 @@
 
 基準：`mobile/App.tsx`、`mobile/src/*Screen.tsx`、批次刊登與行銷模組、相同 server 路由。2026-09-30 正式 `/settings` 瀏覽器回讀已確認生日重複、缺少所有裝置撤銷、永久行銷額度與 APP 商品入口。進度欄「本機」不是「正式完成」。
 
+## 2026-10-02 第四十九批：管理郵件診斷權限與未知結果（仍未部署）
+
+- 修正既有POST feedback/test只有註解宣稱Auth Required、實際沒有驗證的缺口；要求live JWT與當前authVersion，不接受personal API key、frontend電話、JWT role或request欄位作管理權限。後台EMAIL_DIAGNOSTICS_ADMIN_USER_IDS嚴格解析與EMAIL_DIAGNOSTICS_ENABLED=true雙條件，缺失／錯誤設定預設不可寄。正式enable前須核對當前帳號ID；本批不改正式env、不授權真實寄信。
+- 新private no-store GET僅回精確userId/canSend，表示角色及設定、不表示歷史／quota／in-flight結果。POST保留固定原收件人、主旨、內容與empty-body舊wire，拒絕query及任意body fields，按使用者每分鐘1次；8秒timeout後provider未settle仍保留process-local in-flight guard，晚到reject不洩漏或二次回覆。dispatch前再次核對revocation及設定；已dispatch無法被logout撤回，無跨replica或durable歷史保證。strict provider acceptance回ACCEPTED，不回ID／log／stack／recipient、不冒稱inbox delivery。
+- Settings移除phone-only顯示與raw alert，進階展開才讀真正capability；雙語44px controls。POST前以既有AES-GCM/API-owner scope保存僅version／原local UUID／startedAt的immutable marker，不保存JWT。Unknown重開無POST、不把讀權限當歷史查核；手動清理需明確勾選已核對郵件服務且了解不取消原request。verified ACK cleanup失敗只清理；sync gate、離頁／帳號generation、fresh capability及exact CAS拒絕覆蓋較新分頁；busy擋語言reload。
+- 新15項actual HTTP/PostgreSQL及31項Web，focused94／4檔；完整隔離pre-push退出0：Server56檔913＋3skip、HTTP36檔592、Web94檔1557＋build、Native42檔852＋typecheck／Expo、44migration schema diff0／required cleanup0。主JS350.51KB、PWA91entries6025.36KiB，既有map/worker warnings保留；APP與migration未改。
+- Chrome390×844／document375、Settings入口1，獨立UTF8 DB44migrations、三位合成owner、真compiled handlers：owner1 stub接受後QA502，重開與明確reread仍同一ad4e53ea-0c1b-4b1b-998a-9692868abbd3、原POST1；owner2中文POST200後明確ACCEPTED且清理；普通owner無diagnostic／send／他人marker；回owner1仍原unknown且清理未勾選。完整32requests：30GET200，其中capGET5，POST僅502／200兩次；stub mail2、external mail0、其他product writes0。五原JPEG／三幾何JSON與wishlist-web-email-diagnostics-evidence-20261002.json保存；功能證據不代替新版90/90。
+- 自有API／Vite停止、PG正常stop、tab關閉及viewport还原，DB／fixtures／原未知marker／他人worktree保留。觀察到既有advanced API／purchase link內nested Button，保留記錄供下一流程審核；仍須其完整回歸、其餘全功能逐欄／權限／語系、avatar與unknownFlickr、真provider／跨端、PWA／效能、credential／permanent browser、fresh Home／Settings各90及正式preflight／merge／Railway／live readback。PR82 draft、goal active、未部署，精確HEAD CI另回讀。
+
 ## 2026-10-02 第四十八批：合作介紹語系與共用觸控區（仍未部署）
 
 - 原合作介紹頁的標題、合作原則、五個必要資料欄及既有兩個inquiry入口支援繁中／英文，locale storage故障仍可英文使用。必需資料在render才翻譯，重開切語言不保留module-level舊文字。原授權、競標不是固定價、售出／撤回、3–10件樣本及不索取密碼等意義與CSS保留。FAQ補合作收件與非授權說明。
@@ -298,6 +307,7 @@
 | 政策／客服／通知／社交朋友 | APP policies + 網頁增額功能 | 通知已本機接上版本化偏好／失聯GET恢復／跨頁衝突，寄送與推播未開通明示；社交隱私、追蹤持久原操作／原子額度與公開個人頁恢復已本機驗證。Support／Feedback繁中英文、原回饋加密journal與minimal owner/hash receipt、真commit502→reload只GET及policy返回已本機驗證；真mail、其他社交流程／feature英文／正式端仍待回歸 | 連結與表單可用、不刪既有功能；不可把偏好保存當寄送已開通或目前追蹤狀態當歷史回執 |
 | 既有Web供給合作意向 | APP無合作表單；partnerInquiryRoutes／submissionReceipt | 原Web保留；後台minimal ID/hash receipt及HTTP15；前端public加密原表單／strict ACK／明確原retry／cleanup-only／繁中English與真commit502→reload GET-only已本機驗證；第48批landing中英文／安全locale讀取／原form入口真browser已核對 | encrypted原表單、strict ACK、reload GET-only、語系／browser及admin权限不變 |
 | 共用頁首／頁尾導覽与操作尺寸 | WebNavigation；保留Web六個footer路由及回饋 | 第41批語系／第48批實測header/footer≥44px、guest/login/logout/help/feedback、登入者唯一Settings；新版footer使頁長增加，完整視覺分數待重驗 | 不刪原路由／功能、手機無水平溢出、Home與Settings各≥90正式驗收 |
+| 既有管理郵件診斷 | Web獨有保留工具；APP無此功能 | 第49批live JWT／server allowlist＋enable旗標、固定原郵件、bounded acceptance、加密unknown marker及CAS cleanup；15真HTTP及三owner真Chrome已核對，無真mail | 缺配置預設不可寄；正式管理者ID需核對；capability不是historical proof、limits為process-local、ACCEPTED不是inbox delivery |
 | 語言／個資／生日／PWA／API指令／交易紀錄 | 網頁獨有既有功能 | 保留；本機生日清空、信箱草稿、版本化保存及失聯回執已實測；大頭照未知回應已本機加密提醒／只讀目前值／明確清理實測（舊API無原操作回執）；其他進階功能仍待整體回歸 | autosave真實回執、隱私切換、API不輸出憑證 |
 
 ## 平台替代策略

@@ -1,5 +1,15 @@
 # React + TypeScript + Vite
 
+## Server-admitted mail diagnostics — 2026-10-02
+
+The existing Settings diagnostic is available from More features only after a matching live server capability read. A phone number in the frontend no longer grants admission. The server requires a current user JWT, rejects personal API keys and client role/recipient overrides, rechecks the session and operator policy before sending, and returns only bounded acceptance/refusal/unknown facts. Public feedback and its receipt protocol are unchanged.
+
+Operators must configure `EMAIL_DIAGNOSTICS_ADMIN_USER_IDS` as up to32 comma-separated positive PostgreSQL user IDs, after verifying each intended administrator. Missing, malformed or out-of-range lists deny access. `EMAIL_DIAGNOSTICS_ENABLED` must separately be exactly `true` after trimming; it is unavailable by default. Neither value belongs in a frontend bundle. Deployment preflight must establish the intended admission from the current server account data, without inferring authority from client phone or role claims. Enabling this feature does not authorize the agent to send real email.
+
+The retained endpoint accepts no recipient, subject or content overrides and sends the original fixed diagnostic only. Its one-per-user-per-minute limiter and in-flight guard are process-local, not a cross-replica idempotency receipt. An8s provider deadline leaves unresolved calls guarded until they settle. A bounded provider ID plus strict success is required for ACCEPTED; provider ID/log/error/stack/recipient never appear in the response, and acceptance is not inbox delivery.
+
+Web dispatch first saves an immutable API/owner-scoped AES-GCM local marker containing only a random local ID and timestamp. Fresh capability and exact journal checks precede POST. Unknown results reopen locally without resending; the marker is explicitly not server mail history. The user must check the mail service before clearing an unknown reminder, and this cannot cancel an in-flight request. A verified reply with failed cleanup remains cleanup-only; newer journals must be reread. Account/departure generations and synchronous gates fence late/duplicate work, and Settings language reload is blocked while dispatch/cleanup is busy. Chinese/English notices hide raw diagnostics; no token or mail content is stored. Native APP and migrations remain unchanged.
+
 ## Partnership landing and shared touch targets — 2026-10-02
 
 The retained partnership landing page supports Chinese and English, including the title, named principles region, five required item fields and existing inquiry routes. Permission, auction-price, withdrawal and no-password boundaries keep their original meaning. Field translations are resolved when rendered, so reopening after a language change does not retain a module-level translation. Locale storage faults fall back to English.

@@ -10,6 +10,7 @@ import { API_URL, API_BASE_URL } from '../config';
 import { t } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
 import AccountBenefits from '../components/AccountBenefits';
+import EmailDiagnostics from '../components/EmailDiagnostics';
 import './SettingsPage.css';
 import { settingsText as st, settingsMessage, settingsChinese } from '../lib/settingsCopy';
 import { useSettingsProfile } from '../lib/useSettingsProfile';
@@ -50,6 +51,10 @@ function SettingsSession() {
     const [changingLang, setChangingLang] = useState(false);
     const [securityBusy, setSecurityBusy] = useState(false);
     const securityBusyRef = useRef(false);
+    const diagnosticsBusyRef = useRef(false);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+    const onDiagnosticsBusy = useCallback((value: boolean) => { diagnosticsBusyRef.current = value; setDiagnosticsBusy(value); }, []);
     const onSecurityBusy = useCallback((value: boolean) => { securityBusyRef.current = value; setSecurityBusy(value); }, []);
 
     const avatar = useAvatarUpload(token,user?.id,settings.patchDisplay);
@@ -57,7 +62,7 @@ function SettingsSession() {
     const avatarLocked = settings.locked || avatar.locked || changingLang;
     const changeLocale = (next: string) => {
         if (changingLang) return;
-        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current) {
+        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current || diagnosticsBusyRef.current) {
             setFeedback({ message: st('請先完成保存或保留此頁文字；未保存的修改不會因切換語言而丟失。'), type: 'error' });
             return;
         }
@@ -150,7 +155,7 @@ function SettingsSession() {
                         variant={settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('zh-TW')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy}
                     >
                         {changingLang && settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         繁體中文
@@ -159,7 +164,7 @@ function SettingsSession() {
                         variant={!settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('en-US')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy}
                     >
                         {changingLang && !settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         English
@@ -471,7 +476,7 @@ function SettingsSession() {
                 </details>
             </div></fieldset>
             <AccountBenefits key={`benefits-${token}`} />
-            <details className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+            <details onToggle={event => setAdvancedOpen(event.currentTarget.open)} className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 sm:min-h-0"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block text-sm font-semibold leading-5">{st("進階功能")}</span><span className="block text-xs leading-4 text-gray-500">{st("AI 整合・交易紀錄・安裝網頁 App・好友與送禮")}</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
                 <div className="mt-4 space-y-3">
                     <Link to="/dashboard" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">{st("原願望清單 · 分享與送禮")}</Link>
@@ -690,46 +695,7 @@ function SettingsSession() {
                     </Card>
                 </div>
 
-                {/* Debug Tools Section - Admin Only */}
-                {profile.phoneNumber === '0935065876' && (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                        <h2 className="text-xl font-semibold mb-4 text-gray-700">System Diagnostics (Admin Only)</h2>
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-medium text-lg">Test Email</h3>
-                                        <p className="text-sm text-gray-500">
-                                            Internal system integrity check.
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        onClick={async () => {
-                                            const btn = document.getElementById('debug-email-btn');
-                                            if (btn) btn.innerText = "Testing...";
-                                            try {
-                                                const res = await fetch(`${API_URL}/feedback/test`, {
-                                                    method: 'POST',
-                                                    headers: { 'Authorization': `Bearer ${token}` }
-                                                });
-                                                const json = await res.json();
-                                                alert("Test Result:\n" + JSON.stringify(json, null, 2));
-                                            } catch (e: any) {
-                                                alert("Connection Failed: " + e.message);
-                                            } finally {
-                                                if (btn) btn.innerText = "Send Test Email";
-                                            }
-                                        }}
-                                        id="debug-email-btn"
-                                    >
-                                        Send Test Email
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
+                {advancedOpen && token && profile && <EmailDiagnostics token={token} userId={profile.id} onBusy={onDiagnosticsBusy} />}
 
                 {/* Purchase History Link */}
                 <div className="mt-6 pt-6 border-t">

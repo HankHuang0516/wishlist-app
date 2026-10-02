@@ -15,6 +15,22 @@ const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 
   isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
+it('opens diagnostics from backend admission and blocks language reload during the actual mail dispatch', async () => {
+  let finish!: (value: unknown) => void;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/feedback/test')) return init?.method === 'POST' ? new Promise(resolve => { finish = resolve; }) : ok({ userId:19,canSend:true });
+    return ok(profile);
+  }); vi.stubGlobal('fetch', fetcher);
+  const originalTimeout = window.setTimeout.bind(window), reloads: unknown[] = [];
+  vi.spyOn(window, 'setTimeout').mockImplementation((callback, delay, ...args) => { if (delay === 500) { reloads.push(callback); return 0; } return originalTimeout(callback, delay, ...args); });
+  render(view()); await screen.findByLabelText('暱稱');
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/feedback/test'))).toBe(false);
+  const advanced = screen.getByText('進階功能').closest('details')!; advanced.open = true; fireEvent(advanced, new Event('toggle'));
+  fireEvent.click(await screen.findByRole('button', { name:'寄送測試郵件' })); await waitFor(() => expect(finish).toBeTypeOf('function'));
+  expect(screen.getByRole('button', { name:'English' })).toBeDisabled(); fireEvent.click(screen.getByRole('button', { name:'English' })); expect(reloads).toHaveLength(0);
+  await act(async () => finish(ok({ success:true,notificationStatus:'ACCEPTED' }))); await screen.findByText('郵件服務已接受測試請求；尚未確認收件匣送達。');
+  expect(screen.getByRole('button', { name:'English' })).toBeEnabled(); expect(fetcher.mock.calls.filter(([,init]) => init?.method === 'POST')).toHaveLength(1); expect(pending.size).toBe(0);
+});
 beforeEach(() => {
   pending.clear(); localStorage.setItem('user-locale', 'zh-TW');
   vi.mocked(privatePendingStore.get).mockReset().mockImplementation(async key => pending.get(key) ?? null);

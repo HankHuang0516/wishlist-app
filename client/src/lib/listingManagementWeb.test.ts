@@ -62,4 +62,17 @@ describe('scoped immutable listing management journals',()=>{
     expect((await abandonManagement('synthetic-session',raw,()=>true)).state).toBe('APPLIED');const sent=JSON.parse(String(fetch.mock.calls[0][1]?.body));
     expect(sent).toEqual({kind:'EDIT',listingId:id,expectedVersion:1,requestHash:j.requestHash});expect(sent.changes).toBeUndefined();
   });
+  it('binds an original check-in deadline to its exact journal even after the deadline has passed',async()=>{
+    const b=managementBody({kind:'MAP',listingId:id,expectedVersion:1,changes:{display:true,consentToMap:true}}),raw=await managementJournal(b,item,actionId),j=await parseManagementJournal(raw);
+    const receipt={...(await fixture()).receipt,kind:'MAP',requestHash:j.requestHash,mapVisibleUntil:'2026-10-01T13:00:00.000Z'};
+    expect(await managementResult({receipt},raw)).toEqual({state:'APPLIED',reason:null,appliedVersion:2,mapVisibleUntil:receipt.mapVisibleUntil});
+    for(const value of [{...receipt,mapVisibleUntil:null},{...receipt,mapVisibleUntil:'2026-10-01T14:00:00.000Z'},{...receipt,mapVisibleUntil:'bad'},{...receipt,kind:'EDIT'}])await expect(managementResult({receipt:value},raw)).rejects.toThrow();
+    const {raw:old,receipt:legacy}=await fixture();await expect(managementResult({receipt:{...legacy,mapVisibleUntil:null}},old)).rejects.toThrow();
+  });
+  it('stop/cancel evidence cannot fabricate a deadline, and consent is exact per check-in',async()=>{
+    for(const changes of [{display:true,consentToMap:false},{display:false,consentToMap:true},{display:true,consentToMap:true,latitude:25}])expect(()=>managementBody({kind:'MAP',listingId:id,expectedVersion:1,changes})).toThrow();
+    const b=managementBody({kind:'MAP',listingId:id,expectedVersion:1,changes:{display:false,consentToMap:false}}),raw=await managementJournal(b,item,actionId),j=await parseManagementJournal(raw),receipt={...(await fixture()).receipt,kind:'MAP',requestHash:j.requestHash,mapVisibleUntil:null};
+    expect((await managementResult({receipt},raw)).mapVisibleUntil).toBeNull();await expect(managementResult({receipt:{...receipt,mapVisibleUntil:'2026-10-01T13:00:00.000Z'}},raw)).rejects.toThrow();
+    expect((await managementResult({receipt:{...receipt,state:'ABANDONED',appliedVersion:null}},raw)).state).toBe('ABANDONED');
+  });
 });

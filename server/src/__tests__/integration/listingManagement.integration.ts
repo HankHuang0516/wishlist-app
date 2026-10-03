@@ -8,10 +8,18 @@ import { managementBody, managementHash } from '../../lib/listingManagementOpera
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw Error('Equal isolated DB URLs required');
 const originalSecret = process.env.JWT_SECRET, secret = 'listing-management-isolated-only'; process.env.JWT_SECRET = secret;
-const app = express(); app.set('trust proxy', 1); app.use(express.json()); app.use('/api/listings', routes);
+const app = express(); app.set('trust proxy', 1); app.use(express.json());
+app.use((req,res,next)=>{
+  if(req.headers['x-synthetic-lost-map-ack']==='1'){
+    const json=res.json.bind(res);
+    res.json=(body: any)=>body?.receipt?.kind==='MAP'&&body.receipt.state==='APPLIED'?res.status(503).send('Synthetic ACK loss after real commit'):json(body);
+  }
+  next();
+});
+app.use('/api/listings', routes);
 const isolatedHttp=createLoopbackRequest(app);
 let users: number[] = [], listingId: string, ip = 0;
-const http = (method: 'get' | 'post' | 'patch', path: string, user = users[0]) => isolatedHttp[method]('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: user, authVersion: 0 }, secret)).set('X-Forwarded-For', `198.51.100.${++ip % 250 + 1}`);
+const http = (method: 'get' | 'post' | 'patch' | 'put', path: string, user = users[0]) => isolatedHttp[method]('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: user, authVersion: 0 }, secret)).set('X-Forwarded-For', `198.51.100.${++ip % 250 + 1}`);
 const edit = () => managementBody({ kind: 'EDIT', listingId, expectedVersion: 1, changes: { title: '合成橘色二手檯燈', description: '隔離驗收，改為台幣320，不是真實商品。', price: 320 } });
 const send = (id: string, body = edit(), user = users[0]) => http('post', '/management-operations/' + id, user).send(body);
 const read = (id: string, user = users[0]) => http('get', '/management-operations/' + id, user);
@@ -30,6 +38,46 @@ beforeEach(async () => {
 afterEach(() => jest.restoreAllMocks());
 afterAll(async () => { try { if (users.length) await prisma.user.deleteMany({ where: { id: { in: users } } }); } finally { await prisma.$disconnect(); if (originalSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = originalSecret; } });
 describe('durable owner management receipts', () => {
+  const map=(display=true,expectedVersion=1)=>managementBody({kind:'MAP',listingId,expectedVersion,changes:{display,consentToMap:display}});
+  it('returns one immutable map deadline under concurrent retries and preserves it after a later stop',async()=>{
+    const id=randomUUID(),body=map(),responses=await Promise.all(Array.from({length:6},()=>send(id,body)));
+    expect(responses.every(r=>r.status===200)).toBe(true);expect(new Set(responses.map(r=>JSON.stringify(r.body))).size).toBe(1);
+    const receipt=responses[0].body.receipt;expect(receipt).toMatchObject({kind:'MAP',state:'APPLIED',appliedVersion:2,expectedVersion:1});expect(Date.parse(receipt.mapVisibleUntil)-Date.parse(receipt.createdAt)).toBeLessThanOrEqual(3600000);
+    const listing=await prisma.listing.findUniqueOrThrow({where:{id:listingId}});expect(listing.version).toBe(2);expect(listing.mapVisibleUntil?.toISOString()).toBe(receipt.mapVisibleUntil);
+    expect((await read(id,users[1])).status).toBe(404);expect((await send(randomUUID(),body,users[1])).status).toBe(404);
+    const stop=await send(randomUUID(),map(false,2));expect(stop.body.receipt).toMatchObject({state:'APPLIED',appliedVersion:3,mapVisibleUntil:null});
+    expect((await read(id)).body).toEqual(responses[0].body);expect((await send(id,body)).body).toEqual(responses[0].body);expect((await cancel(id,body)).body).toEqual(responses[0].body);expect((await prisma.listing.findUniqueOrThrow({where:{id:listingId}})).mapVisibleUntil).toBeNull();
+  });
+  it('recovers a committed map write after a real 503 reply using only its original receipt',async()=>{
+    const id=randomUUID(),body=map();const lost=await http('post','/management-operations/'+id).set('X-Synthetic-Lost-Map-Ack','1').send(body);expect(lost.status).toBe(503);
+    const before=await prisma.listing.findUniqueOrThrow({where:{id:listingId}});expect(before.version).toBe(2);expect(before.mapVisibleUntil).not.toBeNull();
+    const recovered=await read(id);expect(recovered.status).toBe(200);expect(recovered.body.receipt.mapVisibleUntil).toBe(before.mapVisibleUntil?.toISOString());
+    expect((await prisma.listing.findUniqueOrThrow({where:{id:listingId}}))).toEqual(before);expect((await send(id,body)).body).toEqual(recovered.body);expect(await prisma.listingManagementReceipt.count({where:{userId:users[0]}})).toBe(1);
+  });
+  it('cancels an uncommitted map request and rejects repurposing its original consent',async()=>{
+    const id=randomUUID(),body=map();expect((await read(id)).status).toBe(404);expect(await prisma.listingManagementReceipt.count({where:{userId:users[0]}})).toBe(0);
+    const stopped=await cancel(id,body);expect(stopped.body.receipt).toMatchObject({kind:'MAP',state:'ABANDONED',mapVisibleUntil:null,appliedVersion:null});expect((await send(id,body)).body).toEqual(stopped.body);
+    expect((await send(id,map(false))).status).toBe(409);const listing=await prisma.listing.findUniqueOrThrow({where:{id:listingId}});expect(listing.version).toBe(1);expect(listing.mapVisibleUntil).toBeNull();
+  });
+  it('requires explicit fresh consent and bounds the deadline by listing expiry',async()=>{
+    expect((await http('post','/management-operations/'+randomUUID()).send({...map(),changes:{display:true,consentToMap:false}})).status).toBe(400);expect(await prisma.listingManagementReceipt.count({where:{userId:users[0]}})).toBe(0);
+    const expiry=new Date(Date.now()+60_000);await prisma.listing.update({where:{id:listingId},data:{expiresAt:expiry}});const result=await send(randomUUID(),map());expect(result.body.receipt.mapVisibleUntil).toBe(expiry.toISOString());
+  });
+  it('records a terminal policy/version conflict and cannot overwrite later native map changes',async()=>{
+    await prisma.user.update({where:{id:users[0]},data:{isEmailVerified:false,isPhoneVerified:false}});const id=randomUUID(),body=map();const denied=await send(id,body);expect(denied.body.receipt).toMatchObject({state:'CONFLICT',reason:'LISTING_ACCESS_DENIED',mapVisibleUntil:null});
+    await prisma.user.update({where:{id:users[0]},data:{isEmailVerified:true}});expect((await send(id,body)).body).toEqual(denied.body);
+    const firstId=randomUUID(),first=await send(firstId,body);expect(first.body.receipt.state).toBe('APPLIED');const stopped=await http('put','/'+listingId+'/map-presence').send({expectedVersion:2,display:false});expect(stopped.status).toBe(200);expect(stopped.body.version).toBe(3);expect(stopped.body.receipt).toBeUndefined();
+    expect((await send(firstId,body)).body).toEqual(first.body);expect((await read(firstId)).body).toEqual(first.body);expect((await prisma.listing.findUniqueOrThrow({where:{id:listingId}})).mapVisibleUntil).toBeNull();
+    expect((await send(randomUUID(),body)).body.receipt).toMatchObject({state:'CONFLICT',reason:'LISTING_CONFLICT',mapVisibleUntil:null});
+  });
+  it('rolls back a map mutation if its receipt cannot be persisted',async()=>{
+    const transaction=prisma.$transaction.bind(prisma);jest.spyOn(prisma,'$transaction').mockImplementation(((fn:any,options:any)=>transaction(async tx=>fn(new Proxy(tx,{get(target,key){if(key==='listingManagementReceipt')return new Proxy(target.listingManagementReceipt,{get(model,name){return name==='create'?()=>{throw Error('synthetic map receipt failure');}:Reflect.get(model,name);}});return Reflect.get(target,key);}})),options)) as any);
+    expect((await send(randomUUID(),map())).status).toBe(503);const row=await prisma.listing.findUniqueOrThrow({where:{id:listingId}});expect(row.version).toBe(1);expect(row.mapVisibleUntil).toBeNull();expect(await prisma.listingManagementReceipt.count({where:{userId:users[0]}})).toBe(0);
+  });
+  it('keeps original map evidence after expiry and listing removal without renewing display',async()=>{
+    const id=randomUUID(),body=map(),first=await send(id,body);await prisma.listing.update({where:{id:listingId},data:{version:4,mapVisibleUntil:new Date(Date.now()-1)}});expect((await read(id)).body).toEqual(first.body);expect((await send(id,body)).body).toEqual(first.body);
+    expect((await prisma.listing.findUniqueOrThrow({where:{id:listingId}})).version).toBe(4);await prisma.listing.delete({where:{id:listingId}});expect((await read(id)).body).toEqual(first.body);expect((await send(id,body)).body).toEqual(first.body);expect(await prisma.listing.count({where:{id:listingId}})).toBe(0);
+  });
   it('applies one edit atomically with a strict hash-only receipt and original-version evidence', async () => {
     const id = randomUUID(), first = await send(id); expect(first.status).toBe(200); expect(first.headers['cache-control']).toBe('private, no-store');
     expect(Object.keys(first.body)).toEqual(['receipt']); expect(Object.keys(first.body.receipt).sort()).toEqual(['clientActionId', 'listingId', 'kind', 'expectedVersion', 'requestHash', 'state', 'reason', 'appliedVersion', 'createdAt'].sort());

@@ -423,23 +423,31 @@ describe('complete owner paging and English recovery', () => {
 });
 
 it('checks in only after explicit permission, stops manually, and never renews on reload',async()=>{
- let current={...row,mapVisibleUntil:null as string|null};
+ let current={...row,mapVisibleUntil:null as string|null};const receipts=new Map<string,unknown>();
  const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
-  if(init?.method==='PUT') {const body=JSON.parse(String(init.body));expect(body.expectedVersion).toBe(current.version);expect(body.consentToMap).toBe(body.display);current={...current,version:current.version+1,mapVisibleUntil:body.display?new Date(Date.now()+3600000).toISOString():null};return ok(current);}
+  if(init?.method==='POST') {const body=JSON.parse(String(init.body));expect(body.expectedVersion).toBe(current.version);expect(body.kind).toBe('MAP');expect(body.changes.consentToMap).toBe(body.changes.display);current={...current,version:current.version+1,mapVisibleUntil:body.changes.display?new Date(Date.now()+3600000).toISOString():null};const p=await (await proof(url,init)).json();p.receipt.createdAt=new Date().toISOString();p.receipt.mapVisibleUntil=current.mapVisibleUntil;receipts.set(url,p);return ok(p);}
+  if(url.includes('/management-operations/'))return ok(receipts.get(url));
+  if(url.endsWith('/listings/'+id))return ok(current);
   return ok({items:[current],nextCursor:null});
  });vi.stubGlobal('fetch',fetcher);render(view());await ready();
  expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
- vi.mocked(window.confirm).mockReturnValueOnce(false);fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));
+ fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));const dialog=screen.getByRole('dialog',{name:'確認商品地圖顯示'});expect(dialog).toHaveTextContent('不顯示使用者即時位置');fireEvent.click(within(dialog).getByRole('button',{name:'取消'}));
+ expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+ fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));fireEvent.click(screen.getByRole('button',{name:'確認這次顯示一小時'}));await screen.findByText('原商品操作已確認完成；不會再次套用。');await screen.findByText('版本：2');
+ const deadline=current.mapVisibleUntil;fireEvent.click(screen.getByRole('button',{name:'已讀結果，清理本機紀錄'}));await ready();fireEvent.click(screen.getByRole('button',{name:'重新載入',exact:true}));await ready();expect(current.mapVisibleUntil).toBe(deadline);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:'停止地圖顯示',exact:true}));fireEvent.click(screen.getByRole('button',{name:'確認停止地圖顯示'}));await screen.findByText('原操作已停止地圖顯示。');expect(current.mapVisibleUntil).toBeNull();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(2);
  expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(0);
- fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));await screen.findByText('已確認這次地圖顯示，一小時後停止；不會自動續期。');
- const deadline=current.mapVisibleUntil;fireEvent.click(screen.getByRole('button',{name:'重新載入',exact:true}));await ready();expect(current.mapVisibleUntil).toBe(deadline);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(1);
- fireEvent.click(screen.getByRole('button',{name:'停止地圖顯示',exact:true}));await screen.findByText('已停止地圖顯示。');expect(current.mapVisibleUntil).toBeNull();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(2);
 });
 it('retains an unconfirmed map action and reloads only by GET without replay',async()=>{
- let current={...row,mapVisibleUntil:null as string|null};
- const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>{
-  if(init?.method==='PUT'){current={...current,version:2,mapVisibleUntil:new Date(Date.now()+3600000).toISOString()};throw Error('ACK lost');}
+ let current={...row,mapVisibleUntil:null as string|null};let receipt:unknown;
+ const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+  if(init?.method==='POST'){current={...current,version:2,mapVisibleUntil:new Date(Date.now()+3600000).toISOString()};const p=await (await proof(url,init)).json();p.receipt.createdAt=new Date().toISOString();p.receipt.mapVisibleUntil=current.mapVisibleUntil;receipt=p;throw Error('ACK lost');}
+  if(url.includes('/management-operations/'))return ok(receipt);
+  if(url.endsWith('/listings/'+id))return ok(current);
   return ok({items:[current],nextCursor:null});
- });vi.stubGlobal('fetch',fetcher);render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));await screen.findByText('地圖顯示尚未確認；請重新載入查看最新期限，不會自動重送。');
- fireEvent.click(screen.getByRole('button',{name:'重新載入',exact:true}));await screen.findByRole('button',{name:'停止地圖顯示',exact:true});expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(1);
+ });vi.stubGlobal('fetch',fetcher);const first=render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));fireEvent.click(screen.getByRole('button',{name:'確認這次顯示一小時'}));await screen.findByText('有原商品操作待查核；重開只讀取回執，不會自動重送。');
+ const originalDeadline=current.mapVisibleUntil;current={...current,version:3,mapVisibleUntil:null};first.unmount();render(view());await screen.findByText('版本：3 · 原操作完成後又有更新');await screen.findByText(/原操作顯示期限：/);expect(JSON.stringify(receipt)).toContain(originalDeadline);expect(screen.getByRole('region',{name:'原商品操作與最新資料比較'})).toHaveTextContent('目前不在地圖顯示');expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+});
+it('uses English keyboard-accessible map confirmation without submitting on Escape',async()=>{
+ localStorage.setItem('user-locale','en');const fetcher=vi.fn(async()=>ok({items:[{...row,mapVisibleUntil:null}],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Check in on the map for one hour'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Check in on the map for one hour'}));const dialog=screen.getByRole('dialog',{name:'Confirm product map display'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent('never renews automatically');fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
 });

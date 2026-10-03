@@ -11,7 +11,7 @@ const uuid = (v: unknown) => isUuid(v) && v === v.toLowerCase();
 const text = (v: unknown, max: number) => typeof v === 'string' && v.length <= max && new TextDecoder().decode(new TextEncoder().encode(v)) === v;
 const date = (v: unknown) => typeof v === 'string' && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v;
 const status = (v: unknown) => ['DRAFT', 'PENDING_CONFIRMATION', 'ACTIVE', 'RESERVED', 'SOLD', 'REMOVED', 'EXPIRED'].includes(String(v)) && typeof v === 'string';
-export type ManagementBody = { kind: 'EDIT' | 'EXTEND' | 'STATUS'; listingId: string; expectedVersion: number; changes: Record<string, unknown> };
+export type ManagementBody = { kind: 'EDIT' | 'EXTEND' | 'STATUS' | 'MAP'; listingId: string; expectedVersion: number; changes: Record<string, unknown> };
 export function managementBody(value: unknown): ManagementBody {
   const row = object(value); exact(row, ['kind', 'listingId', 'expectedVersion', 'changes']);
   if (!uuid(row.listingId) || !Number.isSafeInteger(row.expectedVersion) || Number(row.expectedVersion) < 1 || Number(row.expectedVersion) > 2147483646) return fail();
@@ -28,6 +28,10 @@ export function managementBody(value: unknown): ManagementBody {
     exact(changes, ['expiryDate']); const d = changes.expiryDate;
     if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !Number.isFinite(Date.parse(d + 'T12:00:00Z')) || new Date(d + 'T12:00:00Z').toISOString().slice(0, 10) !== d) return fail();
     normalized = { expiryDate: d };
+  } else if (row.kind === 'MAP') {
+    exact(changes, ['display', 'consentToMap']);
+    if (typeof changes.display !== 'boolean' || changes.consentToMap !== changes.display) return fail();
+    normalized = { display: changes.display, consentToMap: changes.display };
   } else return fail();
   return { kind: row.kind as ManagementBody['kind'], listingId: row.listingId as string, expectedVersion: Number(row.expectedVersion), changes: normalized };
 }
@@ -50,16 +54,21 @@ export async function parseManagementJournal(raw: string): Promise<ManagementJou
   if (row.version !== 1 || !uuid(row.clientActionId) || JSON.stringify(body) !== JSON.stringify(row.body) || row.requestHash !== await sha256(JSON.stringify(body))) return fail();
   return row as ManagementJournal;
 }
-export type ManagementResult = { state: 'APPLIED' | 'CONFLICT' | 'ABANDONED'; reason: string | null; appliedVersion: number | null };
+export type ManagementResult = { state: 'APPLIED' | 'CONFLICT' | 'ABANDONED'; reason: string | null; appliedVersion: number | null; mapVisibleUntil?: string | null };
 export async function managementResult(value: unknown, raw: string): Promise<ManagementResult> {
   const j = await parseManagementJournal(raw), row = object(value); exact(row, ['receipt']);
-  const r = object(row.receipt); exact(r, ['clientActionId', 'listingId', 'kind', 'expectedVersion', 'requestHash', 'state', 'reason', 'appliedVersion', 'createdAt']);
+  const r = object(row.receipt); exact(r, ['clientActionId', 'listingId', 'kind', 'expectedVersion', 'requestHash', 'state', 'reason', 'appliedVersion', 'createdAt', ...(j.body.kind === 'MAP' ? ['mapVisibleUntil'] : [])]);
   if (r.clientActionId !== j.clientActionId || r.listingId !== j.body.listingId || r.kind !== j.body.kind || r.expectedVersion !== j.body.expectedVersion || r.requestHash !== j.requestHash || !date(r.createdAt)) return fail();
   if (r.state === 'APPLIED') { if (r.appliedVersion !== j.body.expectedVersion + 1 || r.reason !== null) return fail(); }
   else if (r.state === 'CONFLICT' || r.state === 'ABANDONED') {
     if (r.appliedVersion !== null || (r.state === 'CONFLICT' ? typeof r.reason !== 'string' || !['LISTING_CONFLICT', 'INVALID_LISTING_INPUT', 'LISTING_ACCESS_DENIED'].includes(r.reason) : r.reason !== null)) return fail();
   } else return fail();
-  return { state: r.state, reason: r.reason as string | null, appliedVersion: r.appliedVersion as number | null };
+  if (j.body.kind === 'MAP') {
+    if (r.state === 'APPLIED' && j.body.changes.display === true) {
+      if (!date(r.mapVisibleUntil) || Date.parse(r.mapVisibleUntil as string) > Date.parse(r.createdAt as string) + 3_600_000 || Date.parse(r.mapVisibleUntil as string) <= Date.parse(r.createdAt as string) - 30_000) return fail();
+    } else if (r.mapVisibleUntil !== null) return fail();
+  }
+  return { state: r.state, reason: r.reason as string | null, appliedVersion: r.appliedVersion as number | null, ...(j.body.kind === 'MAP' ? { mapVisibleUntil: r.mapVisibleUntil as string | null } : {}) };
 }
 export async function readManagement(token: string, raw: string) { const j = await parseManagementJournal(raw); return managementResult(await api(token, '/listings/management-operations/' + j.clientActionId), raw); }
 export async function sendManagement(token: string, raw: string, store: PendingStore, key: string, active: () => boolean) {

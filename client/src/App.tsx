@@ -33,6 +33,7 @@ const ApiDocsPage = createLazyPage(() => import('./pages/ApiDocsPage'));
 const ApiShowcasePage = createLazyPage(() => import('./pages/ApiShowcasePage'));
 const ChangelogPage = createLazyPage(() => import('./pages/ChangelogPage'));
 const ListingBatchPage = createLazyPage(() => import('./pages/ListingBatchPage'));
+const ManualListingPage = createLazyPage(() => import('./pages/ManualListingPage'));
 const PublicListingPage = createLazyPage(() => import('./pages/PublicListingPage'));
 const AccountDeletionPage = createLazyPage(() => import('./pages/AccountDeletionPage'));
 const MyListingsPage = createLazyPage(() => import('./pages/MyListingsPage'));
@@ -78,6 +79,7 @@ function App() {
             <Route path="wishes" element={<WishesPage />} />
             <Route path="source-leads" element={<SourceLeadMapPage />} />
             <Route path="sell" element={<ListingBatchPage />} />
+            <Route path="sell/manual" element={<ManualListingPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="reports" element={<ListingReportsPage />} />

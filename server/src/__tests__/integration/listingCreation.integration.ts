@@ -50,6 +50,36 @@ afterAll(async () => {
     } finally { await prisma.$disconnect(); }
 });
 describe('durable owner-scoped listing creation receipts', () => {
+    it('saves a name-only unverified-owner draft without photos, expiry, map exposure or a second row on replay', async () => {
+        await prisma.user.update({where:{id:owners[0]},data:{isEmailVerified:false,isPhoneVerified:false}});
+        const body={clientListingId:randomUUID(),title:'合成名稱草稿',condition:'USED',category:'other',currency:'TWD',publish:false,consentToMap:false,mediaIds:[],deliveryMethods:[],negotiable:false};
+        const first=await create(body);expect(first.status).toBe(201);
+        expect(first.body).toMatchObject({status:'DRAFT',description:null,price:null,media:[],location:null,publishedAt:null,expiresAt:null,lastVerifiedAt:null,expiryMode:'DEFAULT_30_DAYS'});
+        expect((await read(body.clientListingId)).body.receipt).toMatchObject({state:'CREATED',requestHash:hash(body),listingId:first.body.id});
+        expect((await create(body)).body.id).toBe(first.body.id);
+        expect(await prisma.listing.count({where:{ownerUserId:owners[0]}})).toBe(1);
+        expect((await http('get','/api/listings/mine')).body.items).toHaveLength(1);
+        expect((await request(server).get('/api/listings/'+first.body.id)).status).toBe(404);
+        expect((await http('get','/api/listings/'+first.body.id,owners[1])).status).toBe(404);
+        expect((await request(server).get('/api/listings')).body.items).toEqual([]);
+    });
+    it('round-trips optional draft fields and owned manual photos without starting publication', async () => {
+        const media=await prisma.listingMedia.create({data:{ownerUserId:owners[0],capturePurpose:'MANUAL_PHOTO',imageUrl:'/synthetic-manual.webp',thumbnailUrl:'/synthetic-manual-thumb.webp',contentHash:'draft-only-synthetic'}});
+        const body={clientListingId:randomUUID(),title:'合成選填草稿',description:'草稿完整欄位驗收。',brand:'合成品牌',condition:'NEW',category:'books',price:0,currency:'TWD',publish:false,consentToMap:false,mediaIds:[media.id],deliveryMethods:['SHIPPING','MEETUP'],negotiable:true,location:{county:'臺北市',district:'中山區',latitude:25.05,longitude:121.53},expiryDate:'2100-01-31'};
+        const first=await create(body);expect(first.status).toBe(201);
+        expect(first.body).toMatchObject({status:'DRAFT',brand:'合成品牌',price:'0',condition:'NEW',category:'books',deliveryMethods:['SHIPPING','MEETUP'],negotiable:true,expiryMode:'CUSTOM_DATE',expiresAt:'2100-01-31T15:59:59.999Z',publishedAt:null,location:{publicLatitude:25.05,publicLongitude:121.53,precisionMeters:2200}});
+        expect(first.body.media).toHaveLength(1);expect(first.body.media[0].capturePurpose).toBe('MANUAL_PHOTO');
+        expect((await read(body.clientListingId)).body.receipt.requestHash).toBe(hash(body));
+        expect((await prisma.listingMedia.findUniqueOrThrow({where:{id:media.id}})).listingId).toBe(first.body.id);
+        expect((await request(server).get('/api/listings')).body.items).toEqual([]);
+    });
+    it('cannot turn the original private draft operation into a publication or bind another owner photo', async () => {
+        const body={clientListingId:randomUUID(),title:'合成保持私人草稿',publish:false};const first=await create(body);
+        expect(first.status).toBe(201);expect((await create({...body,publish:true,consentToMap:true})).status).toBe(400);
+        const another=await prisma.listingMedia.create({data:{ownerUserId:owners[1],capturePurpose:'MANUAL_PHOTO',imageUrl:'/other.webp',thumbnailUrl:'/other-thumb.webp',contentHash:'other-synthetic'}});
+        expect((await create({...body,clientListingId:randomUUID(),mediaIds:[another.id]})).status).toBe(403);
+        expect(await prisma.listing.count({where:{ownerUserId:owners[0]}})).toBe(1);
+    });
     it('preserves native POST projection and returns an immutable hash-only GET receipt', async () => {
         const body = await payload(), first = await create(body);
         expect(first.status).toBe(201); expect(first.body.status).toBe('ACTIVE');

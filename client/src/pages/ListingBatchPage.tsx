@@ -685,6 +685,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       <p className="mt-3 text-sm leading-6 text-stone-600">一次上傳多張商品照，先存成私人草稿；AI 開放時會逐件產生商品資訊與參考價。請確認真實狀況及售價後才公開刊登。</p>
       {aiAvailable === false && <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">此帳號的 AI 辨識尚未開放。照片仍可私密上傳、手動填寫並刊登；不會進入 AI 隊列。</p>}
       <div className="mt-5 flex flex-wrap gap-3">
+        <Link to="/sell/manual" className="inline-flex min-h-11 items-center rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold">手動填寫／儲存商品草稿</Link>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white"><Camera size={18} />拍一件
           <input aria-label="拍一件商品" className="sr-only" type="file" accept="image/*" capture="environment" disabled={actionsLocked || cards.filter(card => !card.published).length >= 12} onChange={event => { void uploadFiles(event.target.files); event.target.value = ''; }} /></label>
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-stone-300 px-5 py-3 text-sm font-semibold"><ImagePlus size={18} />批次選照片

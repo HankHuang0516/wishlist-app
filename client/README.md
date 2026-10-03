@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+`/sell/manual` 提供與 APP 手動刊登一致的「儲存商品草稿（不公開）」與「確認並公開刊登」。只有名稱也可先儲存為後台商品 DRAFT；其餘欄位／最多八張私人 MANUAL_PHOTO 可先留白。草稿會出現在我的商品，公開入口仍要求完整欄位。這與批次照片的 sellerDraft 是兩種不同資料。加密原操作紀錄與既有建立／照片回執支援重開後只讀查核、明確原內容重試、安全取消及 CAS 清理；不保存精確 GPS，不自動重送或刪除商品／照片。
+
 ## Read-only original meetup recovery — 2026-10-03
 
 Pending meetup operations expose a bilingual original-receipt check. It sends one authenticated GET containing the original UUID and normalized request hash, without private terms or a mutation body. The server returns only the requesting participant's matching durable receipt and the current appointment from one read-only snapshot. Unknown, mismatched, unauthorized and archived results retain the journal; an old acknowledged version cannot approve newer terms. Exact local cleanup preserves a competing journal and departure fences reject late results. Reopening retains the explicit check and never replays a write. Existing native APP, appointment write contracts and migrations remain unchanged.

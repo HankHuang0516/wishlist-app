@@ -29,3 +29,8 @@ assert.equal(calls.entries.some(entry => entry.url === 'registerSW.js'), true);
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 assert.equal(html.includes('registerSW.js'), false, 'Fresh HTML must keep registration owned by the explicit-update UI.');
 console.log('Generated worker activation, client claim, metadata and existing cache policy verified.');
+const install = require('./verify-web-install.cjs').verifyWebInstall(dist);
+for (const url of [...install.icons.map(icon => icon.url), install.appleTouchIcon]) {
+  assert.equal(calls.entries.some(entry => entry.url === url.slice(1)), true, 'Installation artwork must be included in the built public precache.');
+}
+console.log('Installation PNG dimensions, Safari Home Screen icon, theme and public precache verified.');

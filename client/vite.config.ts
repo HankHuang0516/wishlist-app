@@ -18,23 +18,25 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false, // The UI owns registration and never automatically reloads forms.
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['pwa-icon-192.png', 'pwa-icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Wishlist.ai',
         short_name: 'Wishlist.ai',
         description: 'Your intelligent wishlist manager.',
-        theme_color: '#ffffff',
+        theme_color: '#78716c',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
+        id: '/',
+        scope: '/',
         icons: [
           {
-            src: '/logo.png',
+            src: '/pwa-icon-192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/logo.png',
+            src: '/pwa-icon-512.png',
             sizes: '512x512',
             type: 'image/png'
           }

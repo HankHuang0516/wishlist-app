@@ -1,4 +1,4 @@
-import { chatMessage, chatRoomPrice, chatRoomTitle, chatText, chatTime } from '../lib/chatCopy';
+import { chatMessage, chatRoomPrice, chatRoomTitle, chatText, chatTime, sourceInquiryStatus } from '../lib/chatCopy';
 import {parseLead,parseContactRouting} from '../lib/sourceLeadData';
 import {TAIWAN_DISTRICTS} from '../lib/taiwanAdministrativeDistricts';
 import SourceContactChat,{type SourceProductContext} from '../components/SourceContactChat';
@@ -38,14 +38,45 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
   const location = useLocation(), navigate = useNavigate(), params = new URLSearchParams(location.search);
   const invalidIntent = params.size > 1 || params.size === 1 && (!params.has('room')&&!params.has('source') || !isUuid(params.get('room')??params.get('source')));
   const sourceId=invalidIntent?null:params.get('source');
-  const [source,setSource]=useState<SourceProductContext|null>(null),[sourceIssue,setSourceIssue]=useState(''),[sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceProductContext}[]>([]);
+  const [source,setSource]=useState<SourceProductContext|null>(null),[sourceIssue,setSourceIssue]=useState(false),[sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceProductContext}[]>([]);
+  const [sourceBusy,setSourceBusy]=useState(true),[sourceReload,setSourceReload]=useState(0);
   const activeRoom = invalidIntent ? null : params.get('room')?.toLowerCase() ?? null;
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]), [cursor, setCursor] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [loaded, setLoaded] = useState(false);
-  useEffect(()=>{let valid=true;setSource(null);setSourceIssue('');
-    void (async()=>{try{const all:{id:string;state:string;context:SourceProductContext}[]=[];let cursor:string|null=null;const seen=new Set<string>();do{const p:{items:typeof all;nextCursor:string|null}=await api<{items:typeof all;nextCursor:string|null}>(token,'/source-leads/inquiries/mine'+(cursor?'?cursor='+cursor:''));if(!Array.isArray(p.items)||p.items.length>25||!(p.nextCursor===null||isUuid(p.nextCursor)))throw Error();all.push(...p.items.map(t=>{if(!isUuid(t.id)||typeof t.state!=='string')throw Error();return {...t,context:storedSourceContext(t.context)};}));cursor=p.nextCursor;if(cursor&&seen.has(cursor))throw Error();if(cursor)seen.add(cursor);if(all.length>2500)throw Error();}while(cursor);if(valid)setSourceThreads(all);
-      if(sourceId){const old=all.find(x=>x.context.id===sourceId);try{const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1'));if(current.id!==sourceId)throw Error();if(valid)setSource({...current,publicFacts:current.publicFacts??undefined});}catch{if(!old)throw Error();if(valid)setSource(old.context);}}
-    }catch{if(valid)setSourceIssue('來源對話暫時無法讀取；不會改接其他商品，請返回收件匣重試。');}})();return()=>{valid=false;};
-  },[token,sourceId]);
+  useEffect(()=>{
+    let valid=true;
+    const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30_000);
+    setSource(null);setSourceIssue(false);setSourceBusy(true);
+    void (async()=>{
+      try {
+        const all:{id:string;state:string;context:SourceProductContext}[]=[];
+        let cursor:string|null=null;const seen=new Set<string>();
+        do {
+          const page:{items:typeof all;nextCursor:string|null}=await api<{items:typeof all;nextCursor:string|null}>(token,'/source-leads/inquiries/mine'+(cursor?'?cursor='+cursor:''),{signal:controller.signal});
+          if(!valid)return;
+          if(controller.signal.aborted)throw Error();
+          if(!Array.isArray(page.items)||page.items.length>25||!(page.nextCursor===null||isUuid(page.nextCursor)))throw Error();
+          all.push(...page.items.map(thread=>{if(!isUuid(thread.id)||typeof thread.state!=='string')throw Error();return {...thread,context:storedSourceContext(thread.context)};}));
+          cursor=page.nextCursor;if(cursor&&seen.has(cursor))throw Error();if(cursor)seen.add(cursor);if(all.length>2500)throw Error();
+        }while(cursor);
+        setSourceThreads(all);
+        if(sourceId){
+          const old=all.find(thread=>thread.context.id===sourceId);
+          try {
+            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1',{signal:controller.signal}));
+            if(controller.signal.aborted)throw Error();
+            if(current.id!==sourceId)throw Error();
+            if(valid&&!controller.signal.aborted)setSource({...current,publicFacts:current.publicFacts??undefined});
+          }catch(failure){
+            if(controller.signal.aborted||!old)throw failure;
+            if(valid)setSource(old.context);
+          }
+        }
+      }catch{if(valid)setSourceIssue(true);}
+      finally{window.clearTimeout(timer);if(valid)setSourceBusy(false);}
+    })();
+    return()=>{valid=false;window.clearTimeout(timer);controller.abort();};
+  },[token,sourceId,sourceReload]);
+  const sourceFeedback=<>{sourceIssue&&<div role="alert" className="space-y-2 rounded-xl bg-red-50 p-3 text-red-800"><p>{chatText('來源對話暫時無法讀取；原內容保留，請重試讀取來源對話。')}</p><button type="button" className={button} disabled={sourceBusy} onClick={()=>setSourceReload(value=>value+1)}>{chatText('重試讀取來源對話')}</button></div>}{sourceBusy&&<p role="status">{chatText('正在讀取來源對話…')}</p>}</>;
   const active = useRef(true), gate = useRef(false), seq = useRef(0), seen = useRef(new Set<string>());
   const autoPause = useChatReadPause();
   const roomIntent = useRef(activeRoom); roomIntent.current = activeRoom;
@@ -69,8 +100,8 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
   useEffect(() => { if (!activeRoom && loaded) void load(); }, [activeRoom]);
   return <section className="mx-auto max-w-3xl space-y-4 pb-20"><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header>
     {invalidIntent && <div role="alert" className="rounded-xl bg-red-50 p-3">{chatText("聊天連結無效，不會使用不明識別碼查詢。")}<button className={button} onClick={() => navigate('/chat', { replace: true })}>{chatText("返回收件匣")}</button></div>}
-    {sourceId ? <>{sourceIssue&&<p role="alert">{sourceIssue}</p>}{source?<SourceContactChat key={`${userId}:${source.id}`} source={source} onBack={()=>navigate('/explore?source='+source.id)}/>:!sourceIssue&&<p role="status">正在讀取這件商品的對話…</p>}</> : activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
-      {sourceIssue&&<p role="alert">{sourceIssue}</p>}<div className="space-y-3"><h2 className="font-semibold">Wishlist AI 代問</h2>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {t.state==='WAITING_ROUTE'?'待核實原賣家，未送出':t.state==='DELIVERED'?'已代轉，查看原賣家回覆':t.state==='CANCELLED'?'已取消':'查看問題與下一步'}</span></span></button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
+    {sourceId ? <>{sourceFeedback}{source&&<SourceContactChat key={`${userId}:${source.id}`} source={source} onBack={()=>navigate('/explore?source='+source.id)}/>}</> : activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
+      {sourceFeedback}<div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{chatText('Wishlist AI 代問')}</h2><button type="button" className={button} disabled={sourceBusy} onClick={()=>setSourceReload(value=>value+1)}>{chatText('重新讀取來源對話')}</button></div>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {sourceInquiryStatus(t.state)}</span></span></button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
       {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
       <div className="space-y-3">{rooms.map(room => <button key={room.id} type="button" className="flex w-full min-w-0 items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm" onClick={() => navigate('/chat?room=' + room.id)} aria-label={chatText('{title}，與{name}聊天{unread}', { title: chatRoomTitle(room), name: (room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText('商品聯絡人'), unread: room.unreadCount ? chatText('，{count} 則未讀', { count: room.unreadCount }) : '' })}>
         <span className="w-16 flex-none overflow-hidden rounded-xl"><RoomPhoto room={room} token={token} /></span><span className="min-w-0 flex-1"><span className="block break-words font-semibold">{chatRoomTitle(room)}</span><span className="block text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || (room.archived ? chatText("已移除的帳號") : chatText("商品聯絡人"))} · {chatRoomPrice(room)}</span>

@@ -1063,3 +1063,12 @@ No schema migration, new service or new credentials are needed. Internal32 remai
 Validation: sourceCountyIllustration unit4, source/contact/Explore focused Web53, full pre-push validation exit0 in independent localhost TEST_DATABASE_URL. Server unit61 suites951 tests passed with3 preexisting skips; real database41 suites640 tests include opt-in/legacy exclusion, no duplicate IDs, dry-run no persistence and no inventory mutation. Web/native counts are in the companion validation log. Production acceptance is pending and must be recorded after actual deployment/import.
 
 Rollback: revert this application change to hide COUNTY_ILLUSTRATION rows under old validation; retain all source/archive IDs and inquiry histories. Do not delete or rewrite existing30 photos/records, do not enable ExternalListing inventory or change credentials. County rows persist as metadata and can be assessed separately.
+
+
+## 2026-10-03 native county illustration and Taipei unknown-district scope
+
+Internal33 adds approximate=1 to native source list, detail and before opening the original post. Strict parsing separates COUNTY_ILLUSTRATION from public places; approximate markers use amber and all item/list/group cards retain thumbnails, name and original asking-price labels. New54 have no verified media mapping and show the existing unavailable-photo state. No county polygon, random scatter, precise distance, navigation or new GPS permission. Existing source inquiry receipts, session fences and UNKNOWN/qualifiedSupply=false/checkout=false remain.
+
+Only explicit Taipei city-only records may use the literal administrative-district-unknown value, with districtStatus=UNKNOWN in bound original county evidence; no guessed district or private address. Government dataset25489 selected county representative is a schematic point only. No schema migration; old native contract still excludes approximate rows. Web2.0.605, Android2.0.15/code33 prepared; no iOS or production-track release. Two exact candidate IDs are from post3595870063915741, not synthetic stock. Remaining16 have unknown county and are excluded.
+
+Validation/deployment/emulator evidence remains separate. Existing ADB permission failure is not retried or bypassed; read-only AVD enumeration returned names but its Crashpad helper reported permission denial. No emulator UI automation tool is currently available; do not claim signed-build login/Agent E2E acceptance from local parser or API tests.

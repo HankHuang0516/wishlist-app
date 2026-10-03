@@ -4,6 +4,9 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  "概略位置，非取貨點": "Approximate location, not a pickup point",
+  "公共面交點": "Public meeting point",
+  "不是商品或賣家所在地。": "Not the item or seller location.",
   "來源商品圖片": "Source item photo",
   "來源商品圖片，顯示縮圖": "Source item photo, showing a thumbnail",
   "來源商品圖片，縮圖已載入": "Source item photo, thumbnail loaded",

@@ -1,3 +1,4 @@
+import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {publicCommentRoute,publicCommentPayload} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
@@ -209,9 +210,10 @@ export function createSourceLeadRoutes() {
         try {
             if (!enabled())
                 return res.json({ items: [], nextCursor: null, enabled: false });
-            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation'].includes(k)))
+            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'approximate'].includes(k)))
                 throw new LeadError('INVALID_QUERY');
             if (req.query.presentation !== undefined && req.query.presentation !== '1') throw new LeadError('INVALID_PRESENTATION');
+            if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
             const q = String(req.query.q ?? '');
             if (q.length > 80)
                 throw new LeadError('INVALID_QUERY');
@@ -236,7 +238,7 @@ export function createSourceLeadRoutes() {
                 }
                 for (const r of rows) {
                     next = r.id;
-                    if (leadCurrent(r))
+                    if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1'))
                         items.push(leadDTO(r, req.query.presentation === '1'));
                     if (items.length === 25)
                         break;
@@ -289,8 +291,9 @@ export function createSourceLeadRoutes() {
         if (!enabled() || !isListingId(req.params.id))
             return res.sendStatus(404);
         const l = await prisma.externalSourceLead.findUnique({ where: { id: String(req.params.id) } });
-        if (Object.keys(req.query).some(k => k !== 'presentation') || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
-        return l && leadCurrent(l) ? res.json(leadDTO(l, req.query.presentation === '1')) : res.sendStatus(404);
+        if (Object.keys(req.query).some(k => !['presentation','approximate'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
+        if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
+        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1')) : res.sendStatus(404);
     }
     catch (e) {
         return fail(res, e);

@@ -1,3 +1,4 @@
+import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL} from './sourceCountyIllustration';
 import {publicCommentRoute} from './sourcePublicComment';
 import { createHash } from 'crypto';
 import { sourceLeadMediaDTO } from './sourceLeadMedia';
@@ -32,18 +33,25 @@ export function parseLead(input: unknown, now = new Date()) {
     const b = object(input);
     exact(b, ['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'evidence']);
     const e = object(b.evidence);
-    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media']);
+    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media', 'countyIllustration']);
     if (!text(b.archiveItemId, 160) || !/^libfile_[a-f0-9]{32}$/.test(b.libraryFileId) || !Number.isSafeInteger(b.archiveVersion) || b.archiveVersion < 0 || !/^[a-f0-9]{64}$/.test(b.archiveSha256))
         throw new LeadError('ARCHIVE_IDENTITY_REQUIRED');
     const canonicalUrl = publicUrl(b.canonicalUrl);
     if (!text(b.title, 100) || !text(b.summary, 240) || forbiddenListingField({ title: b.title, description: b.summary }) || privateContactField({ title: b.title, description: b.summary }) || /https?:\/\/|@|(?:電話|手機|LINE|微信|帳號)\s*[:：]/i.test(b.title + ' ' + b.summary))
         throw new LeadError('SAFE_SELF_WRITTEN_FACTS_REQUIRED');
-    if (!TAIWAN_DISTRICTS[b.county]?.has(b.district) || !text(b.publicPlaceName, 100) || !text(b.publicAddress, 200) || !b.publicAddress.replace(/^台/, '臺').startsWith(b.county + b.district) || b.publicAddress.slice((b.county + b.district).length).trim().length < 3)
+    const approximate=isCountyIllustration(e);
+    if (!approximate && (!TAIWAN_DISTRICTS[b.county]?.has(b.district) || !text(b.publicPlaceName, 100) || !text(b.publicAddress, 200) || !b.publicAddress.replace(/^台/, '臺').startsWith(b.county + b.district) || b.publicAddress.slice((b.county + b.district).length).trim().length < 3))
         throw new LeadError('CONCRETE_PUBLIC_PLACE_REQUIRED');
     if ([b.publicPlaceName, b.publicAddress].some(v => privateContactField({ title: v }) || forbiddenListingField({ title: v })))
         throw new LeadError('SAFE_PUBLIC_PLACE_REQUIRED');
     const postedEarliestAt = date(b.postedEarliestAt), postedLatestAt = date(b.postedLatestAt), checkedAt = date(b.checkedAt);
-    if (e.sourceUrl !== canonicalUrl || [e.sourcePublic, e.publicPlace, e.sourceMeetingPointConfirmed, e.independentlyReviewed, e.selfWrittenSummary, e.noCopiedTextOrImages, e.noPrivateData].some(v => v !== true) || e.locationType !== 'PUBLIC_MEETING_POINT' || ![e.publicSourceRef, e.dateRef, e.locationRef, e.coordinateRef, e.reviewRef].every(ref))
+    if(approximate) {
+        const c=object(e.countyIllustration),point=countyIllustration(b.county);
+        exact(c,['county','sourceUrl','sourceCountyRef','representativeKey','approvalRef']);
+        if(!point||!TAIWAN_DISTRICTS[b.county]?.has(b.district)||c.county!==b.county||c.sourceUrl!==canonicalUrl||!ref(c.sourceCountyRef)||!ref(c.approvalRef)||c.representativeKey!==point.key||b.latitude!==point.latitude||b.longitude!==point.longitude||b.publicPlaceName!==b.county+'概略示意位置'||b.publicAddress!==b.county+'（'+COUNTY_ILLUSTRATION_LABEL+'）'||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.locationSourceUrl!==canonicalUrl||e.coordinateSourceUrl!==COUNTY_ILLUSTRATION_SOURCE||e.coordinateNodeVersion!==undefined)
+            throw new LeadError('BOUND_COUNTY_ILLUSTRATION_REQUIRED');
+    } else if(e.countyIllustration!==undefined) throw new LeadError('INVALID_LOCATION_PRECISION');
+    if (e.sourceUrl !== canonicalUrl || [e.sourcePublic, e.independentlyReviewed, e.selfWrittenSummary, e.noCopiedTextOrImages, e.noPrivateData].some(v => v !== true) || (!approximate&&([e.publicPlace,e.sourceMeetingPointConfirmed].some(v=>v!==true)||e.locationType!=='PUBLIC_MEETING_POINT')) || ![e.publicSourceRef, e.dateRef, e.locationRef, e.coordinateRef, e.reviewRef].every(ref))
         throw new LeadError('BOUND_PUBLIC_EVIDENCE_REQUIRED');
     publicUrl(e.locationSourceUrl);
     publicUrl(e.coordinateSourceUrl);
@@ -77,7 +85,7 @@ export function contactRoutingDTO(lead:ExternalSourceLead,now=new Date()) {
     if(r&&['UNAVAILABLE','UNVERIFIED'].includes(r.status)&&r.leadId===lead.id&&r.sourceUrl===lead.canonicalUrl&&r.contentHash===lead.contentHash&&ref(r.identityEvidenceRef)&&ref(r.routeEvidenceRef)&&typeof r.reason==='string'&&r.reason.length<=240&&!privateContactField({title:r.reason})&&Number.isFinite(Date.parse(r.checkedAt))&&Date.parse(r.checkedAt)<=now.getTime()&&now.getTime()-Date.parse(r.checkedAt)<48*3600000)return {status:r.status,reason:r.reason,checkedAt:r.checkedAt};
     return {status:'UNVERIFIED',reason:'原貼文與作者身份不等於可收訊路由；尚未核實原賣家可用的聯絡入口，未外送。',checkedAt:null};
 }
-export function leadDTO(r: ExternalSourceLead, presentation = false) { return { ...(presentation ? {media: sourceLeadMediaDTO(r),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: '來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。' }; }
+export function leadDTO(r: ExternalSourceLead, presentation = false) { return { ...(presentation ? {media: sourceLeadMediaDTO(r),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', ...(isCountyIllustration(r.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:{}), title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: isCountyIllustration(r.evidence)?'概略位置，非取貨點；縣市示意座標不代表商品、賣家或可面交位置，庫存與交易待確認。':'來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。' }; }
 export type LeadEvent = {
     requestId: string;
     action: string;

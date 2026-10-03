@@ -20,7 +20,7 @@ export function useSourceLeadSearch(token: string, query: ExploreQuery | null) {
         const rows: SourceLead[] = [], seen = new Set<string>();
         let cursor: string | null = null;
         do {
-          const path = '/source-leads?presentation=1&bbox=' + query!.bounds.join(',') + '&q=' + encodeURIComponent(query!.filters.q) + (cursor ? '&cursor=' + cursor : '');
+          const path = '/source-leads?presentation=1&approximate=1&bbox=' + query!.bounds.join(',') + '&q=' + encodeURIComponent(query!.filters.q) + (cursor ? '&cursor=' + cursor : '');
           const page = parseLeadPage(await api<unknown>(token, path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) }));
           rows.push(...page.items); cursor = page.nextCursor;
           if (cursor && seen.has(cursor)) throw Error();

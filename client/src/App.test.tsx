@@ -11,7 +11,7 @@ describe('App', () => {
         window.history.replaceState(null,'','/source-leads?id=11111111-1111-4111-8111-111111111111');
         render(<App />);
         await screen.findByRole('heading',{name:'來源線索地圖'});
-        await screen.findByText('0 件來源線索・0 個公共地點');
+        await screen.findByText('0 件來源線索・0 個公共／概略示意位置');
         expect(window.location.search).toBe('?id=11111111-1111-4111-8111-111111111111');
         expect(screen.getByRole('link',{name:'Wishlist.ai'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('link',{name:'Wishlist.ai'}));

@@ -90,11 +90,11 @@ export function useSourceInquiry(id: string) {
    if (!journal) {
     if (!active) {
      if (kind !== 'ASK' || recovery.inquiry || recovery.cancel) { publish({ error: text('noRoom') }); return; }
-     await request(`/source-leads/${id}`); active = parseLeadRoom(await request(roomPath, {}), id); if (!current()) return; publish({ room: active });
+     await request(`/source-leads/${id}?approximate=1`); active = parseLeadRoom(await request(roomPath, {}), id); if (!current()) return; publish({ room: active });
     }
     if (kind !== 'CANCEL') {
      if (room ? room.transferHash !== active.transferHash : active.events.some(e => e.action === 'ASK')) { publish({ error: text('changed') }); return; }
-     await request(`/source-leads/${id}`);
+     await request(`/source-leads/${id}?approximate=1`);
     }
     const payload: SourcePayload = kind === 'ASK' ? { requestId: crypto.randomUUID(), action: 'ASK', text: question, consent: true, transferHash: active.transferHash } : kind === 'CONSENT' ? { requestId: crypto.randomUUID(), action: 'CONSENT', consent: true, transferHash: active.transferHash } : { requestId: crypto.randomUUID(), action: 'CANCEL' };
     const body = JSON.stringify({ version: 1, leadId: id, roomId: active.id, payload }), key = await sourceJournalKey(API_URL, owner, id, payload.action === 'CANCEL'), operation = parseSourcePending(body, id);

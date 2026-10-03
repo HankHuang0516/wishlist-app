@@ -1053,3 +1053,13 @@
 - 尚未達全目標：新協定延長／保留／移除／全部分頁真UI、未送出新編輯autosave、日曆完整選日、私人照片刪除失聯／舊紀錄、真MiniMax／Flickr四圖與跨端、行銷舊工作與上下文轉換、舊願望／分享／隱私／刪除、個資其他設定／註冊／社交／通知／政策、PWA舊快取與全站響應式／效能、正式資料migration preflight及最後CI／合併／Railway正式回讀仍保留。PR82 draft／未部署，完整目標active；不以本批成功替代全部功能100%。
 
 - PR101初次精確head ed17ec423828df5d529a6a27699c6dbad6e26059／CI37039955819保留：Web1771成功但原MyListings StrictMode stale-restore測試1失敗，尚未合併或部署。原因是兩個真WebCrypto scope-key promise完成順序不固定，mockImplementationOnce把刻意延遲的old失敗分配給current effect。此单案fixture改為有帳號／scope的deterministic key，仍驗兩次StrictMode restore、舊失敗不得改新表單／啟用／alerts，產品code不改、不放寬timeout。新候選依HEAD560＋1為v561，新候選完整Web111檔1772項／build及worker版號檢查通過，新精確三CI接續；Server runtime樹未改且前次完整930＋3skipped/build證據保留。
+
+## 2026-10-03 county illustration source lead Web rollout
+
+Original-post county evidence and the selected county illustrative point are separately bound. Source lead evidence uses COUNTY_ILLUSTRATION with publicPlace=false and sourceMeetingPointConfirmed=false; exact coordinates must match the approved two-county registry. District names retain original source region, while the point represents the county only. Web opts in with approximate=1 and labels every card/detail as an approximate location, not a pickup point. No precise distance, navigation, seller address or item-location claim is added. Existing concrete public places retain their strict validation.
+
+No schema migration, new service or new credentials are needed. Internal32 remains on its existing source list/detail contract without approximate=1 and cannot receive the new county pins as public meeting points. Native county support or an internal33 release is not included. Existing source inquiry receipts/recovery, two-calendar-month and48h gates, UNKNOWN stock, qualifiedSupply=false, checkout=false and external inventory disabled remain. The remaining18 without approved source county evidence are excluded. Images for new52 are not imported.
+
+Validation: sourceCountyIllustration unit4, source/contact/Explore focused Web53, full pre-push validation exit0 in independent localhost TEST_DATABASE_URL. Server unit61 suites951 tests passed with3 preexisting skips; real database41 suites640 tests include opt-in/legacy exclusion, no duplicate IDs, dry-run no persistence and no inventory mutation. Web/native counts are in the companion validation log. Production acceptance is pending and must be recorded after actual deployment/import.
+
+Rollback: revert this application change to hide COUNTY_ILLUSTRATION rows under old validation; retain all source/archive IDs and inquiry histories. Do not delete or rewrite existing30 photos/records, do not enable ExternalListing inventory or change credentials. County rows persist as metadata and can be assessed separately.

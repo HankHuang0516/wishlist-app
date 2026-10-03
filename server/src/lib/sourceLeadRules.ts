@@ -1,4 +1,4 @@
-import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL} from './sourceCountyIllustration';
+import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL, UNKNOWN_SOURCE_DISTRICT} from './sourceCountyIllustration';
 import {publicCommentRoute} from './sourcePublicComment';
 import { createHash } from 'crypto';
 import { sourceLeadMediaDTO } from './sourceLeadMedia';
@@ -47,8 +47,9 @@ export function parseLead(input: unknown, now = new Date()) {
     const postedEarliestAt = date(b.postedEarliestAt), postedLatestAt = date(b.postedLatestAt), checkedAt = date(b.checkedAt);
     if(approximate) {
         const c=object(e.countyIllustration),point=countyIllustration(b.county);
-        exact(c,['county','sourceUrl','sourceCountyRef','representativeKey','approvalRef']);
-        if(!point||!TAIWAN_DISTRICTS[b.county]?.has(b.district)||c.county!==b.county||c.sourceUrl!==canonicalUrl||!ref(c.sourceCountyRef)||!ref(c.approvalRef)||c.representativeKey!==point.key||b.latitude!==point.latitude||b.longitude!==point.longitude||b.publicPlaceName!==b.county+'概略示意位置'||b.publicAddress!==b.county+'（'+COUNTY_ILLUSTRATION_LABEL+'）'||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.locationSourceUrl!==canonicalUrl||e.coordinateSourceUrl!==COUNTY_ILLUSTRATION_SOURCE||e.coordinateNodeVersion!==undefined)
+        exact(c,['county','sourceUrl','sourceCountyRef','representativeKey','approvalRef','districtStatus']);
+        const districtUnknown=b.county==='臺北市'&&b.district===UNKNOWN_SOURCE_DISTRICT;
+        if(!point||(!TAIWAN_DISTRICTS[b.county]?.has(b.district)&&!districtUnknown)||(districtUnknown?c.districtStatus!=='UNKNOWN':c.districtStatus!==undefined)||c.county!==b.county||c.sourceUrl!==canonicalUrl||!ref(c.sourceCountyRef)||!ref(c.approvalRef)||c.representativeKey!==point.key||b.latitude!==point.latitude||b.longitude!==point.longitude||b.publicPlaceName!==b.county+'概略示意位置'||b.publicAddress!==b.county+'（'+COUNTY_ILLUSTRATION_LABEL+'）'||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.locationSourceUrl!==canonicalUrl||e.coordinateSourceUrl!==COUNTY_ILLUSTRATION_SOURCE||e.coordinateNodeVersion!==undefined)
             throw new LeadError('BOUND_COUNTY_ILLUSTRATION_REQUIRED');
     } else if(e.countyIllustration!==undefined) throw new LeadError('INVALID_LOCATION_PRECISION');
     if (e.sourceUrl !== canonicalUrl || [e.sourcePublic, e.independentlyReviewed, e.selfWrittenSummary, e.noCopiedTextOrImages, e.noPrivateData].some(v => v !== true) || (!approximate&&([e.publicPlace,e.sourceMeetingPointConfirmed].some(v=>v!==true)||e.locationType!=='PUBLIC_MEETING_POINT')) || ![e.publicSourceRef, e.dateRef, e.locationRef, e.coordinateRef, e.reviewRef].every(ref))

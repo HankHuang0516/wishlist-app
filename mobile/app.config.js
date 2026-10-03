@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: 'Wishlist.ai',
     slug: 'weeshgifts',
-    version: '2.0.14',
+    version: '2.0.15',
     orientation: 'portrait',
     scheme: 'weesh',
     userInterfaceStyle: 'automatic',
@@ -24,7 +24,7 @@ module.exports = {
     },
     android: {
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 32,
+      versionCode: 33,
       allowBackup: false,
       blockedPermissions: [
         'android.permission.SYSTEM_ALERT_WINDOW',

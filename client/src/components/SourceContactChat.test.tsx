@@ -42,6 +42,13 @@ function fixture({unknown=false,reject=false,wrong=false,uncommitted=false}: {un
 async function enter() {const onBack=vi.fn();render(<MemoryRouter><SourceContactChat source={source()} onBack={onBack}/></MemoryRouter>);await waitFor(()=>expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false));return onBack;}
 async function send(text='請確認現貨'){fireEvent.change(screen.getByRole('textbox'),{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'送出並委託聯絡賣家'}));await waitFor(()=>expect(screen.getByRole('button',{name:'更新'})).not.toBeDisabled());}
 describe('source contact inside the original Explore and Chat',()=>{
+ it.each(['zh-TW','en-US'])('keeps a county-only source explicit about approximate location and never sends on display in %s',async locale=>{
+  localStorage.setItem('user-locale',locale);const f=fixture();
+  render(<MemoryRouter><SourceContactChat source={{...source(),county:'臺北市',district:'行政區未明示',locationPrecision:'COUNTY_ILLUSTRATION'}} onBack={()=>{}}/></MemoryRouter>);
+  await screen.findByText(locale==='zh-TW'?'概略位置，非取貨點；實際所在地與取貨方式仍待原賣家確認。':'Approximate location, not a pickup point. Confirm the actual location and pickup options with the original seller.');
+  await waitFor(()=>expect(screen.getByRole('textbox')).not.toBeDisabled());expect(f.getActions()).toBe(0);
+  expect(f.fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+ });
  it.each(['zh-TW','en-US'])('missing imported price stays unavailable through card, detail and chat in %s, without writes',async locale=>{
   localStorage.setItem('user-locale',locale);
   const f=fixture(),original=f.fetch.getMockImplementation()!;

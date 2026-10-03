@@ -6,7 +6,7 @@ import { ApiFailure } from '../lib/marketplaceApi';
 import ChatPage from './ChatPage';
 const { api } = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock('../lib/marketplaceApi', async original => ({ ...await original<typeof import('../lib/marketplaceApi')>(), api }));
-vi.mock('../components/SourceContactChat', () => ({ default: ({ source }: { source: { title: string } }) => <p>Original source: {source.title}</p> }));
+vi.mock('../components/SourceContactChat', () => ({ default: ({ source }: { source: { title: string; locationPrecision?: string } }) => <><p>Original source: {source.title}</p><p>Saved location: {source.locationPrecision ?? 'PUBLIC_MEETING_POINT'}</p></> }));
 const auth = { token: 'source-fixture', user: { id: 42, phoneNumber: 'synthetic-only' }, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
 const sourceId = 'b373aae4-51cf-48ce-a82b-93ad0b42716a';
 const context = { id: sourceId, title: '原始商品名稱 {version} 250.7500 USD', county: '臺南市', district: '永康區', canonicalUrl: 'https://www.facebook.com/marketplace/item/8600/', media: [] };
@@ -21,6 +21,46 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe('source inquiry inbox language and explicit read recovery', () => {
+  it.each(['zh-TW', 'en-US'])('reads a mixed inbox with a marked city-only source in %s without losing ordinary history or writing', async locale => {
+    localStorage.setItem('user-locale', locale);
+    const city = { ...context, title: '只有縣市的原商品', county: '臺北市', district: '行政區未明示', locationPrecision: 'COUNTY_ILLUSTRATION' };
+    api.mockImplementation(async (_: string, path: string) => path.startsWith('/source-leads/inquiries/mine') ? { items: [threads[0], { ...threads[1], context: city }], nextCursor: null } : { items: [], nextCursor: null });
+    render(view());
+    await screen.findByText(city.title);
+    expect(screen.getByText(context.title)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(reads()).toHaveLength(1); expect(writes()).toHaveLength(0);
+  });
+  it.each([
+    { county: '臺北市', district: '行政區未明示' },
+    { county: '臺北市', district: '行政區未明示', locationPrecision: 'PRECISE' },
+    { county: '臺南市', district: '行政區未明示', locationPrecision: 'COUNTY_ILLUSTRATION' },
+    { county: '臺北市', district: '不是真實行政區', locationPrecision: 'COUNTY_ILLUSTRATION' },
+  ])('retains strict rejection of unsupported saved location $county $district $locationPrecision', async location => {
+    api.mockImplementation(async (_: string, path: string) => path.startsWith('/source-leads/inquiries/mine') ? { items: [{ ...threads[0], context: { ...context, ...location } }], nextCursor: null } : { items: [], nextCursor: null });
+    render(view()); await screen.findByText(/Source conversations could not be read/);
+    expect(screen.queryByText(context.title)).not.toBeInTheDocument(); expect(writes()).toHaveLength(0);
+  });
+  it('opens the original marked city-only history after withdrawal using GET only and preserves its location marker', async () => {
+    const city = { ...context, county: '臺北市', district: '行政區未明示', locationPrecision: 'COUNTY_ILLUSTRATION' };
+    api.mockImplementation(async (_: string, path: string) => {
+      if (path.startsWith('/source-leads/inquiries/mine')) return { items: [{ ...threads[0], context: city }], nextCursor: null };
+      if (path.startsWith('/source-leads/' + sourceId)) throw new ApiFailure('withdrawn', 404);
+      return { items: [], nextCursor: null };
+    });
+    render(view(auth.token, true));
+    await screen.findByText('Original source: ' + context.title);
+    expect(screen.getByText('Saved location: COUNTY_ILLUSTRATION')).toBeInTheDocument(); expect(writes()).toHaveLength(0);
+  });
+  it('recovers an initially unmarked city history only after explicit retry receives the trusted marker', async () => {
+    let marked = false;
+    const city = { ...context, county: '臺北市', district: '行政區未明示' };
+    api.mockImplementation(async (_: string, path: string) => path.startsWith('/source-leads/inquiries/mine') ? { items: [{ ...threads[0], context: { ...city, ...(marked ? { locationPrecision: 'COUNTY_ILLUSTRATION' } : {}) } }], nextCursor: null } : { items: [], nextCursor: null });
+    render(view()); await screen.findByText(/Source conversations could not be read/);
+    marked = true; fireEvent.click(screen.getByRole('button', { name: 'Retry source conversations' }));
+    await screen.findByText(context.title);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument(); expect(reads()).toHaveLength(2); expect(writes()).toHaveLength(0);
+  });
   it('shows English status accurately for forwarding and withdrawal review while retaining original product content', async () => {
     render(view());
     await screen.findByRole('heading', { name: 'Wishlist AI inquiries' });

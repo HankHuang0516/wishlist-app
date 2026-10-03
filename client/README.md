@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+Source inquiry history carries an explicit server-derived COUNTY_ILLUSTRATION marker for approved county illustrations. A city-only Taipei context keeps its unknown district; an unmarked or invalid district still fails validation. Mixed source history and the original withdrawn context remain readable, while historical media stays suppressed. Source chat displays a bilingual approximate-location notice and never treats the county pin as a pickup point. Reading and retrying history do not submit inquiries; APP source and existing write/recovery permissions are unchanged.
+
 ## Strict public friend wishlist identities
 
 Public friend-wishlist reads use the same positive 32-bit identity rules as friend profiles and follow state. Suffixes, decimal or exponent syntax, leading zeros, whitespace and overflow are rejected before database lookup; malformed IDs cannot silently alias a valid public account. Valid IDs retain the existing authenticated, private/no-store projection, hidden-item filtering and unknown-target empty collection. Original APP, relationship writes and migrations remain unchanged.

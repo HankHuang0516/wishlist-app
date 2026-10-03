@@ -12,7 +12,19 @@
 
 目標：正式 Railway 網頁完整提供 APP 已存在的所有可適用功能，並讓首頁與設定頁各自對齊已核准 AI 示意圖至少90%相似度；保留原網站風格與既有功能，APP既定風格不變。視覺門檻由99%調整為90%，不降低功能、測試或正式部署驗收要求。這不是 APP 發布成功或付款正式開通的聲明。
 
-目前狀態：正式Web2.0.630／原PR124与Railway SUCCESS latest保持，APP2.0.12不改。第112批原iOS12 DEBUG正常同正式QA928：僅local proxy marketing GET受控503，真UI會員／餘額未知→離開我的→移除故障後重新進入，真正常GET200與原會員／永久0恢復，XCTest1/1與兩PNG保留。原host收尾users/me200後marketing429、整體exit1與manager tool error未回傳exit／releaseflag均保留，不冒稱原wrapper全部成功；独立正常登入／GET200與native前後rawresponse SHA一致、自有lease／queue0及port關閉另驗。第111批Web權益success→browserinspector failure→explicitRetry200与36相關測試保持，第110批正式Home／Settings各fresh人工90保持。source129／183原native／compiled／APPdebug及四樹不改，無產品修改或新部署。85–111共2403不可變紀錄保持，native圖private local-only。非會員／月用完runtime与其餘完整32列安全／mail／provider／OS／mixedversion等待項、完整goal active保持。
+目前狀態：依使用者「部署目前網頁版最新進度」指示，正式Web已發布2.0.633，PR126與精確候選三組CI通過、原Railway最新部署SUCCESS；公開版本、主程式與探索／聊天／設定資源逐bytes核對，實際三頁均633、六個導覽且設定唯一。探索真頁正常；聊天來源代問仍顯示讀取提示，明確正常GET200重試後仍存在，根因未確認且未宣稱聊天全功能驗收。完整Web1944測試與build通過；首次SettingsInstall等待一秒失敗原記錄保留，未修改的14項單獨重測全過後只把既有頁面heading等待上限改五秒，不改產品行為。第111／112批跨端權益及原收尾失敗／獨立恢復證據完整保留，第110批Home／Settings各人工90保持但不重評633。原APP2.0.12、183native與compiled／APPdebug、原129改動、server／native／worker樹不改；本次僅版本、測試等待與112驗收矩陣同步。完整32列其餘正式跨端／非會員／月用完／provider／mail／OS／mixedversion／安全與永久動作時權限等等待項保留，完整goal active。
+
+## 第一百一十三批：使用者指定立即部署目前最新網頁進度
+
+- 使用者明確要求把最新網頁進度發布並提供連結，接續「每完成功能就部署」授權；本次正式發布2.0.633到既有Railway project／production／service，無新網站、環境、權限或外部通知。原APP2.0.12與整體功能對齊目標保持。
+- 起始main ee7515994a8cb5085fd0f052d563f168a7594727、Git數632，版號按HEAD數加一633。只提交client package版本／lock版本、已完成到112批的功能矩陣，以及SettingsInstall既有heading wait上限五秒；依精確expected paths提交，保留原129未提交修改，無產品功能source、server、native或worker改動。
+- 第一次完整測試1943pass／1fail：Home轉Settings的lazy heading未在預設一秒內觀察到。原14項未改程式單獨重測全過，只能推論是負載下readiness等待敏感，不聲稱正式網站功能故障或已證明具體CPU根因。保留原log／exit1與focused結果；不刪任何安裝斷言、不改global timeout，僅既有真頁面heading await改bounded5000ms。修正後完整126files／1944tests全過及build0。
+- PR126 https://github.com/HankHuang0516/wishlist-app/pull/126，候選 8093b191655143127ca8c91fc920a790ae6e4187，精確CI 37120570247 的三required jobs全success；實際各測試數另存ci-test-counts，不把upstream15 native CI當作原APP12本次runtime。merge 956c8bcf3bb947c12b6908a81ba14d9786d24506，empty deployment trigger 14f6ad6e0bcb1962ce2111cabca5291b6f28b12c；CLI只從乾淨精確候選四樹checkout上傳。
+- Railway 4fcf3238-d86e-4199-9c51-87168edabfd3 SUCCESS且latest ID相同；uploads原mount保留，未修改vars。providercommitmetadata為實際返回值，若null不補造Git關聯，精確source／CI→CLI returned deployment ID另存。公開version／index meta633、entry與ExplorePage／ChatPage／SettingsPage逐bytes對local production dist，health與三SPA路徑200。
+- 原已開網站透過正常更新／重載取得633；不清除快取、local storage、private journal或帳號。managed own GUI階段逐實際Explore／Chat／Settings route、meta633、1280×720、六個導覽、唯一Settings入口核對。只導覽與網站更新，無profile／privacy／付款／訊息／商品寫入；探索原viewport截圖供部署結果查看，沒有以633重新宣稱整頁視覺90。管理階段完成釋放與own lease／queue0。
+- 實際聊天來源代問顯示read alert。透過原「重試讀取來源對話」只dispatch正常GET，觀察/api/source-leads/inquiries/mine真200、未truncated，但提示仍存在；不是已證明network outage或429。回應僅RAM讀取，保留五筆type／length／UUID等安全shape而不存原title／URL／contact／payload，基本shape正常不足以證明所有parser條件。根因與完整來源對話驗收仍待，未修改產品或正式資料，不把200／入口可開當成完整功能pass。
+- 初Settings metadata在reload尚未完成時630，原sample逐bytes另存並排除，真正等633meta後重新核對。第一managed GUI105秒deadline結束、官方exit0／releasedtrue，但finish flag false；晚到操作被guard拒絕且沒有UI／network action。另取新managed phase完成實際read-only重試、正常Explore真圖與finish、官方exit0／releasedtrue／ownleasequeue0。原1265×712 JPEG未crop／修改，DOM1280×720另存，不混稱兩者相同pixels或fresh90。
+- 第111／112批原APP權益實際success／controlled failure／recovery以及112原host marketing429exit1、manager toolerror無exactwrapperexitflag、後續獨立normalread200全部保留；本次發布不改寫那些結果。85–112共2463不可變證據保留，183原APPsource／compiledinput／binary未改。其餘原完整32列驗收仍待，整體goal active；本次明確交付「最新版已部署」與可開啟連結。
 
 ## 第一百一十二批：原APP12權益讀取失敗與重新進入恢復，整體收尾失敗及獨立核對
 

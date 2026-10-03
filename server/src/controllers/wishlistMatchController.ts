@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { ListingInputError, isDiscoverable } from '../lib/listingRules';
+import { NON_SALE_QA_PREFIX, ListingInputError, isDiscoverable } from '../lib/listingRules';
 import { evaluateWishMatch, parseWishMatchQuery, wishKeywords } from '../lib/wishlistMatch';
 import { publicListingSelect } from './listingController';
 function fail(res: Response, e: unknown) {
@@ -39,7 +39,7 @@ export async function matchWishListings(req: AuthRequest, res: Response) {
             const row = await prisma.listing.findUnique({ where: { id: search.cursor }, select: { id: true, createdAt: true, status: true, expiresAt: true } });
             if (!row || !isDiscoverable(row.status, row.expiresAt, now)) return res.status(404).json({ error: '商品分頁已失效，請重新配對' }); anchor = row;
         }
-        const clauses: Prisma.Sql[] = [Prisma.sql`l."status" IN ('ACTIVE', 'RESERVED')`, Prisma.sql`l."expiresAt" > ${now.toISOString()}::timestamp`, Prisma.sql`l.price >= 0 AND l.currency = 'TWD' AND p."listingId" IS NOT NULL AND l.description IS NOT NULL AND l.category IS NOT NULL AND EXISTS (SELECT 1 FROM "ListingMedia" m WHERE m."listingId" = l.id)`,
+        const clauses: Prisma.Sql[] = [Prisma.sql`left(l.title, length(${NON_SALE_QA_PREFIX})) <> ${NON_SALE_QA_PREFIX}`, Prisma.sql`l."status" IN ('ACTIVE', 'RESERVED')`, Prisma.sql`l."expiresAt" > ${now.toISOString()}::timestamp`, Prisma.sql`l.price >= 0 AND l.currency = 'TWD' AND p."listingId" IS NOT NULL AND l.description IS NOT NULL AND l.category IS NOT NULL AND EXISTS (SELECT 1 FROM "ListingMedia" m WHERE m."listingId" = l.id)`,
             Prisma.sql`(${Prisma.join(tokens.map(t => Prisma.sql`position(${t} in lower(normalize(l.title, NFKC))) > 0 OR position(${t} in lower(normalize(coalesce(l.brand, ''), NFKC))) > 0`), ' OR ')})`];
         if (!includeOwnPreview) clauses.push(Prisma.sql`l."ownerUserId" <> ${req.user.id}`);
         clauses.push(Prisma.sql`(${Prisma.join(tokens.map(t => Prisma.sql`position(${t} in lower(normalize(l.title, NFKC))) > 0`), ' OR ')})`);

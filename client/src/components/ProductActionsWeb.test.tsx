@@ -19,6 +19,12 @@ let originalLocale: string | null;
 beforeEach(() => { originalLocale = localStorage.getItem('user-locale'); localStorage.setItem('user-locale', 'zh-TW'); api.mockReset().mockResolvedValue(room()); onReport.mockReset(); });
 afterEach(() => { vi.restoreAllMocks(); if (originalLocale === null) localStorage.removeItem('user-locale'); else localStorage.setItem('user-locale', originalLocale); });
 describe('product contact and report destinations', () => {
+  it('does not offer buyer contact or create a room for explicitly non-sale QA fixtures', () => {
+    render(view(auth, { ...listing, title: '【QA測試非販售】合成相機' }));
+    expect(screen.getByRole('status')).toHaveTextContent('不能聯絡購買');
+    expect(screen.queryByRole('button', { name: '聯絡賣家／預約面交' })).not.toBeInTheDocument();
+    expect(api).not.toHaveBeenCalled();
+  });
   it('retains uncertain contact outcomes in English without exposing provider details or opening a report automatically', async () => {
     localStorage.setItem('user-locale', 'en-US'); api.mockRejectedValueOnce(new Error('PRIVATE_PROVIDER_DETAIL'));
     render(view()); fireEvent.click(screen.getByRole('button', { name: 'Contact seller / arrange meetup' }));

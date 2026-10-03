@@ -1,0 +1,17 @@
+# Reviewed multi-photo preparation
+
+Build the server, then run `node tools/source-photos/prepare-import.cjs reviewed-input.json canonical-archive.json new-dry-run-payload.json`.
+This command is entirely offline, refuses overwriting an existing output, emits the existing admin API's dry-run format, and never uploads or applies it.
+The input is `{archiveVersion, items:[{base,inventory,receipts}]}`. `base` is the existing exact import row (stable archiveItemId/libraryFileId/source URL). The canonical archive must first have a real new version; its bytes determine the SHA-256.
+
+Inventory fields: `archiveItemId,sourceUrl,checkedAt,reviewRef,sourceRevision,coverage,photos`. `coverage` is FULL_POST only after every source image is inspected; otherwise PARTIAL. Each ordered photo has stable `sourcePhotoId`, classification SAME_ITEM (physical object)/ITEM_SPECIFICATION (dedicated specification image)/ITEM_PACKAGING (only the correct item packaging)/OTHER_ITEM/OTHER_VARIANT/ADVERTISEMENT/UNKNOWN, and an archiveItemId only for SAME_ITEM/ITEM_SPECIFICATION/ITEM_PACKAGING/OTHER_ITEM. Never count advertisements, another item or unresolved groupings as this item's images. Full source inspection does not establish stock or seller rights.
+
+Receipts include every exact same-item image, preserving existing storage IDs for already uploaded pictures: `state=UPLOADED_AND_VERIFIED,archiveItemId,sourcePostUrl,sourcePhotoId,mediaId,photoId,mappingEvidenceRef,rightsBasis,rightsEvidenceRef,uploadReceiptRef,verifiedAt,flickrOriginal.source,thumbnailSource`. Use only genuine read-back receipts. Hank's present display approval is HANK_USER_DIRECTED, not SELLER_CONSENT, and does not authorize all future sources. Never manufacture Flickr URLs or reuse one image across different items.
+
+The existing RAM-to-Flickr uploader also needs a recent ordinary-UI observation of the stable source photo's viewerURL/imageSrc/checkedAt. CDN imageSrc is a transient operational locator, not a canonical archive image; the preparer never accepts it as stored media. The old cover-only uploader/binder cannot safely fill this multi-photo input and must not be reused for full collection.
+
+A source item supports up to 32 images, independently of native listing limits. Above 32 is OVER_LIMIT and fails preparation, never truncates. Incomplete/unknown/invalid mappings fail preparation. Existing item rights, photo freshness, storage validation and source-date/privacy checks remain in force. Actual browser loading is distinct from IMPORTED_COMPLETE and must be tested after deployment by switching to every image, checking ID, source/collected counts and load results.
+
+The optional evidence.photoInventory stores a SHA-256 binding over the complete inventory and exact media mappings. New/replaced/reordered images, new classifications or changed source revision invalidate it. Existing records without a manifest remain UNVERIFIED. The admin import rejects changed/new nonempty media without a current IMPORTED_COMPLETE manifest. No SQL migration is needed.
+
+Optional inventory ambiguities are `{kind:ITEM_IDENTITY|CAPACITY|UNRESOLVED_MEDIA,evidenceRef}`. Any unresolved ambiguity blocks complete import preparation; stable item IDs are retained rather than merged. Packaging is display metadata and contributes zero physical-product photo evidence. A missing brush-head image cannot be supplied with a full-toothbrush image. Uncertain collages remain UNKNOWN.

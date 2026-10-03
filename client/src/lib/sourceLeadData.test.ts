@@ -1,0 +1,11 @@
+import {describe,it,expect} from 'vitest';
+import {parseLead} from './sourceLeadData';
+const id='11111111-1111-4111-8111-111111111111',now=()=>new Date().toISOString();
+const sample=(count=1)=>({id,kind:'SOURCE_LEAD',title:'合成測試來源商品',summary:'僅供本地測試',canonicalUrl:'https://example.invalid/source/one',county:'臺南市',district:'永康區',publicPlaceName:'公共面交點',publicAddress:'臺南市永康區合成路1號',latitude:23,longitude:120.2,postedEarliestAt:now(),postedLatestAt:now(),checkedAt:now(),stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false,notice:'待確認',publicFacts:null,coordinateSourceUrl:'https://www.openstreetmap.org/node/1',coordinateAttribution:null,media:Array.from({length:count},(_,i)=>{const mid=`22222222-2222-4222-8222-${String(i).padStart(12,'0')}`,path=`https://example.invalid/api/source-leads/${id}/media/${mid}/`;return{id:mid,sourceUrl:'https://example.invalid/source/one',imageUrl:path+'image',thumbnailUrl:path+'thumbnail',alt:'合成角度'+i};})});
+describe('source multi-photo contract',()=>{
+ it('accepts legacy without completeness claim',()=>expect(parseLead(sample()).media).toHaveLength(1));
+ it('accepts ten and all thirty-two, rejects thirty-three rather than trimming',()=>{expect(parseLead(sample(10)).media).toHaveLength(10);expect(parseLead(sample(32)).media).toHaveLength(32);expect(()=>parseLead(sample(33))).toThrow();});
+ it('requires source and collected counts to match for complete import',()=>{const raw={...sample(10),photoCompleteness:{status:'IMPORTED_COMPLETE',sourceCount:10,physicalSourceCount:10,importedCount:10,limit:32}};expect(parseLead(raw).photoCompleteness?.status).toBe('IMPORTED_COMPLETE');expect(()=>parseLead({...raw,photoCompleteness:{...raw.photoCompleteness,sourceCount:11}})).toThrow();});
+ it('reports explicit unsupported source count without claiming display',()=>{const raw={...sample(),photoCompleteness:{status:'OVER_LIMIT',sourceCount:33,physicalSourceCount:33,importedCount:1,limit:32}};expect(parseLead(raw).photoCompleteness?.status).toBe('OVER_LIMIT');});
+ it('rejects duplicated IDs and arbitrary external original-image URLs',()=>{const raw=sample(2);expect(()=>parseLead({...raw,media:[raw.media[0],raw.media[0]]})).toThrow();expect(()=>parseLead({...raw,media:[{...raw.media[0],imageUrl:'https://attacker.invalid/image.jpg'}]})).toThrow();});
+});

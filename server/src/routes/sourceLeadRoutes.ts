@@ -1,3 +1,5 @@
+import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound} from '../lib/sourceInquiryRounds';
+import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {publicCommentRoute,publicCommentPayload} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
@@ -15,7 +17,7 @@ const enabled = () => process.env.SOURCE_LEADS_PUBLIC_ENABLED === '1';
 const fail = (res: Response, e: unknown) => res.status(e instanceof LeadError ? 409 : 503).json({ errorCode: e instanceof LeadError ? e.message : 'SOURCE_LEAD_UNAVAILABLE' });
 // Preserve seller identity across renewed route checks without rewriting the original send receipt.
 const sellerBindingHash=(value:unknown)=>{const r=object(value);return digest(Object.fromEntries(['leadId','contentHash','sourceUrl','channel','publicRouteUrl','identityEvidenceRef'].map(k=>[k,r[k]])));};
-const dto = (r: any, l: any, presentation = false) => ({ id: r.id, leadId: r.leadId, state: r.state, available: enabled() && leadCurrent(l) && r.leadContentHash === l.contentHash, events: (r.events as LeadEvent[]).filter(e => presentation || e.action !== 'SELLER_REPLY').map(({ requestId, action, text, at }) => ({ requestId, action, text, at })), transferHash: digest(transferSnapshot(l, r.events as LeadEvent[])), routeVerified: routeCurrent(l), delivered: !!r.delivery?.receipt, delivery: r.delivery?.receipt ? { at: r.delivery.receipt.sentAt, channel: r.delivery.receipt.channel, verification: 'MANUAL_UI_RECEIPT' } : null, checkoutEnabled: false, orderCreated: false, notice: 'Agent 只協助收件；未核原賣家路由前不發送，不代表在售或成交。' });
+const dto = (r: any, l: any, presentation = false) => ({ id: r.id, leadId: r.leadId, state: r.state, available: enabled() && leadCurrent(l) && r.leadContentHash === l.contentHash, events: (r.events as LeadEvent[]).filter(e => presentation || e.action !== 'SELLER_REPLY').map(({ requestId, action, text, at, reservationId }) => ({ requestId, action, text, at, ...(presentation&&reservationId?{reservationId}:{}) })), transferHash: digest(transferSnapshot(l, r.events as LeadEvent[])), routeVerified: routeCurrent(l), delivered: !!r.delivery?.receipt, delivery: r.delivery?.receipt ? { at: r.delivery.receipt.sentAt, channel: r.delivery.receipt.channel, verification: 'MANUAL_UI_RECEIPT' } : null, checkoutEnabled: false, orderCreated: false, notice: 'Agent 只協助收件；未核原賣家路由前不發送，不代表在售或成交。' });
 export function createSourceLeadAdmin(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const router = Router();
     router.use(marketplaceAdmin(getCredential));
@@ -34,8 +36,22 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT pg_advisory_xact_lock(73009260930::bigint)`;
                 for (const row of rows) {
                     const old = await tx.externalSourceLead.findUnique({ where: { archiveItemId: row.archiveItemId } });
+                    const newMedia=(row.evidence as any).media;
+                    const oldMedia=(old?.evidence as any)?.media;
+                    if(((Array.isArray(newMedia)&&newMedia.length)||(Array.isArray(oldMedia)&&oldMedia.length))&&(!old||digest(newMedia??[])!==digest(oldMedia??[]))&&photoCompleteness(row,sourceLeadMedia(row)).status!=='IMPORTED_COMPLETE')
+                        throw new LeadError('SOURCE_PHOTO_COMPLETENESS_REQUIRED');
                     if (old && (old.libraryFileId !== row.libraryFileId || old.canonicalUrl !== row.canonicalUrl || old.archiveVersion > row.archiveVersion || old.status === 'WITHDRAWN' || (old.archiveVersion === row.archiveVersion && (old.archiveSha256 !== row.archiveSha256 || old.contentHash !== row.contentHash))))
                         throw new LeadError('STALE_OR_CONFLICTING_LEAD');
+                }
+                const candidates=await tx.externalSourceLead.findMany({select:{archiveItemId:true,canonicalUrl:true,evidence:true}});
+                const merged=new Map(candidates.map(r=>[r.archiveItemId,r]));
+                for(const row of rows)merged.set(row.archiveItemId,row);
+                const touched=new Set(rows.map(r=>r.archiveItemId));
+                const sourceOwners=new Map<string,string>(),flickrOwners=new Map<string,string>(),mediaOwners=new Map<string,string>();
+                for(const row of merged.values())for(const m of (Array.isArray((row.evidence as any)?.media)?(row.evidence as any).media:[])){
+                    for(const [map,key] of [[sourceOwners,m.sourcePhotoId?row.canonicalUrl+'|'+m.sourcePhotoId:null],[flickrOwners,m.flickrPhotoId],[mediaOwners,m.id]] as [Map<string,string>,string|null][]){
+                        if(!key)continue;const owner=map.get(key);if(owner&&owner!==row.archiveItemId&&(touched.has(owner)||touched.has(row.archiveItemId)))throw new LeadError('SOURCE_PHOTO_CROSS_ITEM_CONFLICT');map.set(key,row.archiveItemId);
+                    }
                 }
                 if (b.dryRun)
                     return { validatedCount: rows.length, persistedCount: 0 };
@@ -116,17 +132,19 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
                 const r = await tx.sourceLeadInquiry.findUniqueOrThrow({ where: { id: first.id }, include: { lead: true } });
                 if (!publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl) && (r.events as unknown as LeadEvent[]).filter(e=>e.action==='ASK').some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
-                const snapshot = transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), payloadHash = digest(snapshot), prior = r.delivery ? object(r.delivery) : null;
-                if (prior) {
+                const snapshot = transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), payloadHash = digest(snapshot), prior = r.delivery ? object(r.delivery) : null, outboundQuestions=pendingRoundQuestions(snapshot,r.delivery);
+                if(!outboundQuestions.length)throw new LeadError('NO_NEW_QUESTION_FOR_ROUND');
+                if (prior?.reservation) {
                     if (prior.reservation?.id !== b.requestId || r.state !== 'TRANSFER_RESERVED')
                         throw new LeadError('TRANSFER_ALREADY_RESERVED_OR_CLOSED');
-                    return { reservation: prior.reservation, snapshot, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
+                    return { reservation: prior.reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
                 }
                 if (r.state !== 'WAITING_ROUTE' || r.consentHash !== payloadHash || r.leadContentHash !== r.lead.contentHash || !leadCurrent(r.lead) || !routeCurrent(r.lead))
                     throw new LeadError('CURRENT_CONSENT_AND_ROUTE_REQUIRED');
-                const reservation = { id: b.requestId, leadId: r.leadId, sourceUrl: r.lead.canonicalUrl, payloadHash, routeHash: digest(r.lead.sellerRoute), channel: object(r.lead.sellerRoute).channel, sellerBindingHash:sellerBindingHash(r.lead.sellerRoute), preparedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 120000).toISOString() };
-                await tx.sourceLeadInquiry.update({ where: { id: r.id }, data: { state: 'TRANSFER_RESERVED', delivery: { reservation } } });
-                return { reservation, snapshot, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
+                if(deliveryHistory(prior).some(r=>r.reservation.id===b.requestId))throw new LeadError('OLD_ROUND_RESERVATION');
+                const reservation = { questionIds:outboundQuestions.map((q:any)=>q.requestId), roundNumber:deliveryHistory(prior).length+1, id: b.requestId, leadId: r.leadId, sourceUrl: r.lead.canonicalUrl, payloadHash, routeHash: digest(r.lead.sellerRoute), channel: object(r.lead.sellerRoute).channel, sellerBindingHash:sellerBindingHash(r.lead.sellerRoute), preparedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 120000).toISOString() };
+                await tx.sourceLeadInquiry.update({ where: { id: r.id }, data: { state: 'TRANSFER_RESERVED', delivery: { ...(prior??{}), reservation } } });
+                return { reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
             });
             return res.json(result);
         }
@@ -141,7 +159,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             const r = await prisma.sourceLeadInquiry.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: { lead: true } }), saved = r.delivery ? object(r.delivery) : {}, v = saved.reservation;
             if (r.state !== 'TRANSFER_RESERVED' || !v || Date.parse(v.expiresAt) <= Date.now() || !leadCurrent(r.lead) || !routeCurrent(r.lead) || r.consentHash !== v.payloadHash || r.consentHash !== digest(transferSnapshot(r.lead, r.events as unknown as LeadEvent[])) || v.routeHash !== digest(r.lead.sellerRoute))
                 throw new LeadError('TRANSFER_STOP_REQUIRED');
-            return res.json({ reservation: v, snapshot: transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), preflightAt: new Date().toISOString(), outboundSent: false, notice: 'Immediately recheck before the normal UI send; cancellation and external UI cannot be atomic. If uncertain stop, never retry send.' });
+            return res.json({ reservation: v, snapshot: transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), outboundQuestions:pendingRoundQuestions(transferSnapshot(r.lead,r.events as unknown as LeadEvent[]),r.delivery), route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), preflightAt: new Date().toISOString(), outboundSent: false, notice: 'Immediately recheck before the normal UI send; cancellation and external UI cannot be atomic. If uncertain stop, never retry send.' });
         }
         catch (e) {
             return fail(res, e);
@@ -161,6 +179,8 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${first.leadId} FOR UPDATE`;
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
                 const r = await tx.sourceLeadInquiry.findUniqueOrThrow({ where: { id: first.id }, include: { lead: true } }), saved = r.delivery ? object(r.delivery) : {}, v = saved.reservation;
+                const priorRound=findDeliveredRound(saved,b.reservationId);
+                if(priorRound){if(digest(priorRound.receipt)!==digest(b))throw new LeadError('DELIVERY_ALREADY_RECORDED');return dto(r,r.lead);}
                 if (saved.receipt) {
                     if (digest(saved.receipt) !== digest(b))
                         throw new LeadError('DELIVERY_ALREADY_RECORDED');
@@ -192,11 +212,12 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             const r=await tx.sourceLeadInquiry.findUniqueOrThrow({where:{id:first.id},include:{lead:true}}),events=r.events as unknown as LeadEvent[];
             const old=events.find(e=>e.requestId===b.requestId),boundHash=digest(b);
             if(old){if(old.action!=='SELLER_REPLY'||old.payloadHash!==boundHash)throw new LeadError('REQUEST_CONFLICT');return dto(r,r.lead,true);}
-            const delivery=object(r.delivery),receipt=delivery.receipt;
+            const delivery=findDeliveredRound(r.delivery,b.reservationId),receipt=delivery?.receipt;
+            if(!delivery)throw new LeadError('VERIFIED_REPLY_BINDING_REQUIRED');
             const sameSeller=delivery.reservation?.sellerBindingHash?delivery.reservation.sellerBindingHash===sellerBindingHash(r.lead.sellerRoute):digest(r.lead.sellerRoute)===b.routeHash;
-            if(r.leadId!==b.leadId||r.lead.canonicalUrl!==b.sourceUrl||!receipt||receipt.leadId!==b.leadId||receipt.sourceUrl!==b.sourceUrl||receipt.reservationId!==b.reservationId||receipt.routeHash!==b.routeHash||!routeCurrent(r.lead)||!sameSeller||at<date(receipt.sentAt)||r.state!=='DELIVERED')throw new LeadError('VERIFIED_REPLY_BINDING_REQUIRED');
+            if(r.leadId!==b.leadId||r.lead.canonicalUrl!==b.sourceUrl||!receipt||receipt.leadId!==b.leadId||receipt.sourceUrl!==b.sourceUrl||receipt.reservationId!==b.reservationId||receipt.routeHash!==b.routeHash||!routeCurrent(r.lead)||!sameSeller||at<date(receipt.sentAt))throw new LeadError('VERIFIED_REPLY_BINDING_REQUIRED');
             if(events.length>=200)throw new LeadError('INQUIRY_LIMIT');
-            const saved=await tx.sourceLeadInquiry.update({where:{id:r.id},data:{events:[...events,{requestId:b.requestId,action:'SELLER_REPLY',text:b.text,at:at.toISOString(),payloadHash:boundHash,receiptRef:b.receiptRef}] as unknown as Prisma.InputJsonValue}});
+            const saved=await tx.sourceLeadInquiry.update({where:{id:r.id},data:{events:[...events,{requestId:b.requestId,action:'SELLER_REPLY',text:b.text,at:at.toISOString(),payloadHash:boundHash,receiptRef:b.receiptRef,reservationId:b.reservationId}] as unknown as Prisma.InputJsonValue}});
             return dto(saved,r.lead,true);
         });return res.json(result);
     }catch(e){return fail(res,e);}});
@@ -210,9 +231,10 @@ export function createSourceLeadRoutes() {
         try {
             if (!enabled())
                 return res.json({ items: [], nextCursor: null, enabled: false });
-            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'approximate'].includes(k)))
+            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'photos', 'approximate'].includes(k)))
                 throw new LeadError('INVALID_QUERY');
             if (req.query.presentation !== undefined && req.query.presentation !== '1') throw new LeadError('INVALID_PRESENTATION');
+            if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
             if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
             const q = String(req.query.q ?? '');
             if (q.length > 80)
@@ -239,7 +261,7 @@ export function createSourceLeadRoutes() {
                 for (const r of rows) {
                     next = r.id;
                     if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1'))
-                        items.push(leadDTO(r, req.query.presentation === '1'));
+                        items.push(leadDTO(r, req.query.presentation === '1',req.query.photos==='2'));
                     if (items.length === 25)
                         break;
                 }
@@ -291,9 +313,10 @@ export function createSourceLeadRoutes() {
         if (!enabled() || !isListingId(req.params.id))
             return res.sendStatus(404);
         const l = await prisma.externalSourceLead.findUnique({ where: { id: String(req.params.id) } });
-        if (Object.keys(req.query).some(k => !['presentation','approximate'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
-        if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
-        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1')) : res.sendStatus(404);
+        if (Object.keys(req.query).some(k => !['presentation','photos','approximate'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
+        if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
+            if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
+        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1',req.query.photos==='2')) : res.sendStatus(404);
     }
     catch (e) {
         return fail(res, e);
@@ -358,12 +381,15 @@ export function createSourceLeadRoutes() {
                 }
                 if (b.action !== 'CANCEL' && (!enabled() || !leadCurrent(room.lead) || room.leadContentHash !== room.lead.contentHash))
                     throw new LeadError('LEAD_UNAVAILABLE');
-                if (['CANCELLED', 'DELIVERED', 'CANCEL_REQUESTED', 'DELIVERY_REQUIRES_REVIEW'].includes(room.state))
+                if (['CANCELLED', 'CANCEL_REQUESTED', 'DELIVERY_REQUIRES_REVIEW'].includes(room.state))
                     throw new LeadError('INQUIRY_CLOSED');
                 if (events.length >= 199 && b.action !== 'CANCEL')
                     throw new LeadError('INQUIRY_LIMIT');
                 let state = room.state, consentHash = room.consentHash;
-                if (b.action === 'ASK' && state !== 'INQUIRY')
+                const followup=b.action==='ASK'&&room.state==='DELIVERED';
+                if(followup&&b.consent!==true)throw new LeadError('EXPLICIT_SCOPED_CONSENT_REQUIRED');
+                const followupDelivery=followup?beginInquiryFollowup(room.delivery,events):null;
+                if (b.action === 'ASK' && state !== 'INQUIRY' && !followup)
                     throw new LeadError('CONSENT_CONTENT_FROZEN');
                 if (b.action === 'ASK' && b.consent === true) {
                     if (b.transferHash !== digest(transferSnapshot(room.lead,events))) throw new LeadError('CONSENT_SNAPSHOT_MISMATCH');
@@ -383,7 +409,7 @@ export function createSourceLeadRoutes() {
                     consentHash = null;
                 }
                 const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(b.action === 'ASK' && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: events.filter(e => e.action === 'ASK').map(e => e.requestId), payloadHash: b.transferHash } : {}) };
-                const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });
+                const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(followupDelivery?{delivery:followupDelivery}:{}), ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });
                 return dto(saved, room.lead, req.query.presentation === '1');
             });
             return res.json(r);

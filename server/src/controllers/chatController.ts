@@ -2,18 +2,20 @@ import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { isDiscoverable } from '../lib/listingRules';
+import { isExplicitNonSaleFixture, isDiscoverable } from '../lib/listingRules';
 import { lockListingAdmission } from '../lib/listingAdmission';
 import { ChatInputError, chatIdentity, chatObject, chatSequence, parseChatPage, parseTextMessage } from '../lib/chatRules';
 
 class ChatAccessError extends Error { constructor(public status = 404) { super(); } }
 class ChatConflictError extends Error {}
 class ChatArchivedError extends Error {}
+class ChatNonSaleError extends Error {}
 function fail(res: Response, error: unknown) {
     if (error instanceof ChatInputError) return res.status(400).json({ error: error.message, errorCode: 'INVALID_CHAT_INPUT' });
     if (error instanceof ChatAccessError) return res.status(error.status).json({ error: error.status === 403 ? '已封鎖，無法建立聊天或傳送新訊息' : '聊天室或帳號不存在', errorCode: 'CHAT_ACCESS_DENIED' });
     if (error instanceof ChatConflictError) return res.status(409).json({ error: '訊息識別碼已用於不同內容', errorCode: 'CHAT_MESSAGE_CONFLICT' });
     if (error instanceof ChatArchivedError) return res.status(403).json({ error: '聊天室已封存，僅能查看保留的歷史', errorCode: 'CHAT_ARCHIVED' });
+    if (error instanceof ChatNonSaleError) return res.status(409).json({ error: '非販售測試商品僅保留歷史，不接受新交易訊息', errorCode: 'CHAT_NON_SALE_LISTING' });
     if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2025'].includes(error.code)) return res.status(404).json({ error: '聊天室或帳號已不存在', errorCode: 'CHAT_ACCESS_DENIED' });
     return res.status(500).json({ error: '聊天服務暫時無法使用', errorCode: 'CHAT_SERVICE_ERROR' });
 }
@@ -53,7 +55,7 @@ async function projection(room: Room, userId: number) {
         otherUserId === null ? Promise.resolve([]) : prisma.userBlock.findMany({ where: blockedWhere(userId, otherUserId), select: { blockerUserId: true } }),
     ]);
     const { participants, messages, listing, ...publicToMembers } = room;
-    const listingAvailable = !room.archivedAt && !!room.buyer && !!room.seller && !!listing && isDiscoverable(listing.status, listing.expiresAt, new Date());
+    const listingAvailable = !room.archivedAt && !!room.buyer && !!room.seller && !!listing && !isExplicitNonSaleFixture(listing.title) && isDiscoverable(listing.status, listing.expiresAt, new Date());
     return { ...publicToMembers,
         listing: listing ? { id: listing.id, title: listing.title, status: listing.status, expiresAt: listing.expiresAt,
             location: listing.location, price: listing.price?.toNumber() ?? null, currency: listing.currency,
@@ -69,8 +71,8 @@ export async function openConversation(req: AuthRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: '請先登入' });
     try {
         const body = chatObject(req.body, ['listingId']); const listingId = chatIdentity(body.listingId); const buyerUserId = req.user.id;
-        const listing = await prisma.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true } });
-        if (!listing) throw new ChatAccessError(); const sellerUserId = listing.ownerUserId;
+        const listing = await prisma.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true, title: true } });
+        if (!listing || isExplicitNonSaleFixture(listing.title)) throw new ChatAccessError(); const sellerUserId = listing.ownerUserId;
         if (sellerUserId === buyerUserId) throw new ChatInputError('無法與自己建立商品聊天');
         const result = await prisma.$transaction(async tx => {
             await lockListingAdmission(tx, listingId);
@@ -79,8 +81,8 @@ export async function openConversation(req: AuthRequest, res: Response) {
             if (existing) return { room: existing, created: false };
             if (!await tx.user.findUnique({ where: { id: buyerUserId }, select: { id: true } })) throw new ChatAccessError(401);
             if (await tx.userBlock.findFirst({ where: blockedWhere(buyerUserId, sellerUserId) })) throw new ChatAccessError(403);
-            const current = await tx.listing.findUnique({ where: { id: listingId }, select: { status: true, expiresAt: true, ownerUserId: true } });
-            if (!current || current.ownerUserId !== sellerUserId || !isDiscoverable(current.status, current.expiresAt, new Date())) throw new ChatAccessError();
+            const current = await tx.listing.findUnique({ where: { id: listingId }, select: { status: true, expiresAt: true, ownerUserId: true, title: true } });
+            if (!current || isExplicitNonSaleFixture(current.title) || current.ownerUserId !== sellerUserId || !isDiscoverable(current.status, current.expiresAt, new Date())) throw new ChatAccessError();
             return { room: await tx.conversation.create({ data: { listingId, buyerUserId, sellerUserId, participants: { create: [
                 { userId: buyerUserId, role: 'BUYER' }, { userId: sellerUserId, role: 'SELLER' },
             ] } }, select: conversationSelect }), created: true };
@@ -144,6 +146,7 @@ export async function sendMessage(req: AuthRequest, res: Response) {
             if (current.archivedAt || current.buyerUserId === null || current.sellerUserId === null || current.listingId === null) throw new ChatArchivedError();
             const existing = await tx.message.findUnique({ where: { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId, clientMessageId: input.clientMessageId } }, select: messageSelect });
             if (existing) { if (existing.text !== input.text) throw new ChatConflictError(); return { message: existing, created: false }; }
+            if (current.listing && isExplicitNonSaleFixture(current.listing.title)) throw new ChatNonSaleError();
             if (await tx.userBlock.findFirst({ where: blockedWhere(buyer, seller) })) throw new ChatAccessError(403);
             const updated = await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageSequence: { increment: 1 }, lastMessageAt: new Date() }, select: { lastMessageSequence: true } });
             const message = await tx.message.create({ data: { conversationId, senderUserId, ...input, sequence: updated.lastMessageSequence }, select: messageSelect });

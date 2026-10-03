@@ -4,11 +4,12 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import listingRoutes from '../../routes/listingRoutes';
+import chatRoutes from '../../routes/chatRoutes';
 import { getApiUrl } from '../../config/constants';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
 const secret = 'wish-match-integration-only-not-production'; process.env.JWT_SECRET = secret;
-const app = express(); app.use(express.json()); app.use('/api/listings', listingRoutes);
+const app = express(); app.use(express.json()); app.use('/api/listings', listingRoutes); app.use('/api/chat', chatRoutes);
 const isolatedHttp=createLoopbackRequest(app);
 let buyer: number, seller: number, third: number, wishlistId: number, wishId: number;
 const call = (path: string, userId = buyer) => isolatedHttp.get('/api/listings' + path).set('Authorization', 'Bearer ' + jwt.sign({ id: userId }, secret, { algorithm: 'HS256' }));
@@ -23,6 +24,15 @@ beforeEach(async () => {
 });
 afterAll(async () => { if (buyer) { await prisma.listingMedia.deleteMany({ where: { ownerUserId: seller } }); await prisma.user.deleteMany({ where: { id: { in: [buyer, seller, third] } } }); } await prisma.$disconnect(); });
 describe('private explainable matching / PostgreSQL', () => {
+    it('keeps explicitly labelled non-sale QA fixtures out of buyer results and refuses creating a buyer room, preserving owner access', async () => {
+        const qa=await seed('【QA測試非販售】Sony 相機 A7'); const real=await seed('Sony 相機 A7');
+        expect((await match()).body.items.map((v: {listing:{id:string}})=>v.listing.id)).toEqual([real]);
+        expect((await call('/')).body.items.map((v:{id:string})=>v.id)).toEqual([real]);
+        expect((await call('/'+qa)).status).toBe(404);
+        expect((await call('/'+qa,seller)).status).toBe(200);
+        expect((await isolatedHttp.post('/api/chat/conversations').set('Authorization','Bearer '+jwt.sign({id:buyer},secret)).send({listingId:qa})).status).toBe(404);
+        expect(await prisma.conversation.count({where:{listingId:qa}})).toBe(0);
+    });
     it('requires JWT and authentic ownership, even when the wishlist is public', async () => {
         expect((await isolatedHttp.get('/api/listings/matches').query({ wishItemId: String(wishId) })).status).toBe(401); expect((await match({}, third)).status).toBe(404);
         await prisma.wishlist.update({ where: { id: wishlistId }, data: { isPublic: true } }); expect((await match({}, third)).status).toBe(404); expect((await call('/match-wishes', third)).body.items).toEqual([]);

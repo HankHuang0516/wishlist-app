@@ -4,10 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/marketplaceApi';
 import { openProductChat } from '../lib/chatWeb';
 import type { PublicListing } from '../lib/listingSearch';
+import { isNonSaleQaTitle } from '../lib/nonSaleListing';
+import { getDisplayLocale } from '../utils/localization';
 import { publicListingText as text, type PublicListingCopyKey } from '../lib/publicListingCopy';
 const button = 'inline-flex min-h-11 items-center rounded-xl border px-4 py-2 disabled:opacity-50';
 export default function ProductActionsWeb({ listing, onReport }: { listing: PublicListing; onReport: () => void }) {
   const { token, user } = useAuth();
+  if (isNonSaleQaTitle(listing.title) && listing.owner.id !== user?.id) return <p role="status">{getDisplayLocale().startsWith('zh') ? '此為非販售測試資料，不能聯絡購買或預約面交。' : 'This is non-sale test data. Contact and meetup booking are unavailable.'}</p>;
   if (!token || !user) return <div className="space-y-2"><Link className={button} to={'/login?next=' + encodeURIComponent('/listings/' + listing.id)}>{text('登入以聯絡賣家或檢舉商品')}</Link></div>;
   return <Actions key={`${user.id}:${token}:${listing.id}`} token={token} userId={user.id} listing={listing} onReport={onReport} />;
 }

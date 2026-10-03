@@ -88,6 +88,44 @@ describe('English wish UI preserves the original workflow and content',()=>{
   });
 });
 describe('native-parity wish web workflows',()=>{
+  it('refuses a blank edited name even when a stored photo is present, without submitting or replacing AI content',async()=>{
+    items=[{...wish,imageUrl:'https://images.example.com/original.jpg'}];mount(1);await screen.findByText('合成願望');
+    const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'   '}});
+    fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    await screen.findByText('請填寫200字內名稱與1000字內備註');
+    expect(api.mock.calls.filter(call=>call[2]?.method==='PUT')).toHaveLength(0);expect(posts()).toHaveLength(0);
+    expect(screen.getByLabelText('願望名稱（有照片可留空）')).toBeEnabled();expect(data.size).toBe(0);
+  });
+  it.each([
+    'https://wishlist-app-production.up.railway.app/api/listing-media/fab22941-2df0-4ca4-90c2-70c504527243/image',
+    `${getFullApiUrl()}/listing-media/fab22941-2df0-4ca4-90c2-70c504527243/image`,
+  ])('edits a stored media photo without validating it as a new AI input: %s',async imageUrl=>{
+    const original={...wish,imageUrl};items=[original];const base=api.getMockImplementation()!;
+    api.mockImplementation(async(...args)=>{
+      if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){
+        const result={...original,...JSON.parse(args[2].body as string)};items=[result];return result;
+      }
+      return base(...args);
+    });
+    mount(1);await screen.findByText('合成願望');
+    const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    expect(screen.getByLabelText('AI 商品圖片網址（HTTPS）')).toBeDisabled();
+    expect(screen.getByLabelText('AI 商品圖片網址（HTTPS）')).toHaveValue(imageUrl);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'更新合成桌燈'}});
+    fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'12.34'}});
+    fireEvent.change(screen.getByLabelText('預算幣別'),{target:{value:'usd'}});
+    fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'原照片保留\n合成 Unicode 備註'}});
+    fireEvent.change(screen.getByLabelText('參考商品連結（選填）'),{target:{value:'https://example.invalid/qa-lamp'}});
+    const save=screen.getByRole('button',{name:'儲存願望資料'});fireEvent.click(save);fireEvent.click(save);
+    await screen.findByText('後台已確認願望資料修改。');
+    const writes=api.mock.calls.filter(call=>call[2]?.method==='PUT');expect(writes).toHaveLength(1);
+    expect(JSON.parse(writes[0][2].body)).toEqual({name:'更新合成桌燈',notes:'原照片保留\n合成 Unicode 備註',link:'https://example.invalid/qa-lamp',maxPrice:12.34,priceCurrency:'USD'});
+    expect(screen.getByRole('img',{name:'更新合成桌燈 商品圖片'})).toHaveAttribute('src',imageUrl);
+    expect(screen.getByText('AI 參考價格 TWD 59')).toBeInTheDocument();
+    expect(screen.getByText('最高預算 USD 12.34')).toBeInTheDocument();
+    expect(data.size).toBe(0);expect(posts()).toHaveLength(0);
+  });
   it('confirms the edited values and clears an old success notice before opening another editor',async()=>{
     items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{
       if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){const result={...wish,...JSON.parse(args[2].body as string)};items=[result];return result;}

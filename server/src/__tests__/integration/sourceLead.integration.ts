@@ -145,6 +145,32 @@ run('independent source lead map -> inquiry (synthetic local DB)', () => {
         await request(app).post('/leads/'+lid+'/inquiry/'+rid+'/actions').set('x-api-key',key).send({requestId:require('crypto').randomUUID(),action:'CANCEL'});
         expect((await request(app).post('/admin/inquiries/'+rid+'/prepare-transfer').set('x-admin-key',admin).send({requestId:require('crypto').randomUUID()})).status).toBe(409);
     });
+    test('private exact receipts survive withdrawal and disabled sources without allocating or exposing another buyer',async()=>{
+        const lid=(await importLead([body('SYNTHETIC-RECEIPT')])).body.ids[0];
+        const opened=(await request(app).post('/leads/'+lid+'/inquiry').set('x-api-key',key).send({})).body;
+        const actions='/leads/'+lid+'/inquiry/'+opened.id+'/actions',unknown=require('crypto').randomUUID();
+        const snapshot=await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:opened.id}});
+        const empty=await request(app).get(actions+'/'+unknown).set('x-api-key',key);expect(empty.status).toBe(200);expect(empty.body).toBeNull();
+        expect(await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:opened.id}})).toEqual(snapshot);
+        const ask={requestId:require('crypto').randomUUID(),action:'ASK',text:'原問題完整回執',consent:true,transferHash:opened.transferHash};
+        expect((await request(app).post(actions).set('x-api-key',key).send(ask)).status).toBe(200);
+        const endpoint=actions+'/'+ask.requestId,read=await request(app).get(endpoint).set('x-api-key',key);
+        expect(read.status).toBe(200);expect(read.headers['cache-control']).toBe('private, no-store');expect(read.body.operation).toEqual(ask);expect(read.body.leadId).toBe(lid);expect(read.body.roomId).toBe(opened.id);expect(read.body.room.delivered).toBe(false);
+        expect(Object.keys(read.body).sort()).toEqual(['leadId','operation','room','roomId']);expect(read.body.room).not.toHaveProperty('buyerUserId');expect(read.body.room).not.toHaveProperty('sellerRoute');expect(read.body.room).not.toHaveProperty('evidence');
+        expect((await request(app).get(endpoint)).status).toBe(401);expect((await request(app).get(endpoint).set('x-api-key',otherKey)).status).toBe(404);
+        expect((await request(app).get(endpoint+'?presentation=1').set('x-api-key',key)).status).toBe(404);
+        expect((await request(app).get('/leads/'+leadId+'/inquiry/'+opened.id+'/actions/'+ask.requestId).set('x-api-key',key)).status).toBe(404);
+        const foreignRoom=(await request(app).post('/leads/'+lid+'/inquiry').set('x-api-key',otherKey).send({})).body;
+        expect((await request(app).get('/leads/'+lid+'/inquiry/'+foreignRoom.id+'/actions/'+ask.requestId).set('x-api-key',otherKey)).body).toBeNull();
+        await request(app).post('/admin/'+lid+'/withdraw').set('x-admin-key',admin).send({reasonRef:'self:synthetic-receipt-withdraw'});process.env.SOURCE_LEADS_PUBLIC_ENABLED='0';
+        try {
+            expect((await request(app).get(endpoint).set('x-api-key',key)).body.operation).toEqual(ask);
+            const cancel={requestId:require('crypto').randomUUID(),action:'CANCEL'};expect((await request(app).post(actions).set('x-api-key',key).send(cancel)).body.state).toBe('CANCELLED');
+            const confirmed=await request(app).get(actions+'/'+cancel.requestId).set('x-api-key',key);expect(confirmed.body.operation).toEqual(cancel);expect(confirmed.body.room.state).toBe('CANCELLED');
+            const before=await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:opened.id}});expect((await request(app).post(actions).set('x-api-key',key).send({...ask,requestId:require('crypto').randomUUID()})).status).toBe(409);
+            expect((await request(app).get(endpoint).set('x-api-key',key)).body.operation).toEqual(ask);expect(await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:opened.id}})).toEqual(before);
+        }finally{process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';}
+    });
     test('one-step consent rejects multi-device changed history and private contact details',async()=>{
         const imported=await importLead([body('SYNTHETIC-CONTACT-RACE')]);expect({status:imported.status,error:imported.body.errorCode}).toEqual({status:200,error:undefined});const lid=imported.body.ids[0];const room=(await request(app).post('/leads/'+lid+'/inquiry').set('x-api-key',key).send({})).body;
         const path='/leads/'+lid+'/inquiry/'+room.id+'/actions';

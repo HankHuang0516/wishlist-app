@@ -304,6 +304,22 @@ export function createSourceLeadRoutes() {
         });
         return res.json(row ? dto(row, row.lead, req.query.presentation === '1') : null);
     } catch (e) { return fail(res, e); } });
+    // A private receipt proves the original action, including its consent
+    // snapshot. Current room state alone is not an action acknowledgement.
+    router.get('/:id/inquiry/:roomId/actions/:requestId', authenticateToken, async (req: AuthRequest, res) => { try {
+        res.set('Cache-Control', 'private, no-store');
+        if (!req.user || ![req.params.id, req.params.roomId, req.params.requestId].every(isListingId) || Object.keys(req.query).length) return res.sendStatus(404);
+        const row = await prisma.sourceLeadInquiry.findFirst({
+            where: { id: String(req.params.roomId), leadId: String(req.params.id), buyerUserId: req.user.id }, include: { lead: true }
+        });
+        if (!row) return res.sendStatus(404);
+        const event = (row.events as unknown as LeadEvent[]).find(e => e.requestId === req.params.requestId && ['ASK', 'CONSENT', 'CANCEL'].includes(e.action));
+        return res.json(event ? {
+            leadId: row.leadId, roomId: row.id,
+            operation: { requestId: event.requestId, action: event.action, ...(event.text !== undefined ? { text: event.text } : {}), ...(event.consent !== undefined ? { consent: event.consent } : {}), ...(event.payloadHash !== undefined ? { transferHash: event.payloadHash } : {}) },
+            room: dto(row, row.lead, true)
+        } : null);
+    } catch (e) { return fail(res, e); } });
     router.post('/:id/inquiry', authenticateToken, async (req: AuthRequest, res) => { try {
         if (!req.user || !isListingId(req.params.id))
             return res.sendStatus(404);

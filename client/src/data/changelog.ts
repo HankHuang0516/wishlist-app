@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:"2.0.593",date:"2026-10-03",title:"來源聊天完整原操作恢復",type:"Fullstack",items:[{type:"Fix",content:"完整加密保存原問題與同意內容，重新開啟先查核本人回執；可明確重試原操作或撤回，紀錄讀取失敗時先恢復再送出。來源聊天支援繁中與英文。"}]},
  {version:"2.0.589",date:"2026-10-03",title:"探索來源搜尋的明確重試",type:"Frontend",items:[{type:"Fix",content:"來源商品讀取失敗後停止自動更新，保留已讀內容與搜尋文字；等待結束後可按重新搜尋恢復，支援繁中與英文。"}]},
  {version:"2.0.584",date:"2026-10-03",title:"來源商品沿用探索與聊聊",type:"Fullstack",items:[{type:"Enhancement",content:"來源商品沿用原卡片、詳情及單次Agent收件；回覆綁定同商品與原收件，未核路由與照片權利時維持待確認。"}]},
  {version:"2.0.445",date:"2026-10-02",title:"讀取詢問不建立空白收件",type:"Fullstack",items:[{type:"Fix",content:"讀取改用唯讀 GET，沒有紀錄時明確提示；只有按保存問題才建立收件，保留既有詢問歷史。"}]},

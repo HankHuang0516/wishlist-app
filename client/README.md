@@ -275,7 +275,7 @@ A 401 or 429 pauses inbox, conversation and appointment automatic reads and auto
 The source layer in the original Explore page stops automatic updates after any failed or malformed read, retaining its last complete page. Source throttling now uses the existing search wait indicator and disables retries until the shared deadline ends. Waiting never dispatches a request. The explicit bilingual Search again action applies the current keywords and map scope; it does not send an inquiry or change a chat. Each source-page read has a bounded timeout and is cancelled on departure. Five regressions cover actual HTTP 429, cooldown expiry, network failure with retained rows, invalid pagination, and Chinese/English page controls. Native source and backend contracts are unchanged.
 
 
-### Source contact original-operation recovery — v592
+### Source contact original-operation recovery — v593
 
 The original Explore → source detail → Chat flow encrypts the complete ASK/CONSENT body, original UUID and room in the existing account/API-scoped browser vault before posting. Withdrawal uses a separate immutable slot. Reopening and Refresh read the original owned inquiry and exact private action receipt; they never post. Explicit Retry original operation resends only the persisted body. Old session markers migrate as receipt-only identities; corrupt or unreadable storage blocks writes, retains owned history where readable, and offers explicit restoration. No plaintext fallback, access token or seller contact details are saved in this journal.
 

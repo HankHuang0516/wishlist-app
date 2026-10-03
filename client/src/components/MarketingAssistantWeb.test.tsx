@@ -443,7 +443,7 @@ describe('shared web marketing entry for drafts and published products', () => {
     fireEvent.click(screen.getByRole('checkbox',{name:'Image 2'}));fireEvent.change(screen.getByRole('textbox',{name:'Describe the changes you want'}),{target:{value:'Brighter background 原始指示 {slots}'}});
     fireEvent.click(screen.getByRole('button',{name:'Request one free revision'}));
     await screen.findByText('The free revision is queued. Images you did not select are retained.');expect(requestBody).toEqual({kind:'REVISION',sourceMediaId:source,listingId,parentJobId:jobId,prompt:'Brighter background 原始指示 {slots}',slots:[2]});
-    expect(scheduled).toHaveLength(1);delivered=true;await act(async()=>scheduled[0]());
+    await waitFor(()=>expect(scheduled).toHaveLength(1));delivered=true;await act(async()=>scheduled[0]());
     await screen.findByText('The revision is ready. Choose the new images or keep the originals, then confirm images and copy.');
     expect(screen.getByText('Images before revision (select to keep originals)')).toBeInTheDocument();
     expect(screen.getByRole('textbox',{name:'Edit marketing copy'})).toHaveValue('Revised original 文案');

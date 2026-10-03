@@ -127,7 +127,7 @@ Q: 聊天或面交顯示自動讀取已暫停，要怎麼恢復？
 A: 請稍後使用該頁的更新按鈕重新核對；成功後才恢復自動更新。限制到期、重新連網或回到畫面不會自行恢復，更新失敗仍保留暫停與原內容。登入失效時先重新登入原帳號。原訊息、尚未送出的文字與私密面交表單不會因此自動送出；結果待確認的操作仍須查核原回執。
 
 
-### Source contact original-operation recovery — v592
+### Source contact original-operation recovery — v593
 
 The original Explore → source detail → Chat flow encrypts the complete ASK/CONSENT body, original UUID and room in the existing account/API-scoped browser vault before posting. Withdrawal uses a separate immutable slot. Reopening and Refresh read the original owned inquiry and exact private action receipt; they never post. Explicit Retry original operation resends only the persisted body. Old session markers migrate as receipt-only identities; corrupt or unreadable storage blocks writes, retains owned history where readable, and offers explicit restoration. No plaintext fallback, access token or seller contact details are saved in this journal.
 

@@ -229,7 +229,7 @@ npm run test
 回滾：關閉 SOURCE_LEADS_PUBLIC_ENABLED 或回退應用版本，保留新增兩表與收件歷史；不刪除正式資料。既有外部商品公開開關維持關閉。手機舊版需另更新新圖層，網頁可獨立查看。
 
 
-### Source contact original-operation recovery — v592
+### Source contact original-operation recovery — v593
 
 The original Explore → source detail → Chat flow encrypts the complete ASK/CONSENT body, original UUID and room in the existing account/API-scoped browser vault before posting. Withdrawal uses a separate immutable slot. Reopening and Refresh read the original owned inquiry and exact private action receipt; they never post. Explicit Retry original operation resends only the persisted body. Old session markers migrate as receipt-only identities; corrupt or unreadable storage blocks writes, retains owned history where readable, and offers explicit restoration. No plaintext fallback, access token or seller contact details are saved in this journal.
 

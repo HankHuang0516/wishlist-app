@@ -5,11 +5,14 @@ import { validateNewPassword } from './accountSecurity';
 import { AuthMode, RecoveryLink, authErrorMessage, emailPayload, emailRequestAck, recoveryToken, registrationAck, registrationPayload, resetAck, verificationAck } from './authFlow';
 import { AuthOperationGate, createAuthOperationGate } from './authOperation';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
+import { TermsAgreement } from './TermsAgreement';
 const titles: Record<AuthMode, string> = { login: '登入', register: '建立帳號', forgot: '忘記密碼', resend: '重新寄送驗證信', verify: '驗證 Email', reset: '重設密碼' };
-export function AuthScreen({ apiUrl, initialLink, externalBusy = false, externalIssue, onRetryRestore, onAuthenticated, onClose, onResetConfirmed, operationGate }: {
+export function AuthScreen({ apiUrl, initialLink, externalBusy = false, externalIssue, onRetryRestore, onAuthenticated, onClose, onResetConfirmed, operationGate, onTermsAccepted }: {
+  onTermsAccepted?: () => void;
   apiUrl: string; initialLink: RecoveryLink | null; externalBusy?: boolean; externalIssue?: string; onRetryRestore?: () => void;
   onAuthenticated: (value: unknown) => Promise<void>; onClose?: () => void; onResetConfirmed?: () => Promise<void>; operationGate?: AuthOperationGate;
 }) {
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [mode, setMode] = useState<AuthMode>(initialLink?.mode ?? 'login');
   const [identifier, setIdentifier] = useState(''), [name, setName] = useState(''), [phone, setPhone] = useState(''), [email, setEmail] = useState('');
   const [password, setPassword] = useState(''), [confirmation, setConfirmation] = useState(''), [linkText, setLinkText] = useState(initialLink?.token ?? '');
@@ -38,6 +41,7 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
   }
   async function submit() {
     if (operation.isRunning() || externalBusy || !active.current) return;
+    if ((mode === 'login' || mode === 'register') && !termsAccepted) { setIssue('請先閱讀並同意使用條款。'); return; }
     let path: string, payload: object;
     try {
       if (mode === 'login') {
@@ -83,6 +87,7 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
   const input = (label: string, value: string, change: (value: string) => void, options: Partial<React.ComponentProps<typeof TextInput>> = {}) =>
     <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} /></View>;
   const button = (label: string, action: () => void, primary = false) => <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={action} style={[primary ? styles.button : styles.link, disabled && styles.disabled]}><Text style={primary ? styles.buttonText : styles.linkText}>{label}</Text></Pressable>;
+  if ((mode === 'login' || mode === 'register') && !termsAccepted) return <TermsAgreement apiUrl={apiUrl} onAccept={() => { setTermsAccepted(true); onTermsAccepted?.(); }} />;
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <Text style={styles.eyebrow}>YOUR WISH, A LITTLE CLOSER</Text><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.body}>留下願望，找到附近的下一個好物。</Text><Text style={styles.heading}>{titles[mode]}</Text>
     {mode === 'login' && <>{input('手機號碼或 Email', identifier, setIdentifier, { autoComplete: 'username', maxLength: 254 })}{input('密碼', password, setPassword, { secureTextEntry: true, autoComplete: 'current-password', maxLength: 1024 })}</>}

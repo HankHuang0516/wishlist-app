@@ -10,6 +10,7 @@ export class ListingSearchError extends Error {}
 export type PublicListing = {
   id: string; title: string; description: string; brand: string | null; category: string; condition: 'NEW' | 'USED';
   price: number; deliveryMethods: ('MEETUP' | 'SHIPPING')[]; negotiable: boolean; status: 'ACTIVE' | 'RESERVED'; expiresAt: string;
+  mapVisibleUntil?: string | null;
   owner: { id: number; name: string | null };
   location: { county: string; district: string; publicLatitude: number; publicLongitude: number; precisionMeters: number };
   media: { id: string; imageUrl: string; thumbnailUrl: string }[];
@@ -52,7 +53,9 @@ export function listingSearchPath(filters: SearchFilters, bounds: Bounds, cursor
 }
 
 export function parsePublicListing(value: unknown, apiUrl: string, local = false): PublicListing {
-  const row = object(value); const owner = object(row.owner); const location = object(row.location);
+  const row = object(value);
+  if (!(row.mapVisibleUntil === undefined || row.mapVisibleUntil === null || typeof row.mapVisibleUntil === 'string' && Number.isFinite(Date.parse(row.mapVisibleUntil)))) throw new ListingSearchError('地圖顯示期限不正確');
+  const owner = object(row.owner); const location = object(row.location);
   const price = typeof row.price === 'string' && /^\d+(?:\.\d{1,2})?$/.test(row.price) ? Number(row.price) : row.price;
   if (!uuid(row.id) || !text(row.title, 100) || !text(row.description, 3000) || !(row.brand === null || text(row.brand, 60)) || !CATEGORIES.some(c => c[0] === row.category) ||
       !['NEW', 'USED'].includes(row.condition as string) || !finite(price) || price < 0 || price > 9_999_999_999.99 || row.currency !== 'TWD' ||
@@ -72,6 +75,7 @@ export function parsePublicListing(value: unknown, apiUrl: string, local = false
   // Only public allowlisted fields enter map/card state. Ignore profile/private extras.
   return { id: row.id, title: row.title, description: row.description, brand: row.brand as string | null, category: row.category as string, condition: row.condition as PublicListing['condition'],
     price, deliveryMethods: row.deliveryMethods as PublicListing['deliveryMethods'], negotiable: row.negotiable, status: row.status as PublicListing['status'], expiresAt: row.expiresAt,
+    mapVisibleUntil: row.mapVisibleUntil as string | null | undefined ?? null,
     owner: { id: owner.id as number, name: owner.name as string | null },
     location: { county: location.county, district: location.district, publicLatitude: location.publicLatitude, publicLongitude: location.publicLongitude, precisionMeters: location.precisionMeters }, media };
 }
@@ -88,7 +92,7 @@ export function mergeListingPages(previous: PublicListing[], next: PublicListing
   return [...rows.values()];
 }
 export function listingGeoJSON(items: PublicListing[]): FeatureCollection<Point> {
-  return { type: 'FeatureCollection', features: items.map(item => ({ type: 'Feature', id: item.id,
+  return { type: 'FeatureCollection', features: items.filter(item => !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > Date.now()).map(item => ({ type: 'Feature', id: item.id,
     geometry: { type: 'Point', coordinates: [item.location.publicLongitude, item.location.publicLatitude] },
     properties: { listingId: item.id, icon: 'photo-' + item.media[0].id, title: item.title } })) };
 }

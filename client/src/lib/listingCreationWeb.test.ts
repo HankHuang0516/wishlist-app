@@ -24,7 +24,7 @@ describe('web creation journal and immutable receipt contract', () => {
     expect(parsed.payload).toEqual(body);
   });
   it.each([
-    { clientListingId: 'invalid' }, { phoneNumber: 'private' }, { price: 350.001 }, { publish: false }, { consentToMap: false },
+    { clientListingId: 'invalid' }, { phoneNumber: 'private' }, { price: 350.001 }, { publish: false }, { consentToMap: false, mapCheckIn:true },
     { deliveryMethods: ['MEETUP', 'MEETUP'] }, { mediaIds: [mediaId, mediaId] }, { expiryDate: '2030-02-30' },
     { location: { county: '臺北市', district: '中山區', latitude: 25.051234, longitude: 121.531234 } },
   ])('does not persist malformed or precise/private publication input %#', async change => {
@@ -95,4 +95,16 @@ describe('web creation journal and immutable receipt contract', () => {
     const call = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain('/abandon'); expect(call[1].method).toBe('POST'); expect(JSON.parse(String(call[1].body))).toEqual({ requestHash: envelope.receipt.requestHash }); expect(fetcher).toHaveBeenCalledOnce();
   });
+});
+
+it('accepts current map deadlines without weakening private-field rejection or old immutable journals',async()=>{
+  const {raw,envelope}=await fixture();
+  const current={...envelope.listing,mapVisibleUntil:new Date(Date.now()+3600000).toISOString()};
+  expect((await listingCreationResult({...envelope,listing:current},raw,19)).listing?.mapVisibleUntil).toBe(current.mapVisibleUntil);
+  expect(()=>strictCreatedListing({...current,mapVisibleUntil:'invalid'},19)).toThrow();
+  for(const consentToMap of [true,false]) {
+    const value=JSON.parse(await listingCreationJournal(JSON.stringify({...payload(),consentToMap,mapCheckIn:consentToMap})));
+    expect(value.payload).toMatchObject({consentToMap,mapCheckIn:consentToMap});
+    expect(await parseListingCreationJournal(JSON.stringify(value))).toEqual(value);
+  }
 });

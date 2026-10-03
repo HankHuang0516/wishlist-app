@@ -137,3 +137,12 @@ The original Explore → source detail → Chat flow encrypts the complete ASK/C
 GET /source-leads/:id/inquiry/:roomId/actions/:requestId returns only the authenticated buyer’s exact operation and public inquiry projection, with private no-store caching. Unknown operations return null without allocation; mismatched ownership, room, lead or query parameters return 404. Read receipts remain available after withdrawal or rollout disablement. HTTP errors, absent/mismatched receipts, timeout or cleanup failure retain the original journal. CAS cleanup cannot erase another tab’s newer operation. Terminal confirmed cancellation fences late questions on the same owned room and resolves them as stopped, never accepted; CANCEL_REQUESTED and delivery review remain unresolved forwarding states. Reads and local-storage waits are bounded by 30 seconds, abort on departure, and respect the shared cooldown without automatic retry. All source contact/recovery controls follow Chinese/English and retain original product/question content.
 
 Regression coverage includes unknown committed/uncommitted sends, reload and exact replay, later 401/429/409, encrypted scope isolation and erasure, corrupt legacy data, save/read/cleanup faults, stale cleanup, late logout responses and an unresponsive local read. Real isolated HTTP tests validate private receipt ownership and unchanged data on reads, including withdrawal and disabled sources. Formal UI/release evidence remains in docs/web-app-parity.md; automated coverage is not proof of native or formal mutation acceptance.
+
+
+## iOS 社群安全與地圖顯示 — 2026-10-03
+
+新版登入／註冊前直接呈現使用條款、18 歲確認及不容許不當內容的規範。聊天可檢舉對方或單則訊息，檢舉先存入既有人工管理收件系統再嘗試通知；通知失敗不會遺失收件，重試沿用原識別碼，重開只讀取本人收件。檢舉不等於封鎖或內容移除。
+
+商品刊登與地圖顯示分開。未勾選地圖同意仍可刊登，預設不顯示。只有這次明確 mapCheckIn 或已驗證擁有者操作 map-presence，才顯示最多一小時且不超過刊登期限。舊商品不自動取得同意，讀取、登入、資訊編輯、延長與恢復在售皆不續期；更改地區清除舊同意。可在我的商品手動確認或停止顯示。公開來源地區示意不代表使用者定位。
+
+Apple Oct 3 審查另要求實體 iPhone/iPad 錄影，須展示登入前條款、檢舉與封鎖。新版測試或模擬器不能替代此影片；送審檢查必須驗證新版 build、18+ 分級、實機影片與審查備註。

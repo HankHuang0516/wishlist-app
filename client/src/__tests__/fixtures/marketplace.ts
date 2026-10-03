@@ -4,7 +4,7 @@ export const makeWish = (id = 1) => ({ id, name: '三國演義漫畫', maxPrice:
 export function makeListing(title = '二手 三國演義 漫畫') {
   const id = uuid(), photo = uuid(), origin = marketplaceOrigin();
   return { id, title, description: '合成測試商品，不是可購買的真實刊登。', brand: null, category: 'books', condition: 'USED',
-    price: '250.00', currency: 'TWD', deliveryMethods: ['MEETUP'], negotiable: false, status: 'ACTIVE', expiresAt: '2100-01-01T00:00:00Z',
+    price: '250.00', currency: 'TWD', deliveryMethods: ['MEETUP'], negotiable: false, status: 'ACTIVE', expiresAt: '2100-01-01T00:00:00Z', mapVisibleUntil: new Date(Date.now() + 3_600_000).toISOString(),
     owner: { id: 3, name: '合成測試賣家' }, location: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 },
     media: [{ id: photo, imageUrl: `${origin}/api/listing-media/${photo}/image`, thumbnailUrl: `${origin}/api/listing-media/${photo}/thumbnail` }] };
 }

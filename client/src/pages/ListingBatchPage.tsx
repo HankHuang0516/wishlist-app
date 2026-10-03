@@ -513,7 +513,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
       requests.push({ card, body: JSON.stringify(buildPublishedListing(card, card.id, details)) });
     }
     const title = selected.length === 1 ? `「${selected[0].form.title}」` : `已逐件確認的 ${selected.length} 件商品`;
-    if (!window.confirm(`確定公開刊登${title}？照片、售價與約略位置將出現在商品地圖。`)) return;
+    if (!window.confirm(`確定公開刊登${title}？商品資訊及照片將公開；只有勾選本次地圖同意時，約略位置才顯示一小時。`)) return;
     busyRef.current = true; setBusy(true); setInvalid(null); setMessage('');
     const epoch = lifetime.current;
     let completed = 0;
@@ -750,7 +750,7 @@ function ListingBatchSession({ token, userId }: { token: string; userId: number 
         <label><input type="checkbox" checked={details.negotiable} onChange={event => updateDetails({ negotiable: event.target.checked })} /> 可議價</label>
       </div>
       <div className="mt-5"><DateField {...sharedProps('expiryDate')} label="自訂失效日期（不填預設 30 天）" disabled={locked || localFailed} value={details.expiryDate} onChange={expiryDate => updateDetails({ expiryDate })} /></div>
-      <label className="mt-5 flex items-start gap-3 text-sm"><input {...sharedProps('consent')} type="checkbox" checked={details.consent} onChange={event => updateDetails({ consent: event.target.checked })} />我已確認商品真實、照片與描述可公開，並同意將照片、售價及約略位置顯示在商品地圖。</label>
+      <label className="mt-5 flex items-start gap-3 text-sm"><input {...sharedProps('consent')} type="checkbox" checked={details.consent} onChange={event => updateDetails({ consent: event.target.checked })} />同意這次將商品約略位置顯示在地圖一小時（選填）。未勾選仍可刊登；不會自動續期。</label>
       </fieldset>
     </section>}
 

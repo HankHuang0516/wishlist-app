@@ -1,3 +1,7 @@
+## Manual product map permission — 2026-10-03
+
+Publishing works with map permission declined. New web publications opt into a one-hour map check-in only when explicitly checked; legacy immutable journals keep their original hashes. Owner-only manual check-in and stop controls use the current listing version, with explicit confirmation and read-only reload after an unknown reply. Reads, normal edits and extensions never renew map display. Shared public maps omit declined, legacy and expired cached pins; the backend serves current results with no-store caching. This is an approximate product location, not a user's live position.
+
 # React + TypeScript + Vite
 
 Source inquiry history carries an explicit server-derived COUNTY_ILLUSTRATION marker for approved county illustrations. A city-only Taipei context keeps its unknown district; an unmarked or invalid district still fails validation. Mixed source history and the original withdrawn context remain readable, while historical media stays suppressed. Source chat displays a bilingual approximate-location notice and never treats the county pin as a pickup point. Reading and retrying history do not submit inquiries; APP source and existing write/recovery permissions are unchanged.

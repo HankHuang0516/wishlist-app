@@ -1,14 +1,151 @@
 [
   {
-    "body": { "clientListingId": "11111111-1111-4111-8111-111111111111", "title": "合成檯燈", "description": "僅供測試，並非真實商品。", "category": "home", "condition": "USED", "brand": "測試品牌", "price": 123.45, "currency": "TWD", "mediaIds": ["22222222-2222-4222-8222-222222222222"], "deliveryMethods": ["SHIPPING", "MEETUP"], "negotiable": true, "location": { "county": "臺北市", "district": "中山區", "latitude": 25.05, "longitude": 121.53 }, "publish": true, "consentToMap": true },
+    "body": {
+      "clientListingId": "11111111-1111-4111-8111-111111111111",
+      "title": "合成檯燈",
+      "description": "僅供測試，並非真實商品。",
+      "category": "home",
+      "condition": "USED",
+      "brand": "測試品牌",
+      "price": 123.45,
+      "currency": "TWD",
+      "mediaIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "deliveryMethods": [
+        "SHIPPING",
+        "MEETUP"
+      ],
+      "negotiable": true,
+      "location": {
+        "county": "臺北市",
+        "district": "中山區",
+        "latitude": 25.05,
+        "longitude": 121.53
+      },
+      "publish": true,
+      "consentToMap": true
+    },
     "requestHash": "372a37d39dda2518bc81de6e09ca351e4ad6b3304d8325cf0b2d4c45d3c796e4"
   },
   {
-    "body": { "clientListingId": "11111111-1111-4111-8111-111111111111", "title": "合成檯燈", "description": "僅供測試，並非真實商品。", "category": "home", "condition": "USED", "brand": "測試品牌", "price": 123.45, "currency": "TWD", "mediaIds": ["22222222-2222-4222-8222-222222222222"], "deliveryMethods": ["SHIPPING", "MEETUP"], "negotiable": true, "location": { "county": "臺北市", "district": "中山區", "latitude": 25.05, "longitude": 121.53 }, "publish": true, "consentToMap": true, "expiryDate": "2030-01-31" },
+    "body": {
+      "clientListingId": "11111111-1111-4111-8111-111111111111",
+      "title": "合成檯燈",
+      "description": "僅供測試，並非真實商品。",
+      "category": "home",
+      "condition": "USED",
+      "brand": "測試品牌",
+      "price": 123.45,
+      "currency": "TWD",
+      "mediaIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "deliveryMethods": [
+        "SHIPPING",
+        "MEETUP"
+      ],
+      "negotiable": true,
+      "location": {
+        "county": "臺北市",
+        "district": "中山區",
+        "latitude": 25.05,
+        "longitude": 121.53
+      },
+      "publish": true,
+      "consentToMap": true,
+      "expiryDate": "2030-01-31"
+    },
     "requestHash": "99b11002e4ee235ea2e0583a9abfc65ebf30a3cfff1b9af3f61dac2dc09094e0"
   },
   {
-    "body": { "clientListingId": "11111111-1111-4111-8111-111111111111", "title": "合成檯燈", "description": "僅供測試，並非真實商品。", "category": "home", "condition": "USED", "brand": "測試品牌", "price": 123.45, "currency": "TWD", "mediaIds": ["22222222-2222-4222-8222-222222222222"], "deliveryMethods": ["SHIPPING", "MEETUP"], "negotiable": true, "location": { "county": "臺北市", "district": "中山區", "latitude": 25.05, "longitude": 121.53 }, "publish": true, "consentToMap": true, "expiryDate": "2000-01-01" },
+    "body": {
+      "clientListingId": "11111111-1111-4111-8111-111111111111",
+      "title": "合成檯燈",
+      "description": "僅供測試，並非真實商品。",
+      "category": "home",
+      "condition": "USED",
+      "brand": "測試品牌",
+      "price": 123.45,
+      "currency": "TWD",
+      "mediaIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "deliveryMethods": [
+        "SHIPPING",
+        "MEETUP"
+      ],
+      "negotiable": true,
+      "location": {
+        "county": "臺北市",
+        "district": "中山區",
+        "latitude": 25.05,
+        "longitude": 121.53
+      },
+      "publish": true,
+      "consentToMap": true,
+      "expiryDate": "2000-01-01"
+    },
     "requestHash": "22bf58de46fe6826c4770f950767d90d4d2cd05bc7db3010425d2ef21cbf4d4a"
+  },
+  {
+    "body": {
+      "clientListingId": "11111111-1111-4111-8111-111111111111",
+      "title": "合成檯燈",
+      "description": "僅供測試，並非真實商品。",
+      "category": "home",
+      "condition": "USED",
+      "brand": "測試品牌",
+      "price": 123.45,
+      "currency": "TWD",
+      "mediaIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "deliveryMethods": [
+        "SHIPPING",
+        "MEETUP"
+      ],
+      "negotiable": true,
+      "location": {
+        "county": "臺北市",
+        "district": "中山區",
+        "latitude": 25.05,
+        "longitude": 121.53
+      },
+      "publish": true,
+      "consentToMap": true,
+      "mapCheckIn": true
+    },
+    "requestHash": "b4192456817609e1ddb1eacca2fdd70a0a971286a17ba9941e34ce77f692eddf"
+  },
+  {
+    "body": {
+      "clientListingId": "11111111-1111-4111-8111-111111111111",
+      "title": "合成檯燈",
+      "description": "僅供測試，並非真實商品。",
+      "category": "home",
+      "condition": "USED",
+      "brand": "測試品牌",
+      "price": 123.45,
+      "currency": "TWD",
+      "mediaIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "deliveryMethods": [
+        "SHIPPING",
+        "MEETUP"
+      ],
+      "negotiable": true,
+      "location": {
+        "county": "臺北市",
+        "district": "中山區",
+        "latitude": 25.05,
+        "longitude": 121.53
+      },
+      "publish": true,
+      "consentToMap": false,
+      "mapCheckIn": false
+    },
+    "requestHash": "f331c1a64f816875bfa33b28f44feed33f315b3d804a54746c56266f8c3b2784"
   }
 ]

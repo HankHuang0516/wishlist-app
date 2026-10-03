@@ -297,3 +297,10 @@ CI 執行 marketing-compose.test.mjs 的完整遮罩／遺漏配件／壞遮罩�
 ## 願望編輯必填名稱與唯讀圖片雙語驗收
 
 在中英文各開啟既有願望編輯，確認必填名稱／唯讀圖片標籤；空白名稱先拒絕且保留輸入，不送 PUT 或建立回執。原照片願望正常五欄編輯回歸及未知回覆只讀查核保持。新增照片願望仍可不填名稱，手動新增仍需名稱。正式版以一筆新的私人合成願望驗空白拒絕、正常保存和重新讀取；不得修改原用戶願望。設定頁三項權益以真實本人 API 對照，購買與订閱保持暫停，不將會員旗標推成商店付款已開通。
+
+
+## Apple Oct 3 rejection release gate
+
+Use isolated PostgreSQL appleReviewRemediation.integration.ts to verify owner-only manual map permission, denial, expiry, stale-version rejection, no renewal on reads/extension, and human-report persistence/receipt ownership even if notification fails. Native regression must verify declining map display permits publishing and expired/cached consent never produces a map pin. Validate both buyer and seller reporting, report retry identity, and blocking stops new messages.
+
+Before submitting the selected new binary, record the exact physical iPhone/iPad build showing terms before login/register, a received report and blocking; include the accessible video reference or completed matching App Review attachment in App Review notes. Fresh native checks must also cover the existing chat, meetup, wishes, account deletion and scene lifecycle. Build 12, internal-only build 13, simulator footage and unchanged-binary evidence cannot close this rejection.

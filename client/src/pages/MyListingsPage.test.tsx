@@ -110,7 +110,7 @@ describe('native-equivalent owner management', () => {
     expect(date).toHaveValue('2101-01-15');
     fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
     await screen.findByText('原商品操作已確認完成；不會再次套用。');
-    expect(window.confirm).toHaveBeenCalledWith('確認延長至 2101-01-15？');
+    expect(window.confirm).toHaveBeenCalledWith('確認延長至 2101-01-15？延長刊登不會自動更新地圖顯示。');
     const writes = fetch.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(writes).toHaveLength(1);
     expect(writes[0][0]).toContain('/listings/management-operations/');
@@ -410,7 +410,7 @@ describe('complete owner paging and English recovery', () => {
     vi.stubGlobal('fetch',fetch);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Extend expiry'}));
     fireEvent.click(screen.getByRole('button',{name:'Open calendar for New expiry date (Taiwan time)'}));expect(screen.getByRole('heading',{name:'October 2100'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Select 2100-10-31'}));fireEvent.click(screen.getByRole('button',{name:'Confirm extension'}));
-    await screen.findByText('Version: 2');expect(window.confirm).toHaveBeenCalledWith('Extend expiry to 2100-10-31? ');
+    await screen.findByText('Version: 2');expect(window.confirm).toHaveBeenCalledWith('Extend expiry to 2100-10-31? Extending a listing does not renew map display.');
     const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'EXTEND',expectedVersion:1,changes:{expiryDate:'2100-10-31'}});
   });
   it('retains English unsaved text and blocks submission when local persistence fails', async () => {
@@ -420,4 +420,26 @@ describe('complete owner paging and English recovery', () => {
     fireEvent.change(screen.getByLabelText('Listing title'),{target:{value:'Retain this text'}});expect(await screen.findByRole('alert')).toHaveTextContent('Copy it before closing');
     expect(screen.getByLabelText('Listing title')).toHaveValue('Retain this text');expect(screen.getByRole('button',{name:'Save changes'})).toBeDisabled();expect(fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);expect(screen.queryByText('private disk details')).not.toBeInTheDocument();
   });
+});
+
+it('checks in only after explicit permission, stops manually, and never renews on reload',async()=>{
+ let current={...row,mapVisibleUntil:null as string|null};
+ const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+  if(init?.method==='PUT') {const body=JSON.parse(String(init.body));expect(body.expectedVersion).toBe(current.version);expect(body.consentToMap).toBe(body.display);current={...current,version:current.version+1,mapVisibleUntil:body.display?new Date(Date.now()+3600000).toISOString():null};return ok(current);}
+  return ok({items:[current],nextCursor:null});
+ });vi.stubGlobal('fetch',fetcher);render(view());await ready();
+ expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
+ vi.mocked(window.confirm).mockReturnValueOnce(false);fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));
+ expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(0);
+ fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));await screen.findByText('已確認這次地圖顯示，一小時後停止；不會自動續期。');
+ const deadline=current.mapVisibleUntil;fireEvent.click(screen.getByRole('button',{name:'重新載入',exact:true}));await ready();expect(current.mapVisibleUntil).toBe(deadline);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:'停止地圖顯示',exact:true}));await screen.findByText('已停止地圖顯示。');expect(current.mapVisibleUntil).toBeNull();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(2);
+});
+it('retains an unconfirmed map action and reloads only by GET without replay',async()=>{
+ let current={...row,mapVisibleUntil:null as string|null};
+ const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>{
+  if(init?.method==='PUT'){current={...current,version:2,mapVisibleUntil:new Date(Date.now()+3600000).toISOString()};throw Error('ACK lost');}
+  return ok({items:[current],nextCursor:null});
+ });vi.stubGlobal('fetch',fetcher);render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'手動顯示地圖一小時'}));await screen.findByText('地圖顯示尚未確認；請重新載入查看最新期限，不會自動重送。');
+ fireEvent.click(screen.getByRole('button',{name:'重新載入',exact:true}));await screen.findByRole('button',{name:'停止地圖顯示',exact:true});expect(fetcher.mock.calls.filter(([,init])=>init?.method==='PUT')).toHaveLength(1);
 });

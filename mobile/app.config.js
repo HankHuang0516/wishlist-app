@@ -4,13 +4,13 @@ module.exports = {
   expo: {
     name: 'Wishlist.ai',
     slug: 'weeshgifts',
-    version: '2.0.15',
+    version: '2.0.16',
     orientation: 'portrait',
     scheme: 'weesh',
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '12',
+      buildNumber: '14',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,

@@ -475,8 +475,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {issueText('shared:expiryDate')}
       </View>
       <View onLayout={event => { offsets.current['shared:consent'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:consent' && s.highlight]}>
-        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 我確認資料屬實並同意公開照片與約略位置</Text></Pressable>
-        {issueText('shared:consent')}
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 本次同意這批商品約略位置在地圖顯示一小時（選填）</Text></Pressable>
+        <Text style={s.small}>可不勾選並繼續刊登；一小時後停止顯示。重開 App 或延長刊登不會自動續期，可在我的商品手動確認或停止。</Text>{issueText('shared:consent')}
       </View>
       <Text style={s.small}>重新開啟草稿時，位置、交付方式與失效日期需再次確認；精確定位不保存在私人商品草稿。</Text>
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}

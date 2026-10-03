@@ -18,6 +18,7 @@ import { WishHome } from './src/WishHome';
 import { WishScreen } from './src/WishScreen';
 import { AccountSecurityScreen } from './src/AccountSecurityScreen';
 import { MyListingsScreen } from './src/MyListingsScreen';
+import { TERMS_ACK_KEY, TERMS_VERSION, TermsAgreement } from './src/TermsAgreement';
 import { AuthScreen } from './src/AuthScreen';
 import { admitLogin, recoveryLink, RecoveryLink } from './src/authFlow';
 import { createAuthOperationGate, isCurrentAuthEpoch } from './src/authOperation';
@@ -63,6 +64,8 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
 
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [termsChecked, setTermsChecked] = useState(false), [termsAccepted, setTermsAccepted] = useState(false);
+  useEffect(() => { let active = true; SecureStore.getItemAsync(TERMS_ACK_KEY).then(value => { if (active) setTermsAccepted(value === TERMS_VERSION); }).catch(() => undefined).finally(() => { if (active) setTermsChecked(true); }); return () => { active = false; }; }, []);
   const [booting, setBooting] = useState(true);
   const [noticeChecked, setNoticeChecked] = useState(false);
   const [noticeNeeded, setNoticeNeeded] = useState(true);
@@ -210,7 +213,8 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   if (booting) return <SafeAreaView style={styles.center}><ActivityIndicator accessibilityLabel="恢復登入中" /><Text style={styles.body}>正在載入…</Text></SafeAreaView>;
   if (deletionProblem) return <SafeAreaView style={styles.screen}><Text style={styles.title}>刪除恢復資料尚未確認</Text><Text accessibilityRole="alert" style={styles.body}>{deletionProblem}</Text><Pressable accessibilityRole="button" style={styles.button} onPress={() => { setDeletionProblem(''); setBooting(true); setRestoreAttempt(n => n + 1); }}><Text style={styles.buttonText}>重新讀取安全儲存</Text></Pressable></SafeAreaView>;
   if (deletionJournal || deletionOpen) return <SafeAreaView style={styles.screen}><AccountDeletionScreen apiUrl={apiUrl} userId={user?.id} token={token ?? undefined} initialJournal={deletionJournal} onPrepared={setDeletionJournal} onErased={erasePrivateViews} onExit={exitDeletion} /></SafeAreaView>;
-  if (!user) return <SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
+  if (user && (!termsChecked || !termsAccepted)) return <SafeAreaView style={styles.screen}>{termsChecked ? <TermsAgreement apiUrl={apiUrl} onAccept={() => setTermsAccepted(true)} onDecline={() => setDeletionOpen(true)} /> : <ActivityIndicator />}</SafeAreaView>;
+  if (!user) return <SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
 
   return <SafeAreaView style={styles.screen}>
     <View style={styles.header}>
@@ -227,10 +231,10 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
         <Text style={selected ? styles.activeTab : styles.inactiveTab}>{item}</Text>
       </Pressable>;
     })}</View>
-    {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('探索'); Alert.alert('商品已刊登', `已確認 ${count} 件商品，可在探索地圖查看。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
-    {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('探索'); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可至探索地圖查找商品。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
+    {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); Alert.alert('商品已刊登', `已確認 ${count} 件商品。可在我的商品分享連結，或手動同意本次地圖顯示。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
+    {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可在我的商品分享連結，或手動同意本次地圖顯示。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
     {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
-    {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
+    {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
   </SafeAreaView>;
 }
 

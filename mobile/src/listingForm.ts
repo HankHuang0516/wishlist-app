@@ -52,7 +52,6 @@ export function firstListingPublishIssue(form: ListingForm, mediaIds: string[], 
       latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8)
     return { field: 'location', message: '請完成商品地點：使用目前位置，或填入縣市、行政區與有效地圖座標。' };
   if (!form.meetup && !form.shipping) return { field: 'delivery', message: '請至少選擇面交或寄送一種交付方式。' };
-  if (!form.consent) return { field: 'consent', message: '請勾選同意公開照片與約略位置。' };
   if (form.expiryDate) {
     const day = new Date(`${form.expiryDate}T23:59:59.999+08:00`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.expiryDate) || !Number.isFinite(day.getTime()) || taiwanDate(day) !== form.expiryDate || day <= now)
@@ -75,11 +74,11 @@ export function buildListingBody(form: ListingForm, clientListingId: string, med
   const hasLocation = [form.county, form.district, form.latitude, form.longitude].some(Boolean);
   const latitude = Number(form.latitude); const longitude = Number(form.longitude);
   if (hasLocation && (!form.county.trim() || !form.district.trim() || form.county.trim().length > 30 || form.district.trim().length > 30 || !form.latitude.trim() || !form.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < 20 || latitude > 26.6 || longitude < 117 || longitude > 123.8)) throw new ListingFormError('請完成台灣縣市、行政區與有效位置');
-  if (publish && (!form.description.trim() || !form.price || !mediaIds.length || !hasLocation || (!form.meetup && !form.shipping) || !form.consent)) throw new ListingFormError('上架前請完成說明、價格、照片、地區、交付方式並同意公開');
+  if (publish && (!form.description.trim() || !form.price || !mediaIds.length || !hasLocation || (!form.meetup && !form.shipping))) throw new ListingFormError('上架前請完成說明、價格、照片、地區與交付方式');
   return { clientListingId, title, condition: form.condition, category: form.category, currency: 'TWD', publish,
     ...(form.description.trim() ? { description: form.description.trim() } : {}), ...(form.brand.trim() ? { brand: form.brand.trim() } : {}),
     ...(form.price ? { price: Number(form.price) } : {}), deliveryMethods: [...(form.meetup ? ['MEETUP'] : []), ...(form.shipping ? ['SHIPPING'] : [])],
-    negotiable: form.negotiable, mediaIds, consentToMap: form.consent,
+    negotiable: form.negotiable, mediaIds, consentToMap: form.consent, mapCheckIn: publish && form.consent,
     ...(form.expiryDate ? { expiryDate: form.expiryDate } : {}),
     ...(hasLocation ? { location: { county: form.county.trim(), district: form.district.trim(), latitude, longitude } } : {}),
   };

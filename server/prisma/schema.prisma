@@ -267,6 +267,7 @@ model Listing {
   expiresAt       DateTime?
   expiryMode      ListingExpiryMode       @default(DEFAULT_30_DAYS)
   lastVerifiedAt  DateTime?
+  mapVisibleUntil DateTime?
   version         Int                     @default(1)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -280,6 +281,7 @@ model Listing {
 
   @@unique([ownerUserId, clientListingId])
   @@index([status, expiresAt])
+  @@index([mapVisibleUntil])
   @@index([ownerUserId, createdAt])
   @@index([createdAt, id])
 }

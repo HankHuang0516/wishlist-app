@@ -84,11 +84,15 @@ describe('page expiry, deduplication and map projection', () => {
     expect(merged.map(item => item.id)).toEqual([id, otherId]); expect(merged[0].price).toBe(900);
   });
   it('projects only coarse locations and thumbnail IDs to native GeoJSON, never owner or descriptions', () => {
-    const data = listingGeoJSON([parsePublicListing(raw, apiUrl)]);
+    const data = listingGeoJSON([parsePublicListing({ ...raw, mapVisibleUntil: new Date(Date.now() + 3_600_000).toISOString() }, apiUrl)]);
     expect(data.features[0]).toEqual({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [121.51, 25.03] }, properties: { listingId: id, icon: 'photo-' + mediaId, title: '二手相機' } });
     expect(listingGeoJSON([]).features).toEqual([]);
   });
   it('formats free listings and two decimal prices', () => {
     const item = parsePublicListing(raw, apiUrl); expect(listingPrice(item)).toBe('NT$ 1,250.5'); expect(listingPrice({ ...item, price: 0 })).toBe('免費贈送');
   });
+});
+
+it('does not map a listing without a current explicit check-in, including cached expired consent', () => {
+  for (const mapVisibleUntil of [undefined, null, new Date(Date.now() - 1).toISOString()]) expect(listingGeoJSON([parsePublicListing({ ...raw, mapVisibleUntil }, apiUrl)]).features).toEqual([]);
 });

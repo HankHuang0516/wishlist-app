@@ -57,11 +57,12 @@ function number(input: unknown, field: string, min: number, max: number): number
 
 export function parseListingCreate(input: unknown, now: Date) {
     const body = object(input, 'body');
-    onlyKeys(body, ['clientListingId', 'title', 'description', 'condition', 'category', 'brand', 'price', 'currency', 'deliveryMethods', 'negotiable', 'location', 'mediaIds', 'expiryDate', 'publish', 'consentToMap']);
+    onlyKeys(body, ['clientListingId', 'title', 'description', 'condition', 'category', 'brand', 'price', 'currency', 'deliveryMethods', 'negotiable', 'location', 'mediaIds', 'expiryDate', 'publish', 'consentToMap', 'mapCheckIn']);
     if (!isListingId(body.clientListingId)) throw new ListingInputError('clientListingId');
     if (typeof body.publish !== 'boolean') throw new ListingInputError('publish');
     if (body.consentToMap !== undefined && typeof body.consentToMap !== 'boolean') throw new ListingInputError('consentToMap');
-    if (body.publish && body.consentToMap !== true) throw new ListingInputError('consentToMap', '請確認同意公開至商品地圖');
+    if (body.mapCheckIn !== undefined && typeof body.mapCheckIn !== 'boolean') throw new ListingInputError('mapCheckIn');
+    if (body.mapCheckIn === true && (!body.publish || body.consentToMap !== true)) throw new ListingInputError('consentToMap', '請明確同意這次一小時地圖顯示');
     const title = text(body.title, 'title', 100);
     const description = body.description === undefined ? null : text(body.description, 'description', 3000);
     const condition = body.condition === undefined ? 'USED' : body.condition;
@@ -85,8 +86,10 @@ export function parseListingCreate(input: unknown, now: Date) {
         deliveryMethods: methods as ('MEETUP' | 'SHIPPING')[], negotiable: body.negotiable === true,
         status: body.publish ? 'ACTIVE' as const : 'DRAFT' as const,
         publishedAt: body.publish ? now : null, ...expiry, lastVerifiedAt: body.publish ? now : null,
+        mapVisibleUntil: body.mapCheckIn === true ? new Date(Math.min(now.getTime() + 3_600_000, expiry.expiresAt!.getTime())) : null,
     };
-    const normalized = { ...data, publishedAt: undefined, lastVerifiedAt: undefined, expiresAt: undefined, expiryDate: body.expiryDate, location, mediaIds, consentToMap: body.consentToMap === true };
+    const { mapVisibleUntil, ...hashData } = data;
+    const normalized = { ...hashData, publishedAt: undefined, lastVerifiedAt: undefined, expiresAt: undefined, expiryDate: body.expiryDate, location, mediaIds, consentToMap: body.consentToMap === true, ...(body.mapCheckIn !== undefined ? { mapCheckIn: body.mapCheckIn } : {}) };
     return { clientListingId: body.clientListingId, data, location, mediaIds: mediaIds as string[], requestHash: createHash('sha256').update(JSON.stringify(normalized)).digest('hex') };
 }
 

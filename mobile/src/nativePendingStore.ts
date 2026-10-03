@@ -20,6 +20,6 @@ export async function erasePrivatePendingData(apiUrl: string, userId: number) {
   return privatePendingIndex.erase(await pendingScope(apiUrl, userId));
 }
 export async function pendingRequestKey(apiUrl: string, userId: number, resource: string) {
-  if (!Number.isSafeInteger(userId) || userId < 1 || !/^(listing|wish-create|listing-report|(message|meetup)\.[0-9a-f-]{36})$/i.test(resource)) throw new Error('Invalid private request scope');
+  if (!Number.isSafeInteger(userId) || userId < 1 || !/^(listing|wish-create|listing-report|(message|meetup|chat-report)\.[0-9a-f-]{36})$/i.test(resource)) throw new Error('Invalid private request scope');
   return `${await pendingScope(apiUrl, userId)}.${resource.toLowerCase()}`;
 }

@@ -55,7 +55,7 @@ export async function matchWishListings(req: AuthRequest, res: Response) {
         if (search.minPrice !== undefined) clauses.push(Prisma.sql`l.price >= ${search.minPrice}`);
         if (search.maxPrice !== undefined) clauses.push(Prisma.sql`l.price <= ${search.maxPrice}`);
         if (wish.maxPrice !== null && wish.priceCurrency === 'TWD') clauses.push(Prisma.sql`l.price <= ${wish.maxPrice}`);
-        if (search.bbox) clauses.push(Prisma.sql`p."publicLatitude" BETWEEN ${search.bbox.south} AND ${search.bbox.north} AND p."publicLongitude" BETWEEN ${search.bbox.west} AND ${search.bbox.east}`);
+        if (search.bbox) clauses.push(Prisma.sql`l."mapVisibleUntil" > ${now.toISOString()}::timestamp AND p."publicLatitude" BETWEEN ${search.bbox.south} AND ${search.bbox.north} AND p."publicLongitude" BETWEEN ${search.bbox.west} AND ${search.bbox.east}`);
         if (preferences.center && preferences.radiusKm !== undefined) {
             const [lat, lng] = preferences.center;
             clauses.push(Prisma.sql`6371 * 2 * asin(sqrt(least(1.0, greatest(0.0, power(sin(radians(p."publicLatitude" - ${lat}) / 2), 2) + cos(radians(${lat})) * cos(radians(p."publicLatitude")) * power(sin(radians(p."publicLongitude" - ${lng}) / 2), 2))))) <= ${preferences.radiusKm}`);

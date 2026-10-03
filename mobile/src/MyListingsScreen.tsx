@@ -47,7 +47,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
   }
   useEffect(() => { alive.current = true; void load(); return () => { alive.current = false; sequence.current++; }; }, []);
 
-  async function mutate(item: ManagedListing, path: string, method: 'POST' | 'PATCH', body: object,
+  async function mutate(item: ManagedListing, path: string, method: 'POST' | 'PATCH' | 'PUT', body: object,
     expectedStatus: ManagedListing['status'] | null, success: string) {
     if (running.current) return;
     running.current = true; setLoading(true); setError(''); setNotice('');
@@ -70,7 +70,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
   }
   function extend(item: ManagedListing, date: string) {
     setExpiryId(null);
-    Alert.alert('確認延長刊登？', item.status === 'EXPIRED' ? '延長後會重新公開顯示在探索地圖。' : `新失效日期：${date}。`, [
+    Alert.alert('確認延長刊登？', `新失效日期：${date}。延長刊登不會自動更新地圖顯示。`, [
       { text: '取消', style: 'cancel' }, { text: '確認延長',
         onPress: () => void mutate(item, `/listings/${item.id}/extend`, 'POST', { expectedVersion: item.version, expiryDate: date },
           item.status === 'EXPIRED' ? 'ACTIVE' : item.status, `「${item.title}」已延長至 ${date}。`) },
@@ -79,6 +79,14 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
   function save(item: ManagedListing) {
     try { void mutate(item, `/listings/${item.id}`, 'PATCH', listingEditBody(item, title, description, price), item.status, `「${item.title}」資料已更新。`); }
     catch (failure) { setError(failure instanceof Error ? failure.message : '請確認商品資料。'); }
+  }
+  function mapPresence(item: ManagedListing, display: boolean) {
+    Alert.alert(display ? '這次在地圖顯示一小時？' : '停止在地圖顯示？',
+      display ? '只顯示商品的約 2 公里模糊位置，不是使用者即時定位。一小時後停止顯示，開啟 App、編輯或延長刊登都不會自動續期。' : '停止地圖顯示，商品刊登與聊天仍保留。', [
+        { text: '不顯示／取消', style: 'cancel' },
+        { text: display ? '同意這次顯示' : '停止顯示', onPress: () => void mutate(item, `/listings/${item.id}/map-presence`, 'PUT',
+          { expectedVersion: item.version, display, consentToMap: display }, item.status, display ? '已手動確認這次地圖顯示，不會自動續期。' : '已停止地圖顯示。') },
+      ]);
   }
   async function share(item: ManagedListing) {
     try {
@@ -111,9 +119,11 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
               <Text style={s.muted}>{item.condition === 'USED' ? '二手' : '新品'}</Text></View>
             <Text style={s.muted}>{item.location ? `${item.location.county}${item.location.district}` : '地點未填'}{item.expiresAt ? ` · 至 ${item.expiresAt.slice(0, 10)}` : ''}</Text></View></View>
         {detailId === item.id && !!item.description && <Text style={s.body}>{item.description}</Text>}
+        <Text style={s.muted}>{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > now ? `地圖顯示至 ${new Date(item.mapVisibleUntil).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}；不會自動續期` : '目前不在地圖顯示；需手動確認這次顯示'}</Text>
         {detailId === item.id && <Text style={s.muted}>分類：{item.category ?? '未分類'} · 建立日期：{item.createdAt.slice(0, 10)} · 商品編號：{item.id}</Text>}
         <View style={s.actions}>{cardAction(detailId === item.id ? '收合詳情' : '查看詳情', () => setDetailId(current => current === item.id ? null : item.id))}
         {listingShareUrl(item, apiUrl, __DEV__) && cardAction('分享連結', () => void share(item))}
+        {['ACTIVE', 'RESERVED'].includes(item.status) && managementTab(item, now) !== '已失效' && <>{cardAction('手動顯示地圖一小時', () => mapPresence(item, true))}{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > now && cardAction('停止地圖顯示', () => mapPresence(item, false))}</>}
         {(item.status === 'DRAFT' || item.status === 'ACTIVE' || item.status === 'RESERVED' || item.status === 'EXPIRED') &&
           <>{managementTab(item, now) !== '已失效' && cardAction('編輯資訊', () => { setEditing(item.id); setTitle(item.title); setDescription(item.description ?? ''); setPrice(item.price === null ? '' : String(item.price)); })}
             {item.status === 'ACTIVE' && managementTab(item, now) === '在售' && detailId === item.id && cardAction('標記保留', () => askStatus(item, 'reserve', 'RESERVED'))}

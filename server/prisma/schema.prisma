@@ -819,6 +819,7 @@ model ListingManagementReceipt {
   state          String   @db.VarChar(12)
   reason         String?  @db.VarChar(32)
   appliedVersion Int?
+  mapVisibleUntil DateTime?
   createdAt      DateTime @default(now())
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

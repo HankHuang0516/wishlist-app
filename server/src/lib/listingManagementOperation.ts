@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isListingId, ListingInputError } from './listingRules';
+import { mapPresenceBody } from './mapPresence';
 
 export function managementId(value: unknown): string {
     if (!isListingId(value)) throw new ListingInputError('clientActionId');
@@ -33,12 +34,17 @@ export function managementBody(value: unknown) {
         const date = changes.expiryDate;
         if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T12:00:00Z`)) || new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date) throw new ListingInputError('expiryDate');
         normalized = { expiryDate: date };
+    } else if (row.kind === 'MAP') {
+        exact(changes, ['display', 'consentToMap']);
+        const presence = mapPresenceBody({ expectedVersion, ...changes });
+        normalized = { display: presence.display, consentToMap: presence.display };
+        if (changes.consentToMap !== presence.display) throw new ListingInputError('consentToMap');
     } else throw new ListingInputError('kind');
-    return { kind: row.kind as 'EDIT' | 'STATUS' | 'EXTEND', listingId, expectedVersion, changes: normalized };
+    return { kind: row.kind as 'EDIT' | 'STATUS' | 'EXTEND' | 'MAP', listingId, expectedVersion, changes: normalized };
 }
 export function managementHash(body: ReturnType<typeof managementBody>) { return createHash('sha256').update(JSON.stringify(body)).digest('hex'); }
 export function managementAbandonBody(value: unknown) {
     const row = record(value); exact(row, ['kind', 'listingId', 'expectedVersion', 'requestHash']);
-    if (typeof row.kind !== 'string' || !['EDIT', 'STATUS', 'EXTEND'].includes(row.kind) || !Number.isSafeInteger(row.expectedVersion) || Number(row.expectedVersion) < 1 || Number(row.expectedVersion) > 2147483646 || typeof row.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.requestHash)) throw new ListingInputError('body');
-    return { kind: row.kind as 'EDIT' | 'STATUS' | 'EXTEND', listingId: managementId(row.listingId), expectedVersion: Number(row.expectedVersion), requestHash: row.requestHash };
+    if (typeof row.kind !== 'string' || !['EDIT', 'STATUS', 'EXTEND', 'MAP'].includes(row.kind) || !Number.isSafeInteger(row.expectedVersion) || Number(row.expectedVersion) < 1 || Number(row.expectedVersion) > 2147483646 || typeof row.requestHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.requestHash)) throw new ListingInputError('body');
+    return { kind: row.kind as 'EDIT' | 'STATUS' | 'EXTEND' | 'MAP', listingId: managementId(row.listingId), expectedVersion: Number(row.expectedVersion), requestHash: row.requestHash };
 }

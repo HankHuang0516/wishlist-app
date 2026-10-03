@@ -313,3 +313,8 @@ Web explicitly requests approximate=1 for source list and details. County illust
 ## 願望編輯提示與驗證一致
 
 編輯既有願望顯示「願望名稱（必填）」及「商品圖片網址（唯讀）」，英文分別為 Wish name · required 與 Saved product image URL · read-only；名稱以 aria-required 標示。新增願望仍可在選用照片時留空名稱，仍使用原 AI 圖片輸入說明。這項調整不改儲存驗證、待確認紀錄、照片、AI 結果或後台契約。
+
+
+### Manual map display recovery — v641
+
+Web check-in/stop uses the existing encrypted owner/API-scoped listing management journal. The immutable MAP receipt binds the original UUID, complete consent body hash, applied version and original deadline. Reload reads only the original receipt and latest listing; a later device change remains separate. Explicit retries reuse the original operation and cannot renew its deadline. Cancellation fences an uncommitted request. Each new check-in requires a keyboard-accessible Chinese/English confirmation. Existing EDIT/STATUS/EXTEND receipt projections retain their exact shape, and native direct map APIs remain available. Local controlled DEV UI evidence is separate from formal deployment evidence.

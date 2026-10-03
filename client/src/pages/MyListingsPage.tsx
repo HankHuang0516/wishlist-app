@@ -9,6 +9,7 @@ import type { ManagedListing, ManagementTab } from '../lib/managedListingWeb';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import DateField from '../components/DateField';
 import ListingEditForm from '../components/ListingEditForm';
+import MarketplaceDialog from '../components/MarketplaceDialog';
 import { parseListingEditDraft } from '../lib/listingEditDraft';
 import type { ListingEditFields } from '../lib/listingEditDraft';
 import { Button } from '../components/ui/Button';
@@ -34,6 +35,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   const [pendingRaw, setPendingRaw] = useState<string | null>(null), [journal, setJournal] = useState<ManagementJournal | null>(null);
   const [outcome, setOutcome] = useState<ManagementResult | null>(null), [latest, setLatest] = useState<ManagedListing | null>(null);
   const [pendingLoaded, setPendingLoaded] = useState(false), [cancelRequested, setCancelRequested] = useState(false);
+  const [mapConfirmation, setMapConfirmation] = useState<{item: ManagedListing; display: boolean} | null>(null);
   const pendingKey = useRef('');
   const unconfirmed = pendingRaw ? journal?.body.listingId ?? 'restoring' : null;
   const [loaded, setLoaded] = useState(false);
@@ -99,7 +101,8 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         const b = saved.body;
         if (current.status !== managementTargetStatus(b, saved.original) ||
           b.kind === 'EDIT' && (current.title !== b.changes.title || b.changes.description !== undefined && current.description !== b.changes.description || b.changes.price !== undefined && current.price !== b.changes.price) ||
-          b.kind === 'EXTEND' && current.expiresAt?.slice(0,10) !== b.changes.expiryDate) throw new ManagedListingError();
+          b.kind === 'EXTEND' && current.expiresAt?.slice(0,10) !== b.changes.expiryDate ||
+          b.kind === 'MAP' && (current.mapVisibleUntil ?? null) !== result.mapVisibleUntil) throw new ManagedListingError();
       }
       if (!isCurrent(epoch)) return;
       setRows(old => old.some(row => row.id === current.id) ? old.map(row => row.id === current.id ? current : row) : [...old, current]);
@@ -193,17 +196,10 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     if (!window.confirm(t("確認延長至 {date}？{warning}", { date, warning: t("延長刊登不會自動更新地圖顯示。") }))) return;
     void mutate(item, 'EXTEND', { expiryDate: date });
   }
-  async function mapPresence(item: ManagedListing, display: boolean) {
+  function mapPresence(item: ManagedListing, display: boolean) {
     const epoch = generation.current;
     if (!isCurrent(epoch) || running.current || unconfirmed || !pendingLoaded) return;
-    if (!window.confirm(display ? t("這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。") : t("停止地圖顯示？商品刊登及聊天仍保留。"))) return;
-    running.current = true; setBusy(true); setIssue(''); setNotice('');
-    try {
-      const result = parse(await api<unknown>(token, `/listings/${item.id}/map-presence`, {method:'PUT',body:JSON.stringify({expectedVersion:item.version,display,consentToMap:display})}));
-      if (result.id !== item.id || result.version !== item.version + 1 || display && (!result.mapVisibleUntil || Date.parse(result.mapVisibleUntil) <= Date.now()) || !display && result.mapVisibleUntil !== null) throw new ManagedListingError();
-      if (isCurrent(epoch)) { setRows(old=>old.map(row=>row.id===item.id?result:row)); setNotice(display ? t("已確認這次地圖顯示，一小時後停止；不會自動續期。") : t("已停止地圖顯示。")); }
-    } catch { if (isCurrent(epoch)) setIssue(t("地圖顯示尚未確認；請重新載入查看最新期限，不會自動重送。")); }
-    finally { if (isCurrent(epoch)) { running.current=false;setBusy(false); } }
+    setMapConfirmation({item, display});
   }
   async function share(item: ManagedListing) {
     const epoch = generation.current;
@@ -215,8 +211,13 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     } catch (error) { if (isCurrent(epoch) && !(error instanceof DOMException && error.name === 'AbortError')) setIssue(t("無法開啟分享或複製連結，請使用下方商品網址。")); }
   }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);
-  const blocked = busy || !!unconfirmed || !pendingLoaded;
+  const blocked = busy || !!unconfirmed || !pendingLoaded || !!mapConfirmation;
   return <div className="max-w-3xl mx-auto p-4 space-y-5 [&_button]:min-h-11">
+    {mapConfirmation && <MarketplaceDialog title={t("確認商品地圖顯示")} closeLabel={t("取消")} onClose={()=>setMapConfirmation(null)}>
+      <p className="mb-3 font-semibold break-words">{mapConfirmation.item.title}</p>
+      <p className="mb-5 text-sm leading-6">{mapConfirmation.display ? t("這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。") : t("停止地圖顯示？商品刊登及聊天仍保留。")}</p>
+      <Button disabled={busy || !!unconfirmed || !pendingLoaded} onClick={()=>{const {item,display}=mapConfirmation;setMapConfirmation(null);void mutate(item,'MAP',{display,consentToMap:display});}}>{mapConfirmation.display ? t("確認這次顯示一小時") : t("確認停止地圖顯示")}</Button>
+    </MarketplaceDialog>}
     <Link to="/settings" className="text-blue-700">{t("返回我的／設定")}</Link>
     <div className="flex items-center justify-between gap-3"><h1 className="text-3xl font-bold">{t("我的商品")}</h1><Link to="/sell" className="rounded-xl bg-blue-600 text-white p-3">{t("刊登好物")}</Link></div>
     <div role="tablist" aria-label={t("我的商品狀態")} className="flex flex-wrap gap-2">{MANAGEMENT_TABS.map(name => <button key={name} type="button" role="tab" aria-selected={tab === name}
@@ -227,14 +228,14 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     {issue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{issue}</p>}
     {!pendingLoaded && <Button variant="outline" disabled={busy} onClick={() => void restore(true)}>{t("重新載入商品操作紀錄")}</Button>}
     {journal && <section aria-label={t("原商品操作與最新資料比較")} className="rounded-xl border bg-white p-4 space-y-3">
-      <h2 className="font-bold">{t("原商品操作 · ")}{journal.body.kind === 'EDIT' ? t("編輯資訊") : journal.body.kind === 'EXTEND' ? t("延長期限") : t("狀態變更")}</h2>
+      <h2 className="font-bold">{t("原商品操作 · ")}{journal.body.kind === 'EDIT' ? t("編輯資訊") : journal.body.kind === 'EXTEND' ? t("延長期限") : journal.body.kind === 'MAP' ? t("地圖顯示") : t("狀態變更")}</h2>
       <p className="text-sm">{t("商品：")}{journal.original.title}{t(" · 原版本 ")}{journal.body.expectedVersion} · {outcome?.state === 'APPLIED' ? t("已完成版本 {version}", { version: outcome.appliedVersion! }) : outcome?.state === 'CONFLICT' ? t("未套用，資料有衝突或不符合規則") : outcome?.state === 'ABANDONED' ? t("已取消") : t("待查核")}</p>
       <div className="grid gap-3 sm:grid-cols-2 text-sm break-words">
         <div className="rounded-lg bg-blue-50 p-3"><h3 className="font-semibold">{t("您的原操作內容（已保存）")}</h3>
           {journal.body.kind === 'EDIT' ? <><p>{t("商品名稱：")}{String(journal.body.changes.title)}</p><p className="whitespace-pre-wrap">{t("商品說明：")}{String(journal.body.changes.description ?? journal.original.description ?? t("未填"))}</p><p>{t("售價（NT$）：")}{String(journal.body.changes.price ?? journal.original.price ?? t("未填"))}</p></>
-            : journal.body.kind === 'EXTEND' ? <p>{t("新的失效日期（台灣時間）：")}{String(journal.body.changes.expiryDate)}</p> : <p>{t("動作：")}{({reserve:t("標記保留"),release:t("恢復在售"),sold:t("標記售出"),remove:t("移除")} as Record<string,string>)[String(journal.body.changes.action)]}</p>}
+            : journal.body.kind === 'EXTEND' ? <p>{t("新的失效日期（台灣時間）：")}{String(journal.body.changes.expiryDate)}</p> : journal.body.kind === 'MAP' ? <><p>{journal.body.changes.display ? t("手動顯示地圖一小時") : t("停止地圖顯示")}</p>{outcome?.state === 'APPLIED' && <p>{outcome.mapVisibleUntil ? t("原操作顯示期限：{time}", {time:new Date(outcome.mapVisibleUntil).toLocaleString()}) : t("原操作已停止地圖顯示。")}</p>}</> : <p>{t("動作：")}{({reserve:t("標記保留"),release:t("恢復在售"),sold:t("標記售出"),remove:t("移除")} as Record<string,string>)[String(journal.body.changes.action)]}</p>}
         </div><div className="rounded-lg bg-gray-50 p-3"><h3 className="font-semibold">{t("後台最新商品資料（只讀）")}</h3>
-          {latest ? <><p>{t("版本：")}{latest.version}{outcome?.appliedVersion && latest.version > outcome.appliedVersion ? t(" · 原操作完成後又有更新") : ''}</p><p>{t("商品名稱：")}{latest.title}</p><p className="whitespace-pre-wrap">{t("商品說明：")}{latest.description ?? t("未填")}</p><p>{t("售價（NT$）：")}{latest.price ?? t("未填")}</p><p>{t("狀態：")}{t(managementTab(latest))}</p><p>{t("失效日期（台灣時間）：")}{latest.expiresAt?.slice(0,10) ?? t("未設定")}</p></> : <p>{t("尚未核對；不會用目前卡片推定原操作成功。")}</p>}
+          {latest ? <><p>{t("版本：")}{latest.version}{outcome?.appliedVersion && latest.version > outcome.appliedVersion ? t(" · 原操作完成後又有更新") : ''}</p><p>{t("商品名稱：")}{latest.title}</p><p className="whitespace-pre-wrap">{t("商品說明：")}{latest.description ?? t("未填")}</p><p>{t("售價（NT$）：")}{latest.price ?? t("未填")}</p><p>{t("狀態：")}{t(managementTab(latest))}</p><p>{t("失效日期（台灣時間）：")}{latest.expiresAt?.slice(0,10) ?? t("未設定")}</p>{journal.body.kind === 'MAP' && <p>{latest.mapVisibleUntil && Date.parse(latest.mapVisibleUntil)>now ? t("地圖顯示至 {time}；不會自動續期。",{time:new Date(latest.mapVisibleUntil).toLocaleString()}) : t("目前不在地圖顯示；需手動確認這次顯示。")}</p>}</> : <p>{t("尚未核對；不會用目前卡片推定原操作成功。")}</p>}
         </div></div>
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy || !pendingLoaded} onClick={() => void recover()}>{t("只查核原操作回執與最新商品")}</Button>
         {!outcome ? <><Button variant="outline" disabled={busy || !pendingLoaded} onClick={() => void pendingAction('retry')}>{t("明確重試同一原操作")}</Button>

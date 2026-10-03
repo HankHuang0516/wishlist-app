@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:"2.0.641",date:"2026-10-03",title:"商品地圖顯示操作恢復",type:"Fullstack",items:[{type:"Fix",content:"手動地圖顯示與停止保留原操作結果；回覆中斷後重開先查核，不會重複續期。原期限與其他裝置後續狀態分開顯示，確認支援鍵盤及繁中／英文。"}]},
  {version:"2.0.639",date:"2026-10-03",title:"iOS 社群安全與手動地圖顯示",type:"Fullstack",items:[{type:"Security",content:"登入前呈現 18 歲使用條款；聊天可檢舉不當內容並取得人工處理收件編號。"},{type:"Enhancement",content:"商品刊登可拒絕地圖顯示，每次手動同意一小時後停止，不因重開或延長刊登自動續期。"}]},
  {version:"2.0.605",date:"2026-10-03",title:"台北縣市示意與原生來源契約",type:"Fullstack",items:[{type:"Enhancement",content:"原生來源識別概略位置，逐件保留照片、名稱與原帖標價；只知台北市時明示行政區未明示，不猜取貨點。"}]},
  {version:"2.0.597",date:"2026-10-03",title:"來源線索的縣市概略位置",type:"Fullstack",items:[{type:"Enhancement",content:"有原帖地區依據的來源可顯示縣市示意位置，明確標示非取貨點，不提供精確距離或導航；在售與交易仍待確認。"}]},

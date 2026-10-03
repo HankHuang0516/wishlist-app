@@ -343,19 +343,25 @@ export async function setListingMapPresence(req: AuthRequest, res: Response) {
         const id = listingCreationId(req.params.id), userId = req.user.id, body = mapPresenceBody(req.body);
         if (Object.keys(req.query).length) throw new ListingInputError('query');
         const listing = await prisma.$transaction(async tx => {
-            await lockListingAdmission(tx, id);
-            const user = await listingCreationGate(tx, req, userId);
-            const current = await tx.listing.findFirst({ where: { id, ownerUserId: userId }, select: publicListingSelect });
-            if (!current) throw new ListingMissing();
-            const now = new Date();
-            if (current.version !== body.expectedVersion) throw new ListingConflict();
-            if (body.display && (!isDiscoverable(current.status, current.expiresAt, now) || !current.location || (!user.isEmailVerified && !user.isPhoneVerified)))
-                throw new ListingForbidden('請先確認商品仍在刊登並完成帳號驗證');
-            const updated = await tx.listing.updateMany({ where: { id, ownerUserId: userId, version: body.expectedVersion },
-                data: { mapVisibleUntil: body.display ? mapPresenceUntil(true, now, current.expiresAt!) : null, version: { increment: 1 } } });
-            if (updated.count !== 1) throw new ListingConflict();
-            return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
+            await listingCreationGate(tx, req, userId);
+            return applyListingMapPresence(tx, userId, id, { ...body, consentToMap: body.display });
         });
         return res.json(listing);
     } catch (error) { return fail(res, error); }
+}
+
+export async function applyListingMapPresence(tx: Prisma.TransactionClient, userId: number, id: string, input: unknown) {
+    const body = mapPresenceBody(input);
+    await lockListingAdmission(tx, id);
+    const current = await tx.listing.findFirst({ where: { id, ownerUserId: userId }, select: publicListingSelect });
+    if (!current) throw new ListingMissing();
+    const now = new Date();
+    if (current.version !== body.expectedVersion) throw new ListingConflict();
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { isEmailVerified: true, isPhoneVerified: true } });
+    if (body.display && (!isDiscoverable(current.status, current.expiresAt, now) || !current.location || (!user.isEmailVerified && !user.isPhoneVerified)))
+        throw new ListingForbidden('請先確認商品仍在刊登並完成帳號驗證');
+    const updated = await tx.listing.updateMany({ where: { id, ownerUserId: userId, version: body.expectedVersion },
+        data: { mapVisibleUntil: body.display ? mapPresenceUntil(true, now, current.expiresAt!) : null, version: { increment: 1 } } });
+    if (updated.count !== 1) throw new ListingConflict();
+    return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
 }

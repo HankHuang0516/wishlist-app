@@ -67,6 +67,9 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   const [noticeChecked, setNoticeChecked] = useState(false);
   const [noticeNeeded, setNoticeNeeded] = useState(true);
   const [tab, setTab] = useState<Tab>('首頁');
+  const exploredOwner=useRef<number|null>(null);
+  if(!user)exploredOwner.current=null;
+  else if(tab==='探索')exploredOwner.current=user.id;
   const [authLink, setAuthLink] = useState<RecoveryLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -218,8 +221,11 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialSourceId={focusSource} onInitialSourceHandled={()=>setFocusSource(null)} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => {setActiveSourceChat(null);setFocusSource(null); setActiveRoom(id); setTab('社交'); }} onOpenSourceChat={context=>{setActiveRoom(null);setActiveSourceChat(context);setTab('社交');}} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} activeSourceChat={activeSourceChat} onSourceChatChange={context=>{if(!context&&activeSourceChat){setFocusSource(activeSourceChat.id);setExploreWishId(undefined);setTab('探索');}setActiveSourceChat(context);}} /> :
+    {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? null : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} activeSourceChat={activeSourceChat} onSourceChatChange={context=>{if(!context&&activeSourceChat){setFocusSource(activeSourceChat.id);setTab('探索');}setActiveSourceChat(context);}} /> :
       <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
+    {exploredOwner.current===user.id && <View style={[styles.flex, tab !== '探索' && {display:'none'}]}>
+      <ExploreScreen key={user.id} active={tab==='探索'} api={api} apiUrl={apiUrl} userId={user.id} initialSourceId={focusSource} onInitialSourceHandled={()=>setFocusSource(null)} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => {setActiveSourceChat(null);setFocusSource(null); setActiveRoom(id); setTab('社交'); }} onOpenSourceChat={context=>{setActiveRoom(null);setActiveSourceChat(context);setTab('社交');}} />
+    </View>}
     <View style={styles.tabs}>{TABS.map(item => {
       const selected = item === tab;
       return <Pressable key={item} testID={TAB_IDS[item]} accessibilityLabel={item} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setTab(item)} style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}>

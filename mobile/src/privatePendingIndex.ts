@@ -6,7 +6,7 @@ const PAGE_COUNT = 128;
 const PAGE_SIZE = 8;
 const INDEX_VERSION = 1;
 const scopePattern = /^wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9}$/;
-const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(listing|wish-create|listing-report|(?:message|meetup)\.[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})(?:\.[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.(?:[0-9]|[1-3][0-9]|40))?$/i;
+const keyPattern = /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.(listing|wish-create|listing-report|(?:message|meetup|source-lead)\.[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})(?:\.[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.(?:[0-9]|[1-3][0-9]|40))?$/i;
 export class PrivatePendingIndexError extends Error {
   constructor() { super('無法安全盤點或清理本人待確認資料，尚未確認裝置清理完成。'); }
 }

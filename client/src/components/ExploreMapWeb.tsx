@@ -9,6 +9,7 @@ import { clusterLeafIds, type ResultCamera } from '../lib/exploreMapView';
 import { mapText } from '../lib/mapText';
 import './ExploreMapWeb.css';
 import type {SourceLead} from '../lib/sourceLeadData';
+import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 
 // MapLibre v6 requires Vite to bundle the worker with its shared imports.
 setWorkerUrl(workerUrl);
@@ -157,7 +158,7 @@ export default function ExploreMapWeb(props: Props) {
   useEffect(() => {
     const map = mapRef.current; if (!ready || !map || !map.getLayer('external-photos')) return;
     let active = true; const markers = new Map<string, Marker>();
-    const items = new Map<string,{id:string;title:string;price:string;thumbnailUrl:string;location:{longitude:number;latitude:number};kind:'external'|'source'}>([...props.external.map(item => [item.id,{id:item.id,title:item.title,price:externalPrice(item),thumbnailUrl:item.thumbnailUrl,location:item.location,kind:'external' as const}] as const),...(props.sourceLeads??[]).filter(item=>item.media?.[0]?.thumbnailUrl).map(item=>[item.id,{id:item.id,title:item.title,price:item.publicFacts?.priceText||'售價待詢問',thumbnailUrl:item.media![0].thumbnailUrl,location:{longitude:item.longitude,latitude:item.latitude},kind:'source' as const}] as const)]);
+    const items = new Map<string,{id:string;title:string;price:string;thumbnailUrl:string;location:{longitude:number;latitude:number};kind:'external'|'source'}>([...props.external.map(item => [item.id,{id:item.id,title:item.title,price:externalPrice(item),thumbnailUrl:item.thumbnailUrl,location:item.location,kind:'external' as const}] as const),...(props.sourceLeads??[]).filter(item=>item.media?.[0]?.thumbnailUrl).map(item=>[item.id,{id:item.id,title:item.title,price:sourceLeadPrice(item.publicFacts?.priceText),thumbnailUrl:item.media![0].thumbnailUrl,location:{longitude:item.longitude,latitude:item.latitude},kind:'source' as const}] as const)]);
     function syncMarkers() {
       if (!active) return;
       const visible = new Set<string>();

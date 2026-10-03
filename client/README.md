@@ -290,3 +290,8 @@ Regression coverage includes unknown committed/uncommitted sends, reload and exa
 ## County illustration source leads — 2026-10-03
 
 Web explicitly requests approximate=1 for source list and details. County illustration evidence binds the original source region and an approved fixed county representative, with a visible label that it is not a pickup point. No precise address, distance or navigation is supplied. Source stock remains UNKNOWN and qualification/checkout remain false. Existing concrete public meeting points preserve their evidence gates. Old native clients without this opt-in continue receiving the concrete-public-point sources only; internal32 has not gained the new county layer. No schema migration or permission change is required.
+
+
+## 來源缺少售價的顯示
+
+來源線索的空售價 sentinel（例如原帖標價 None元）在探索列表、地圖標記、詳情與來源聊天統一顯示「售價待詢問」／Ask about price。保留原始 publicFacts，正常0元、區間、議價及來源提醒照原文顯示；不更改庫存、交易或聯絡路由。

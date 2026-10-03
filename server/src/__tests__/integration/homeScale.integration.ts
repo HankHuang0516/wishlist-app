@@ -34,7 +34,7 @@ afterAll(async()=>{if(buyer)await prisma.user.deleteMany({where:{id:{in:[buyer,s
 it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fault and account-isolation matrix':'real PostgreSQL/HTTP: complete 10k,30k,50k catalogs, independent ID oracle and concurrent user isolation',async()=>{
  const {puppeteer,executablePath}=webQaBrowser();
  const browser=await puppeteer.launch({headless:true,executablePath,args:['--disable-background-networking']});
- const page=await browser.newPage();await page.setViewport({width:1440,height:900});await page.setBypassServiceWorker(true);await page.setRequestInterception(true);
+ const page=await browser.newPage();await page.evaluateOnNewDocument(()=>{Object.defineProperty(navigator,'language',{get:()=> 'zh-TW'});Object.defineProperty(navigator,'languages',{get:()=>['zh-TW','zh']});});await page.setViewport({width:1440,height:900});await page.setBypassServiceWorker(true);await page.setRequestInterception(true);
  const origin='https://wishlist-qa.invalid'; const dist=path.resolve(__dirname,'../../../../client/dist');
  const faults:{path:string;method:string;kind:'FAIL'|'DROP_ACK'|'HOLD';remaining:number;wait?:Promise<void>;started?:()=>void}[]=[];const traffic:{path:string;method:string;status:number}[]=[];
  const bridge=async(req:any)=>{

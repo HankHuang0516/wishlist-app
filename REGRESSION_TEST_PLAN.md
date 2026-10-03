@@ -1,5 +1,11 @@
 # Wishlist.ai Regression Test Plan
 
+### Public friend wishlist target identity
+
+- Actual authenticated social routes reject numeric suffixes, decimals, exponent syntax, leading zeros, zero, negative, whitespace and overflow with INVALID_INPUT / 400; no public-account aliasing. Anonymous requests remain 401.
+- Valid IDs preserve public lists, exclude private lists and hidden items, return only the public DTO, and retain private/no-store. Unknown valid targets retain an empty collection.
+- Verify formal friend search, public profile and public-wishlist navigation using existing synthetic QA data without follow, profile, wish, mail or payment writes; record any rate-limit or incomplete verification honestly.
+
 ### 已有照片的願望編輯
 
 - 既有正常上傳的願望照片網址為 API 的 opaque image 路徑，不可當新增 AI 圖片驗證。編輯名稱、備註、參考連結、最高預算與幣別後，單次 PUT 只送可寫欄位，原照片、AI 狀態／參考價保持。

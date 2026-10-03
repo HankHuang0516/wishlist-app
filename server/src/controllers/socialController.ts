@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { socialCard, socialCardSelect, socialSearchQuery, socialSearchWhere } from '../lib/socialPrivacy';
 import { legacyFollow } from './followOperationController';
+import { followUserId } from '../lib/followOperation';
 
 // Search users by name or phone (excluding self)
 export const searchUsers = async (req: Request, res: Response) => {
@@ -84,8 +85,8 @@ export { getUpcomingBirthdays } from './birthdayController';
 // Get public wishlists of a specific user
 export const getUserPublicWishlists = async (req: Request, res: Response) => {
     const { id } = req.params; // Target user ID
-    const targetId = parseInt(id as string);
-    if (isNaN(targetId)) {
+    let targetId: number;
+    try { targetId = followUserId(id); } catch {
         return res.status(400).json({ error: 'Invalid user ID', errorCode: API_ERROR_CODES.INVALID_INPUT });
     }
 

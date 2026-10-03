@@ -44,6 +44,13 @@ describe('actual social route / public wishlist privacy', () => {
   expect((await request(server).get(`/api/users/${owner}/wishlists`)).status).toBe(401);
   expect((await request(server).get(`/api/users/${owner}/wishlists`).set('Authorization','Bearer invalid')).status).toBe(401);
  });
+ it.each(['suffix','decimal','exponent','leading-zero','zero','negative','overflow','too-long','whitespace'])('rejects a malformed target without aliasing a public account: %s', async kind => {
+  const targets: Record<string,string> = {suffix:`${owner}abc`,decimal:`${owner}.5`,exponent:`${owner}e3`,'leading-zero':`0${owner}`,zero:'0',negative:'-1',overflow:'2147483648','too-long':'999999999999999999',whitespace:` ${owner}`};
+  const r=await request(server).get(`/api/users/${encodeURIComponent(targets[kind])}/wishlists`).set('Authorization',auth());
+  expect(r.status).toBe(400);expect(r.body).toEqual({error:'Invalid user ID',errorCode:'INVALID_INPUT'});
+  expect(r.headers['cache-control']).toBe('private, no-store');
+  expect(JSON.stringify(r.body)).not.toContain('Synthetic public');
+ });
  it('preserves public visibility for a logged-in non-follower, excluding private lists and hidden items', async () => {
   const r = await get(); expect(r.status).toBe(200); expect(r.headers['cache-control']).toBe('private, no-store');
   expect(r.body.map((l: any) => l.id)).toEqual([publicId]); expect(r.body[0].items.map((i: any) => i.id)).toEqual([visibleId]);

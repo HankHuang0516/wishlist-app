@@ -6,6 +6,7 @@ import OfflineBanner from "./components/OfflineBanner";
 import { createLazyPage } from "./components/LazyPage";
 import { Analytics } from "./utils/analytics";
 import WebUpdateProvider from './context/WebUpdateContext';
+import WebAppInstallProvider from './context/WebAppInstallContext';
 
 const SourceLeadMapPage = createLazyPage(() => import('./pages/SourceLeadMapPage'));
 const Home = createLazyPage(() => import('./pages/Home'));
@@ -56,7 +57,7 @@ function App() {
   return (
     <BrowserRouter>
       <RouteTracker />
-      <WebUpdateProvider><AuthProvider>
+      <WebAppInstallProvider><WebUpdateProvider><AuthProvider>
         <OfflineBanner />
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -96,7 +97,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
-      </AuthProvider></WebUpdateProvider>
+      </AuthProvider></WebUpdateProvider></WebAppInstallProvider>
     </BrowserRouter>
   );
 }

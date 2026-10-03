@@ -6,7 +6,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { composeFramedMarketingImage, composeMarketingImage } from './marketing-compose.mjs';
+import { composeFramedMarketingImage, composeMarketingImage, cutoutMayOmitPhotoDetails } from './marketing-compose.mjs';
 
 const exec = promisify(execFile);
 async function mcode(stage, args, options) {
@@ -110,6 +110,7 @@ async function cycle() {
       await exec('swift', [new URL('./lift-subject.swift', import.meta.url).pathname, sourcePath, cutoutPath],
         { timeout: 120_000, maxBuffer: 30_000 });
       cutout = await readFile(cutoutPath);
+      if (await cutoutMayOmitPhotoDetails(original.bytes, cutout)) cutout = null;
     } catch { /* Safe whole-photo inset below; no synthetic product geometry. */ }
     const uploaded = parsed((await mcode('UPLOAD', ['upload-temp-url', sourcePath],
       { timeout: 45_000, maxBuffer: 1_000_000 })).stdout, 'UPLOAD');

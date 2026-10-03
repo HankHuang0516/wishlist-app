@@ -264,3 +264,8 @@ Desktop-class iPad Safari with touch uses Safari sharing instructions, including
 The public manifest uses actual 192px and 512px PNG derivatives of the existing logo instead of declaring the 1024px logo at both sizes. Safari receives an explicit 180px Apple touch icon and app title. The manifest preserves Home start URL and root identity/scope, and uses the same theme color as the page. All three public icons are included in the generated precache; existing private-cache exclusions and installation lifecycle remain unchanged.
 
 The existing postbuild worker gate now checks the actual built manifest, PNG signature/IHDR dimensions, Safari link, matching theme and public precache entries. Regression fixtures reject the old dimension mismatch, HTML fallback, missing/wrong-size Safari image, account/external/queried/traversing paths, native-store diversion, competing manifests and theme mismatch. PNG-header fixtures prove validation only; separately decode the real product files in the browser, read formal manifest/asset URLs after release, and retain independent native OS installation acceptance. Correct metadata and successful browser decoding do not prove installation or explain an absent browser installation prompt without its own diagnostic evidence.
+
+
+## 來源缺少售價的顯示
+
+來源空價格回歸：用實際 None元形態驗證探索卡片→詳情→來源聊天與地圖標記共用顯示；繁中／英文缺價提示一致，正常0元、固定價、區間、議價原文保持。正式部署後重讀原來源，不寫來源或詢問。此項不代表來源價格、庫存或交易有效性已確認。

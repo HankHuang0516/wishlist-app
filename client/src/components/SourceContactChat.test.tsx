@@ -1,5 +1,5 @@
 import {describe,it,expect,vi,afterEach,beforeEach} from 'vitest';
-import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import {render,screen,fireEvent,waitFor,cleanup,within} from '@testing-library/react';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
 import SourceContactChat from './SourceContactChat';
 import ExplorePage from '../pages/ExplorePage';
@@ -42,6 +42,29 @@ function fixture({unknown=false,reject=false,wrong=false,uncommitted=false}: {un
 async function enter() {const onBack=vi.fn();render(<MemoryRouter><SourceContactChat source={source()} onBack={onBack}/></MemoryRouter>);await waitFor(()=>expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false));return onBack;}
 async function send(text='請確認現貨'){fireEvent.change(screen.getByRole('textbox'),{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'送出並委託聯絡賣家'}));await waitFor(()=>expect(screen.getByRole('button',{name:'更新'})).not.toBeDisabled());}
 describe('source contact inside the original Explore and Chat',()=>{
+ it.each(['zh-TW','en-US'])('missing imported price stays unavailable through card, detail and chat in %s, without writes',async locale=>{
+  localStorage.setItem('user-locale',locale);
+  const f=fixture(),original=f.fetch.getMockImplementation()!;
+  const raw='原帖標價：None元；幣別依情境推定，非即時報價，不等同含運總價。';
+  const facts={priceText:raw,priceUnitStatus:'unknown',currencyStatus:'unknown',sourceAccessNotice:'待確認',originalDateLabel:'原始日期區間',locationRelation:'公共面交點非现貨位置',coordinateQualityNotes:[]};
+  f.fetch.mockImplementation(async(u,i)=>{
+   const response=await original(u,i),body=await response.json(),path=new URL(u,'https://example.invalid').pathname;
+   if(path.endsWith('/source-leads'))return {...response,json:async()=>({...body,items:[{...source(),publicFacts:facts}]})};
+   if(path.endsWith('/source-leads/'+id))return {...response,json:async()=>({...source(),publicFacts:facts})};
+   return {...response,json:async()=>body};
+  });
+  render(<MemoryRouter initialEntries={['/explore']}><Routes><Route path="/explore" element={<ExplorePage/>}/><Route path="/chat" element={<ChatPage/>}/></Routes></MemoryRouter>);
+  const fallback=locale==='zh-TW'?'售價待詢問':'Ask about price';
+  await screen.findByText(fallback);expect(screen.queryByText(raw)).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'查看合成測試來源商品商品詳情'}));
+  const detail=await screen.findByRole('dialog',{name:locale==='zh-TW'?'外部來源商品':'External-source item'});
+  expect(within(detail).getByText(fallback)).toBeTruthy();
+  fireEvent.click(within(detail).getByRole('link',{name:'聯絡賣家'}));
+  const chat=await screen.findByRole('dialog',{name:locale==='zh-TW'?'Wishlist AI 聊聊':'Wishlist AI chat'});
+  expect(within(chat).getByText(fallback)).toBeTruthy();expect(screen.queryByText(raw)).toBeNull();
+  expect(f.fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(0);
+  expect(facts.priceText).toBe(raw);
+ });
  it('original card → detail → original chat → one explicit send → same source on return',async()=>{const f=fixture();render(<MemoryRouter initialEntries={['/explore']}><Routes><Route path="/explore" element={<ExplorePage/>}/><Route path="/chat" element={<ChatPage/>}/></Routes></MemoryRouter>);fireEvent.click(await screen.findByRole('button',{name:'查看合成測試來源商品商品詳情'}));await screen.findByRole('dialog',{name:'外部來源商品'});fireEvent.click(screen.getByRole('link',{name:/聯絡賣家/}));await screen.findByRole('dialog',{name:'Wishlist AI 聊聊'});await waitFor(()=>expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false));expect(screen.queryByRole('checkbox')).toBeNull();await send();await screen.findByText(/已接至 Wishlist AI 收件/);expect(f.getActions()).toBe(1);fireEvent.click(screen.getByRole('button',{name:'返回商品'}));const returned=await screen.findByRole('dialog',{name:'外部來源商品'});expect(returned).toHaveTextContent('合成測試來源商品');expect(f.getActions()).toBe(1);});
  it('opening only reads; a single send carries item-bounded consent and no fake delivery',async()=>{const f=fixture();await enter();expect(f.fetch.mock.calls.filter(([u,i])=>u.includes('/inquiry')&&i?.method==='POST')).toHaveLength(0);expect(screen.getByText(/商品ID：/)).toHaveTextContent(id);await send();await screen.findByText(/已接至 Wishlist AI 收件/);const body=JSON.parse(f.fetch.mock.calls.find(([u])=>u.includes('/actions'))![1].body);expect(body).toMatchObject({action:'ASK',text:'請確認現貨',consent:true,transferHash:'a'.repeat(64)});expect(screen.getByText(/詢問編號：/)).toHaveTextContent('尚未送給賣家');expect(screen.queryByRole('checkbox')).toBeNull();});
  it('purchase intention remains an editable draft, not an order or automatic send',async()=>{const f=fixture();await enter();fireEvent.click(screen.getByRole('button',{name:'我想購買，先代問現貨與條件'}));expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain('購買意願');expect(f.getActions()).toBe(0);expect(screen.getByText(/不會下訂或付款/)).toBeTruthy();});

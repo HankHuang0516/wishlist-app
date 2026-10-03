@@ -12,7 +12,8 @@ import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import DateField from '../components/DateField';
 
-const button='min-h-11 rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold';
+const buttonShape='min-h-11 rounded-xl border border-stone-300 px-4 py-3 text-sm font-semibold';
+const button=buttonShape+' bg-white';
 const input='mt-1 w-full rounded-xl border border-stone-300 bg-white p-3';
 export default function ManualListingPage(){
   const {token,user}=useAuth();
@@ -122,7 +123,7 @@ function ManualSession({token,userId}:{token:string;userId:number}){
       <section className="space-y-3"><h2 className="font-semibold">交付與地點（草稿可留白）</h2><div className="flex flex-wrap gap-5"><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={details.meetup} onChange={e=>detail('meetup',e.target.checked)}/>面交</label><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={details.shipping} onChange={e=>detail('shipping',e.target.checked)}/>寄送</label><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={details.negotiable} onChange={e=>detail('negotiable',e.target.checked)}/>可議價</label></div>
         <div className="grid gap-4 sm:grid-cols-2">{([['county','縣市'],['district','行政區'],['latitude','緯度'],['longitude','經度']] as const).map(([key,label])=><label key={key} className="text-sm">{label}<input className={input} maxLength={30} value={details[key]} onChange={e=>detail(key,e.target.value)}/></label>)}</div><p className="text-xs text-stone-500">儲存前會轉為約 2 公里網格位置；不保存精確座標。地點可全部留白儲存草稿。</p>
         <DateField label="失效日期（選填，台灣時間）" disabled={locked} value={details.expiryDate} onChange={value=>detail('expiryDate',value)}/><label className="flex min-h-11 items-start gap-2 text-sm"><input type="checkbox" checked={details.consent} onChange={e=>detail('consent',e.target.checked)}/>我同意公開商品至地圖；未勾選仍可儲存不公開草稿</label></section>
-      <div className="flex flex-wrap gap-3"><button className={button} onClick={()=>void create(false)}>儲存商品草稿（不公開）</button><button className={button+' bg-stone-900 text-white'} onClick={()=>void create(true)}>確認並公開刊登</button></div>
+      <div className="flex flex-wrap gap-3"><button className={button} onClick={()=>void create(false)}>儲存商品草稿（不公開）</button><button className={buttonShape+' bg-stone-900 text-white'} onClick={()=>void create(true)}>確認並公開刊登</button></div>
     </fieldset><Link to="/my-listings" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-5 py-3 text-sm text-blue-700">前往我的商品查看與管理</Link>
   </div>;
 }

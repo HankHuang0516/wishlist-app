@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
+import { NON_SALE_QA_PREFIX, isExplicitNonSaleFixture, isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
 import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 import { ListingCreationError, listingCreationGate, listingCreationId, listingCreationReceiptSelect } from '../lib/listingCreation';
 import { mapPresenceBody, mapPresenceUntil } from '../lib/mapPresence';
@@ -157,6 +157,7 @@ export async function searchListings(req: AuthRequest, res: Response) {
         const search = parseListingSearch(req.query);
         const where: Prisma.ListingWhereInput = {
             status: { in: ['ACTIVE', 'RESERVED'] }, expiresAt: { gt: new Date() },
+            NOT: { title: { startsWith: NON_SALE_QA_PREFIX } },
             ...(search.q ? { OR: ['title', 'description', 'brand'].map(field => ({ [field]: { contains: search.q, mode: 'insensitive' } })) } : {}),
             ...(search.category ? { category: search.category } : {}),
             ...(search.brand ? { brand: { equals: search.brand, mode: 'insensitive' } } : {}),
@@ -204,7 +205,7 @@ export async function getListing(req: AuthRequest, res: Response) {
         const id = req.params.id;
         if (!isListingId(id)) throw new ListingInputError('id');
         const listing = await prisma.listing.findUnique({ where: { id }, select: publicListingSelect });
-        if (!listing || (!isDiscoverable(listing.status, listing.expiresAt, new Date()) && listing.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '商品不存在或已停止刊登' });
+        if (!listing || ((!isDiscoverable(listing.status, listing.expiresAt, new Date()) || isExplicitNonSaleFixture(listing.title)) && listing.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '商品不存在或已停止刊登' });
         return res.json(listing);
     } catch (error) { return fail(res, error); }
 }

@@ -52,3 +52,6 @@ server/otp.txt
 
 # Private first-party listing photos; never publish with static assets or Git.
 server/storage/
+
+# Isolated synthetic browser QA output
+.qa-artifacts/

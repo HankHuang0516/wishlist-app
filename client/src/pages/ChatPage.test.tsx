@@ -32,6 +32,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <ChatRoomWeb {...value} />;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('keeps QA history readable but disables new messages in an existing explicitly non-sale room',async()=>{
+    room={...room,listingAvailable:false,listing:{...room.listing,title:'【QA測試非販售】歷史商品',thumbnailUrl:null}};
+    rows=[makeMessage(1,{text:'原有歷史'})];room={...room,lastMessageSequence:1};
+    render(roomView());await screen.findByText('原有歷史');
+    expect(screen.getByRole('textbox')).toBeDisabled();expect(screen.getByRole('button',{name:'傳送訊息'})).toBeDisabled();
+    expect(posts().filter(call=>call[1].endsWith('/messages'))).toHaveLength(0);
+  });
   it.each([429, 401])('requires manual inbox recovery after status %s even when timers and foreground events resume', async status => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const base = api.getMockImplementation()!;

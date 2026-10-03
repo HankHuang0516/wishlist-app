@@ -1,3 +1,4 @@
+import { queryMyChats } from '../controllers/chatQueryController';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth';
@@ -8,6 +9,7 @@ const router = Router();
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 const writes = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '聊天操作過於頻繁，請稍後重試', errorCode: 'CHAT_RATE_LIMIT' } });
 router.use(authenticateToken);
+router.post('/query', rateLimit({windowMs:60_000,limit:20,standardHeaders:'draft-8',legacyHeaders:false}), queryMyChats);
 router.get('/conversations', listConversations);
 router.post('/conversations', writes, openConversation);
 router.get('/conversations/:id', getConversation);

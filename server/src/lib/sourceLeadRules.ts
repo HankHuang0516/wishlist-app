@@ -1,3 +1,4 @@
+import {parsePhotoInventory, photoCompleteness} from './sourcePhotoInventory';
 import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL, UNKNOWN_SOURCE_DISTRICT} from './sourceCountyIllustration';
 import {publicCommentRoute} from './sourcePublicComment';
 import { createHash } from 'crypto';
@@ -33,7 +34,7 @@ export function parseLead(input: unknown, now = new Date()) {
     const b = object(input);
     exact(b, ['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'evidence']);
     const e = object(b.evidence);
-    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media', 'countyIllustration']);
+    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media', 'photoInventory', 'countyIllustration']);
     if (!text(b.archiveItemId, 160) || !/^libfile_[a-f0-9]{32}$/.test(b.libraryFileId) || !Number.isSafeInteger(b.archiveVersion) || b.archiveVersion < 0 || !/^[a-f0-9]{64}$/.test(b.archiveSha256))
         throw new LeadError('ARCHIVE_IDENTITY_REQUIRED');
     const canonicalUrl = publicUrl(b.canonicalUrl);
@@ -66,6 +67,7 @@ export function parseLead(input: unknown, now = new Date()) {
         throw new LeadError('OSM_PROVENANCE_REQUIRED');
     if (!archiveGate({ originalPostedAt: null, originalPostedEarliestAt: postedEarliestAt, originalPostedLatestAt: postedLatestAt, verifiedAddress: b.publicAddress, addressEvidenceRef: e.locationRef, verifiedLatitude: b.latitude, verifiedLongitude: b.longitude }, now) || checkedAt > now || now.getTime() - checkedAt.getTime() > 48 * 3600000)
         throw new LeadError('SOURCE_DATE_OR_LOCATION_EXPIRED');
+    if(e.photoInventory !== undefined) { try {parsePhotoInventory(e.photoInventory,{archiveItemId:b.archiveItemId,canonicalUrl},now.getTime());} catch {throw new LeadError('INVALID_PHOTO_INVENTORY');} }
     const facts = { title: b.title, summary: b.summary, canonicalUrl, county: b.county, district: b.district, publicPlaceName: b.publicPlaceName, publicAddress: b.publicAddress, latitude: b.latitude, longitude: b.longitude, postedEarliestAt, postedLatestAt };
     return { ...facts, archiveItemId: b.archiveItemId, libraryFileId: b.libraryFileId, archiveVersion: b.archiveVersion, archiveSha256: b.archiveSha256, checkedAt, evidence: e, contentHash: digest({ facts, e }) };
 }
@@ -86,7 +88,7 @@ export function contactRoutingDTO(lead:ExternalSourceLead,now=new Date()) {
     if(r&&['UNAVAILABLE','UNVERIFIED'].includes(r.status)&&r.leadId===lead.id&&r.sourceUrl===lead.canonicalUrl&&r.contentHash===lead.contentHash&&ref(r.identityEvidenceRef)&&ref(r.routeEvidenceRef)&&typeof r.reason==='string'&&r.reason.length<=240&&!privateContactField({title:r.reason})&&Number.isFinite(Date.parse(r.checkedAt))&&Date.parse(r.checkedAt)<=now.getTime()&&now.getTime()-Date.parse(r.checkedAt)<48*3600000)return {status:r.status,reason:r.reason,checkedAt:r.checkedAt};
     return {status:'UNVERIFIED',reason:'原貼文與作者身份不等於可收訊路由；尚未核實原賣家可用的聯絡入口，未外送。',checkedAt:null};
 }
-export function leadDTO(r: ExternalSourceLead, presentation = false) { return { ...(presentation ? {media: sourceLeadMediaDTO(r),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', ...(isCountyIllustration(r.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:{}), title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: isCountyIllustration(r.evidence)?'概略位置，非取貨點；縣市示意座標不代表商品、賣家或可面交位置，庫存與交易待確認。':'來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。' }; }
+export function leadDTO(r: ExternalSourceLead, presentation = false, photosV2 = false) { return { ...(presentation ? {media: photosV2?sourceLeadMediaDTO(r):sourceLeadMediaDTO(r).slice(0,8),...(photosV2?{photoCompleteness:photoCompleteness(r,sourceLeadMediaDTO(r))}:{}),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', ...(isCountyIllustration(r.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:{}), title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: (presentation&&!photosV2&&sourceLeadMediaDTO(r).length>8?'此舊版最多顯示8張；完整商品圖片請使用最新版網頁。':'')+(isCountyIllustration(r.evidence)?'概略位置，非取貨點；縣市示意座標不代表商品、賣家或可面交位置，庫存與交易待確認。':'來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。') }; }
 export type LeadEvent = {
     requestId: string;
     action: string;
@@ -95,6 +97,7 @@ export type LeadEvent = {
     at: string;
     questionIds?: string[];
     payloadHash?: string;
+    reservationId?: string;
 };
 export function transferSnapshot(lead: ExternalSourceLead, events: LeadEvent[]) { return { leadId: lead.id, contentHash: lead.contentHash, canonicalUrl: lead.canonicalUrl, questions: events.filter(e => e.action === 'ASK').map(e => ({ requestId: e.requestId, text: e.text })) }; }
 export function routeCurrent(lead: ExternalSourceLead, now = new Date()) { try {

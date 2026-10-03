@@ -38,6 +38,14 @@ afterAll(async () => {
     await prisma.$disconnect();
 });
 describe('private meetup / real HTTP and PostgreSQL', () => {
+    it('refuses new, revised or confirmed meetup terms after QA relabelling but permits history and cancellation',async()=>{
+        await propose();await prisma.listing.update({where:{id:listingId},data:{title:'【QA測試非販售】原商品'}});
+        expect((await call('get','/conversations/'+room+'/meetup')).status).toBe(200);
+        expect((await act('CONFIRM',1,seller)).status).toBe(409);
+        expect((await act('REVISE',1,buyer,t(7200000))).status).toBe(409);
+        expect((await act('CANCEL',1,buyer)).status).toBe(201);
+        const detail=await call('get','/conversations/'+room+'/meetup');expect(detail.body.appointment.status).toBe('CANCELLED');
+    });
     it('reads the actor original receipt without replaying and separates later terms from the acknowledged version', async () => {
         const input = { clientActionId: randomUUID(), action: 'PROPOSE', expectedVersion: 0, terms: t() };
         await call('post', '/conversations/' + room + '/meetup').send(input);

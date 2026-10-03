@@ -1,3 +1,4 @@
+import ChatQuery from '../components/ChatQuery';
 import { chatMessage, chatRoomPrice, chatRoomTitle, chatText, chatTime, sourceInquiryStatus } from '../lib/chatCopy';
 import {parseLead,parseContactRouting} from '../lib/sourceLeadData';
 import {TAIWAN_DISTRICTS} from '../lib/taiwanAdministrativeDistricts';
@@ -15,6 +16,7 @@ import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../li
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import MeetupWeb from '../components/MeetupWeb';
 import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
+import { isNonSaleQaTitle } from '../lib/nonSaleListing';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
   const id = privateChatPhotoId(room, getFullApiUrl());
@@ -64,7 +66,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
         if(sourceId){
           const old=all.find(thread=>thread.context.id===sourceId);
           try {
-            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1&approximate=1',{signal:controller.signal}));
+            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1&photos=2&approximate=1',{signal:controller.signal}));
             if(controller.signal.aborted)throw Error();
             if(current.id!==sourceId)throw Error();
             if(valid&&!controller.signal.aborted)setSource({...current,publicFacts:current.publicFacts??undefined});
@@ -100,7 +102,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
     return () => { active.current = false; seq.current++; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); window.removeEventListener('online', tick); };
   }, []);
   useEffect(() => { if (!activeRoom && loaded) void load(); }, [activeRoom]);
-  return <section className="mx-auto max-w-3xl space-y-4 pb-20"><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header>
+  return <section className="mx-auto max-w-3xl space-y-4 pb-20"><ChatQuery key={token} token={token}/><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header>
     {invalidIntent && <div role="alert" className="rounded-xl bg-red-50 p-3">{chatText("聊天連結無效，不會使用不明識別碼查詢。")}<button className={button} onClick={() => navigate('/chat', { replace: true })}>{chatText("返回收件匣")}</button></div>}
     {sourceId ? <>{sourceFeedback}{source&&<SourceContactChat key={`${userId}:${source.id}`} source={source} onBack={()=>navigate('/explore?source='+source.id)}/>}</> : activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
       {sourceFeedback}<div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{chatText('Wishlist AI 代問')}</h2><button type="button" className={button} disabled={sourceBusy} onClick={()=>setSourceReload(value=>value+1)}>{chatText('重新讀取來源對話')}</button></div>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {sourceInquiryStatus(t.state)}</span></span></button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
@@ -234,7 +236,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
   }, [messages, showMeetup]);
   async function send() {
     const current = roomRef.current;
-    if (!ready || !current || current.archived || !key.current || mutation.current || blockUnknown || current.blocked && !saved.current) return;
+    if (!ready || !current || current.archived || isNonSaleQaTitle(current.listing?.title) || !key.current || mutation.current || blockUnknown || current.blocked && !saved.current) return;
     mutation.current = true; sequence.current++; setBusy(true); setError(''); setNotice(''); let confirmed = false;
     try {
       const body = saved.current ?? JSON.stringify(messageBody(crypto.randomUUID(), text)), requestKey = key.current; parsePendingMessage(body);
@@ -270,8 +272,8 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     <form className="space-y-3 rounded-2xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void send(); }}>
       {pending && <p className="text-sm">{chatText("上一則訊息結果尚未確認，原識別碼與文字已保留；不會自動重送或建立重複訊息。")}{room?.archived ? chatText("聊天室已封存，不能重新傳送。") : ''}</p>}
       {!ready && <button type="button" className={button} disabled={busy} onClick={() => void restore()}>{chatText("重試恢復待確認訊息")}</button>}
-      <label className="block">{chatText("商品聊天訊息（最多2000字元）")}<textarea disabled={!ready || busy || !!pending || !room || room.blocked || room.archived || blockUnknown} maxLength={2000} value={text} onChange={event => setText(event.target.value)} className="mt-2 min-h-24 w-full rounded-xl border p-3" placeholder={chatText("輸入訊息，預約前請確認商品狀態")} /></label>
-      <div className="flex flex-wrap gap-2"><button type="submit" className={`${button} bg-green-800 text-white`} disabled={busy || !ready || !room || room.archived || blockUnknown || !pending && (!text.trim() || room.blocked)}>{pending ? chatText("明確重試相同訊息") : chatText("傳送訊息")}</button>
+      <label className="block">{chatText("商品聊天訊息（最多2000字元）")}<textarea disabled={!ready || busy || !!pending || !room || room.blocked || room.archived || isNonSaleQaTitle(room.listing?.title) || blockUnknown} maxLength={2000} value={text} onChange={event => setText(event.target.value)} className="mt-2 min-h-24 w-full rounded-xl border p-3" placeholder={chatText("輸入訊息，預約前請確認商品狀態")} /></label>
+      <div className="flex flex-wrap gap-2"><button type="submit" className={`${button} bg-green-800 text-white`} disabled={busy || !ready || !room || room.archived || isNonSaleQaTitle(room.listing?.title) || blockUnknown || !pending && (!text.trim() || room.blocked)}>{pending ? chatText("明確重試相同訊息") : chatText("傳送訊息")}</button>
         {pending && <button type="button" className={button} disabled={busy || !room} onClick={() => void checkPending()}>{chatText("只查核原訊息回執")}</button>}
         {room && !('IntersectionObserver' in window) && <><p className="text-sm">{chatText("此瀏覽器無法偵測訊息可見範圍，不會自動標記已讀；可由你明確確認。")}</p><button type="button" className={button} disabled={!messages.length || autoPause.paused} onClick={() => { viewed.current = Math.max(viewed.current, ...messages.map(m => m.sequence)); void markRef.current(); }}>{chatText("將目前已載入訊息標記為已讀")}</button></>}
       </div>

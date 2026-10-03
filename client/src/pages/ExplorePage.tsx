@@ -18,7 +18,7 @@ import ExternalDetailPhoto from '../components/ExternalDetailPhoto';
 import { exploreText as text, exploreMessage, exploreFailureKey, exploreNotice, exploreReason, exploreCategory, exploreTime, exploreSourcePrice } from '../lib/exploreCopy';
 import { readAllMatchWishes } from '../lib/homeMatches';
 import { expandedSearchBounds, resultCamera } from '../lib/exploreMapView';
-import { exploreSellerPath, parseExploreIntent, readExploreExternal, readExploreSeller, type ExploreQuery } from '../lib/exploreWeb';
+import { exploreSearchLocation, exploreSellerPath, parseExploreSearchState, readExploreExternal, readExploreSeller, type ExploreQuery } from '../lib/exploreWeb';
 import ExploreMapWeb, { type MapFrame, type MapSelection } from '../components/ExploreMapWeb';
 import MarketplaceDialog from '../components/MarketplaceDialog';
 import MapFallbackBoundary from '../components/MapFallbackBoundary';
@@ -70,7 +70,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const source=useSourceLeadSearch(token,query);
   const sourceFrameCycle=useRef(0);
   const [sellerSerial,setSellerSerial]=useState(0),[externalSerial,setExternalSerial]=useState(0);
-  const [listMode, setListMode] = useState(false), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
+  const [listMode, setListMode] = useState(new URLSearchParams(search).get('view') === 'list'), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
   const [selection, setSelection] = useState<MapSelection | null>(null), [frame, setFrame] = useState<MapFrame | null>(null);
   const [locationMessage, setLocationMessage] = useState(''), [clock, setClock] = useState(Date.now()), [queryError, setQueryError] = useState('');
   const [detail, setDetail] = useState<{ kind: MapSelection['kind']; id: string; seller?: PublicListing; external?: ExternalListing; source?:SourceLead; loading: boolean; error: string } | null>(null);
@@ -86,6 +86,20 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const initialSource=useRef<SourceLead|null>(null);
   const origin = marketplaceOrigin();
   const readBlocked = retryUntil > clock;
+  const explicitView = useRef(new URLSearchParams(search).has('view'));
+  function rememberSearch(q: string, selectedWish: number | null, asList: boolean, state=currentQuery.current) {
+    if (window.location.pathname === '/explore') window.history.replaceState(window.history.state, '', exploreSearchLocation({ q, wishId: selectedWish, listMode: asList, filters:state?.filters,bounds:state?.bounds,radius:state?.radius }));
+  }
+  function switchList(asList: boolean) {
+    explicitView.current=true; setListMode(asList);
+    if(window.location.pathname!=='/explore')return;
+    // A visual change must preserve an in-flight deep-link/search bootstrap.
+    const params=new URLSearchParams(window.location.search);
+    if(asList)params.set('view','list');else params.set('view','map');
+    const next='?'+params.toString();
+    try{parseExploreSearchState(next);}catch(error){setQueryError(errorText(error));return;}
+    window.history.replaceState(window.history.state,'','/explore'+next);
+  }
   const waiting = () => waitUntil.current > Date.now();
   const noteFailure = (error: unknown) => {
     if (error instanceof ApiFailure && error.status === 429 && error.retryAfterMs > 0) {
@@ -131,9 +145,9 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     const read = (path: string) => api<unknown>(token, path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
     void (async () => {
       try {
-        const intent = parseExploreIntent(search); let bounds: Bounds = [...TAIWAN_BOUNDS];
+        const restored = parseExploreSearchState(search), intent = restored.intent; let bounds: Bounds = restored.bounds;
         setWishId(intent.wishId);
-        if(intent.sourceId){const lead=parseLead(await read('/source-leads/'+intent.sourceId+'?presentation=1&approximate=1'));if(lead.id!==intent.sourceId)throw Error('來源商品識別不符。');if(!active.current||controller.signal.aborted)return;initialSource.current=lead;bounds=clipBounds([lead.longitude-0.06,lead.latitude-0.06,lead.longitude+0.06,lead.latitude+0.06])!;}
+        if(intent.sourceId){const lead=parseLead(await read('/source-leads/'+intent.sourceId+'?presentation=1&photos=2&approximate=1'));if(lead.id!==intent.sourceId)throw Error('來源商品識別不符。');if(!active.current||controller.signal.aborted)return;initialSource.current=lead;bounds=clipBounds([lead.longitude-0.06,lead.latitude-0.06,lead.longitude+0.06,lead.latitude+0.06])!;}
         if (intent.listingId) {
           const item = parsePublicListing(await read('/listings/' + intent.listingId), origin, import.meta.env.DEV);
           if (item.id !== intent.listingId || Date.parse(item.expiresAt) <= Date.now()) throw new Error('所選商品已失效，請回首頁重新選擇。');
@@ -141,7 +155,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
           initialTarget.current = item;
           bounds = clipBounds([item.location.publicLongitude - 0.06, item.location.publicLatitude - 0.06, item.location.publicLongitude + 0.06, item.location.publicLatitude + 0.06])!;
         }
-        if (active.current && !controller.signal.aborted) { const initialFilters = { ...emptySearchFilters, q: intent.q }; viewport.current = bounds; setFilters(initialFilters); setQuery({ filters: initialFilters, bounds, wishId: intent.wishId, radius: '', serial: 1 }); }
+        if (active.current && !controller.signal.aborted) { const initialFilters = restored.filters; viewport.current = bounds; setFilters(initialFilters); setRadius(restored.radius); setQuery({ filters: initialFilters, bounds, wishId: intent.wishId, radius: restored.radius, serial: 1 }); }
       } catch (error) { if (active.current && !controller.signal.aborted) setInitError(noteFailure(error)); }
     })();
     void loadWishes(controller.signal);
@@ -209,7 +223,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     try {
       const clipped = clipBounds(bounds); if (!clipped) throw new Error('請將地圖移回台灣範圍，或擴大搜尋。');
       const next = { bounds: clipped, filters: { ...nextFilters }, wishId: nextWish, radius: nextRadius, serial: (currentQuery.current?.serial ?? 0) + 1 };
-      exploreSellerPath(next); clearElapsedWait(); initialTarget.current = null; currentQuery.current = next; setQueryError(''); setCluster(null); setQuery(next);
+      exploreSellerPath(next); rememberSearch(next.filters.q, next.wishId, listMode,next); clearElapsedWait(); initialTarget.current = null; currentQuery.current = next; setQueryError(''); setCluster(null); setQuery(next);
     } catch (error) { setQueryError(errorText(error)); }
   }
   function locate() {
@@ -219,7 +233,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       if (!active.current) return;
       const bounds = clipBounds([position.coords.longitude - 0.05, position.coords.latitude - 0.05, position.coords.longitude + 0.05, position.coords.latitude + 0.05]);
       if (!bounds) { setLocationMessage('目前位置不在台灣，請手動移動地圖搜尋。'); return; }
-      viewport.current = bounds; showFrame({ kind: 'multiple', bounds }); setListMode(false);
+      viewport.current = bounds; showFrame({ kind: 'multiple', bounds }); switchList(false);
       setLocationMessage('已移至所在範圍；按「搜尋此範圍」才會查詢，距離比對只使用約略中心。');
     }, () => { if (active.current) setLocationMessage('無法取得位置或未授權，仍可手動移動地圖與搜尋。'); }, { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 });
   }
@@ -233,17 +247,18 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       ...liveItems.map(i=>({longitude:i.location.publicLongitude,latitude:i.location.publicLatitude})),...liveExternal.map(i=>i.location),...source.items.map(i=>({longitude:i.longitude,latitude:i.latitude}))];
     const camera=resultCamera(points);
     if(camera){showFrame(camera);resultsFrame.current={camera,bounds:query.bounds};}else{resultsFrame.current=null;showFrame({kind:'multiple',bounds:query.bounds});}
-    setListMode(false);
+    // Results may frame the map without overriding the buyer's list mode.
+    if ((nativeTarget || sourceTarget) && !explicitView.current) setListMode(false);
     const native=(nativeTarget?liveItems.find(i=>i.id===nativeTarget.id):undefined)??liveItems[0];
     setSelection(sourceTarget?{kind:'source',id:sourceTarget.id}:native?{kind:'seller',id:native.id}:liveExternal[0]?{kind:'external',id:liveExternal[0].id}:source.items[0]?{kind:'source',id:source.items[0].id}:null);
   },[query,sellerSerial,externalSerial,source.completedSerial,source.items,liveItems,liveExternal]);
   function focus(kind: MapSelection['kind'], id: string) {
-    if(kind==='source'){const lead=source.items.find(r=>r.id===id);if(!lead)return;const camera=resultCamera([{longitude:lead.longitude,latitude:lead.latitude}]);if(camera)showFrame(camera);setSelection({kind,id});setListMode(false);setCluster(null);return;}
+    if(kind==='source'){const lead=source.items.find(r=>r.id===id);if(!lead)return;const camera=resultCamera([{longitude:lead.longitude,latitude:lead.latitude}]);if(camera)showFrame(camera);setSelection({kind,id});switchList(false);setCluster(null);return;}
     const item = kind === 'seller' ? liveItems.find(item => item.id === id) : liveExternal.find(item => item.id === id);
     if (!item) return;
     const point = 'owner' in item ? { longitude: item.location.publicLongitude, latitude: item.location.publicLatitude } : item.location;
     const camera = resultCamera([point]); if (camera) showFrame(camera);
-    setSelection({ kind, id }); setListMode(false); setCluster(null);
+    setSelection({ kind, id }); switchList(false); setCluster(null);
   }
   async function showDetail(kind: MapSelection['kind'], id: string) {
     if (waiting()) return;
@@ -251,7 +266,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     detailRequest.current?.abort(); const controller = new AbortController(); detailRequest.current = controller;
     setDetail({ kind, id, loading: true, error: '' });
     try {
-      if(kind==='source'){const lead=parseLead(await api<unknown>(token,'/source-leads/'+id+'?presentation=1&approximate=1',{signal:controller.signal}));if(lead.id!==id)throw Error();if(active.current&&!controller.signal.aborted)setDetail({kind,id,source:lead,loading:false,error:''});return;}
+      if(kind==='source'){const lead=parseLead(await api<unknown>(token,'/source-leads/'+id+'?presentation=1&photos=2&approximate=1',{signal:controller.signal}));if(lead.id!==id)throw Error();if(active.current&&!controller.signal.aborted)setDetail({kind,id,source:lead,loading:false,error:''});return;}
       const response = await api<unknown>(token, '/' + (kind === 'seller' ? 'listings/' : 'external-listings/') + id, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
       if (!active.current || controller.signal.aborted) return;
       if (kind === 'seller') {
@@ -293,13 +308,13 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     </form>
     {queryError && <p role="alert" className="text-red-700">{exploreMessage(queryError)}</p>}{wishError && <div role="status" className="text-amber-800"><p>{exploreMessage(wishError)}</p><button type="button" disabled={wishBusy || readBlocked} onClick={() => void loadWishes()} className="min-h-11 underline disabled:opacity-50">{text('重新讀取願望選單')}</button></div>}
     {query?.wishId && <div className="rounded-xl bg-green-50 p-4 text-sm text-green-900"><p className="font-semibold">{text('正在交叉比對：{name}', { name: chosenWish?.name ?? text('所選願望') })}</p><p className="mt-1">{text("含自己刊登的配對預覽，不能向自己購買。依文字、型號、條件與預算比對，圖片不直接比對；分數不保證同一型號或真偽。")}</p>{seller.notice && <p className="mt-1">{exploreNotice(seller.notice)}</p>}</div>}
-    <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={!listMode} onClick={() => { setListMode(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("地圖")}</button><button type="button" aria-pressed={listMode} onClick={() => { setListMode(true); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("商品列表")}</button>
+    <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={!listMode} onClick={() => { switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("地圖")}</button><button type="button" aria-pressed={listMode} onClick={() => { switchList(true); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("商品列表")}</button>
       <button type="button" onClick={locate} className="flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4"><LocateFixed className="h-4 w-4" aria-hidden="true" />{text("移至我的位置")}</button>
       <button type="button" disabled={!query || readBlocked} onClick={() => commit()} className="min-h-11 rounded-xl bg-green-800 px-4 text-white disabled:opacity-50">{text("搜尋此範圍")}</button>
       <button type="button" disabled={!query || readBlocked} onClick={() => commit(expandedSearchBounds(query?.bounds ?? TAIWAN_BOUNDS))} className="min-h-11 rounded-xl border bg-white px-4">{text("擴大搜尋範圍")}</button>
-      {resultsFrame.current && <button type="button" onClick={() => { const saved = resultsFrame.current!; viewport.current = saved.bounds; showFrame(saved.camera); setListMode(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("返回目前結果")}</button>}
+      {resultsFrame.current && <button type="button" onClick={() => { const saved = resultsFrame.current!; viewport.current = saved.bounds; showFrame(saved.camera); switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("返回目前結果")}</button>}
     </div>{locationMessage && <p role="status" className="text-sm text-gray-600">{exploreMessage(locationMessage)}</p>}
-    {query && <MapFallbackBoundary fallback={<p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">{text('互動地圖暫時無法使用，請切換「商品列表」繼續搜尋與閱覽。')}</p>}><ExploreMapWeb items={liveItems} external={liveExternal} sourceLeads={source.items} frame={frame} visible={!listMode} onViewport={bounds => { viewport.current = bounds; }} onSelect={item => { setSelection(item); setCluster(null); }} onCluster={(kind, ids) => { setCluster({ kind, ids }); setListMode(true); }} /></MapFallbackBoundary>}
+    {query && <MapFallbackBoundary fallback={<p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">{text('互動地圖暫時無法使用，請切換「商品列表」繼續搜尋與閱覽。')}</p>}><ExploreMapWeb items={liveItems} external={liveExternal} sourceLeads={source.items} frame={frame} visible={!listMode} onViewport={bounds => { viewport.current = bounds; }} onSelect={item => { setSelection(item); setCluster(null); }} onCluster={(kind, ids) => { setCluster({ kind, ids }); switchList(true); }} /></MapFallbackBoundary>}
     <div aria-live="polite" className="space-y-2 text-sm text-gray-600">{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && <p>{text('目前範圍已載入：{count} 件站內商品{own}、{external} 件外部來源。這不是全站商品總數。', { count: liveItems.length, own: query.wishId ? text('（含 {count} 件自有預覽）', { count: liveItems.filter(item => item.owner.id === userId).length }) : '', external: liveExternal.length })}</p>}
       <p>{source.items.length} 筆來源線索；不是已確認在售商品。</p>{source.error&&<p role="alert" className="text-red-700">{text(source.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}{source.hidden&&<p>目前篩選條件不能由來源線索驗證，來源層未列入。</p>}{external.skipped && <p>{text("目前條件無法由外部來源驗證，外部商品未列入。")}</p>}{!external.enabled && !external.skipped && !external.busy && !external.error && <p>{text("外部來源目前未開放，顯示站內商品。")}</p>}
       {seller.error && <p role="alert" className="text-red-700">{text('站內商品查詢未完成：')}{exploreMessage(seller.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}
@@ -317,7 +332,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
         <p className="whitespace-pre-wrap break-words">{detail.seller.description}</p><dl className="space-y-2 text-sm"><div><dt className="inline font-medium">{text("品牌：")}</dt><dd className="inline">{detail.seller.brand ?? text('未提供')}</dd></div><div><dt className="inline font-medium">{text("新舊與狀態：")}</dt><dd className="inline">{text(detail.seller.condition === 'USED' ? '二手' : '新品')} · {text(detail.seller.status === 'RESERVED' ? '已保留' : '在售')}</dd></div><div><dt className="inline font-medium">{text("約略地點：")}</dt><dd className="inline">{detail.seller.location.county} · {detail.seller.location.district}{text('（非精確地址）')}</dd></div><div><dt className="inline font-medium">{text("交付：")}</dt><dd className="inline">{detail.seller.deliveryMethods.map(method => text(method === 'MEETUP' ? '面交' : '寄送')).join('、')} · {text(detail.seller.negotiable ? '可議價' : '不議價')}</dd></div><div><dt className="inline font-medium">{text("失效時間：")}</dt><dd className="inline">{exploreTime(detail.seller.expiresAt)}{text('（台灣時間）')}</dd></div></dl>
         <div className="flex flex-wrap gap-3"><Link to={`/listings/${detail.seller.id}`} className="inline-flex min-h-11 items-center rounded-xl border px-4">{text("開啟可分享商品頁")}</Link>
           <ProductActionsWeb listing={detail.seller} onReport={() => { setReport(detail.seller!); setDetail(null); }} /></div></div>}
-      {detail.source&&<div className="space-y-4"><p className="text-sm text-gray-600">外部來源 · Wishlist AI代問，非站內賣家；庫存與交易待確認。</p><h3 className="text-xl font-semibold">{detail.source.title}</h3><p className="font-semibold text-green-800">{sourceLeadPrice(detail.source.publicFacts?.priceText)}</p><ListingPhotoGallery photos={detail.source.media??[]} title={detail.source.title}/><p className="whitespace-pre-wrap break-words">{detail.source.summary}</p><p role="status" className="text-sm text-stone-600">{detail.source.contactRouting?.reason||'原賣家收訊路由待核實，商品問題可先交 Wishlist AI 收件。'}</p><p>{detail.source.county} · {detail.source.district} · {text(sourceLocationLabel(detail.source))}：{detail.source.publicPlaceName}；{text('不是商品或賣家所在地。')}</p><p>{detail.source.publicFacts?.originalDateLabel}</p><Link className="inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 text-white" to={'/chat?source='+detail.source.id}>聯絡賣家</Link><a className="inline-flex min-h-11 items-center rounded-xl border px-4" href={detail.source.canonicalUrl} target="_blank" rel="noreferrer">原始來源</a></div>}{detail.external && <div className="space-y-4"><p className="text-sm text-amber-800">{text("外部來源 · 非站內賣家；請至原網站確認價格、庫存及交易方式。")}</p><h3 className="text-xl font-semibold">{detail.external.title}</h3><p className="font-semibold">{exploreSourcePrice(detail.external)}</p><ExternalDetailPhoto item={detail.external} /><p className="whitespace-pre-wrap">{detail.external.description}</p>{detail.external.aiSupplement && <p className="rounded-xl bg-amber-50 p-3">{text('AI 補充（不是來源保證）：')}{detail.external.aiSupplement}</p>}
+      {detail.source&&<div className="space-y-4"><p className="text-sm text-gray-600">外部來源 · Wishlist AI代問，非站內賣家；庫存與交易待確認。</p><h3 className="text-xl font-semibold">{detail.source.title}</h3><p className="font-semibold text-green-800">{sourceLeadPrice(detail.source.publicFacts?.priceText)}</p><ListingPhotoGallery photos={detail.source.media??[]} title={detail.source.title} completeness={detail.source.photoCompleteness}/><p className="whitespace-pre-wrap break-words">{detail.source.summary}</p><p role="status" className="text-sm text-stone-600">{detail.source.contactRouting?.reason||'原賣家收訊路由待核實，商品問題可先交 Wishlist AI 收件。'}</p><p>{detail.source.county} · {detail.source.district} · {text(sourceLocationLabel(detail.source))}：{detail.source.publicPlaceName}；{text('不是商品或賣家所在地。')}</p><p>{detail.source.publicFacts?.originalDateLabel}</p><Link className="inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 text-white" to={'/chat?source='+detail.source.id}>聯絡賣家</Link><a className="inline-flex min-h-11 items-center rounded-xl border px-4" href={detail.source.canonicalUrl} target="_blank" rel="noreferrer">原始來源</a></div>}{detail.external && <div className="space-y-4"><p className="text-sm text-amber-800">{text("外部來源 · 非站內賣家；請至原網站確認價格、庫存及交易方式。")}</p><h3 className="text-xl font-semibold">{detail.external.title}</h3><p className="font-semibold">{exploreSourcePrice(detail.external)}</p><ExternalDetailPhoto item={detail.external} /><p className="whitespace-pre-wrap">{detail.external.description}</p>{detail.external.aiSupplement && <p className="rounded-xl bg-amber-50 p-3">{text('AI 補充（不是來源保證）：')}{detail.external.aiSupplement}</p>}
         <p className="text-sm text-gray-600">{detail.external.county} · {detail.external.district}{text(' 行政區中心，並非商品確切所在地。資料確認：')}{exploreTime(detail.external.observedAt)}{text('（台灣時間）')}</p><a href={detail.external.canonicalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-xl border px-4">{text('前往來源網站（{host}）', { host: detail.external.source.host })}</a></div>}
     </MarketplaceDialog>}
     {report && <ListingReportWeb key={`${userId}:${token}:${report.id}`} token={token} userId={userId} listing={{ id: report.id, title: report.title, available: Date.parse(report.expiresAt) > Date.now() }} onClose={() => setReport(null)} />}

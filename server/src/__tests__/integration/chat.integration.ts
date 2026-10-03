@@ -39,6 +39,28 @@ afterAll(async () => {
 });
 
 describe('first-party chat / PostgreSQL integration', () => {
+    it('preserves an existing QA room history and old acknowledgement while blocking new transaction messages', async () => {
+        const room=(await open()).body.id;const key=randomUUID();expect((await send(room,'原有歷史',buyer,key)).status).toBe(201);
+        await prisma.listing.update({where:{id:listingId},data:{title:'【QA測試非販售】原商品'}});
+        expect((await call('get','/conversations/'+room)).body.listingAvailable).toBe(false);
+        expect((await call('get','/conversations/'+room+'/messages')).body.items).toHaveLength(1);
+        expect((await send(room,'原有歷史',buyer,key)).status).toBe(200);
+        expect((await send(room,'新的交易')).status).toBe(409);
+        expect((await send(room,'賣家新交易',seller)).status).toBe(409);
+        expect(await prisma.message.count({where:{conversationId:room}})).toBe(1);
+    });
+    it('isolates simultaneous buyers/products even when every room reuses the same client message ID', async () => {
+        const listingIds=[listingId];
+        for(let i=0;i<4;i++)listingIds.push((await prisma.listing.create({data:{ownerUserId:seller,clientListingId:randomUUID(),requestHash:'isolated-many-rooms',title:'合成商品 '+i,status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000)}})).id);
+        const pairs=listingIds.flatMap(id=>[buyer,third].map(userId=>({id,userId})));
+        const rooms=await Promise.all(pairs.map(async pair=>{const r=await call('post','/conversations',pair.userId).send({listingId:pair.id});expect(r.status).toBe(201);return{...pair,room:r.body.id};}));
+        expect(new Set(rooms.map(r=>r.room)).size).toBe(10);
+        const sameClientId=randomUUID();
+        await Promise.all(rooms.flatMap(r=>Array.from({length:3},()=>send(r.room,`ONLY ${r.userId} ${r.id}`,r.userId,sameClientId))));
+        for(const r of rooms){const [room,history,denied]=await Promise.all([call('get','/conversations/'+r.room,r.userId),call('get','/conversations/'+r.room+'/messages',r.userId),call('get','/conversations/'+r.room,r.userId===buyer?third:buyer)]);
+            expect(room.body.listingId).toBe(r.id);expect(room.body.buyerUserId).toBe(r.userId);expect(history.body.items).toHaveLength(1);expect(history.body.items[0]).toMatchObject({conversationId:r.room,senderUserId:r.userId,clientMessageId:sameClientId,text:`ONLY ${r.userId} ${r.id}`});expect(denied.status).toBe(404);
+        }
+    });
     it('requires real JWT auth and rejects forged tokens', async () => {
         expect((await request(server).get('/api/chat/conversations')).status).toBe(401);
         expect((await request(server).post('/api/chat/conversations').set('Authorization', 'Bearer ' + jwt.sign({ id: buyer }, 'different-test-secret')).send({ listingId })).status).toBe(401);

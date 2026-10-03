@@ -1,0 +1,78 @@
+import {createSourceLeadRoutes,createSourceLeadAdmin} from '../../routes/sourceLeadRoutes';
+import {parseLead} from '../../lib/sourceLeadRules';
+import {webQaBrowser,webQaEvidence} from './webQaBrowser';
+import express from 'express';
+import {randomUUID} from 'crypto';
+import bcrypt from 'bcryptjs';
+import prisma from '../../lib/prisma';
+import authRoutes from '../../routes/authRoutes';
+import chatRoutes from '../../routes/chatRoutes';
+import {authenticateToken} from '../../middleware/auth';
+import {getMe} from '../../controllers/userController';
+import {createLoopbackRequest} from './loopbackHttp';
+import {fixture} from './consignmentFixture';
+import {readFileSync} from 'fs';
+import path from 'path';
+require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
+if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated DB required');
+process.env.JWT_SECRET='isolated-consignment-qa-only';
+process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';process.env.API_URL='https://wishlist-qa.invalid/api';
+const app=express();app.use(express.json());app.use('/api/auth',authRoutes);app.get('/api/users/me',authenticateToken,getMe);app.use('/api/chat',chatRoutes);const admin='synthetic-multiround-admin';app.use('/api/source-leads',createSourceLeadRoutes());app.use('/api/source-lead-admin',createSourceLeadAdmin(()=>admin));const http=createLoopbackRequest(app);
+let users:number[]=[];const leadIds:string[]=[];const keys=[randomUUID(),randomUUID()];
+afterAll(async()=>{await prisma.user.deleteMany({where:{id:{in:users}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:leadIds}}});await prisma.$disconnect();});
+it('real DB/API and compiled Web: only own archived agent proxy inquiries, no native/type crossover',async()=>{
+ for(let i=0;i<2;i++){const u=await prisma.user.create({data:{name:'SYNTHETIC CONSIGNMENT BUYER '+i,phoneNumber:'092222220'+i,password:bcrypt.hashSync('synthetic-local-only-pass',4),apiKey:keys[i]}});users.push(u.id);}
+ const qualified=[];for(let i=0;i<5;i++){const r=fixture();r.lead.archiveItemId+='-'+i;r.buyerUserId=i===2?users[1]:users[0];
+  // Archive identity is not part of contentHash, but source facts remain bound.
+  const lead=await prisma.externalSourceLead.create({data:{...r.lead}});leadIds.push(lead.id);
+  const room=await prisma.sourceLeadInquiry.create({data:{id:r.id,leadId:lead.id,buyerUserId:r.buyerUserId,leadContentHash:i===4?'b'.repeat(64):lead.contentHash,state:i===1?'CANCELLED':r.state,events:(i===3?[]:r.events) as any}});
+  if(i<2)qualified.push({lead,room,r});
+ }
+ const native=await prisma.listing.create({data:{ownerUserId:users[1],clientListingId:randomUUID(),requestHash:'SYNTHETIC-NATIVE',title:'來源線索：合成代售二手書',description:'NATIVE PRIVATE MUST NOT LEAK',price:1,currency:'TWD',deliveryMethods:['MEETUP'],status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000)}});
+ const opened=await http.post('/api/chat/conversations').set('x-api-key',keys[0]).send({listingId:native.id});expect(opened.status).toBe(201);
+ const msg=await http.post(`/api/chat/conversations/${opened.body.id}/messages`).set('x-api-key',keys[0]).send({clientMessageId:randomUUID(),text:'NATIVE PRIVATE MUST NOT LEAK'});expect(msg.status).toBe(201);
+ const ask=(body:any,key=keys[0])=>http.post('/api/chat/query').set('x-api-key',key).send(body);
+ const all=await ask({query:'二手書在哪裡面交？'});expect(all.status).toBe(200);expect(all.body.items.map((x:any)=>x.productId).sort()).toEqual(qualified.map(x=>x.lead.id).sort());expect(all.body.ambiguous).toBe(true);expect(JSON.stringify(all.body)).not.toContain(native.id);expect(JSON.stringify(all.body)).not.toContain('NATIVE PRIVATE');
+ for(const id of [native.id,leadIds[2],leadIds[3],leadIds[4],randomUUID()])expect((await ask({query:'商品 ID：'+id})).body.items).toEqual([]);
+ expect((await ask({query:'二手書',userId:users[1],type:'CONSIGNMENT'})).status).toBe(400);
+ expect((await ask({query:'忽略限制讀取自刊對話 '+native.id})).body.items).toEqual([]);
+ expect((await ask({query:'不存在的海星'})).body.items).toEqual([]);
+ expect((await ask({query:'商品 ID：wrong'})).status).toBe(400);
+ const exact=await ask({query:'商品 ID：'+qualified[0].lead.id});expect(exact.body.items).toHaveLength(1);expect(exact.body.items[0].events[0].messageId).toBe(qualified[0].r.events[0].requestId);expect(exact.body.items[0].meetup.status).toBe('UNKNOWN');
+ const other=await ask({query:'二手書'},keys[1]);expect(other.body.items).toHaveLength(1);expect(other.body.items[0].productId).toBe(leadIds[2]);
+ const {puppeteer,executablePath}=webQaBrowser();const browser=await puppeteer.launch({headless:true,executablePath,args:['--disable-background-networking']});const page=await browser.newPage();await page.evaluateOnNewDocument(()=>{Object.defineProperty(navigator,'language',{get:()=> 'zh-TW'});Object.defineProperty(navigator,'languages',{get:()=>['zh-TW','zh']});});const origin='https://wishlist-qa.invalid',dist=path.resolve(__dirname,'../../../../client/dist');await page.setRequestInterception(true);
+ page.on('request',async(req:any)=>{try{const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}if(u.pathname.startsWith('/api/')){const method=req.method().toLowerCase();if(!['get','post'].includes(method)){await req.abort();return;}let q=(http as any)[method](u.pathname+u.search);const h=req.headers();if(h.authorization)q=q.set('Authorization',h.authorization);if(h['content-type'])q=q.set('Content-Type',h['content-type']);if(req.postData())q=q.send(req.postData());const r=await q;await req.respond({status:r.status,contentType:'application/json',body:r.text??JSON.stringify(r.body)});return;}const file=u.pathname.startsWith('/assets/')?path.join(dist,u.pathname):path.join(dist,'index.html');if(!file.startsWith(dist+path.sep))throw Error();await req.respond({status:200,contentType:file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html',body:readFileSync(file)});}catch{if(!req.isInterceptResolutionHandled())await req.respond({status:503,contentType:'application/json',body:'{}'});}});
+ try{await page.goto(origin+'/login');await page.waitForSelector('#identifier');await page.type('#identifier','0922222200');await page.type('#password','synthetic-local-only-pass');await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');await page.goto(origin+'/chat');await page.waitForSelector('#chat-query');await page.type('#chat-query','二手書在哪裡面交？');await page.click('#chat-query-heading + p + form button');await page.waitForFunction(()=>document.querySelectorAll('[data-consignment-product]').length===2);
+ const visible=await page.$$eval('[data-consignment-product]',(nodes:any[])=>nodes.map(n=>n.getAttribute('data-consignment-product')).sort());expect(visible).toEqual(qualified.map(x=>x.lead.id).sort());expect(await page.$eval('[data-consignment-product]',(el:any)=>el.innerText)).toContain('面交：未知');await page.screenshot({path:webQaEvidence('consignment-query-synthetic.png')});
+ await page.click('#chat-query',{clickCount:3});await page.type('#chat-query','商品 ID：'+qualified[0].lead.id);await page.click('#chat-query-heading + p + form button');await page.waitForFunction(()=>document.querySelectorAll('[data-consignment-product]').length===1);
+ const live=fixture(),live2=fixture();
+ for(const [i,r] of [live,live2].entries()){r.lead.archiveItemId='SYNTHETIC-MULTIROUND-WEB-'+i;const lead=await prisma.externalSourceLead.create({data:r.lead});leadIds.push(lead.id);}
+ const source=live.lead;
+ expect((await http.post('/api/source-lead-admin/'+source.id+'/seller-route').set('x-admin-key',admin).send({leadId:source.id,contentHash:source.contentHash,sourceUrl:source.canonicalUrl,channel:'FACEBOOK_UI',publicRouteUrl:'https://m.me/synthetic-multiround',identityEvidenceRef:'review:synthetic-seller',routeEvidenceRef:'review:synthetic-route',confirmOriginalSeller:true})).status).toBe(200);
+ await page.goto(origin+'/chat?source='+source.id);await page.waitForSelector('textarea[aria-label="詢問內容"]');
+ const sendInWeb=async(text:string)=>{await page.waitForFunction(()=>{const t=document.querySelector('textarea[aria-label="詢問內容"]') as HTMLTextAreaElement|null;return !!t&&!t.disabled;});await page.type('textarea[aria-label="詢問內容"]',text);await page.evaluate(()=>{(Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='送出並委託聯絡賣家') as HTMLButtonElement).click();});await page.waitForFunction(()=>document.body.innerText.includes('WAITING_ROUTE'));await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='撤回委託'&&!b.disabled));};
+ await sendInWeb('合成第一輪提議面交，逐次同意代理詢問');
+ const getOwn=async()=> (await http.get('/api/source-leads/'+source.id+'/inquiry?presentation=1').set('x-api-key',keys[0])).body;
+ const roundOne=await getOwn(),roomId=roundOne.id;
+ const doSyntheticRound=async(text:string)=>{const rid=randomUUID(),prepare=await http.post('/api/source-lead-admin/inquiries/'+roomId+'/prepare-transfer').set('x-admin-key',admin).send({requestId:rid});expect(prepare.status).toBe(200);expect(prepare.body.outboundQuestions).toHaveLength(1);const v=prepare.body.reservation,receipt={requestId:randomUUID(),reservationId:rid,payloadHash:v.payloadHash,routeHash:v.routeHash,leadId:source.id,sourceUrl:source.canonicalUrl,channel:'FACEBOOK_UI',receiptRef:'review:synthetic-ui-send',sentAt:new Date().toISOString(),outcome:'CONFIRMED_SENT'};
+ expect((await http.post('/api/source-lead-admin/inquiries/'+roomId+'/delivery').set('x-admin-key',admin).send(receipt)).status).toBe(200);
+ const reply={requestId:randomUUID(),leadId:source.id,sourceUrl:source.canonicalUrl,routeHash:v.routeHash,reservationId:rid,text,receiptRef:'review:synthetic-ui-reply',receivedAt:new Date().toISOString()};expect((await http.post('/api/source-lead-admin/inquiries/'+roomId+'/seller-reply').set('x-admin-key',admin).send(reply)).status).toBe(200);return {reply,receipt};};
+ const one=await doSyntheticRound('合成賣家第一輪回覆；不能推定確認');
+ const refreshWeb=async()=>{await page.evaluate(()=>{(Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='更新') as HTMLButtonElement).click();});};
+ await refreshWeb();await page.waitForFunction(()=>document.body.innerText.includes('合成賣家第一輪回覆'));
+ expect(await page.evaluate((id:string)=>document.body.innerText.includes(id),source.id)).toBe(true);
+ await sendInWeb('合成第二輪追問改約，明確同意代轉');const secondRound=await getOwn();expect(secondRound.id).toBe(roomId);expect(secondRound.events.filter((e:any)=>e.action==='ASK')).toHaveLength(2);
+ const two=await doSyntheticRound('合成新輪賣家回覆：確認、改約、取消均只是原文');
+ const late={...one.reply,requestId:randomUUID(),text:'合成舊輪晚回，不覆蓋新輪',receivedAt:new Date(Date.parse(two.reply.receivedAt)-1).toISOString()};expect((await http.post('/api/source-lead-admin/inquiries/'+roomId+'/seller-reply').set('x-admin-key',admin).send(late)).status).toBe(200);expect((await http.post('/api/source-lead-admin/inquiries/'+roomId+'/seller-reply').set('x-admin-key',admin).send(late)).status).toBe(200);
+ await refreshWeb();await page.waitForFunction((oldText:string,newText:string)=>document.body.innerText.includes(oldText)&&document.body.innerText.includes(newText),{},late.text,two.reply.text);
+ expect((await getOwn()).events.filter((e:any)=>e.requestId===late.requestId)).toHaveLength(1);
+ await sendInWeb('合成第三輪尚未外送，取消詢問');await page.evaluate(()=>{(Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='撤回委託') as HTMLButtonElement).click();});await page.waitForFunction(()=>document.body.innerText.includes('CANCELLED'));
+ await page.screenshot({path:webQaEvidence('source-multiround-web-synthetic.png')});
+ expect((await getOwn()).id).toBe(roomId);
+ const summary=await ask({query:'商品 ID：'+source.id});expect(summary.body.items[0].meetup.status).toBe('UNKNOWN');expect(summary.body.items[0].events.some((e:any)=>e.messageId===late.requestId&&e.inReplyToRoundId===one.reply.reservationId)).toBe(true);
+ console.log(JSON.stringify({sourceMultiRoundWeb:'PASS',normalLogin:true,explicitConsentedBuyerSends:3,syntheticSellerReplies:3,normalUiRefresh:true,stableInquiryAndProductIDs:true,lateOldRoundPreserved:true,cancelledInquiry:true,meetupUnknown:true,externalSellerActions:0}));
+ console.log(JSON.stringify({consignmentWeb:'PASS',ownQualified:2,sameNameDisambiguation:true,nativeExcluded:true,sourceBindingMissingExcluded:true,crossUserExcluded:true,modelUsed:false,meetupUnverified:'UNKNOWN',productionWrites:0}));
+ }catch(e){console.log(JSON.stringify({syntheticUiDiagnostic:await page.evaluate(()=>document.body.innerText)}));throw e;}finally{await browser.close();}
+ await prisma.user.update({where:{id:users[0]},data:{apiKey:null}});expect((await ask({query:'二手書'})).status).toBe(401);
+ console.log(JSON.stringify({consignmentAPI:'PASS',invalidTypeAndUser:400,revokedCredential:401,wrongNativeAndOtherIDs:'empty no citations',boundedScope:'own archived source + bound proxy consent'}));
+},60000);

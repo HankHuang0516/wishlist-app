@@ -97,6 +97,13 @@ export function isDiscoverable(status: string, expiresAt: Date | null, now: Date
     return (status === 'ACTIVE' || status === 'RESERVED') && !!expiresAt && expiresAt > now;
 }
 
+// Existing QA fixtures explicitly declare they are not goods for sale. Keep
+// owner/history access; never infer this from seller names or ordinary "QA".
+export const NON_SALE_QA_PREFIX = '【QA測試非販售】';
+export function isExplicitNonSaleFixture(title: string): boolean {
+    return title.startsWith(NON_SALE_QA_PREFIX);
+}
+
 export function parseListingSearch(input: Record<string, unknown>) {
     onlyKeys(input, ['q', 'condition', 'category', 'brand', 'minPrice', 'maxPrice', 'delivery', 'bbox', 'cursor', 'limit']);
     const q = input.q === undefined ? undefined : text(input.q, 'q', 100);

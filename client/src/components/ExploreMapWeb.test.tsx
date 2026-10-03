@@ -7,6 +7,8 @@ import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import ExploreMapWeb from './ExploreMapWeb';
 
 const mocks = vi.hoisted(() => ({ maps: [] as any[], markers: [] as any[], fail: false, worker: vi.fn() }));
+// The unit test mocks the renderer; its bundled browser worker is verified by the production build.
+vi.mock('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url',()=>({default:'/assets/synthetic-map-worker.js'}));
 vi.mock('maplibre-gl', () => ({ setWorkerUrl: mocks.worker, NavigationControl: class {}, Marker: class {
   options: any; constructor(options: any) { this.options = options; mocks.markers.push(this); } setLngLat = vi.fn(() => this); addTo = vi.fn(() => this); remove = vi.fn();
 }, Map: class {

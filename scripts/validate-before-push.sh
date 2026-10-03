@@ -14,6 +14,8 @@ export DATABASE_URL="$TEST_DATABASE_URL"
 echo "📦 Server build、單元測試與實際 DB 整合驗證"
 npm run build --prefix server
 npm test --prefix server -- --runInBand
+echo "🌐 建置當前 Web 供實際瀏覽器整合測試"
+npm run build --prefix client
 cd server
 npx prisma migrate deploy
 npx prisma migrate diff --from-url "$TEST_DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code

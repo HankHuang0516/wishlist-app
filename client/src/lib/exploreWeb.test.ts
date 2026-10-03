@@ -1,11 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseExploreIntent, exploreSellerPath, exploreExternalPath, readExploreSeller, readExploreExternal, type ExploreQuery } from './exploreWeb';
+import { parseExploreSearchState, exploreSearchLocation, parseExploreIntent, exploreSellerPath, exploreExternalPath, readExploreSeller, readExploreExternal, type ExploreQuery } from './exploreWeb';
 import { emptySearchFilters, TAIWAN_BOUNDS } from './listingSearch';
 import { ApiFailure } from './marketplaceApi';
 import { makeListing, makeMatch, makeMatchPage, uuid } from '../__tests__/fixtures/marketplace';
 import { marketplaceOrigin } from './marketplaceUrl';
 const scope = (): ExploreQuery => ({ filters: { ...emptySearchFilters }, bounds: TAIWAN_BOUNDS, wishId: null, radius: '', serial: 1 });
 describe('web map query parity and public response contracts', () => {
+  it('restores validated advanced filters, approximate bounds and wish radius without saving precise GPS',()=>{
+    const filters={...emptySearchFilters,q:'Sony 相機',brand:'Sony',category:'electronics',condition:'USED' as const,delivery:'MEETUP' as const,minPrice:'100',maxPrice:'4500'};
+    const link=exploreSearchLocation({q:filters.q,filters,wishId:814,listMode:true,bounds:[121.491234,25.031234,121.528765,25.068765],radius:'10'});
+    const restored=parseExploreSearchState(new URL(link,'https://example.invalid').search);
+    expect(restored.filters).toEqual(filters);expect(restored.bounds).toEqual([121.49,25.03,121.53,25.07]);expect(restored.radius).toBe('10');expect(restored.listMode).toBe(true);
+    for(const bad of ['?minPrice=20&maxPrice=10','?condition=WRONG','?category=secret','?radius=10','?wish=814&radius=999','?bbox=121.491234,25.03,121.53,25.07','?bbox=0,0,1,1','?brand=a%00b'])expect(()=>parseExploreSearchState(bad)).toThrow();
+  });
+  it('round-trips Chinese search and list mode in a bounded public URL, without a stale product selection', () => {
+    const path=exploreSearchLocation({ q:'三國 & 漫畫',wishId:null,listMode:true });
+    expect(parseExploreIntent(new URL(path,'https://example.invalid').search).q).toBe('三國 & 漫畫');
+    expect(new URL(path,'https://example.invalid').searchParams.get('view')).toBe('list');
+    expect(path).not.toContain('listing');
+    expect(() => parseExploreIntent('?view=secret')).toThrow();
+  });
   it('accepts only safe wish and listing navigation IDs', () => {
     const id = uuid(); expect(parseExploreIntent(`?wish=814&listing=${id}`)).toEqual({ wishId: 814, listingId: id, sourceId:null, q: '' });
     expect(parseExploreIntent('')).toEqual({ wishId: null, listingId: null, sourceId:null, q: '' });

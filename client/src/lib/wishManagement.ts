@@ -50,6 +50,12 @@ export function wishDraftBody(form: WishDraft, mediaId: string | null = null) {
   const currency = form.currency.trim().toUpperCase(); if (maxPrice !== null && !currencies.includes(currency)) throw new WishManagementError('請填寫支援的幣別，例如TWD／USD／JPY');
   return { name, notes: form.notes || null, link, imageUrl, ...(mediaId ? { mediaId } : {}), maxPrice, ...(maxPrice !== null ? { priceCurrency: currency } : {}) };
 }
+// Existing photos are read-only during editing. Validate only writable fields;
+// never treat a stored media proxy as a new image or start recognition again.
+export function wishEditBody(form: Omit<WishDraft, 'imageUrl'>) {
+  const { imageUrl: _imageUrl, ...patch } = wishDraftBody({ ...form, imageUrl: '' });
+  return patch;
+}
 export type WishCreateJournal = { kind: 'LIST' | 'ITEM'; listId: number | null; body: string };
 export function parseWishJournal(raw: string): WishCreateJournal {
   try {

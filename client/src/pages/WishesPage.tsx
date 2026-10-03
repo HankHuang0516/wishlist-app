@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { getFullApiUrl } from '../config';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
-import { parseManagedList, parseManagementPage, validWishId, wishDraftBody, WishManagementError, type ManagedList, type ManagedWish, type WishDraft } from '../lib/wishManagement';
+import { parseManagedList, parseManagementPage, validWishId, wishDraftBody, wishEditBody, WishManagementError, type ManagedList, type ManagedWish, type WishDraft } from '../lib/wishManagement';
 import { emptyWishDraft, listDraftBody, lookupWishCreate, lookupWishPhoto, parseWebManagedWish, parseWebWishJournal, parseWishPhotoJournal, prepareWishUpload, submitWishCreate, submitWishPhoto, wishRoot, type WishPhotoRecord, type WishReceipt } from '../lib/wishWeb';
 import MarketplaceDialog from '../components/MarketplaceDialog';
 import { wishPageText as pageText, wishDisplayError, wishStatusText } from '../lib/wishPageText';
@@ -168,9 +168,8 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
       } else {
         if (!selected || photoRaw && !photo && !editor.wish) throw new WishManagementError('請先查核照片上傳，或完成照片移除標記清理');
         if (!editor.wish && photo && (photo.listingId !== null || photo.wishItemId !== null)) throw new WishManagementError('照片已用於另一筆商品或願望，請查核原資料，不會重複附加');
-        const body = wishDraftBody(draft, editor.wish ? null : photo?.id ?? null);
-        if (editor.wish) { const { imageUrl: _imageUrl, ...patch } = body; mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); confirmWishFields(result,patch); if (!active.current) return; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readDetail(selected.id); await readLists(); }
-        else await create(JSON.stringify({ kind: 'ITEM', listId: selected.id, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) }));
+        if (editor.wish) { const patch = wishEditBody(draft); mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); confirmWishFields(result,patch); if (!active.current) return; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readDetail(selected.id); await readLists(); }
+        else { const body = wishDraftBody(draft, photo?.id ?? null); await create(JSON.stringify({ kind: 'ITEM', listId: selected.id, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) })); }
       }
     } catch (failure) { if (active.current) { if (mutationAttempted) setMutationUnknown(true); setError(wishDisplayError(failure, '尚未確認保存；請先查核原回執，不會自動另建。')); } }
     finally { end(); }

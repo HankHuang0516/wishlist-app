@@ -227,3 +227,12 @@ npm run test
 ## 2026-10-02 來源線索限定發布
 來源線索與商品/結帳分離，公開網址 `/source-leads?id=<UUID>`。座標指向公開公共地點，不代表現貨所在地；原始日期須近兩月且來源核對在48小時內。私有證據與聯絡路由不進公开 DTO。询问先保存，再逐次明確同意；無已核原賣家路由維持 WAITING_ROUTE，撤回不宣稱已送。
 回滾：關閉 SOURCE_LEADS_PUBLIC_ENABLED 或回退應用版本，保留新增兩表與收件歷史；不刪除正式資料。既有外部商品公開開關維持關閉。手機舊版需另更新新圖層，網頁可獨立查看。
+
+
+### Source contact original-operation recovery — v592
+
+The original Explore → source detail → Chat flow encrypts the complete ASK/CONSENT body, original UUID and room in the existing account/API-scoped browser vault before posting. Withdrawal uses a separate immutable slot. Reopening and Refresh read the original owned inquiry and exact private action receipt; they never post. Explicit Retry original operation resends only the persisted body. Old session markers migrate as receipt-only identities; corrupt or unreadable storage blocks writes, retains owned history where readable, and offers explicit restoration. No plaintext fallback, access token or seller contact details are saved in this journal.
+
+GET /source-leads/:id/inquiry/:roomId/actions/:requestId returns only the authenticated buyer’s exact operation and public inquiry projection, with private no-store caching. Unknown operations return null without allocation; mismatched ownership, room, lead or query parameters return 404. Read receipts remain available after withdrawal or rollout disablement. HTTP errors, absent/mismatched receipts, timeout or cleanup failure retain the original journal. CAS cleanup cannot erase another tab’s newer operation. Terminal confirmed cancellation fences late questions on the same owned room and resolves them as stopped, never accepted; CANCEL_REQUESTED and delivery review remain unresolved forwarding states. Reads and local-storage waits are bounded by 30 seconds, abort on departure, and respect the shared cooldown without automatic retry. All source contact/recovery controls follow Chinese/English and retain original product/question content.
+
+Regression coverage includes unknown committed/uncommitted sends, reload and exact replay, later 401/429/409, encrypted scope isolation and erasure, corrupt legacy data, save/read/cleanup faults, stale cleanup, late logout responses and an unresponsive local read. Real isolated HTTP tests validate private receipt ownership and unchanged data on reads, including withdrawal and disabled sources. Formal UI/release evidence remains in docs/web-app-parity.md; automated coverage is not proof of native or formal mutation acceptance.

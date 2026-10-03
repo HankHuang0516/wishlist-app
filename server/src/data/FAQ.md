@@ -125,3 +125,12 @@ A: 到設定的進階功能按「檢查網站更新」。版本準備完成後�
 
 Q: 聊天或面交顯示自動讀取已暫停，要怎麼恢復？
 A: 請稍後使用該頁的更新按鈕重新核對；成功後才恢復自動更新。限制到期、重新連網或回到畫面不會自行恢復，更新失敗仍保留暫停與原內容。登入失效時先重新登入原帳號。原訊息、尚未送出的文字與私密面交表單不會因此自動送出；結果待確認的操作仍須查核原回執。
+
+
+### Source contact original-operation recovery — v592
+
+The original Explore → source detail → Chat flow encrypts the complete ASK/CONSENT body, original UUID and room in the existing account/API-scoped browser vault before posting. Withdrawal uses a separate immutable slot. Reopening and Refresh read the original owned inquiry and exact private action receipt; they never post. Explicit Retry original operation resends only the persisted body. Old session markers migrate as receipt-only identities; corrupt or unreadable storage blocks writes, retains owned history where readable, and offers explicit restoration. No plaintext fallback, access token or seller contact details are saved in this journal.
+
+GET /source-leads/:id/inquiry/:roomId/actions/:requestId returns only the authenticated buyer’s exact operation and public inquiry projection, with private no-store caching. Unknown operations return null without allocation; mismatched ownership, room, lead or query parameters return 404. Read receipts remain available after withdrawal or rollout disablement. HTTP errors, absent/mismatched receipts, timeout or cleanup failure retain the original journal. CAS cleanup cannot erase another tab’s newer operation. Terminal confirmed cancellation fences late questions on the same owned room and resolves them as stopped, never accepted; CANCEL_REQUESTED and delivery review remain unresolved forwarding states. Reads and local-storage waits are bounded by 30 seconds, abort on departure, and respect the shared cooldown without automatic retry. All source contact/recovery controls follow Chinese/English and retain original product/question content.
+
+Regression coverage includes unknown committed/uncommitted sends, reload and exact replay, later 401/429/409, encrypted scope isolation and erasure, corrupt legacy data, save/read/cleanup faults, stale cleanup, late logout responses and an unresponsive local read. Real isolated HTTP tests validate private receipt ownership and unchanged data on reads, including withdrawal and disabled sources. Formal UI/release evidence remains in docs/web-app-parity.md; automated coverage is not proof of native or formal mutation acceptance.

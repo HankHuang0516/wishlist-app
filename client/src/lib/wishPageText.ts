@@ -116,6 +116,8 @@ const en = {
   "後台會去除位置資訊並產生縮圖；知道照片網址的人仍可能查看照片，請勿上傳個資。": "The server removes location metadata and creates a thumbnail. People who know the photo URL may still view it; avoid uploading personal information.",
   "AI 商品圖片網址（HTTPS）": "AI product image URL · HTTPS",
   "願望名稱（有照片可留空）": "Wish name · optional with a photo",
+  "願望名稱（必填）": "Wish name · required",
+  "商品圖片網址（唯讀）": "Saved product image URL · read-only",
   "最高預算（選填）": "Maximum budget · optional",
   "預算幣別": "Budget currency",
   "備註（公開清單會顯示）": "Notes · shown on public lists",

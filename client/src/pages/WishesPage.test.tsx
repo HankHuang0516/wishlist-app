@@ -88,14 +88,19 @@ describe('English wish UI preserves the original workflow and content',()=>{
   });
 });
 describe('native-parity wish web workflows',()=>{
-  it('refuses a blank edited name even when a stored photo is present, without submitting or replacing AI content',async()=>{
+  it.each([
+    ['zh-TW','編輯願望','願望名稱（必填）','儲存願望資料','請填寫200字內名稱與1000字內備註'],
+    ['en-US','Edit wish','Wish name · required','Save wish data','Use a name up to 200 characters and notes up to 1000 characters.'],
+  ])('refuses a blank edited name even when a stored photo is present, without submitting or replacing AI content: %s',async(locale,editLabel,nameLabel,saveLabel,errorLabel)=>{
+    localStorage.setItem('user-locale',locale);
     items=[{...wish,imageUrl:'https://images.example.com/original.jpg'}];mount(1);await screen.findByText('合成願望');
-    const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
-    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'   '}});
-    fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
-    await screen.findByText('請填寫200字內名稱與1000字內備註');
+    const edit=screen.getByRole('button',{name:editLabel});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
+    expect(screen.getByLabelText(nameLabel)).toHaveAttribute('aria-required','true');
+    fireEvent.change(screen.getByLabelText(nameLabel),{target:{value:'   '}});
+    fireEvent.click(screen.getByRole('button',{name:saveLabel}));
+    await screen.findByText(errorLabel);
     expect(api.mock.calls.filter(call=>call[2]?.method==='PUT')).toHaveLength(0);expect(posts()).toHaveLength(0);
-    expect(screen.getByLabelText('願望名稱（有照片可留空）')).toBeEnabled();expect(data.size).toBe(0);
+    expect(screen.getByLabelText(nameLabel)).toBeEnabled();expect(screen.getByLabelText(nameLabel)).toHaveValue('   ');expect(data.size).toBe(0);
   });
   it.each([
     'https://wishlist-app-production.up.railway.app/api/listing-media/fab22941-2df0-4ca4-90c2-70c504527243/image',
@@ -110,9 +115,9 @@ describe('native-parity wish web workflows',()=>{
     });
     mount(1);await screen.findByText('合成願望');
     const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
-    expect(screen.getByLabelText('AI 商品圖片網址（HTTPS）')).toBeDisabled();
-    expect(screen.getByLabelText('AI 商品圖片網址（HTTPS）')).toHaveValue(imageUrl);
-    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'更新合成桌燈'}});
+    expect(screen.getByLabelText('商品圖片網址（唯讀）')).toBeDisabled();
+    expect(screen.getByLabelText('商品圖片網址（唯讀）')).toHaveValue(imageUrl);
+    fireEvent.change(screen.getByLabelText('願望名稱（必填）'),{target:{value:'更新合成桌燈'}});
     fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'12.34'}});
     fireEvent.change(screen.getByLabelText('預算幣別'),{target:{value:'usd'}});
     fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'原照片保留\n合成 Unicode 備註'}});
@@ -131,17 +136,17 @@ describe('native-parity wish web workflows',()=>{
       if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){const result={...wish,...JSON.parse(args[2].body as string)};items=[result];return result;}
       return base(...args);
     });mount(1);await screen.findByText('合成願望');const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
-    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'已更新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    fireEvent.change(screen.getByLabelText('願望名稱（必填）'),{target:{value:'已更新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
     await screen.findByText('後台已確認願望資料修改。');expect(screen.getByText('已更新合成願望')).toBeInTheDocument();expect(screen.getByText('最高預算 TWD 725.25')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'編輯願望'}));expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（有照片可留空）')).toHaveValue('已更新合成願望');
+    fireEvent.click(screen.getByRole('button',{name:'編輯願望'}));expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（必填）')).toHaveValue('已更新合成願望');
   });
   it.each(['name','maxPrice','notes'])('does not claim a mismatched edited wish field was saved: %s',async field=>{
     items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{
       if(args[1]==='/native-wishes/items/4'&&args[2]?.method==='PUT'){const result={...wish,...JSON.parse(args[2].body as string)};return {...result,[field]:wish[field as keyof typeof wish]};}
       return base(...args);
     });mount(1);await screen.findByText('合成願望');const edit=screen.getByRole('button',{name:'編輯願望'});await waitFor(()=>expect(edit).toBeEnabled());fireEvent.click(edit);
-    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'新合成備註'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
-    await screen.findByText('回覆與送出的願望欄位不一致，尚未確認更新');expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（有照片可留空）')).toBeDisabled();expect(api.mock.calls.filter(call=>call[2]?.method==='PUT')).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('願望名稱（必填）'),{target:{value:'新合成願望'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'725.25'}});fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'新合成備註'}});fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    await screen.findByText('回覆與送出的願望欄位不一致，尚未確認更新');expect(screen.queryByText('後台已確認願望資料修改。')).not.toBeInTheDocument();expect(screen.getByLabelText('願望名稱（必填）')).toBeDisabled();expect(api.mock.calls.filter(call=>call[2]?.method==='PUT')).toHaveLength(1);
   });
   it('requires login with an exact validated list return intent before any private read',()=>{
     const auth={user:null,token:null,isAuthenticated:false,login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn()};render(<MemoryRouter initialEntries={['/wishes?list=1']}><AuthContext.Provider value={auth}><WishesPage/></AuthContext.Provider></MemoryRouter>);

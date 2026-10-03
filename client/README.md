@@ -299,3 +299,7 @@ Web explicitly requests approximate=1 for source list and details. County illust
 ## 來源缺少售價的顯示
 
 來源線索的空售價 sentinel（例如原帖標價 None元）在探索列表、地圖標記、詳情與來源聊天統一顯示「售價待詢問」／Ask about price。保留原始 publicFacts，正常0元、區間、議價及來源提醒照原文顯示；不更改庫存、交易或聯絡路由。
+
+## 願望編輯提示與驗證一致
+
+編輯既有願望顯示「願望名稱（必填）」及「商品圖片網址（唯讀）」，英文分別為 Wish name · required 與 Saved product image URL · read-only；名稱以 aria-required 標示。新增願望仍可在選用照片時留空名稱，仍使用原 AI 圖片輸入說明。這項調整不改儲存驗證、待確認紀錄、照片、AI 結果或後台契約。

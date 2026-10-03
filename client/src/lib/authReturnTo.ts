@@ -1,4 +1,4 @@
-export const AUTH_RETURN_PATHS = ['/dashboard', '/wishes', '/account-deletion', '/my-listings', '/sell', '/explore', '/chat', '/settings', '/reports', '/social', '/settings/notifications', '/purchase-history', '/change-password'] as const;
+export const AUTH_RETURN_PATHS = ['/dashboard', '/wishes', '/account-deletion', '/my-listings', '/sell', '/sell/manual', '/explore', '/chat', '/settings', '/reports', '/social', '/settings/notifications', '/purchase-history', '/change-password'] as const;
 import { isUuid } from './listingBatch';
 export type AuthReturnTo = typeof AUTH_RETURN_PATHS[number] | `/chat?room=${string}` | `/chat?source=${string}` | `/explore?source=${string}` | `/listings/${string}` | `/wishlists/${number}` | `/wishes?list=${number}` | `/users/${number}/profile` | `/users/${number}/wishlists`;
 export function authReturnTo(value: string | null): AuthReturnTo {

@@ -1,4 +1,4 @@
-import { API_URL } from '../config';
+import { getFullApiUrl } from '../config';
 import { api } from './marketplaceApi';
 import { isUuid } from './listingBatch';
 import { sha256, type PendingStore } from './webPendingStore';
@@ -40,7 +40,7 @@ export async function photoUploadResult(value:unknown,raw:string,userId:number,p
   if(!uuid(receipt.mediaId))return fail();
   let media:UploadedPhoto|null=null;
   if(row.media!==null){const photo=object(row.media);exact(photo,['id','ownerUserId','clientUploadId','capturePurpose','contentHash','listingId','wishItemId','imageUrl','thumbnailUrl','width','height','byteSize','createdAt']);
-    const base=API_URL.replace(/\/api\/?$/,'');
+    const base=getFullApiUrl().replace(/\/api\/?$/,'');
     if(photo.id!==receipt.mediaId||photo.ownerUserId!==userId||typeof photo.clientUploadId!=='string'||photo.clientUploadId.toLowerCase()!==journal.clientUploadId||photo.capturePurpose!==journal.capturePurpose||!hash(photo.contentHash)||!iso(photo.createdAt)
       ||photo.imageUrl!==`${base}/api/listing-media/${photo.id}/image`||photo.thumbnailUrl!==`${base}/api/listing-media/${photo.id}/thumbnail`
       ||!integer(photo.width,1,1600)||!integer(photo.height,1,1600)||!integer(photo.byteSize,1,5*1024*1024)
@@ -49,8 +49,9 @@ export async function photoUploadResult(value:unknown,raw:string,userId:number,p
   }
   return {state:'STORED',mediaId:receipt.mediaId as string,media};
 }
-export async function readPhotoUpload(token:string,raw:string,userId:number,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
+export async function readPhotoUpload(token:string,raw:string,userId:number,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM',active:()=>boolean=()=>true){
   const journal=await parsePhotoUploadJournal(raw,purpose);
+  if(!active())return fail();
   return photoUploadResult(await api(token,'/listing-media/upload-receipts/'+journal.clientUploadId),raw,userId,purpose);
 }
 export async function sendPhotoUpload(token:string,raw:string,userId:number,file:File,store:PendingStore,key:string,active:()=>boolean,purpose:'BATCH_ITEM'|'MANUAL_PHOTO'='BATCH_ITEM'){
@@ -64,7 +65,7 @@ export async function sendPhotoUpload(token:string,raw:string,userId:number,file
   try{ack=object(await api(token,'/listing-media',{method:'POST',body}));exact(ack,['id','imageUrl','thumbnailUrl','width','height','byteSize','createdAt']);if(!uuid(ack.id))return fail();}catch(error){failure=error;}
   if(!active())return fail();
   let result:PhotoUploadResult;
-  try{result=await readPhotoUpload(token,raw,userId,purpose);}catch(error){throw failure??error;}
+  try{result=await readPhotoUpload(token,raw,userId,purpose,active);}catch(error){throw failure??error;}
   if(ack&&(result.state!=='STORED'||result.mediaId!==ack.id))return fail();
   return result;
 }

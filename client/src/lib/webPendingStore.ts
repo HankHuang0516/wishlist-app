@@ -24,7 +24,7 @@ export async function pendingScope(apiUrl: string, userId: number) {
   return `wishlist.pending.v1.${await sha256(validateApiUrl(absolute, import.meta.env.DEV))}.${userId}`;
 }
 export async function pendingRequestKey(apiUrl: string, userId: number, feature: string) {
-  if (!resource.test(feature)) throw new PendingStoreError();
+  if (!resource.test(feature) && !/^listing-manual-(create|photo)$/.test(feature)) throw new PendingStoreError();
   return `${await pendingScope(apiUrl, userId)}.${feature.toLowerCase()}`;
 }
 /** Anonymous feedback is isolated from every signed-in account; no fake user ID. */
@@ -41,7 +41,7 @@ export async function partnerInquiryPendingKey(apiUrl:string){
 function scopeOf(key: string) {
   const publicFeedback=/^(wishlist\.pending\.public\.v1\.[a-f0-9]{64})\.(feedback|partner-inquiry)$/.exec(key);
   if(publicFeedback)return publicFeedback[1];
-  const match = keyPattern.exec(key);
+  const match = keyPattern.exec(key) ?? /^(wishlist\.pending\.v1\.[a-f0-9]{64}\.[1-9][0-9]{0,9})\.listing-manual-(create|photo)$/.exec(key);
   if (!match || Number(match[1].split('.').at(-1)) > 2147483647) throw new PendingStoreError();
   return match[1];
 }

@@ -1,6 +1,18 @@
 import { getUserLocale } from '../utils/localization';
 
 const english = {
+  '請在瀏覽器的安裝視窗完成操作…': 'Finish the installation in the browser’s prompt…',
+  '已取消安裝。之後可從瀏覽器選單安裝，或繼續使用網站。': 'Installation was cancelled. You can use the browser menu later or continue on the website.',
+  '瀏覽器已接受安裝。請從裝置的 App 入口確認是否完成；仍可繼續使用網站。': 'The browser accepted installation. Check your device’s app entry to confirm completion; you can still use the website.',
+  '無法開啟或確認安裝。請使用下方手動步驟，或繼續使用網站。': 'Installation could not be opened or verified. Use the manual steps below or continue on the website.',
+  '尚未確認安裝結果。請檢查裝置的 App 入口，或繼續使用網站；不會自動重試。': 'Installation is unconfirmed. Check your device’s app entry or continue on the website; nothing is retried automatically.',
+  '瀏覽器回報網頁 App 已安裝。請從裝置的 App 入口開啟。': 'The browser reported that the Web app was installed. Open it from your device’s app entry.',
+  '目前已在獨立網頁 App 中使用。': 'You are already using the standalone Web app.',
+  '等待安裝結果…': 'Waiting for installation…',
+  '請在 Safari 開啟網站。若看不到安裝選項，仍可直接使用網站。': 'Open the website in Safari. If installation is unavailable, you can still use the website.',
+  '若顯示「以網頁 App 開啟」，請啟用，再點「加入」。': 'If Open as Web App appears, turn it on, then tap Add.',
+  'Apple 安裝說明': 'Apple installation instructions',
+  '若瀏覽器未提供安裝選項，請換用支援的瀏覽器，或繼續使用網站。': 'If your browser has no installation option, use a supported browser or continue on the website.',
   '個人資料': 'Personal profile', '管理你的帳號與偏好設定': 'Manage your account and preferences',
   '重試讀取設定': 'Retry reading settings', '個人資料儲存狀態': 'Profile save status',
   '查核原儲存結果': 'Verify original save result', '重試清理恢復標記': 'Retry recovery journal cleanup',

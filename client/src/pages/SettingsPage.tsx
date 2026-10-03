@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, User as UserIcon, Download, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
@@ -17,6 +17,8 @@ import { settingsText as st, settingsMessage, settingsChinese } from '../lib/set
 import { useSettingsProfile } from '../lib/useSettingsProfile';
 import { useAvatarUpload } from '../lib/useAvatarUpload';
 import { WebsiteUpdateControls } from '../components/WebUpdateNotice';
+import { WebAppInstallControls } from '../components/WebAppInstallControls';
+import { useWebAppInstall } from '../context/WebAppInstallContext';
 
 export default function SettingsPage() {
     const { token, user } = useAuth();
@@ -27,6 +29,7 @@ function SettingsSession() {
     const { token, user } = useAuth();
     const navigate = useNavigate();
     const settings = useSettingsProfile(token, user?.id);
+    const installation = useWebAppInstall();
     const { profile, loading, savedField, update: handleUpdate } = settings;
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -67,7 +70,7 @@ function SettingsSession() {
     const avatarLocked = settings.locked || avatar.locked || changingLang;
     const changeLocale = (next: string) => {
         if (changingLang) return;
-        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current || diagnosticsBusyRef.current || integrationBusyRef.current) {
+        if (!settings.canReload() || !avatar.canReload() || securityBusyRef.current || diagnosticsBusyRef.current || integrationBusyRef.current || installation.isBusy()) {
             setFeedback({ message: st('請先完成保存或保留此頁文字；未保存的修改不會因切換語言而丟失。'), type: 'error' });
             return;
         }
@@ -78,27 +81,6 @@ function SettingsSession() {
         } catch {
             setChangingLang(false);
             setFeedback({ message: st('語言偏好未能保存；目前語言保留，請稍後重試。'), type: 'error' });
-        }
-    };
-
-    // PWA Install State
-    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
-    useEffect(() => {
-        const handler = (e: any) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
-        };
-        window.addEventListener('beforeinstallprompt', handler);
-        return () => window.removeEventListener('beforeinstallprompt', handler);
-    }, []);
-
-    const handleInstallClick = async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            setDeferredPrompt(null);
         }
     };
 
@@ -141,7 +123,7 @@ function SettingsSession() {
                         variant={settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('zh-TW')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy || installation.busy}
                     >
                         {changingLang && settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         繁體中文
@@ -150,7 +132,7 @@ function SettingsSession() {
                         variant={!settingsChinese() ? "primary" : "outline"}
                         onClick={() => changeLocale('en-US')}
                         className="flex-1"
-                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy}
+                        disabled={changingLang || settings.busy || avatar.busy || securityBusy || diagnosticsBusy || integrationBusy || installation.busy}
                     >
                         {changingLang && !settingsChinese() ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         English
@@ -470,87 +452,7 @@ function SettingsSession() {
                     <Link to="/social" className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm text-blue-700"><Users className="h-4 w-4" aria-hidden="true" />{st("好友與社交")}</Link>
                     <Link to="/reports" className="block min-h-11 rounded-md border p-3 text-sm text-blue-700">{st("我的商品檢舉 · 查看處理狀態")}</Link>
                 </div>
-            {/* App Installation Section - Only visible if installable or on mobile not installed */}
-
-            {/* 1. Native Install Button (Android/Desktop when event fires) */}
-            {
-                deferredPrompt && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')}</h2>
-                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
-                            <CardContent className="pt-6 flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-medium text-lg text-blue-900">Wishlist.ai</h3>
-                                    <p className="text-sm text-blue-700 mt-1">{t('settings.installDesc')}</p>
-                                </div>
-                                <Button
-                                    onClick={handleInstallClick}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
-                                >
-                                    <Download className="w-4 h-4 mr-2" />
-                                    {t('settings.installBtn')}
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
-
-            {/* 2. iOS Manual Instructions (Always show on iOS if not installed) */}
-            {
-                (!deferredPrompt && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('settings.installApp')} (iOS)</h2>
-                        <Card className="bg-gray-50 border-gray-200">
-                            <CardContent className="pt-6">
-                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
-                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                    <li>{st('點一下「分享」按鈕')}</li>
-                                    <li>{st('往下捲動並選擇「加入主畫面」')}</li>
-                                    <li>{st('點一下「加入」')}</li>
-                                </ol>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
-
-            {/* 3. Android Manual Instructions (Fallback if prompt doesn't fire) */}
-            {/* 3. Android Manual Instructions (Fallback) */}
-            {
-                (!deferredPrompt && /Android/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.android')})</h2>
-                        <Card className="bg-gray-50 border-gray-200">
-                            <CardContent className="pt-6">
-                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.noButton')}</h3>
-                                <p className="text-sm text-gray-600 mb-3">{t('pwa.manual')}</p>
-                                <ol className="list-decimal list-inside text-gray-700 mt-2 space-y-2 text-sm">
-                                    <li><strong>{t('pwa.step1')}</strong></li>
-                                    <li><strong>{t('pwa.step2')}</strong></li>
-                                    <li><strong>{t('pwa.step3')}</strong></li>
-                                </ol>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
-
-            {/* 4. Desktop/Generic Instructions (Fallback for PC/Mac) */}
-            {
-                (!deferredPrompt && !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) && (
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold mt-8 mb-4">{t('pwa.installTitle')} ({t('pwa.desktop')})</h2>
-                        <Card className="bg-gray-50 border-gray-200">
-                            <CardContent className="pt-6">
-                                <h3 className="font-medium text-lg text-gray-900">{t('pwa.howTo')}</h3>
-                                <p className="text-sm text-gray-600 mb-3">{t('pwa.desktopDesc')} <Download className="inline w-4 h-4 mx-1" /></p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            }
-
+            <WebAppInstallControls reloadPending={changingLang} />
 
             {/* AI Integration */}
             {advancedOpen && token && user?.id && <AiIntegrationInstructions token={token} userId={user.id} onBusy={onIntegrationBusy} />}

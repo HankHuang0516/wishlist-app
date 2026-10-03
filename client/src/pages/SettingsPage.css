@@ -2,6 +2,7 @@
 .settings-hub > .rounded-lg h3, .settings-hub > fieldset .rounded-lg h3 { font-size: 1rem; line-height: 1.5; }
 .settings-language { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem; }
 .settings-language > div { padding: 0; }
+.settings-language > div:first-child { flex: none; white-space: nowrap; }
 .settings-language > div:first-child p { display: none; }
 .settings-language > div:last-child { display: flex; flex-wrap: wrap; gap: .5rem; }
 .settings-language button { flex: none; min-width: 7rem; white-space: nowrap; }

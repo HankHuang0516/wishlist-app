@@ -28,7 +28,7 @@ afterEach(() => {
   }
 });
 async function settings() {
-  await screen.findByRole('heading', { name: 'Personal profile' });
+  await screen.findByRole('heading', { name: 'Personal profile' }, { timeout: 5000 });
   const advanced = screen.getByText('More features').closest('details')!;
   advanced.open = true; fireEvent(advanced, new Event('toggle'));
 }

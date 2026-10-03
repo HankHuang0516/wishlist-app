@@ -23,11 +23,13 @@ function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
 function storedSourceContext(value:unknown):SourceProductContext {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('來源對話資料不正確。');
   const row=value as SourceProductContext;
-  if(!isUuid(row.id)||typeof row.title!=='string'||!row.title.trim()||row.title.length>100||!row.county||!row.district||!TAIWAN_DISTRICTS[row.county]?.has(row.district))throw new Error('來源對話資料不正確。');
+  const countyIllustration=row.locationPrecision==='COUNTY_ILLUSTRATION';
+  if(row.locationPrecision!==undefined&&!countyIllustration)throw new Error('來源對話位置格式不正確。');
+  if(!isUuid(row.id)||typeof row.title!=='string'||!row.title.trim()||row.title.length>100||!row.county||!row.district||(!TAIWAN_DISTRICTS[row.county]?.has(row.district)&&!(countyIllustration&&row.county==='臺北市'&&row.district==='行政區未明示')))throw new Error('來源對話資料不正確。');
   const url=new URL(row.canonicalUrl);if(url.protocol!=='https:'||url.username||url.password||url.port||url.search||url.hash)throw new Error('來源對話連結不正確。');
   if(row.publicFacts!=null&&(typeof row.publicFacts.priceText!=='string'||row.publicFacts.priceText.length>300))throw new Error('來源對話售價不正確。');
   // Saved history remains readable after expiry, but stale media never gains display permission.
-  return {id:row.id,title:row.title,canonicalUrl:row.canonicalUrl,county:row.county,district:row.district,publicFacts:row.publicFacts??undefined,contactRouting:row.contactRouting?parseContactRouting(row.contactRouting):undefined,media:[]};
+  return {id:row.id,title:row.title,canonicalUrl:row.canonicalUrl,county:row.county,district:row.district,...(countyIllustration?{locationPrecision:'COUNTY_ILLUSTRATION' as const}:{}),publicFacts:row.publicFacts??undefined,contactRouting:row.contactRouting?parseContactRouting(row.contactRouting):undefined,media:[]};
 }
 export default function ChatPage() {
   const { user, token } = useAuth(), location = useLocation();

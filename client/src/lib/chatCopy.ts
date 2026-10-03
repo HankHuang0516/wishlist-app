@@ -1,6 +1,17 @@
 import { getDisplayLocale } from '../utils/localization';
 import type { ChatRoomRecord } from './chatData';
 const english = {
+  "Wishlist AI 代問": "Wishlist AI inquiries",
+  "正在讀取來源對話…": "Reading source conversations…",
+  "重新讀取來源對話": "Reload source conversations",
+  "重試讀取來源對話": "Retry source conversations",
+  "來源對話暫時無法讀取；原內容保留，請重試讀取來源對話。": "Source conversations could not be read. Original content is retained. Retry source conversations.",
+  "查看問題與下一步": "Review question and next steps",
+  "待核實原賣家，未送出": "Seller verification pending · Not sent",
+  "已保留代轉操作，送達尚未確認": "Forwarding reserved · Delivery unconfirmed",
+  "已記錄代轉，查看原賣家回覆": "Forwarding recorded · View seller reply",
+  "已申請撤回，仍待核查": "Withdrawal requested · Review pending",
+  "送達證據仍待核查": "Delivery evidence needs review",
   "自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。": "Automatic reads are paused. Use this page's update button to verify the latest state; reads resume only after success. If your session expired, first sign in to the same account.",
   "請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。": "Requests are temporarily limited. Automatic reads are paused; try again later. Your original content and pending operations remain.",
   "售價未提供": "Price unavailable",
@@ -174,6 +185,17 @@ export function chatMessage(value: string) {
   const versions = /^已確認先前第(\d+)版操作；目前第(\d+)版仍需重新核對。$/.exec(value);
   if (versions) return chatText('已確認先前第{acknowledged}版操作；目前第{current}版仍需重新核對。', { acknowledged: versions[1], current: versions[2] });
   return chatText('操作需要重新查核；請保留內容並重試讀取。');
+}
+export function sourceInquiryStatus(state: string) {
+  switch (state) {
+    case 'WAITING_ROUTE': return chatText('待核實原賣家，未送出');
+    case 'TRANSFER_RESERVED': return chatText('已保留代轉操作，送達尚未確認');
+    case 'DELIVERED': return chatText('已記錄代轉，查看原賣家回覆');
+    case 'CANCEL_REQUESTED': return chatText('已申請撤回，仍待核查');
+    case 'DELIVERY_REQUIRES_REVIEW': return chatText('送達證據仍待核查');
+    case 'CANCELLED': return chatText('已取消');
+    default: return chatText('查看問題與下一步');
+  }
 }
 export const chatTime = (value: string) => new Date(value).toLocaleString(getDisplayLocale().startsWith('zh') ? 'zh-TW' : 'en-US', { timeZone: 'Asia/Taipei', hour12: false });
 export const chatRoomTitle = (room: ChatRoomRecord) => room.listingId === null ? chatText('已封存的商品聊天') : room.listing.title;

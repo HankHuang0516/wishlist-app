@@ -18,7 +18,7 @@ async function main() {
     });
     calls++;
     assert.equal(response.status, status);
-    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('cache-control'), route.startsWith('/listings?') ? 'no-store' : 'private, no-store');
     return response.json();
   };
   try {
@@ -63,7 +63,7 @@ async function main() {
     const listingPayload = index => ({ clientListingId: randomUUID(), title: 'Nintendo Switch OLED QA ' + index,
       description: '合成測試商品，非真實刊登', category: 'electronics', brand: 'Nintendo', condition: 'USED', price: 7500,
       deliveryMethods: ['MEETUP'], location: { county: '台北市', district: '中山區', latitude: 25.052349, longitude: 121.523456 },
-      mediaIds: [photos[index].id], publish: true, consentToMap: true });
+      mediaIds: [photos[index].id], publish: true, consentToMap: true, mapCheckIn: true });
     const payload = listingPayload(0);
     const listing = await request('/listings', 201, 'seller', 'POST', payload);
     assert.equal(listing.expiryMode, 'DEFAULT_30_DAYS');

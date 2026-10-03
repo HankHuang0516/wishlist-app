@@ -24,8 +24,8 @@ const finite = (value: unknown, low: number, high: number): value is number => t
  * and server. A journal may never carry precise/private meetup coordinates. */
 function publication(value: unknown) {
   const row = record(value);
-  keys(row, ['clientListingId','title','description','condition','category','brand','price','currency','deliveryMethods','negotiable','location','mediaIds','expiryDate','publish','consentToMap']);
-  if (!uuid(row.clientListingId) || row.publish !== true || row.consentToMap !== true || row.currency !== 'TWD'
+  keys(row, ['clientListingId','title','description','condition','category','brand','price','currency','deliveryMethods','negotiable','location','mediaIds','expiryDate','publish','consentToMap','mapCheckIn']);
+  if (!uuid(row.clientListingId) || row.publish !== true || typeof row.consentToMap !== 'boolean' || row.mapCheckIn !== undefined && typeof row.mapCheckIn !== 'boolean' || row.mapCheckIn === true && row.consentToMap !== true || row.currency !== 'TWD'
     || !finite(row.price,0,9_999_999_999.99) || Math.abs(row.price*100-Math.round(row.price*100)) > .001
     || !['USED','NEW'].includes(String(row.condition)) || !listingCategories.some(item => item[0] === row.category)
     || !Array.isArray(row.deliveryMethods) || row.deliveryMethods.length < 1 || row.deliveryMethods.length > 2 || row.deliveryMethods.some(v=>v!=='MEETUP'&&v!=='SHIPPING') || new Set(row.deliveryMethods).size !== row.deliveryMethods.length
@@ -41,7 +41,7 @@ function publication(value: unknown) {
   const normalized = { title:text(row.title,100),description:text(row.description,3000),condition:row.condition,category:row.category,
     brand:row.brand===undefined?null:text(row.brand,60),price:row.price,currency:'TWD',deliveryMethods:row.deliveryMethods,negotiable:row.negotiable,status:'ACTIVE',
     expiryMode:row.expiryDate===undefined?'DEFAULT_30_DAYS':'CUSTOM_DATE',expiryDate:row.expiryDate,
-    location:{county,district,publicLatitude,publicLongitude,precisionMeters:2200},mediaIds:row.mediaIds,consentToMap:true };
+    location:{county,district,publicLatitude,publicLongitude,precisionMeters:2200},mediaIds:row.mediaIds,consentToMap:row.consentToMap,...(row.mapCheckIn !== undefined ? {mapCheckIn:row.mapCheckIn} : {}) };
   return { payload:row, normalized };
 }
 /** Separate envelope: a draft can never weaken the v1 publication gate. */
@@ -87,7 +87,8 @@ export async function parseListingCreationJournal(raw:string): Promise<ListingCr
 }
 export function strictCreatedListing(value:unknown,userId:number):ManagedListing {
   const row=record(value);
-  keys(row,['id','ownerUserId','title','description','condition','category','brand','price','currency','deliveryMethods','negotiable','status','publishedAt','expiresAt','expiryMode','lastVerifiedAt','createdAt','updatedAt','version','owner','location','media'],true);
+  keys(row,['id','ownerUserId','title','description','condition','category','brand','price','currency','deliveryMethods','negotiable','status','publishedAt','expiresAt','expiryMode','lastVerifiedAt',...(row.mapVisibleUntil !== undefined ? ['mapVisibleUntil'] : []),'createdAt','updatedAt','version','owner','location','media'],true);
+  if (!(row.mapVisibleUntil === undefined || row.mapVisibleUntil === null || date(row.mapVisibleUntil))) return fail();
   const owner=record(row.owner); keys(owner,['id','name'],true);
   if(!(owner.name===null||typeof owner.name==='string') || !['DEFAULT_30_DAYS','CUSTOM_DATE'].includes(String(row.expiryMode)) || typeof row.negotiable!=='boolean'
     || !(row.brand===null||typeof row.brand==='string'&&row.brand.length<=60) || !date(row.updatedAt) || !date(row.createdAt)

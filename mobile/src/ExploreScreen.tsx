@@ -94,7 +94,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     return () => { mounted.current = false; sequence.current++; externalSequence.current++;
       clearInterval(timer); subscription.remove(); };
   }, []);
-  const visible = useMemo(() => items.filter(item => Date.parse(item.expiresAt) > clock), [items, clock]);
+  const visible = useMemo(() => items.filter(item => Date.parse(item.expiresAt) > clock && !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > clock), [items, clock]);
   const externalVisible = useMemo(() => externalItems.filter(item =>
     Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= 48 * 3_600_000), [externalItems, clock]);
   const chosen = visible.find(item => item.id === selected);
@@ -360,6 +360,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     {!!error && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{error}</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View>}
     {!!externalError && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{externalError}</Text><Pressable accessibilityRole="button" disabled={externalBusy} style={s.chip} onPress={() => void loadExternal()}><Text style={s.text}>重載外部商品</Text></Pressable></View>}
     {bounds && !externalPath && <Text style={s.notice}>目前篩選包含外部來源無法驗證的欄位{wishItemId && radiusApplied ? '（含距離）' : ''}，因此只顯示站內刊登。</Text>}
+    <Text style={s.small}>商品地區示意，不顯示使用者即時位置。站內商品須由賣家手動同意顯示，一小時後停止；來源圖釘是公開地區示意。</Text>
     {!bounds && <Text style={s.notice}>目前視野不在台灣，請將地圖移回台灣範圍。</Text>}
     {listMode ? <FlatList data={listItems} keyExtractor={entry => entry.kind + ':' + entry.item.id}
       ListHeaderComponent={<View style={s.listStatus}>{leads.list}<Text accessibilityLiveRegion="polite" style={s.small}>{clusterPreview ? `此圖釘包含 ${listItems.length} 件商品 · 此次搜尋共載入 ${loadedCount} 件` : resultSummary}</Text><View style={s.wrap}>

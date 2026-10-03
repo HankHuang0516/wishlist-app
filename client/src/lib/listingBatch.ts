@@ -119,7 +119,6 @@ export function firstListingPublishIssue(draft: SellerDraft, mediaId: string, de
   if (!details.latitude.trim() || !Number.isFinite(latitude) || latitude < 20 || latitude > 26.6) return { field: 'latitude', message: locationMessage };
   if (!details.longitude.trim() || !Number.isFinite(longitude) || longitude < 117 || longitude > 123.8) return { field: 'longitude', message: locationMessage };
   if (!details.meetup && !details.shipping) return { field: 'delivery', message: '請選擇至少一種交付方式' };
-  if (!details.consent) return { field: 'consent', message: '請確認同意公開商品至地圖' };
   if (details.expiryDate) {
     const issue: ListingPublishIssue = { field: 'expiryDate', message: '請選擇未來的失效日期' };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(details.expiryDate)) return issue;
@@ -144,6 +143,6 @@ export function buildPublishedListing(draft: SellerDraft, mediaId: string, detai
   return { clientListingId: draft.clientListingId, title: form.title.trim(), description: form.description.trim(), brand: form.brand.trim() || undefined,
     category: form.category, condition: form.condition, price: Number(form.price), currency: 'TWD', publish: true,
     mediaIds: [mediaId], deliveryMethods: [...(details.meetup ? ['MEETUP'] : []), ...(details.shipping ? ['SHIPPING'] : [])],
-    negotiable: details.negotiable, consentToMap: true, location: { county: details.county.trim(), district: details.district.trim(), latitude: publicLatitude, longitude: publicLongitude },
+    negotiable: details.negotiable, consentToMap: details.consent, mapCheckIn: details.consent, location: { county: details.county.trim(), district: details.district.trim(), latitude: publicLatitude, longitude: publicLongitude },
     ...(details.expiryDate ? { expiryDate: details.expiryDate } : {}) };
 }

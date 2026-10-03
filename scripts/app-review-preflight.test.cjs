@@ -47,3 +47,30 @@ function privacyReady(){return {appId:'6468950847',published:true,pending:false,
 test('accepts published App Privacy labels matching the current collection and code',()=>assert.doesNotThrow(()=>assertPrivacyEvidence(privacyReady(),'native','server')));
 for (const [name,change] of [['unpublished privacy',r=>r.published=false],['pending declaration',r=>r.pending=true],['missing chat declaration',r=>r.declaredTypes=r.declaredTypes.filter(x=>x!=='電子郵件或訊息')],['missing retained operation declaration',r=>{r.declaredTypes=r.declaredTypes.filter(x=>x!=='產品互動');r.linkedCount=r.declaredTypes.length;}],['legacy anonymous labels',r=>r.linkedCount=0],['new native collection',r=>r.nativeTree='old'],['new backend collection',r=>r.serverTree='old']])
     test(`blocks ${name}`,()=>{const r=privacyReady();change(r);assert.throws(()=>assertPrivacyEvidence(r,'native','server'));});
+
+const {assertReviewRemediationEvidence} = require('./app-review-preflight.cjs');
+function remediationFixture() {
+ const native={buildId:'build14',buildNumber:'14',nativeGitTree:'current-tree',artifactSha256:'a'.repeat(64),mode:'fresh-native-ui'};
+ const receipt={appId:'6468950847',buildId:native.buildId,nativeGitTree:native.nativeGitTree,artifactSha256:native.artifactSha256,deviceKind:'physical',verifiedAt:new Date().toISOString(),videoPath:'/private/synthetic-recording.mp4',videoSha256:'b'.repeat(64),notesVideoUrl:'https://example.invalid/physical-proof.mp4',checks:Object.fromEntries(['termsBeforeLogin','termsBeforeRegister','chatReportReceipt','blockPreventsNewMessages','mapDecline','manualMapCheckIn','mapStop','noAutomaticMapRenewal'].map(c=>[c,true]))};
+ return {native,receipt,age:{ageRatingOverrideV2:'EIGHTEEN_PLUS'}};
+}
+test('requires physical recording, the new selected binary and the Apple age override',()=>{
+ const {native,receipt,age}=remediationFixture(); assert.doesNotThrow(()=>assertReviewRemediationEvidence(receipt,native,age));
+ for(const change of [{deviceKind:'simulator'},{videoSha256:null},{buildId:'build12'},{nativeGitTree:'old-tree'},{notesVideoUrl:null},{verifiedAt:'2020-01-01'}])assert.throws(()=>assertReviewRemediationEvidence({...receipt,...change},native,age));
+ for(const check of Object.keys(receipt.checks))assert.throws(()=>assertReviewRemediationEvidence({...receipt,checks:{...receipt.checks,[check]:false}},native,age));
+ assert.throws(()=>assertReviewRemediationEvidence(receipt,{...native,mode:'unchanged-native-binary'},age));
+ assert.throws(()=>assertReviewRemediationEvidence(receipt,{...native,buildNumber:'12'},age));
+ assert.throws(()=>assertReviewRemediationEvidence(receipt,native,{ageRatingOverrideV2:'NONE'}));
+});
+
+const {assertRecordingDelivery}=require('./app-review-preflight.cjs');
+test('checks the actual completed review attachment, exact inspected video and notes before resubmission',()=>{
+ const {receipt,native,age}=remediationFixture();delete receipt.notesVideoUrl;
+ receipt.videoAttachment={id:'attachment',fileName:'physical-device-proof.mp4',reviewDetailId:'detail'};
+ const attachment={id:'attachment',relationships:{appStoreReviewDetail:{data:{id:'detail'}}},attributes:{fileName:'physical-device-proof.mp4',sourceFileChecksum:'c'.repeat(32),assetDeliveryState:{state:'COMPLETE'}}};
+ assert.doesNotThrow(()=>assertReviewRemediationEvidence(receipt,native,age));
+ assert.doesNotThrow(()=>assertRecordingDelivery(receipt,'Recording: physical-device-proof.mp4',attachment,'detail','c'.repeat(32)));
+ for(const attributes of [{assetDeliveryState:{state:'UPLOADING'}},{sourceFileChecksum:'d'.repeat(32)},{fileName:'other.mp4'}])assert.throws(()=>assertRecordingDelivery(receipt,'physical-device-proof.mp4',{...attachment,attributes:{...attachment.attributes,...attributes}},'detail','c'.repeat(32)));
+ assert.throws(()=>assertRecordingDelivery(receipt,'No recording',attachment,'detail','c'.repeat(32)));
+ assert.throws(()=>assertRecordingDelivery(receipt,'physical-device-proof.mp4',attachment,'wrong-detail','c'.repeat(32)));
+});

@@ -166,7 +166,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     void Promise.all([sellers,externals]);
     return () => { valid = false; controller.abort(); };
   }, [query, token, origin]);
-  const liveItems = useMemo(() => seller.items.filter(item => Date.parse(item.expiresAt) > clock), [seller.items, clock]);
+  const liveItems = useMemo(() => seller.items.filter(item => Date.parse(item.expiresAt) > clock && !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > clock), [seller.items, clock]);
   const liveExternal = useMemo(() => external.items.filter(item => Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= 48 * 3_600_000), [external.items, clock]);
   const selectedSeller = selection?.kind === 'seller' ? liveItems.find(item => item.id === selection.id) : undefined;
   const selectedSource=selection?.kind==='source'?source.items.find(r=>r.id===selection.id):undefined;

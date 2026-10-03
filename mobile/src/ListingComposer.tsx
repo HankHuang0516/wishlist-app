@@ -175,7 +175,8 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
       <Pressable accessibilityRole="button" disabled={locked} style={s.chip} onPress={() => setPicker(true)}><Text style={s.text}>自訂失效日期 · 選用</Text></Pressable>
       {!!form.expiryDate && <Pressable accessibilityRole="button" disabled={locked} style={s.option} onPress={() => change('expiryDate', '')}><Text style={s.text}>清除，使用預設30天</Text></Pressable>}
       {picker && !locked && <ListingExpiryPicker value={form.expiryDate} onApply={date => { change('expiryDate', date); setPicker(false); }} onCancel={() => setPicker(false)} />}
-      {toggle('consent', '同意公開商品資訊、照片與約略位置至商品地圖')}
+      {toggle('consent', '本次同意商品約略位置在地圖顯示一小時（選填）')}
+      <Text style={s.small}>可不勾選並繼續刊登，商品會保留在我的商品與分享連結。定位只是協助填寫；不會顯示使用者即時位置。地圖顯示不會自動續期，可在「我的商品」手動確認或隨時停止。</Text>
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
       {pending ? <Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>重試相同刊登</Text></Pressable> : <><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>發布商品</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.option} onPress={() => void save(false)}><Text style={s.text}>儲存草稿</Text></Pressable></>}
     </ScrollView>

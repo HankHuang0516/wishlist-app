@@ -43,7 +43,7 @@ async function body(overrides: Record<string, unknown> = {}) {
         deliveryMethods: ['MEETUP', 'SHIPPING'], location: { county: '台北市', district: '中山區', latitude: 25.052349, longitude: 121.523456 }, mediaIds: [await media()], publish: true, consentToMap: true, ...overrides };
 }
 async function create(overrides: Record<string, unknown> = {}) {
-    const payload = await body(overrides);
+    const payload = await body({ mapCheckIn: overrides.publish !== false, ...overrides });
     const r = await post('').send(payload);
     expect(r.status).toBe(201);
     return r.body;
@@ -150,7 +150,7 @@ describe('listing API / PostgreSQL integration', () => {
     });
     it('rejects ownership overposting, missing map consent and prohibited merchandise', async () => {
         expect((await post('').send(await body({ ownerUserId: third }))).status).toBe(400);
-        expect((await post('').send(await body({ consentToMap: false }))).status).toBe(400);
+        expect((await post('').send(await body({ consentToMap: false, mapCheckIn: true }))).status).toBe(400);
         expect((await post('').send(await body({ title: '出售毒品' }))).status).toBe(400);
         expect(await prisma.listing.count()).toBe(0);
     });
@@ -275,7 +275,7 @@ describe('listing API / PostgreSQL integration', () => {
         const draft = await create({ publish: false, consentToMap: false });
         expect(draft.expiresAt).toBeNull();
         await prisma.listing.update({ where: { id: draft.id }, data: { createdAt: new Date('2020-01-01') } });
-        expect((await post('/' + draft.id + '/publish').send({ expectedVersion: 1, consentToMap: false })).status).toBe(400);
+        expect((await post('/' + draft.id + '/publish').send({ expectedVersion: 1, consentToMap: false, mapCheckIn: true })).status).toBe(400);
         const result = await post('/' + draft.id + '/publish').send({ expectedVersion: 1, consentToMap: true });
         expect(result.status).toBe(200);
         expect(new Date(result.body.publishedAt).getTime()).toBeGreaterThan(Date.now() - 3000);

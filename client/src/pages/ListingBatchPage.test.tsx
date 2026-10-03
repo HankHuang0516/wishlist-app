@@ -184,7 +184,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
   }
   const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><ListingBatchPage /></AuthContext.Provider></MemoryRouter>;
   async function publishOne() {
@@ -243,10 +243,11 @@ describe('web private batch listing flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '開啟「自訂失效日期（不填預設 30 天）」日曆' }));
     fireEvent.click(screen.getByRole('button', { name: '選擇 2030-01-31' }));
     expect(review).not.toBeChecked();
-    expect(screen.getByLabelText(/我已確認商品真實/)).not.toBeChecked();
+    expect(screen.getByLabelText(/同意這次將商品約略位置/)).not.toBeChecked();
     fireEvent.click(review);
-    expect(screen.getByLabelText(/我已確認商品真實/)).toHaveFocus();
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    expect(review).toBeChecked(); // Declining the map still permits review/publication.
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
+    expect(review).not.toBeChecked();
     fireEvent.click(review);
     expect(review).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: '開啟「自訂失效日期（不填預設 30 天）」日曆' }));
@@ -490,7 +491,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/listings') && call.method === 'POST')).toBe(true));
@@ -529,7 +530,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await waitFor(() => expect(releaseSellerSave).toBeDefined());
@@ -552,7 +553,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     fireEvent.click(screen.getByText('確認並刊登'));
     await screen.findByText(/前次刊登結果尚未確認/);
@@ -579,7 +580,7 @@ describe('web private batch listing flow', () => {
     fireEvent.change(screen.getByLabelText('行政區'), { target: { value: '中山區' } });
     fireEvent.change(screen.getByLabelText('緯度（度）'), { target: { value: '25.05' } });
     fireEvent.change(screen.getByLabelText('經度（度）'), { target: { value: '121.53' } });
-    fireEvent.click(screen.getByLabelText(/我已確認商品真實/));
+    fireEvent.click(screen.getByLabelText(/同意這次將商品約略位置/));
     fireEvent.click(screen.getByLabelText(/我已逐欄確認第 1 件/));
     const retain = async (key:string,body:string) => { if(pending.has(key)&&pending.get(key)!==body)throw Error('Different operation');pending.set(key,body); };
     // Fail publication persistence, not the two preceding draft checks.

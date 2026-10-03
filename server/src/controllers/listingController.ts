@@ -5,6 +5,8 @@ import { AuthRequest } from '../middleware/auth';
 import { isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
 import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 import { ListingCreationError, listingCreationGate, listingCreationId, listingCreationReceiptSelect } from '../lib/listingCreation';
+import { mapPresenceBody, mapPresenceUntil } from '../lib/mapPresence';
+import { lockListingAdmission } from '../lib/listingAdmission';
 
 // Explicit projection: no credentials, request hashes, private profile/contact
 // fields or future exact meetup locations can escape through a relation include.
@@ -12,7 +14,7 @@ export const publicListingSelect = {
     id: true, ownerUserId: true, title: true, description: true, condition: true,
     category: true, brand: true, price: true, currency: true, deliveryMethods: true,
     negotiable: true, status: true, publishedAt: true, expiresAt: true, expiryMode: true,
-    lastVerifiedAt: true, createdAt: true, updatedAt: true, version: true,
+    lastVerifiedAt: true, mapVisibleUntil: true, createdAt: true, updatedAt: true, version: true,
     owner: { select: { id: true, name: true } },
     location: { select: { county: true, district: true, publicLatitude: true, publicLongitude: true, precisionMeters: true } },
     media: { where: { OR: [{ capturePurpose: { not: 'AI_MARKETING' as const } }, { marketingSelected: true }] },
@@ -150,6 +152,7 @@ export async function abandonListingCreation(req: AuthRequest, res: Response) {
 }
 
 export async function searchListings(req: AuthRequest, res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
     try {
         const search = parseListingSearch(req.query);
         const where: Prisma.ListingWhereInput = {
@@ -160,7 +163,7 @@ export async function searchListings(req: AuthRequest, res: Response) {
             ...(search.condition ? { condition: search.condition } : {}),
             ...(search.delivery ? { deliveryMethods: { has: search.delivery } } : {}),
             ...(search.minPrice !== undefined || search.maxPrice !== undefined ? { price: { gte: search.minPrice, lte: search.maxPrice } } : {}),
-            ...(search.bbox ? { location: { is: { publicLatitude: { gte: search.bbox.south, lte: search.bbox.north }, publicLongitude: { gte: search.bbox.west, lte: search.bbox.east } } } } : {}),
+            ...(search.bbox ? { mapVisibleUntil: { gt: new Date() }, location: { is: { publicLatitude: { gte: search.bbox.south, lte: search.bbox.north }, publicLongitude: { gte: search.bbox.west, lte: search.bbox.east } } } } : {}),
         };
         const rows = await prisma.listing.findMany({ where, select: publicListingSelect, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: search.limit + 1, ...(search.cursor ? { cursor: { id: search.cursor }, skip: 1 } : {}) });
@@ -297,9 +300,9 @@ export async function applyListingEdit(tx: Prisma.TransactionClient, ownerUserId
                 AND: [{ OR: [{ listingId: null }, { listingId: id }] }, { OR: [{ capturePurpose: { not: 'AI_MARKETING' } }, { marketingSelected: true }] }] },
                 select: { id: true } });
             if (media.length !== parsed.mediaIds.length) throw new ListingForbidden('圖片不存在、已被使用或不屬於此帳號');
-            const { publishedAt, expiresAt, expiryMode, lastVerifiedAt, status, ...editable } = parsed.data;
+            const { publishedAt, expiresAt, expiryMode, lastVerifiedAt, mapVisibleUntil, status, ...editable } = parsed.data;
             // No expiry/publication/status fields are written by normal editing.
-            const changed = await tx.listing.updateMany({ where: { id, ownerUserId, version: expectedVersion as number, status: listing.status }, data: { ...editable, version: { increment: 1 } } });
+            const changed = await tx.listing.updateMany({ where: { id, ownerUserId, version: expectedVersion as number, status: listing.status }, data: { ...editable, ...(body.location !== undefined ? { mapVisibleUntil: null } : {}), version: { increment: 1 } } });
             if (changed.count !== 1) throw new ListingConflict();
             if (body.location !== undefined && parsed.location) await tx.listingLocation.upsert({ where: { listingId: id }, create: { listingId: id, ...parsed.location }, update: parsed.location });
             await tx.listingMedia.updateMany({ where: { listingId: id, ownerUserId, id: { notIn: parsed.mediaIds } }, data: { listingId: null } });
@@ -316,7 +319,7 @@ export async function publishListing(req: AuthRequest, res: Response) {
     try {
         const id = req.params.id;
         if (!isListingId(id)) throw new ListingInputError('id');
-        const body = versionBody(req.body, ['expectedVersion', 'expiryDate', 'consentToMap']);
+        const body = versionBody(req.body, ['expectedVersion', 'expiryDate', 'consentToMap', 'mapCheckIn']);
         const listing = await prisma.listing.findFirst({ where: { id, ownerUserId: req.user.id }, include: { location: true, media: { orderBy: { position: 'asc' } } } });
         if (!listing) return res.status(404).json({ error: '商品不存在' });
         if (listing.status !== 'DRAFT') throw new ListingConflict();
@@ -324,11 +327,35 @@ export async function publishListing(req: AuthRequest, res: Response) {
         if (!user.isEmailVerified && !user.isPhoneVerified) throw new ListingForbidden('上架前請先完成手機或 Email 驗證');
         const expiryDate = body.expiryDate ?? (listing.expiryMode === 'CUSTOM_DATE' && listing.expiresAt ? listing.expiresAt.toISOString().slice(0, 10) : undefined);
         if (body.expiryDate === null) throw new ListingInputError('expiryDate');
-        const parsed = parseListingCreate({ ...editablePayload(listing), publish: true, consentToMap: body.consentToMap, ...(expiryDate !== undefined ? { expiryDate } : {}) }, new Date());
+        const parsed = parseListingCreate({ ...editablePayload(listing), publish: true, consentToMap: body.consentToMap, ...(body.mapCheckIn !== undefined ? { mapCheckIn: body.mapCheckIn } : {}), ...(expiryDate !== undefined ? { expiryDate } : {}) }, new Date());
         assertListingPolicy(parsed.data);
         const changed = await prisma.listing.updateMany({ where: { id, ownerUserId: req.user.id, version: body.expectedVersion as number, status: 'DRAFT' },
-            data: { status: 'ACTIVE', publishedAt: parsed.data.publishedAt, expiresAt: parsed.data.expiresAt, expiryMode: parsed.data.expiryMode, lastVerifiedAt: parsed.data.lastVerifiedAt, version: { increment: 1 } } });
+            data: { status: 'ACTIVE', publishedAt: parsed.data.publishedAt, expiresAt: parsed.data.expiresAt, expiryMode: parsed.data.expiryMode, lastVerifiedAt: parsed.data.lastVerifiedAt, mapVisibleUntil: parsed.data.mapVisibleUntil, version: { increment: 1 } } });
         if (changed.count !== 1) throw new ListingConflict();
         return res.json(await prisma.listing.findUnique({ where: { id }, select: publicListingSelect }));
+    } catch (error) { return fail(res, error); }
+}
+
+export async function setListingMapPresence(req: AuthRequest, res: Response) {
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (!req.user) return res.status(401).json({ errorCode: 'MISSING_TOKEN' });
+    try {
+        const id = listingCreationId(req.params.id), userId = req.user.id, body = mapPresenceBody(req.body);
+        if (Object.keys(req.query).length) throw new ListingInputError('query');
+        const listing = await prisma.$transaction(async tx => {
+            await lockListingAdmission(tx, id);
+            const user = await listingCreationGate(tx, req, userId);
+            const current = await tx.listing.findFirst({ where: { id, ownerUserId: userId }, select: publicListingSelect });
+            if (!current) throw new ListingMissing();
+            const now = new Date();
+            if (current.version !== body.expectedVersion) throw new ListingConflict();
+            if (body.display && (!isDiscoverable(current.status, current.expiresAt, now) || !current.location || (!user.isEmailVerified && !user.isPhoneVerified)))
+                throw new ListingForbidden('請先確認商品仍在刊登並完成帳號驗證');
+            const updated = await tx.listing.updateMany({ where: { id, ownerUserId: userId, version: body.expectedVersion },
+                data: { mapVisibleUntil: body.display ? mapPresenceUntil(true, now, current.expiresAt!) : null, version: { increment: 1 } } });
+            if (updated.count !== 1) throw new ListingConflict();
+            return tx.listing.findUniqueOrThrow({ where: { id }, select: publicListingSelect });
+        });
+        return res.json(listing);
     } catch (error) { return fail(res, error); }
 }

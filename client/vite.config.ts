@@ -74,6 +74,7 @@ export default defineConfig({
     })
   ],
   test: {
+    maxWorkers: 2, // Keep UI timing checks reliable alongside native builds.
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',

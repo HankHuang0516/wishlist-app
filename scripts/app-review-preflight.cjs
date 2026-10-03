@@ -22,6 +22,7 @@ function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTre
     assert.equal(receipt.demoUserId, result.demoUserId);
     assert.equal(receipt.sceneLifecycleVerified, true);
     assert.equal(receipt.buildId, selectedBuildId, 'Evidence must match the selected build');
+    assert.equal(receipt.nativeGitTree, currentNativeTree, 'Native evidence must match current source');
     assert(receipt.buildNumber && receipt.artifactSha256);
     assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Evidence is stale');
     if (receipt.mode === 'unchanged-native-binary') {
@@ -34,6 +35,37 @@ function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTre
         for (const step of ['login', 'socialInbox', 'buyerChat', 'sellerChat', 'meetup', 'wishes', 'account'])
             assert.equal(receipt.checks?.[step], true, `Missing native UI check ${step}`);
     }
+}
+
+// Apple's Oct 3 rejection requires a new binary and actual physical-device
+// recording. The former unchanged-build exception cannot satisfy this review.
+function assertReviewRemediationEvidence(receipt, native, ageRating) {
+    assert.equal(ageRating.ageRatingOverrideV2, 'EIGHTEEN_PLUS', 'Set and verify the Apple 18+ age override');
+    assert.equal(receipt.appId, '6468950847');
+    assert.equal(receipt.buildId, native.buildId, 'Physical recording must show the selected build');
+    assert.equal(receipt.artifactSha256, native.artifactSha256);
+    assert.equal(receipt.nativeGitTree, native.nativeGitTree, 'Record the current native source');
+    assert(Number(native.buildNumber) >= 14, 'Build 12 and the internal-only build 13 do not fix this rejection');
+    assert.notEqual(native.mode, 'unchanged-native-binary', 'Run fresh native checks after the Oct 3 fixes');
+    assert.equal(receipt.deviceKind, 'physical', 'Apple explicitly requires an iPhone or iPad recording, not a simulator');
+    assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Physical-device recording verification is stale');
+    assert(receipt.videoPath && /^[a-f0-9]{64}$/.test(receipt.videoSha256), 'Missing inspected physical-device video');
+    assert(receipt.notesVideoUrl?.startsWith('https://') || receipt.videoAttachment?.id && receipt.videoAttachment?.fileName, 'Provide the actual recording link or App Review attachment in notes');
+    for (const check of ['termsBeforeLogin', 'termsBeforeRegister', 'chatReportReceipt', 'blockPreventsNewMessages', 'mapDecline', 'manualMapCheckIn', 'mapStop', 'noAutomaticMapRenewal'])
+        assert.equal(receipt.checks?.[check], true, `Missing actual review remediation check ${check}`);
+}
+
+function assertRecordingDelivery(receipt, notes, attachment, reviewDetailId, videoMd5) {
+    if (receipt.videoAttachment) {
+        const claimed = receipt.videoAttachment;
+        assert.equal(claimed.reviewDetailId, reviewDetailId, 'Video must belong to this version review detail');
+        assert.equal(attachment?.id, claimed.id, 'Missing actual App Review video attachment');
+        assert.equal(attachment?.relationships?.appStoreReviewDetail?.data?.id, reviewDetailId, 'Attached recording belongs to another review detail');
+        assert.equal(attachment?.attributes?.fileName, claimed.fileName);
+        assert.equal(attachment?.attributes?.sourceFileChecksum, videoMd5, 'Attached recording differs from the inspected physical video');
+        assert.equal(attachment?.attributes?.assetDeliveryState?.state, 'COMPLETE', 'Finish the recording attachment upload');
+        assert(notes.includes(claimed.fileName), 'Name the actual recording attachment in App Review notes');
+    } else assert(receipt.notesVideoUrl?.startsWith('https://') && notes.includes(receipt.notesVideoUrl), 'Include the actual recording link in App Review notes');
 }
 
 function assertDemoReady(snapshot, now = Date.now()) {
@@ -111,6 +143,14 @@ async function main() {
         assertNativeEvidence(receipt, result, selectedBuildId(version), nativeTree);
         const hashFile = path => createHash('sha256').update(fs.readFileSync(path)).digest('hex');
         assert.equal(hashFile(receipt.artifactPath), receipt.artifactSha256, 'Submitted artifact changed');
+        assert(args.includes('--remediation-receipt'), 'The Oct 3 rejection requires inspected physical-device evidence');
+        const remediation = JSON.parse(fs.readFileSync(get('--remediation-receipt'), 'utf8'));
+        const age = asc('age-rating', 'view', '--version-id', result.versionId).data.attributes;
+        assertReviewRemediationEvidence(remediation, receipt, age);
+        assert.equal(hashFile(remediation.videoPath), remediation.videoSha256, 'Physical-device recording changed');
+        const detail = asc('review', 'details-for-version', '--version-id', result.versionId).data;
+        const attachment = remediation.videoAttachment ? asc('review', 'attachments-get', '--id', remediation.videoAttachment.id, '--include', 'appStoreReviewDetail').data : null;
+        assertRecordingDelivery(remediation, detail.attributes.notes || '', attachment, detail.id, createHash('md5').update(fs.readFileSync(remediation.videoPath)).digest('hex'));
         for (const proof of receipt.appleScreenshotProofs || []) assert.equal(hashFile(proof.path), proof.sha256, 'Review baseline changed');
         const privacy = JSON.parse(fs.readFileSync(get('--privacy-receipt'), 'utf8'));
         const serverTree = execFileSync('git', ['rev-parse', 'HEAD:server'], { encoding: 'utf8' }).trim();
@@ -126,7 +166,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, assertNativeEvidence, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
+module.exports = { assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

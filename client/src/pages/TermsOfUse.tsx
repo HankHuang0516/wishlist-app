@@ -50,7 +50,7 @@ export default function TermsOfUse() {
 
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. 使用者規範</h2>
-                        <p>使用本服務時，您承諾絕不從事以下行為：</p>
+                        <p>本服務限年滿 18 歲使用。對不當內容及濫用行為採零容忍；違規內容可被移除，濫用者的使用權可被限制或終止。</p><p>可在商品詳情檢舉商品，在聊天室檢舉不當內容或對方，並封鎖對方停止新訊息。檢舉交由人工查閱；收件不代表已移除內容。</p><p>商品地圖不是使用者即時定位。站內商品的約略位置須手動同意本次顯示，一小時後停止，開啟 App 或延長刊登不會自動續期。可不顯示或隨時停止；來源圖釘僅為公開地區示意。</p><p>使用本服務時，您承諾絕不從事以下行為：</p>
                         <ul className="list-disc pl-5 mt-2 space-y-1">
                             <li>上傳、張貼或傳輸任何非法、有害、威脅、辱罵、騷擾、侵害他人隱私或智慧財產權的內容。</li>
                             <li>干擾或破壞本服務的運作、伺服器或網路。</li>
@@ -95,7 +95,7 @@ export default function TermsOfUse() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        最後更新日期：2026-01-18
+                        最後更新日期：2026-10-03
                     </div>
                 </div>
             </div>
@@ -133,7 +133,7 @@ export default function TermsOfUse() {
 
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. User Conduct</h2>
-                        <p>When using the Service, you agree not to engage in the following:</p>
+                        <p>You must be at least 18 years old to use this service. We have zero tolerance for objectionable content and abusive behavior. Violating content may be removed and abusive users may have access restricted or terminated.</p><p>Report items from their details, and report objectionable messages or users from the chat. Block a user to stop new messages. Reports enter human review; receipt does not mean content has been removed.</p><p>The item map does not display live user locations. An in-app item requires manual consent for each one-hour map display. Opening the app or extending a listing never renews that consent. You can decline or stop display. Source pins illustrate public areas only.</p><p>When using the Service, you agree not to engage in the following:</p>
                         <ul className="list-disc pl-5 mt-2 space-y-1">
                             <li>Uploading, posting, or transmitting any content that is illegal, harmful, threatening, abusive, harassing, or infringes on others' privacy or intellectual property rights.</li>
                             <li>Interfering with or disrupting the operation of the Service, servers, or networks.</li>
@@ -178,7 +178,7 @@ export default function TermsOfUse() {
                     </section>
 
                     <div className="pt-6 text-sm text-gray-500">
-                        Last updated: 2026-01-18
+                        Last updated: 2026-10-03
                     </div>
                 </div>
             </div>

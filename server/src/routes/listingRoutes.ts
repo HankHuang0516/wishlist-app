@@ -4,6 +4,7 @@ import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth
 import { abandonListingCreation, getListingCreation, changeListingStatus, createListing, editListing, extendListingExpiry, getListing, myListings, publishListing, searchListings } from '../controllers/listingController';
 import { getMatchWishes, matchWishListings } from '../controllers/wishlistMatchController';
 import { abandonListingManagement, readListingManagement, submitListingManagement } from '../controllers/listingManagementController';
+import { setListingMapPresence } from '../controllers/listingController';
 
 const router = Router();
 const writes = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false,
@@ -23,4 +24,5 @@ router.post('/:id/status', authenticateToken, writes, changeListingStatus);
 router.post('/:id/extend', authenticateToken, writes, extendListingExpiry);
 router.patch('/:id', authenticateToken, writes, editListing);
 router.post('/:id/publish', authenticateToken, writes, publishListing);
+router.put('/:id/map-presence', authenticateToken, writes, setListingMapPresence);
 export default router;

@@ -7,6 +7,7 @@ export type ManagedListing = {
   id: string; ownerUserId: number; version: number; title: string; description: string | null;
   status: ManagedStatus; condition: 'NEW' | 'USED'; category: string | null; price: number | null;
   createdAt: string; publishedAt: string | null; expiresAt: string | null; location: { county: string; district: string } | null;
+  mapVisibleUntil?: string | null;
   media: { id: string; thumbnailUrl: string; capturePurpose: string }[];
 };
 export type ManagementTab = '在售' | '已保留' | '已售出' | '已失效' | '草稿' | '已移除';
@@ -29,6 +30,7 @@ export function parseManagedListing(value: unknown, userId: number, apiUrl: stri
       !['NEW', 'USED'].includes(String(row.condition)) || !optionalText(row.category, 50) ||
       !date(row.createdAt) || !(row.publishedAt === null || date(row.publishedAt)) ||
       !(row.expiresAt === null || date(row.expiresAt)) || row.currency !== 'TWD' ||
+      !(row.mapVisibleUntil === undefined || row.mapVisibleUntil === null || date(row.mapVisibleUntil)) ||
       !Array.isArray(row.media) || row.media.length > 8 || !(row.location === null || typeof row.location === 'object' && !Array.isArray(row.location))) throw new ManagedListingError();
   const price = row.price === null ? null : typeof row.price === 'string' && /^\d{1,10}(?:\.\d{1,2})?$/.test(row.price) ? Number(row.price) : NaN;
   if (price !== null && (!Number.isFinite(price) || price > 9_999_999_999.99)) throw new ManagedListingError();
@@ -47,6 +49,7 @@ export function parseManagedListing(value: unknown, userId: number, apiUrl: stri
     description: row.description as string | null, status: row.status as ManagedStatus,
     condition: row.condition as ManagedListing['condition'], category: row.category as string | null, price,
     createdAt: row.createdAt as string, publishedAt: row.publishedAt as string | null, expiresAt: row.expiresAt as string | null,
+    mapVisibleUntil: row.mapVisibleUntil as string | null | undefined ?? null,
     location: location ? { county: location.county as string, district: location.district as string } : null, media };
 }
 

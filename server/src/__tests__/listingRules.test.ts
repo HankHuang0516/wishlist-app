@@ -65,7 +65,7 @@ describe('listing validation and idempotent data', () => {
     });
     it.each([
         null, [], { ...full, ownerUserId: 99 }, { ...full, status: 'ACTIVE' }, { ...full, expiresAt: '9999' },
-        { ...full, clientListingId: 'x' }, { ...full, publish: 'true' }, { ...full, consentToMap: false }, { ...full, consentToMap: 'true' },
+        { ...full, clientListingId: 'x' }, { ...full, publish: 'true' }, { ...full, consentToMap: false, mapCheckIn: true }, { ...full, consentToMap: 'true' },
         { ...full, title: '' }, { ...full, title: 'x'.repeat(101) }, { ...full, title: 'bad\u0000' }, { ...full, description: 'x'.repeat(3001) },
         { ...full, condition: 'REFURBISHED' }, { ...full, category: 'drugs' }, { ...full, brand: '' }, { ...full, price: -1 }, { ...full, price: Infinity },
         { ...full, price: '7500' }, { ...full, price: 0.001 }, { ...full, currency: 'USD' }, { ...full, negotiable: 'yes' },

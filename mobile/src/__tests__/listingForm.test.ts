@@ -20,7 +20,7 @@ describe('native listing form contracts', () => {
     expect(body).toMatchObject({ publish: true, price: 0 });
   });
   it.each([{ title: '' }, { title: 'x'.repeat(101) }, { description: 'x'.repeat(3001) }, { brand: 'x'.repeat(61) }, { category: 'bad' }, { price: '-1' }, { price: '1.001' },
-    { price: '10000000000' }, { expiryDate: '2026-02-30' }, { expiryDate: '2020-01-01' }, { consent: false }, { latitude: '' }, { latitude: '0' }, { longitude: 'x' }, { county: '' },
+    { price: '10000000000' }, { expiryDate: '2026-02-30' }, { expiryDate: '2020-01-01' }, { latitude: '' }, { latitude: '0' }, { longitude: 'x' }, { county: '' },
     { district: 'x'.repeat(31) }, { description: '' }, { price: '' }, { meetup: false, shipping: false }])('rejects invalid publication data %p', changes => {
     expect(() => buildListingBody({ ...full, ...changes }, id, [id], true, now)).toThrow(ListingFormError);
   });
@@ -41,7 +41,8 @@ describe('native listing form contracts', () => {
     expect(firstListingPublishIssue({ ...full, latitude: '' }, [id], now)).toMatchObject({ field: 'location' });
     expect(firstListingPublishIssue({ ...full, county: '台北市', district: '中山區', longitude: '' }, [id], now)?.message).toContain('地圖座標');
     expect(firstListingPublishIssue({ ...full, meetup: false, shipping: false }, [id], now)?.field).toBe('delivery');
-    expect(firstListingPublishIssue({ ...full, consent: false }, [id], now)?.field).toBe('consent');
+    expect(firstListingPublishIssue({ ...full, consent: false }, [id], now)).toBeNull();
+    expect(buildListingBody({ ...full, consent: false }, id, [id], true, now)).toMatchObject({ publish: true, mapCheckIn: false, consentToMap: false });
     expect(firstListingPublishIssue({ ...full, expiryDate: '2020-01-01' }, [id], now)?.field).toBe('expiryDate');
   });
 });

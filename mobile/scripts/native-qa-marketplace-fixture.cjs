@@ -81,7 +81,7 @@ async function seedNativeMarketplace(qa, ownerRole = 'seller', preset = 'switch'
     category: fixture.category ?? 'electronics', brand: fixture.brand, condition: 'USED', price: fixture.price,
     deliveryMethods: ['MEETUP'], location: { county: fixture.county, district: fixture.district,
       latitude: fixture.latitude ?? 25.052349, longitude: fixture.longitude ?? 121.523456 },
-    mediaIds: [photo.id], publish: true, consentToMap: true,
+    mediaIds: [photo.id], publish: true, consentToMap: true, mapCheckIn: true,
   });
   if (!/^[0-9a-f-]{36}$/.test(listing?.id || '') || listing.title !== fixture.title ||
       listing.owner?.id !== owner.id || listing.expiryMode !== 'DEFAULT_30_DAYS' ||

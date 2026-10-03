@@ -18,7 +18,7 @@ describe('web listing batch publication boundary', () => {
     ['condition', { condition: 'BROKEN' }, {}], ['category', { category: 'invalid' }, {}],
     ['county', {}, { county: '' }], ['district', {}, { district: '' }],
     ['latitude', {}, { latitude: 'NaN' }], ['longitude', {}, { longitude: '130' }],
-    ['delivery', {}, { meetup: false, shipping: false }], ['consent', {}, { consent: false }],
+    ['delivery', {}, { meetup: false, shipping: false }],
     ['expiryDate', {}, { expiryDate: '2027-02-30' }],
   ])('returns the actionable %s field under exactly the same publication constraints', (field, formChange, sharedChange) => {
     const changed = { ...draft, form: { ...draft.form, ...formChange } } as SellerDraft;
@@ -54,13 +54,13 @@ describe('web listing batch publication boundary', () => {
     expect(() => parseAiState({ mediaId, status: 'COMPLETED', draft: { ...ai, estimatedPriceLowTwd: 800 } }, mediaId)).toThrow();
   });
 
-  it('requires explicit consent, location, real photo, and seller price before publication', () => {
-    expect(() => buildPublishedListing(draft, mediaId, { ...details, consent: false })).toThrow('同意');
+  it('allows declining the map while requiring location, a real photo and seller price before publication', () => {
+    expect(buildPublishedListing(draft, mediaId, { ...details, consent: false })).toMatchObject({publish:true,consentToMap:false,mapCheckIn:false});
     expect(() => buildPublishedListing(draft, mediaId, { ...details, latitude: '' })).toThrow('位置');
     expect(() => buildPublishedListing(draft, mediaId, { ...details, latitude: 'not-a-number' })).toThrow('位置');
     expect(() => buildPublishedListing({ ...draft, form: { ...draft.form, price: '' } }, mediaId, details)).toThrow('售價');
     expect(() => buildPublishedListing(draft, 'not-a-photo', details)).toThrow('識別碼');
-    expect(buildPublishedListing(draft, mediaId, details)).toMatchObject({ publish: true, consentToMap: true, price: 350, mediaIds: [mediaId],
+    expect(buildPublishedListing(draft, mediaId, details)).toMatchObject({ publish: true, consentToMap: true, mapCheckIn:true, price: 350, mediaIds: [mediaId],
       clientListingId: listingId, location: { county: '臺北市', district: '中山區', latitude: 25.05, longitude: 121.53 } });
   });
 

@@ -190,8 +190,20 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     const minimum = earliestExtensionDate(item.expiresAt);
     const timestamp = Date.parse(`${date}T12:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < minimum || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== date) { setIssue(t("請選擇 {minimum} 或之後的有效日期。", { minimum })); return; }
-    if (!window.confirm(t("確認延長至 {date}？{warning}", { date, warning: managementTab(item) === '已失效' ? t("延長後會重新公開顯示在探索地圖。") : '' }))) return;
+    if (!window.confirm(t("確認延長至 {date}？{warning}", { date, warning: t("延長刊登不會自動更新地圖顯示。") }))) return;
     void mutate(item, 'EXTEND', { expiryDate: date });
+  }
+  async function mapPresence(item: ManagedListing, display: boolean) {
+    const epoch = generation.current;
+    if (!isCurrent(epoch) || running.current || unconfirmed || !pendingLoaded) return;
+    if (!window.confirm(display ? t("這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。") : t("停止地圖顯示？商品刊登及聊天仍保留。"))) return;
+    running.current = true; setBusy(true); setIssue(''); setNotice('');
+    try {
+      const result = parse(await api<unknown>(token, `/listings/${item.id}/map-presence`, {method:'PUT',body:JSON.stringify({expectedVersion:item.version,display,consentToMap:display})}));
+      if (result.id !== item.id || result.version !== item.version + 1 || display && (!result.mapVisibleUntil || Date.parse(result.mapVisibleUntil) <= Date.now()) || !display && result.mapVisibleUntil !== null) throw new ManagedListingError();
+      if (isCurrent(epoch)) { setRows(old=>old.map(row=>row.id===item.id?result:row)); setNotice(display ? t("已確認這次地圖顯示，一小時後停止；不會自動續期。") : t("已停止地圖顯示。")); }
+    } catch { if (isCurrent(epoch)) setIssue(t("地圖顯示尚未確認；請重新載入查看最新期限，不會自動重送。")); }
+    finally { if (isCurrent(epoch)) { running.current=false;setBusy(false); } }
   }
   async function share(item: ManagedListing) {
     const epoch = generation.current;
@@ -239,8 +251,10 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
           <div className="min-w-0 space-y-1"><h2 className="text-lg font-semibold break-words">{item.title}</h2><p className="font-semibold text-blue-700">{item.price === null ? t("售價未填") : item.price === 0 ? t("免費贈送") : `NT$ ${item.price.toLocaleString(managementEnglish() ? 'en-US' : 'zh-TW')}`}</p>
             <p>{t(managementTab(item, now))} · {item.condition === 'USED' ? t("二手") : t("新品")}</p><p className="text-sm text-gray-600">{item.location ? `${item.location.county}${item.location.district}` : t("地點未填")}{item.expiresAt ? t(" · 至 {date}", { date: item.expiresAt.slice(0, 10) }) : ''}</p></div></div>
         {detailId === item.id && <div className="space-y-2"><p className="whitespace-pre-wrap">{item.description || t("尚未填寫說明")}</p><p className="text-xs text-gray-600 break-all">{t("分類：")}{item.category ?? t("未分類")}{t(" · 建立：")}{item.createdAt.slice(0, 10)}{t(" · 商品編號：")}{item.id}</p></div>}
+        <p className="text-sm text-gray-600">{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > now ? t("地圖顯示至 {time}；不會自動續期。", {time:new Date(item.mapVisibleUntil).toLocaleTimeString()}) : t("目前不在地圖顯示；需手動確認這次顯示。")}</p>
         <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
           {item.publishedAt && <><Button variant="outline" onClick={() => void share(item)}>{t("分享連結")}</Button><Link className="p-2 text-blue-700 underline" to={`/listings/${item.id}?v=${item.version}`}>{t("商品網址")}</Link></>}
+          {['ACTIVE','RESERVED'].includes(item.status) && !expired && <><Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,true)}>{t("手動顯示地圖一小時")}</Button>{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil)>now && <Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,false)}>{t("停止地圖顯示")}</Button>}</>}
           {editable && <Button variant="outline" disabled={blocked} onClick={() => { setEditSeed(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
           {item.status === 'ACTIVE' && !expired && detailId === item.id && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
           {item.status === 'RESERVED' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}

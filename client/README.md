@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Strict public friend wishlist identities
+
+Public friend-wishlist reads use the same positive 32-bit identity rules as friend profiles and follow state. Suffixes, decimal or exponent syntax, leading zeros, whitespace and overflow are rejected before database lookup; malformed IDs cannot silently alias a valid public account. Valid IDs retain the existing authenticated, private/no-store projection, hidden-item filtering and unknown-target empty collection. Original APP, relationship writes and migrations remain unchanged.
+
 Editing a wish validates only the writable name, notes, reference link and budget/currency. Its existing photo URL remains read-only and never passes through new-image admission; API media proxy URLs therefore cannot block a normal edit or trigger recognition again. Blank edited names are rejected even when a photo exists. New photo/URL creation keeps its existing strict admission. The server-confirmed field comparison, uncertain-update recovery and original AI/photo fields stay intact. Verify a real uploaded-photo wish on the deployed build and read the same updated fields in the original APP.
 
 Settings keeps the language heading on one line when the language buttons wrap on narrow screens. The heading does not shrink; the existing button wrapping, touch sizes, saved locale and reload protection remain unchanged. Check the actual production stylesheet at 320px and 390px, with advanced sections expanded, and preserve the desktop layout at 1280px. Layout checks must not edit profile fields, reveal API instructions, toggle contact privacy or submit account actions.

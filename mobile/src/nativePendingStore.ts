@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { validateApiUrl } from './api';
 import { createPendingStore } from './pendingStore';
+import { uuid } from './listingForm';
 import { createPrivatePendingIndex } from './privatePendingIndex';
 const privatePendingIndex = createPrivatePendingIndex({
   get: key => SecureStore.getItemAsync(key),
@@ -19,7 +20,12 @@ async function pendingScope(apiUrl: string, userId: number) {
 export async function erasePrivatePendingData(apiUrl: string, userId: number) {
   return privatePendingIndex.erase(await pendingScope(apiUrl, userId));
 }
+export function validPendingResource(resource: string) {
+  if (['listing', 'wish-create', 'listing-report'].includes(resource)) return true;
+  const match = /^(message|meetup|source-lead)\.(.+)$/i.exec(resource);
+  return !!match && uuid(match[2]);
+}
 export async function pendingRequestKey(apiUrl: string, userId: number, resource: string) {
-  if (!Number.isSafeInteger(userId) || userId < 1 || !/^(listing|wish-create|listing-report|(message|meetup)\.[0-9a-f-]{36})$/i.test(resource)) throw new Error('Invalid private request scope');
+  if (!Number.isSafeInteger(userId) || userId < 1 || userId > 2147483647 || !validPendingResource(resource)) throw new Error('Invalid private request scope');
   return `${await pendingScope(apiUrl, userId)}.${resource.toLowerCase()}`;
 }

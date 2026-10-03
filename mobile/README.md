@@ -80,3 +80,9 @@
 願望照片／URL自動分析、通知／治理、完整原生註冊／驗證／重設操作驗收與帳號刪除及其他MVP缺口仍待完成。2026-09-15新原upload簽章release APK含願望管理／帳號安全頁／六個AuthScreen表單，AAB及原Team iOS archive仍為較早native版本。19:05排程請求的本輪APK在指定私有Android SDK36 emulator完成五個匿名帳號頁面／合成連結預填導覽，回傳0、無fatal、截圖已檢視、lease已釋放；沒有提交帳號／Email。4096頁面不算16KB測試。願望／帳號登入後原生操作及完整交易 E2E尚需驗證。TypeScript、純規則、Hermes export或成功建置均不代表完整雙平台驗收；尚未上傳新版internal。
 
 `scripts/build-android-local.cjs` 在讀取原簽章密碼前要求至少15GiB可用空間，不會自動上傳商店或產生新key。`scripts/build-ios-simulator-local.cjs` 與 `scripts/build-ios-archive-local.cjs` 可傳入人工選定 `YYYYMMDD-HHMM` label，隔離新app／result，拒絕覆寫既有產物；無參數歷史路徑保留。後者限定原Team既有login identity，不改全域keychain或私鑰ACL。Session v2綁定API origin，舊prototype session不自動遷移；安全儲存失敗不降級明文。
+
+## Android internal34 buyer journey repair
+
+Source inquiry pending keys accept only exact source UUIDs and remain API-origin/user/item scoped, including durable recovery and erasure index. Search counts separate loaded native listings, partner listings and unverified source leads; cursors never claim a total inventory. Unsupported source filters, loading and errors remain distinct from empty results. Same-account Explore stays mounted across inquiry navigation, retaining filters, viewport, map/list mode and scroll; signing out removes the view. Source detail and inquiry modals use safe areas and accessible return targets. Production seller messages and orders are excluded from verification.
+
+Review follow-ups keep uncertain writes distinct from failed reads, hide and invalidate detail requests when Explore is inactive, and give incoming products priority over the first search result. Explore is retained only after the account first visits it. Targeted regressions and the complete local validation pass; the earlier installed Android and iOS artifacts predate these review follow-ups. Rebuild and authenticated buyer UI acceptance are still required before merge or internal publication. No iOS store release is included.

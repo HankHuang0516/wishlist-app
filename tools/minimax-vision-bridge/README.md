@@ -24,6 +24,12 @@ Railway 設定 `MINIMAX_PILOT_USER_ID`（僅測試帳號的數字 ID）及隨機
 
 若 Mac 離線或睡眠，Railway 工作會等待；最多重試三次，不應在 App 顯示假完成。公開商轉與付費額度尚未開放，內測限指定帳號。
 
+### 去背完整性檢查
+
+Apple Vision 成功輸出仍可能漏掉電線、提把或配件。工作器會比較原照片與遮罩，若遮罩外仍有明顯連續細節，或遮罩尺寸／透明度／解碼不符，就沿用完整原照片相框排版；四種背景、私人儲存、一次免費調整及人工確認流程保持。這是保守的拒絕檢查，沒有偵測到邊緣不代表所有物件都已保留，賣家仍須對照原照檢查。低對比、透明或模糊細節仍可能需要人工確認。
+
+執行 `node --test tools/minimax-vision-bridge/marketing-compose.test.mjs`，核對完整遮罩、遺漏黑色／亮色電線、分離配件、無效遮罩、完整照片四角與電線像素及四張不同背景。更新後必須將 `marketing-poller.mjs` 與 `marketing-compose.mjs` 同步至既有 WishlistMarketing 私有安裝副本，核對雜湊並安全切換該工作器；單獨部署 Railway 不會更新 Mac 上的處理程式。
+
 ## 外部二手來源的私有 AI 補充
 
 外部來源另有獨立的 `MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED=1` 開關，預設關閉。須先在後台建立並核實來源、圖片重用與 AI 處理授權，再升級本機 poller，最後才可開啟；此功能仍使用相同的本機拉取通道與 worker token。工作器只從來源登記的 HTTPS 圖片主機下載，驗證公開 IPv4 並固定連線位址，不把 bearer token 送給來源；圖片只在本機暫存，完成後清除。模型補充結果僅回到後台待審候選資料，不能自行新增公開商品、售價或賣家資訊。具體限制與驗收閘門見 [外部商品來源契約](../../docs/external-supply-intake.md)。目前沒有因程式部署而自動加入任何真實雙北商品。

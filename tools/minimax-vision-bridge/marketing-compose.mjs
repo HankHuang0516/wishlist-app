@@ -14,6 +14,75 @@ const require = createRequire(dependencyRoot
   : new URL('../../server/package.json', import.meta.url));
 const sharp = require('sharp');
 
+// A successful segmentation can still discard a cable, handle or accessory.
+// Reject masks when a substantial source-photo edge remains outside them.
+// This deliberately prefers the existing whole-photo layout over an uncertain
+// cutout; absence of an edge is not proof that every photographed part survived.
+export async function cutoutMayOmitPhotoDetails(originalBytes, cutoutBytes) {
+  try {
+    const original = sharp(originalBytes).rotate(), cutout = sharp(cutoutBytes).rotate();
+    const sourceInfo = await original.metadata(), maskInfo = await cutout.metadata();
+    if (!maskInfo.hasAlpha || sourceInfo.width !== maskInfo.width || sourceInfo.height !== maskInfo.height)
+      return true;
+    const { data: source, info } = await original.resize({ width: 512, height: 512, fit: 'inside' })
+      .toColourspace('srgb').removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const mask = await cutout.resize(info.width, info.height, { kernel: 'nearest' }).ensureAlpha()
+      .raw().toBuffer();
+    const { width, height } = info, pixels = width * height;
+    if (info.channels !== 3 || mask.length !== pixels * 4) return true;
+    const foreground = new Uint8Array(pixels), edges = new Uint8Array(pixels);
+    let included = 0;
+    for (let p = 0; p < pixels; p++) {
+      foreground[p] = mask[p * 4 + 3] >= 128 ? 1 : 0;
+      included += foreground[p];
+    }
+    if (included < pixels * 0.01 || included > pixels * 0.95) return true;
+    const nearForeground = (x, y, radius) => {
+      for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height && foreground[ny * width + nx]) return true;
+      }
+      return false;
+    };
+    for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+      const p = y * width + x;
+      // Ignore the normal antialiased silhouette rather than rejecting every
+      // valid mask merely because its outermost pixels have partial alpha.
+      if (foreground[p] || nearForeground(x, y, 2)) continue;
+      for (let dy = -1; dy <= 1 && !edges[p]; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const q = (y + dy) * width + x + dx;
+        if ([0, 1, 2].some(c => Math.abs(source[p * 3 + c] - source[q * 3 + c]) >= 48)) {
+          edges[p] = 1; break;
+        }
+      }
+    }
+    const queue = new Int32Array(pixels);
+    for (let p = 0; p < pixels; p++) {
+      if (!edges[p]) continue;
+      let head = 0, tail = 1, near = false;
+      queue[0] = p; edges[p] = 0;
+      let minX = width, maxX = 0, minY = height, maxY = 0;
+      while (head < tail) {
+        const current = queue[head++], x = current % width, y = Math.floor(current / width);
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        near ||= nearForeground(x, y, 4);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy, next = ny * width + nx;
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && edges[next]) {
+            edges[next] = 0; queue[tail++] = next;
+          }
+        }
+      }
+      const spanX = maxX - minX + 1, spanY = maxY - minY + 1;
+      if (tail >= 16 && near && Math.max(spanX, spanY) >= 12 ||
+          tail >= 64 && Math.max(spanX, spanY) >= 24 && Math.min(spanX, spanY) >= 6) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export async function composeMarketingImage(backgroundBytes, cutoutBytes, { badge = 'AI 行銷示意', outputSize = 1024,
   groundY = 980 } = {}) {
   const scene = await sharp(backgroundBytes).resize(outputSize, outputSize, { fit: 'cover' }).jpeg({ quality: 92 }).toBuffer();

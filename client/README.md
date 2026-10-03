@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+Settings keeps the language heading on one line when the language buttons wrap on narrow screens. The heading does not shrink; the existing button wrapping, touch sizes, saved locale and reload protection remain unchanged. Check the actual production stylesheet at 320px and 390px, with advanced sections expanded, and preserve the desktop layout at 1280px. Layout checks must not edit profile fields, reveal API instructions, toggle contact privacy or submit account actions.
+
 手動刊登的主要按鈕與次要按鈕共用尺寸與形狀，各自只套用一個背景色。桌面與手機驗收須使用實際建置的樣式核對文字可見性；DOM 中有按鈕標籤不足以證明配色正常。
 
 `/sell/manual` 提供與 APP 手動刊登一致的「儲存商品草稿（不公開）」與「確認並公開刊登」。只有名稱也可先儲存為後台商品 DRAFT；其餘欄位／最多八張私人 MANUAL_PHOTO 可先留白。草稿會出現在我的商品，公開入口仍要求完整欄位。這與批次照片的 sellerDraft 是兩種不同資料。加密原操作紀錄與既有建立／照片回執支援重開後只讀查核、明確原內容重試、安全取消及 CAS 清理；不保存精確 GPS，不自動重送或刪除商品／照片。

@@ -7,7 +7,7 @@ const neededFields = [
     "可追蹤的商品 ID 與原始商品連結",
     "商品名稱、實際交易方式與明示價格",
     "可展示的原圖／縮圖及其使用授權",
-    "雙北行政區、最後確認在售時間與失效時間",
+    "商品實際所在縣市／行政區／門市、最後確認在售時間與失效時間",
     "售出、下架或撤回時的更新方式",
 ] as const;
 
@@ -22,7 +22,7 @@ export default function PartnerPage() {
         <div className="mx-auto max-w-5xl space-y-12 pb-12 text-slate-800">
             <section className="overflow-hidden rounded-[2rem] border border-rose-100 bg-gradient-to-br from-rose-50 via-white to-amber-50 px-6 py-12 shadow-sm sm:px-12 sm:py-16">
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white/90 px-4 py-2 text-sm font-semibold text-rose-700">
-                    <MapPinned className="h-4 w-4" aria-hidden="true" /> {pt("雙北二手商品合作試點")} </div>
+                    <MapPinned className="h-4 w-4" aria-hidden="true" /> {pt("全台二手商品合作招募，先雙北小量試點")} </div>
                 <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl"> {pt("讓好物，遇見正在尋找它的人。")} </h1>
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600"> {pt("Wishlist.ai 結合願望清單與附近商品探索，邀請二手店、寄賣夥伴和公共拍賣單位， 一起測試有來源、可更新、能導回原站的商品曝光方式。")} </p>
                 <div className="mt-8 flex flex-wrap gap-3">
@@ -75,6 +75,7 @@ export default function PartnerPage() {
                 <p className="mt-3 max-w-2xl leading-7 text-slate-300">{pt("請提供來源名稱、負責窗口、3–10 件真實在售商品範例，以及可使用的圖文與更新方式。試點前會先確認權利與作業範圍，不需要提供賣場密碼。")}</p>
                 <Link to="/partners/inquiry" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-medium text-slate-900 transition hover:bg-rose-50"> {pt("提出合作意向")} <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
+                <div className="mt-4 space-y-2 break-words text-sm"><p>Wishlist.AI 的 Hank</p><div className="flex flex-wrap gap-4"><a className="inline-flex min-h-11 items-center underline underline-offset-4" href="https://eclawbot.com/c/pe3vqm" target="_blank" rel="noopener noreferrer">{pt("EClaw 合作名片")}</a><a className="inline-flex min-h-11 items-center underline underline-offset-4" href="mailto:hankhuang0516@gmail.com">hankhuang0516@gmail.com</a></div></div>
             </section>
         </div>
     );

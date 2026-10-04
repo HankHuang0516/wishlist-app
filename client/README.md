@@ -4,6 +4,10 @@ Publishing works with map permission declined. New web publications opt into a o
 
 # React + TypeScript + Vite
 
+## Account security confirmation
+
+Password updates and revoking device sessions use the existing keyboard-accessible page dialog. Opening the dialog sends no request. It describes the original consequences, permits cancellation and Escape, restores focus, and locks other security actions. The validated payload stays in memory only; a session change drops the unsubmitted confirmation. Confirming once preserves the original security endpoint, response checks and read-only session probe after an unknown reply. No automatic replay, password persistence, APP or backend changes are introduced.
+
 Source inquiry history carries an explicit server-derived COUNTY_ILLUSTRATION marker for approved county illustrations. A city-only Taipei context keeps its unknown district; an unmarked or invalid district still fails validation. Mixed source history and the original withdrawn context remain readable, while historical media stays suppressed. Source chat displays a bilingual approximate-location notice and never treats the county pin as a pickup point. Reading and retrying history do not submit inquiries; APP source and existing write/recovery permissions are unchanged.
 
 ## Strict public friend wishlist identities

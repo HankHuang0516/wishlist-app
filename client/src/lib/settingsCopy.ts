@@ -92,6 +92,8 @@ const english = {
   '目前密碼': 'Current password', '新密碼': 'New password', '再次輸入新密碼': 'Confirm new password',
   '新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。': 'Use 8–72 characters, including letters and numbers. Allowed symbols: @$!%*?&.',
   '確認中…': 'Verifying…', '更新密碼並重新登入': 'Update password and sign in again', '撤銷所有裝置登入': 'Revoke all device sessions',
+  '確認帳號安全操作': 'Confirm account security action', '確認更新密碼': 'Confirm password update',
+  '確認撤銷登入': 'Confirm session revocation', '保留原狀': 'Keep unchanged', '取消': 'Cancel',
   '登出此裝置': 'Sign out on this device', '刪除本人帳號與資料': 'Delete my account and data',
   '確認更新密碼？所有裝置都需重新登入，個人 API key 將失效。管理與上架簽章不受影響。': 'Update password? All devices must sign in again and your personal API key will be revoked. Administration and release signing are unchanged.',
   '撤銷所有裝置登入？包含此裝置，所有裝置都需重新登入。個人 API key、管理與上架簽章不變。': 'Revoke all device sessions, including this device? All devices must sign in again. Your personal API key, administration and release signing are unchanged.',

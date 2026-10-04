@@ -115,4 +115,82 @@ describe('real notification preference, not simulated saved feedback', () => {
         expect(screen.getByRole('link', { name: '登入後返回通知設定' })).toHaveAttribute('href', '/login?next=%2Fsettings%2Fnotifications');
         expect(fetcher).not.toHaveBeenCalled();
     });
+    it('uses English for every service explanation and the confirmed preference', async () => {
+        localStorage.setItem('user-locale', 'en-US');
+        const fetcher = vi.fn(async () => ok(profile)); vi.stubGlobal('fetch', fetcher); render(view());
+        expect(await screen.findByRole('checkbox')).not.toBeChecked();
+        expect(screen.getByText(/Only your preference is saved; marketing email delivery is not available/)).toBeInTheDocument();
+        expect(screen.getByText(/does not subscribe you to automatic notifications for all security events/)).toBeInTheDocument();
+        expect(screen.getByText(/does not request push permission/)).toBeInTheDocument();
+        expect(screen.getByText('Server-confirmed preference: Do not receive')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'View chat and meetups' })).toHaveAttribute('href', '/chat');
+        expect(document.body.textContent).not.toMatch(/[\u3400-\u9fff]/);
+        expect(fetcher).toHaveBeenCalledOnce();
+    });
+    it('keeps the English guest return path without reading private data', () => {
+        localStorage.setItem('user-locale', 'en-US');
+        const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher); render(view({ ...auth, user: null, token: null, isAuthenticated: false }));
+        expect(screen.getByText('Sign in to read or change notification preferences.')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Sign in and return to notification settings' })).toHaveAttribute('href', '/login?next=%2Fsettings%2Fnotifications');
+        expect(document.body.textContent).not.toMatch(/[\u3400-\u9fff]/); expect(fetcher).not.toHaveBeenCalled();
+    });
+    it('retains an English unconfirmed save and recovers the exact receipt on reopen without reposting', async () => {
+        localStorage.setItem('user-locale', 'en-US'); let saved: unknown;
+        const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+            if (init?.method === 'POST') { saved = await receipt(); throw new Error('lost ACK'); }
+            return ok(url.includes('/profile-operations/') ? saved : profile);
+        }); vi.stubGlobal('fetch', fetcher);
+        const mounted = render(view()); fireEvent.click(await screen.findByRole('checkbox'));
+        await screen.findByText('The save is unconfirmed. Verify the original receipt or explicitly retry the same operation.');
+        expect(screen.getByRole('checkbox')).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Verify original save result' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Retry the same save operation' })).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/[\u3400-\u9fff]/);
+        mounted.unmount(); render(view()); await screen.findByText('The server confirmed the save.');
+        await vi.waitFor(() => expect(screen.getByRole('checkbox')).not.toBeDisabled());
+        expect(screen.getByRole('checkbox')).toBeChecked(); expect(pending.size).toBe(0);
+        expect(fetcher.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(1);
+        expect(fetcher.mock.calls.filter(call => call[0].includes('/profile-operations/') && !call[1]?.method)).toHaveLength(1);
+    });
+    it('explains an English conflict using the current preference without claiming a retained draft', async () => {
+        localStorage.setItem('user-locale', 'en-US');
+        const fetcher = vi.fn(async (_url: string, init?: RequestInit) => ok(init?.method === 'POST' ? await receipt('CONFLICT', profile) : profile));
+        vi.stubGlobal('fetch', fetcher); render(view()); fireEvent.click(await screen.findByRole('checkbox'));
+        await screen.findByText('Another operation updated the data. This change was not applied. The page shows the current server preference; check it before changing it again.');
+        await vi.waitFor(() => expect(screen.getByRole('checkbox')).not.toBeDisabled());
+        expect(screen.getByRole('checkbox')).not.toBeChecked(); expect(document.body.textContent).not.toMatch(/draft|[\u3400-\u9fff]/);
+        expect(fetcher.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(1);
+    });
+    it('offers English safe read recovery after a malformed profile without treating it as opt-out', async () => {
+        localStorage.setItem('user-locale', 'en-US');
+        const fetcher = vi.fn().mockResolvedValueOnce(ok({ ...profile, marketingEmailsEnabled: undefined })).mockResolvedValue(ok(profile));
+        vi.stubGlobal('fetch', fetcher); render(view());
+        await screen.findByText('Account data or its recovery journal could not be read safely. Saving is paused. Retry reading; this does not mean your data is empty.');
+        expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Retry reading' }));
+        expect(await screen.findByRole('checkbox')).not.toBeChecked();
+        expect(document.body.textContent).not.toMatch(/[\u3400-\u9fff]/); expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+    it('keeps English two-step cancellation scoped to the pending operation and avoids a nonexistent draft claim', async () => {
+        localStorage.setItem('user-locale', 'en-US');
+        const raw = await profileJournal({ marketingEmailsEnabled: true }, 0);
+        pending.set(await pendingRequestKey(API_URL, 19, 'profile'), raw);
+        const fetcher = vi.fn(async (url: string) => {
+            if (url.endsWith('/abandon')) return ok(await receipt('ABANDONED', profile));
+            if (url.includes('/profile-operations/')) throw new Error('receipt unavailable');
+            return ok(profile);
+        }); vi.stubGlobal('fetch', fetcher); render(view());
+        await screen.findByText('The original save is unconfirmed. Reopening only verifies it without resending.');
+        expect(screen.getByRole('checkbox')).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Safely stop original operation' }));
+        expect(screen.getByText(/Saved data will not be reversed. Continue/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Keep original operation' }));
+        expect(fetcher.mock.calls.every(call => !call[0].endsWith('/abandon'))).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Safely stop original operation' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm stopping original operation' }));
+        await screen.findByText('The original operation was safely stopped and cannot apply. Preferences already saved on the server are not reversed.');
+        await vi.waitFor(() => expect(pending.size).toBe(0));
+        expect(document.body.textContent).not.toMatch(/draft|[\u3400-\u9fff]/);
+        expect(fetcher.mock.calls.filter(call => call[0].endsWith('/abandon'))).toHaveLength(1);
+    });
 });

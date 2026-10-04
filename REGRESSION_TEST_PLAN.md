@@ -1,5 +1,12 @@
 # Wishlist.ai Regression Test Plan
 
+### Complete account deletion impact
+
+- Compare all 23 categories and labels with original APP 2.0.12 and the real version-2 impact DTO. Counts are independent, include valid zeroes and must not be added into a deletion total.
+- Verify an initial read failure followed by explicit GET recovery. A pending refresh prevents overlapping reads and deletion; a failed refresh preserves the old snapshot and typed proof but marks the snapshot unverified. A valid subsequent read replaces counts and restores preview eligibility.
+- Reject missing or additional categories, strings, negative or overflowing counts and noncanonical timestamps. Ignore late results from a previous account. Read-only refresh must not confirm deletion, write a journal or send DELETE.
+- Run Web tests and production builds, real impact-route integration tests, managed browser success/failure/recovery, exact-candidate CI and deployed readback. These read-only checks do not establish permanent-erasure acceptance.
+
 ### Account security page confirmation
 
 - Chinese and English confirmations state the original effects on all sessions and personal API keys. Opening, cancelling, Escape and closing never send a security request, store a password or sign out. Focus returns to the original action.

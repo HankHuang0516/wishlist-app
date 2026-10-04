@@ -15,7 +15,10 @@ const storedOriginal=()=>[...bodies.values()][0]??null;
 const actionId = '11111111-1111-4111-8111-111111111111';
 const auth = { user: { id: 19, phoneNumber: 'test' }, token: 'test-session', login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: true };
 const preview = { version: 2, previewOnly: true, accountDeleted: false, capturedAt: '2026-09-26T00:00:00.000Z',
-  counts: { wishlists: 1, wishes: 2, listings: 3, uploadedPhotos: 4, messagesAuthored: 5 } };
+  counts: { reportsAuthored: 6, reportOperationReceipts: 7, reportsOnOwnedListings: 8, moderationActionsOnOwnedListings: 9, moderationActionsDetachingOwnReports: 10,
+    wishlists: 1, wishes: 2, wishCreateReceipts: 11, listings: 3, uploadedPhotos: 4, conversations: 12, messagesAuthored: 5, otherMessagesInSharedConversations: 13,
+    meetupAppointments: 14, upcomingMeetupAppointments: 15, purchaseRecords: 16, giftClaimsInOtherWishlists: 17, originalCreditsInOtherWishlists: 18,
+    itemWatches: 19, followRelationships: 20, blockRelationships: 21, feedbackRecords: 22, crawlerRecords: 23 } };
 const ack = { state: 'ERASED', accountDeleted: true, clientActionId: actionId,
   erasedAt: '2026-09-26T00:00:01.000Z', photoCleanupPending: 1, legacyCleanupPending: 0 };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
@@ -34,6 +37,32 @@ beforeEach(() => {
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('public browser account deletion path', () => {
+  it('shows all 23 APP impact categories, including retained messages and detached purchases',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>ok(preview)));mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    const list=screen.getByLabelText('完整資料影響盤點');expect(list.querySelectorAll('dt')).toHaveLength(23);
+    for(const [label,value] of [['保留對方自有訊息',13],['解除帳號關聯的購買紀錄',16],['本人檢舉收件與安全放棄回執',7],['本人分析錯誤紀錄',23]])expect([...list.querySelectorAll('dt')].find(e=>e.textContent===label)?.nextElementSibling).toHaveTextContent(String(value));
+    expect(screen.getByRole('button',{name:'重新盤點'})).toBeEnabled();expect(window.confirm).not.toHaveBeenCalled();
+  });
+  it('recovers an initial failed impact read with one explicit GET and no deletion',async()=>{
+    const fetcher=vi.fn().mockResolvedValueOnce({ok:false,status:503,json:async()=>({error:'PRIVATE_DIAGNOSTIC'})}).mockResolvedValueOnce(ok(preview));vi.stubGlobal('fetch',fetcher);mount();
+    await screen.findByRole('alert');expect(screen.queryByLabelText('完整資料影響盤點')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'永久刪除本人帳號'})).toBeDisabled();expect(document.body).not.toHaveTextContent('PRIVATE_DIAGNOSTIC');
+    fireEvent.click(screen.getByRole('button',{name:'重新盤點'}));await screen.findByText(/願望清單 1、願望 2、刊登 3/);expect(fetcher).toHaveBeenCalledTimes(2);expect(fetcher.mock.calls.every(([,init])=>!init.method||init.method==='GET')).toBe(true);expect(window.confirm).not.toHaveBeenCalled();expect(bodies.size).toBe(0);
+  });
+  it('keeps the last preview and typed proof after a failed refresh, blocks deletion and refreshes without overlap',async()=>{
+    let settle!:(v:unknown)=>void;const fetcher=vi.fn().mockResolvedValueOnce(ok(preview)).mockImplementationOnce(()=>new Promise(resolve=>{settle=resolve;})).mockResolvedValueOnce(ok({...preview,counts:{...preview.counts,wishes:9,purchaseRecords:0}}));vi.stubGlobal('fetch',fetcher);mount();await screen.findByText(/願望清單 1、願望 2、刊登 3/);
+    fireEvent.change(screen.getByLabelText('刪除帳號的目前密碼'),{target:{value:'fixture-password'}});fireEvent.change(screen.getByLabelText('輸入刪除帳號以確認'),{target:{value:'刪除帳號'}});
+    const retry=screen.getByRole('button',{name:'重新盤點'});fireEvent.click(retry);fireEvent.click(retry);expect(retry).toBeDisabled();expect(screen.getByRole('button',{name:'永久刪除本人帳號'})).toBeDisabled();expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async()=>settle({ok:false,status:503,json:async()=>({errorCode:'UNAVAILABLE'})}));await screen.findByRole('alert');expect(screen.getByText(/目前保留上次盤點/)).toBeInTheDocument();expect(screen.getByText(/願望清單 1、願望 2、刊登 3/)).toBeInTheDocument();expect(screen.getByLabelText('刪除帳號的目前密碼')).toHaveValue('fixture-password');
+    fireEvent.click(screen.getByRole('button',{name:'永久刪除本人帳號'}));expect(window.confirm).not.toHaveBeenCalled();expect(bodies.size).toBe(0);
+    fireEvent.click(retry);await screen.findByText(/願望清單 1、願望 9、刊登 3/);expect(screen.queryByRole('alert')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'永久刪除本人帳號'})).toBeEnabled();expect(fetcher).toHaveBeenCalledTimes(3);expect(fetcher.mock.calls.every(([url])=>String(url).endsWith('/deletion-impact'))).toBe(true);
+  });
+  it('does not accept a partial or malformed additional category as a complete impact',async()=>{
+    const fetcher=vi.fn().mockResolvedValueOnce(ok({...preview,counts:{...preview.counts,purchaseRecords:-1}})).mockResolvedValueOnce(ok(preview));vi.stubGlobal('fetch',fetcher);mount();await screen.findByRole('alert');expect(screen.queryByLabelText('完整資料影響盤點')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'永久刪除本人帳號'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'重新盤點'}));await screen.findByLabelText('完整資料影響盤點');
+  });
+  it('ignores a late old-account preview and aborts it when the account changes',async()=>{
+    let settle!:(v:unknown)=>void;let oldSignal!:AbortSignal;const fetcher=vi.fn((_url:string,init:RequestInit)=>init.headers && (init.headers as Record<string,string>).Authorization==='Bearer test-session'?new Promise(resolve=>{oldSignal=init.signal!;settle=resolve;}):Promise.resolve(ok({...preview,counts:{...preview.counts,wishes:8}})));vi.stubGlobal('fetch',fetcher);const view=mount();await waitFor(()=>expect(settle).toBeTypeOf('function'));
+    view.rerender(<MemoryRouter><AuthContext.Provider value={{...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}}><AccountDeletionPage/></AuthContext.Provider></MemoryRouter>);await screen.findByText(/願望清單 1、願望 8、刊登 3/);expect(oldSignal.aborted).toBe(true);await act(async()=>settle(ok(preview)));expect(screen.queryByText(/願望清單 1、願望 2、刊登 3/)).not.toBeInTheDocument();expect(bodies.size).toBe(0);
+  });
   it('blocks all network access until the encrypted recovery read completes',async()=>{
     let release:(value:null)=>void=()=>{};vault.get.mockImplementationOnce(()=>new Promise<null>(done=>{release=done;}));const fetch=vi.fn(async()=>ok(preview));vi.stubGlobal('fetch',fetch);mount();
     expect(screen.getByRole('status')).toHaveTextContent('正在安全讀取原刪除操作');expect(screen.queryByLabelText('刪除帳號的目前密碼')).not.toBeInTheDocument();expect(fetch).not.toHaveBeenCalled();

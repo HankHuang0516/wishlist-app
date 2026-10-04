@@ -13,6 +13,47 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it('atomically transfers a reviewed original operation into an encrypted recoverable edit draft', async () => {
+    const {store, factory, name} = fixture(), operationKey = scope + '.listing-management', draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
+    await store.save(operationKey, 'original-proposal'); await store.replaceDraft(draftKey, null, 'reviewed-other-draft');
+    await store.save(key, 'unrelated-operation');
+    await store.handoffListingEdit(operationKey, 'original-proposal', draftKey, 'reviewed-other-draft', 'prepared-original-fields');
+    const reopened = createWebPendingStore(name, factory, crypt);
+    expect(await reopened.get(operationKey)).toBeNull(); expect(await reopened.get(draftKey)).toBe('prepared-original-fields'); expect(await reopened.get(key)).toBe('unrelated-operation');
+    expect(new TextDecoder().decode((await raw(factory, name, 'pending', draftKey) as {cipher:ArrayBuffer}).cipher)).not.toContain('prepared-original-fields');
+    await expect(store.handoffListingEdit(operationKey, 'original-proposal', draftKey, 'reviewed-other-draft', 'replay')).rejects.toThrow(PendingStoreError);
+    expect(await store.get(draftKey)).toBe('prepared-original-fields');
+  });
+  it('transfers to an absent draft and rejects another API, owner or resource without clearing the operation', async () => {
+    const {store} = fixture(), operationKey = scope + '.listing-management', draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
+    await store.save(operationKey, 'original-proposal');
+    for (const wrong of [draftKey.replace('.42', '.43'), draftKey.replace('a'.repeat(64), 'b'.repeat(64)), key]) {
+      await expect(store.handoffListingEdit(operationKey, 'original-proposal', wrong, null, 'prepared')).rejects.toThrow(PendingStoreError);
+      expect(await store.get(operationKey)).toBe('original-proposal'); expect(await store.get(draftKey)).toBeNull();
+    }
+    await store.handoffListingEdit(operationKey, 'original-proposal', draftKey, null, 'prepared');
+    expect(await store.get(operationKey)).toBeNull(); expect(await store.get(draftKey)).toBe('prepared');
+  });
+  it.each(['draft', 'same-body-new-revision', 'operation', 'erasure', 'encryption-failure'])('fences %s during transfer preparation in the real encrypted store', async race => {
+    const {store, factory, name} = fixture(), operationKey = scope + '.listing-management', draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
+    await store.save(operationKey, 'original'); await store.replaceDraft(draftKey, null, 'reviewed');
+    const subtle = new Proxy(crypt.subtle, {get(target, property) {
+      if (property === 'encrypt') return async (...args: Parameters<SubtleCrypto['encrypt']>) => {
+        if (race === 'draft') await store.replaceDraft(draftKey, 'reviewed', 'newer');
+        if (race === 'same-body-new-revision') { await store.replaceDraft(draftKey, 'reviewed', 'intermediate'); await store.replaceDraft(draftKey, 'intermediate', 'reviewed'); }
+        if (race === 'operation') { await store.clear(operationKey, 'original'); await store.save(operationKey, 'newer-operation'); }
+        if (race === 'erasure') await store.eraseScope(scope);
+        if (race === 'encryption-failure') throw Error('controlled encryption failure');
+        return target.encrypt(...args);
+      };
+      const value = Reflect.get(target, property); return typeof value === 'function' ? value.bind(target) : value;
+    }});
+    const racingCrypto = new Proxy(crypt, {get(target, property) { if (property === 'subtle') return subtle; const value = Reflect.get(target, property); return typeof value === 'function' ? value.bind(target) : value; }});
+    const racingStore = createWebPendingStore(name, factory, racingCrypto);
+    await expect(racingStore.handoffListingEdit(operationKey, 'original', draftKey, 'reviewed', 'prepared')).rejects.toThrow(PendingStoreError);
+    expect(await store.get(operationKey)).toBe(race === 'erasure' ? null : race === 'operation' ? 'newer-operation' : 'original');
+    expect(await store.get(draftKey)).toBe(race === 'erasure' ? null : race === 'draft' ? 'newer' : 'reviewed');
+  });
   it('isolates anonymous feedback by API from all owners, encrypts contact text and restricts public keys to feedback',async()=>{
     const {store,factory,name}=fixture(),a=await feedbackPendingKey('https://example.com/api',null),b=await feedbackPendingKey('https://other.example/api',null),own=await feedbackPendingKey('https://example.com/api',42);
     const body=JSON.stringify({content:'synthetic-private-feedback',email:'fixture@example.invalid'});await store.save(a,body);

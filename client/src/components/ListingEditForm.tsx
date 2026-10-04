@@ -5,20 +5,20 @@ import { listingEditBody, ManagedListingError } from '../lib/managedListingWeb';
 import { getFullApiUrl } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
 import { listingFields, parseListingEditDraft, sameEditFields, serializeListingEditDraft } from '../lib/listingEditDraft';
-import type { ListingEditFields } from '../lib/listingEditDraft';
+import type { ListingEditDraft, ListingEditFields } from '../lib/listingEditDraft';
 import MarketingAssistantWeb from './MarketingAssistantWeb';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 
 type Props = {
-  item: ManagedListing; token: string; userId: number; locked: boolean; seed?: ListingEditFields;
+  item: ManagedListing; token: string; userId: number; locked: boolean; preparedDraft?: {raw: string; draft: ListingEditDraft};
   onClose(): void;
   onSave(changes: Record<string, unknown>): Promise<boolean>;
   beforeApprove(): Promise<(() => void) | null>;
   onApproved(): Promise<ManagedListing>;
 };
-export default function ListingEditForm({ item, token, userId, locked, seed, onClose, onSave, beforeApprove, onApproved }: Props) {
-  const [value, setValue] = useState<ListingEditFields>(seed ?? listingFields(item));
+export default function ListingEditForm({ item, token, userId, locked, preparedDraft, onClose, onSave, beforeApprove, onApproved }: Props) {
+  const [value, setValue] = useState<ListingEditFields>(preparedDraft?.draft.fields ?? listingFields(item));
   const [ready, setReady] = useState(false), [saving, setSaving] = useState(false), [issue, setIssue] = useState('');
   const [notice, setNotice] = useState(''), [baseVersion, setBaseVersion] = useState(item.version);
   const [stopped, setStopped] = useState(false), [sending, setSending] = useState(false);
@@ -38,13 +38,16 @@ export default function ListingEditForm({ item, token, userId, locked, seed, onC
         const raw = await privatePendingStore.get(key);
         const draft = raw ? parseListingEditDraft(raw, item.id) : null;
         if (!isCurrent(epoch)) return;
-        const retainConfirmedConflict = !!seed && !!draft && sameEditFields(seed, draft.fields);
-        state.current = { key, raw, base: retainConfirmedConflict ? listingFields(item) : draft?.baseFields ?? listingFields(item), version: retainConfirmedConflict ? item.version : draft?.baseVersion ?? item.version, stopped: false };
-        const recovered = draft?.fields ?? seed ?? listingFields(item);
+        const selected = preparedDraft?.draft ?? draft;
+        state.current = { key, raw: preparedDraft?.raw ?? raw, base: selected?.baseFields ?? listingFields(item), version: selected?.baseVersion ?? item.version, stopped: false };
+        const recovered = selected?.fields ?? listingFields(item);
         currentValue.current = recovered; setValue(recovered); setBaseVersion(state.current.version); setReady(true);
+        if (preparedDraft && (preparedDraft.draft.listingId !== item.id || raw !== preparedDraft.raw)) {
+          state.current.stopped = true; setStopped(true); setIssue(t("已準備的草稿又被更新或移除；原修改仍顯示，請先複製文字，再關閉後重新比較。"));
+          return;
+        }
         if (draft) setNotice(t("已恢復本機編輯草稿；尚未更新商品。"));
-        if (seed && (!draft || retainConfirmedConflict)) persist(recovered);
-      } catch { if (isCurrent(epoch)) { state.current.stopped = true; setStopped(true); setIssue(t("無法安全讀取商品編輯草稿；原資料保留，請關閉後重試。")); } }
+      } catch { if (isCurrent(epoch)) { state.current.stopped = true; setStopped(true); if (preparedDraft) setReady(true); setIssue(t("無法安全讀取商品編輯草稿；原資料保留，請關閉後重試。")); } }
     })();
     return () => { active.current = false; generation.current++; };
   }, []);

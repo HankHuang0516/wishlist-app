@@ -12,7 +12,11 @@ vi.mock('../lib/webPendingStore',async original=>({...await original<object>(),p
   get:vi.fn(async(key:string)=>journals.get(key)??null),
   save:vi.fn(async(key:string,raw:string)=>{if(journals.has(key)&&journals.get(key)!==raw)throw Error('CAS');journals.set(key,raw);}),
   clear:vi.fn(async(key:string,raw:string)=>journals.get(key)===raw?journals.delete(key):false),
-  replaceDraft:vi.fn(async(key:string,expected:string|null,raw:string)=>{if((journals.get(key)??null)!==expected)throw Error('CAS');journals.set(key,raw);})
+  replaceDraft:vi.fn(async(key:string,expected:string|null,raw:string)=>{if((journals.get(key)??null)!==expected)throw Error('CAS');journals.set(key,raw);}),
+  handoffListingEdit:vi.fn(async(operationKey:string,operation:string,draftKey:string,expectedDraft:string|null,raw:string)=>{
+    if(journals.get(operationKey)!==operation||(journals.get(draftKey)??null)!==expectedDraft)throw Error('CAS');
+    journals.set(draftKey,raw);journals.delete(operationKey);
+  })
 }}));
 const id = '11111111-1111-4111-8111-111111111111', second = '22222222-2222-4222-8222-222222222222';
 const photo = '33333333-3333-4333-8333-333333333333';
@@ -22,6 +26,26 @@ const row = { id, ownerUserId: 19, owner: { id: 19 }, version: 1, title: '三國
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><MyListingsPage /></AuthContext.Provider></MemoryRouter>;
 const ready = async () => waitFor(()=>expect(screen.getByRole('button',{name:'延長期限',exact:true})).toBeEnabled());
+async function prepareCompetingEdit(strict = false) {
+  let writes = 0;
+  const proposal = { title: '我的原操作修改', description: row.description, price: 300 };
+  const current = { ...row, version: 2, title: '其他裝置更新', description: '後台較新說明', price: '280' };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') return proof(url, init, ++writes === 1 ? 'CONFLICT' : 'APPLIED');
+    return url.endsWith(`/listings/${id}`) ? ok(writes < 2 ? current : { ...current, ...proposal, price: '300', version: 3 }) : ok({ items: [row], nextCursor: null });
+  });
+  vi.stubGlobal('fetch', fetcher); render(strict ? <StrictMode>{view()}</StrictMode> : view()); await ready(); await openEditor();
+  fireEvent.change(screen.getByLabelText('商品名稱'), { target: { value: proposal.title } });
+  fireEvent.change(screen.getByLabelText('售價（NT$，0 代表免費贈送）'), { target: { value: '300' } });
+  fireEvent.click(screen.getByRole('button', { name: '儲存修改' }));
+  await screen.findByText('版本：2');
+  const draftKey = [...journals.keys()].find(key => JSON.parse(journals.get(key)!).fields)!;
+  const managementKey = [...journals.keys()].find(key => JSON.parse(journals.get(key)!).clientActionId)!;
+  const originalRaw = journals.get(managementKey)!;
+  const competing = { ...JSON.parse(journals.get(draftKey)!), revision: crypto.randomUUID(), fields: { title: '另一分頁的草稿', description: '另一份未送出說明', price: '450' } };
+  const competingRaw = JSON.stringify(competing); journals.set(draftKey, competingRaw);
+  return { fetcher, proposal, draftKey, managementKey, originalRaw, competingRaw, competing };
+}
 async function openEditor() { fireEvent.click(screen.getByRole('button', { name: '編輯資訊' })); await waitFor(() => expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
 async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?:number){
   const body=JSON.parse(String(init.body));return ok({receipt:{clientActionId:url.split('/').at(-1),listingId:body.listingId,kind:body.kind,expectedVersion:body.expectedVersion,requestHash:await sha256(JSON.stringify(body)),state,reason:state==='CONFLICT'?'LISTING_CONFLICT':null,appliedVersion:state==='APPLIED'?appliedVersion??body.expectedVersion+1:null,createdAt:'2026-10-01T12:00:00.000Z'}});
@@ -450,6 +474,106 @@ it('retains an unconfirmed map action and reloads only by GET without replay',as
 });
 it('uses English keyboard-accessible map confirmation without submitting on Escape',async()=>{
  localStorage.setItem('user-locale','en');const fetcher=vi.fn(async()=>ok({items:[{...row,mapVisibleUntil:null}],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Check in on the map for one hour'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Check in on the map for one hour'}));const dialog=screen.getByRole('dialog',{name:'Confirm product map display'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent('never renews automatically');fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
+});
+
+describe('conflicting edit draft handoff', () => {
+  it.each(['unavailable', 'malformed'])('keeps prepared original fields selectable and blocks writes on %s draft restoration', async failure => {
+    const state = await prepareCompetingEdit();
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    const transfer = vi.mocked(privatePendingStore.handoffListingEdit).getMockImplementation()!;
+    const get = vi.mocked(privatePendingStore.get).getMockImplementation()!; let transferred = false;
+    vi.mocked(privatePendingStore.handoffListingEdit).mockImplementationOnce(async (...args) => { await transfer(...args); transferred = true; });
+    vi.mocked(privatePendingStore.get).mockImplementation(async key => { if (transferred && key === state.draftKey) { if (failure === 'malformed') return '{'; throw Error('controlled unavailable storage'); } return get(key); });
+    fireEvent.click(await screen.findByRole('button', { name: '保留原操作修改，取代這份本機草稿' }));
+    await screen.findByText('無法安全讀取商品編輯草稿；原資料保留，請關閉後重試。');
+    expect(screen.getByLabelText('商品名稱')).toHaveValue(state.proposal.title);
+    expect(screen.getByLabelText('商品名稱')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('商品名稱')).toBeEnabled();
+    expect(screen.getByRole('button', { name: '儲存修改' })).toBeDisabled();
+    expect(JSON.parse(journals.get(state.draftKey)!).fields.title).toBe(state.proposal.title);
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    vi.mocked(privatePendingStore.get).mockImplementation(get);
+  });
+  it('keeps both encrypted records when atomic preparation fails', async () => {
+    const state = await prepareCompetingEdit();
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    vi.mocked(privatePendingStore.handoffListingEdit).mockRejectedValueOnce(Error('controlled atomic failure'));
+    fireEvent.click(await screen.findByRole('button', { name: '保留原操作修改，取代這份本機草稿' }));
+    await screen.findByText('無法安全保存原操作修改；未清理原紀錄或取代草稿，請重新讀取比較。');
+    expect(journals.get(state.managementKey)).toBe(state.originalRaw); expect(journals.get(state.draftKey)).toBe(state.competingRaw);
+    expect(screen.queryByLabelText('商品名稱')).not.toBeInTheDocument();
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+  it('keeps the selected original fields read-only if the prepared draft changes before editor restoration', async () => {
+    const state = await prepareCompetingEdit();
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    const transfer = vi.mocked(privatePendingStore.handoffListingEdit).getMockImplementation()!;
+    vi.mocked(privatePendingStore.handoffListingEdit).mockImplementationOnce(async (...args) => { await transfer(...args); journals.set(state.draftKey, state.competingRaw); });
+    vi.mocked(privatePendingStore.replaceDraft).mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: '保留原操作修改，取代這份本機草稿' }));
+    await screen.findByText('已準備的草稿又被更新或移除；原修改仍顯示，請先複製文字，再關閉後重新比較。');
+    expect(screen.getByLabelText('商品名稱')).toHaveValue(state.proposal.title);
+    expect(screen.getByLabelText('商品名稱')).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: '儲存修改' })).toBeDisabled();
+    expect(journals.get(state.draftKey)).toBe(state.competingRaw);
+    expect(privatePendingStore.replaceDraft).not.toHaveBeenCalled();
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+  it('translates comparison choices while preserving both original Chinese proposals and sending nothing', async () => {
+    const state = await prepareCompetingEdit(); localStorage.setItem('user-locale', 'en');
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    const region = await screen.findByRole('region', { name: 'Compare original changes with another local draft' });
+    expect(region).toHaveTextContent('另一分頁的草稿');
+    expect(screen.getByRole('region', { name: 'Compare original operation with latest listing' })).toHaveTextContent(state.proposal.title);
+    fireEvent.click(screen.getByRole('button', { name: 'Keep both records for now' }));
+    expect(journals.get(state.managementKey)).toBe(state.originalRaw); expect(journals.get(state.draftKey)).toBe(state.competingRaw);
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+  it('retains the original operation and another tab draft until the user resolves the comparison', async () => {
+    const state = await prepareCompetingEdit();
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    const comparison = await screen.findByRole('region', { name: '原操作修改與另一份本機草稿比較' });
+    expect(comparison).toHaveTextContent('另一分頁的草稿');
+    expect(screen.getByRole('region', { name: '原商品操作與最新資料比較' })).toHaveTextContent(state.proposal.title);
+    expect(screen.queryByRole('button', { name: '儲存修改' })).not.toBeInTheDocument();
+    expect(journals.get(state.managementKey)).toBe(state.originalRaw);
+    expect(journals.get(state.draftKey)).toBe(state.competingRaw);
+    fireEvent.click(screen.getByRole('button', { name: '先保留兩份紀錄' }));
+    expect(journals.get(state.managementKey)).toBe(state.originalRaw);
+    expect(journals.get(state.draftKey)).toBe(state.competingRaw);
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+  it('durably saves the selected original fields before journal cleanup and a new explicit backend save', async () => {
+    const state = await prepareCompetingEdit(true);
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    fireEvent.click(await screen.findByRole('button', { name: '保留原操作修改，取代這份本機草稿' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '儲存修改' })).toBeEnabled());
+    expect(journals.has(state.managementKey)).toBe(false);
+    const draft = JSON.parse(journals.get(state.draftKey)!);
+    expect(draft.baseVersion).toBe(2);
+    expect(draft.fields).toEqual({ title: state.proposal.title, description: state.proposal.description, price: '300' });
+    expect(screen.getByLabelText('商品名稱')).toHaveValue(state.proposal.title);
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' })); await screen.findByText('版本：3');
+    const writes = state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(writes).toHaveLength(2);
+    expect(writes[1][0]).not.toBe(writes[0][0]);
+    expect(JSON.parse(String(writes[1][1]?.body))).toEqual({ kind: 'EDIT', listingId: id, expectedVersion: 2, changes: state.proposal });
+  });
+  it('rejects a changed competing draft after review and keeps the exact original operation', async () => {
+    const state = await prepareCompetingEdit();
+    fireEvent.click(screen.getByRole('button', { name: '保留我的修改，以最新版本重新編輯' }));
+    await screen.findByRole('region', { name: '原操作修改與另一份本機草稿比較' });
+    const newerRaw = JSON.stringify({ ...state.competing, revision: crypto.randomUUID(), fields: { ...state.competing.fields, title: '另一分頁再次更新' } });
+    journals.set(state.draftKey, newerRaw);
+    fireEvent.click(screen.getByRole('button', { name: '保留原操作修改，取代這份本機草稿' }));
+    await screen.findByText('本機草稿與原操作不同；請比較後選擇，兩份紀錄目前都保留。');
+    expect(journals.get(state.managementKey)).toBe(state.originalRaw);
+    expect(journals.get(state.draftKey)).toBe(newerRaw);
+    expect(screen.getByRole('region', { name: '原商品操作與最新資料比較' })).toHaveTextContent(state.proposal.title);
+    expect(screen.queryByRole('button', { name: '儲存修改' })).not.toBeInTheDocument();
+    expect(state.fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
 });
 
 describe('original App status details within tab groups', () => {

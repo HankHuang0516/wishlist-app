@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { earliestExtensionDate, listingEditBody, managementTab, MANAGEMENT_TABS, parseManagedListing, parseManagedListingPage } from './managedListingWeb';
+import { earliestExtensionDate, listingEditBody, managementTab, managementStatusText, MANAGEMENT_TABS, parseManagedListing, parseManagedListingPage } from './managedListingWeb';
 
 const id = 'b5abf861-a66d-4072-876b-4f0ab3172dac';
 const mediaId = 'fab22941-2df0-4ca4-90c2-70c504527243';
@@ -38,6 +38,20 @@ describe('my listings safety and management', () => {
     expect(listingEditBody(item, ' 新檯燈 ', ' 九成新 ', '600')).toEqual({ expectedVersion: 3, title: '新檯燈', description: '九成新', price: 600 });
     expect(() => listingEditBody(item, '檯燈', '', '600')).toThrow();
     expect(() => listingEditBody(item, '檯燈', '說明', '1e3')).toThrow();
+  });
+  it('retains pending and date-overdue status distinctions in both languages without changing their tabs', () => {
+    const item = parseManagedListing(row, 42, api), now = Date.parse('2026-11-01T00:00:00Z');
+    try {
+      for (const [locale, pending, overdue, expired] of [['zh-TW','待確認','已失效 · 日期已過','已失效'],['en-US','Pending confirmation','Expired · deadline passed','Expired']]) {
+        localStorage.setItem('user-locale',locale);
+        expect(managementStatusText({...item,status:'PENDING_CONFIRMATION'},now)).toBe(pending);
+        expect(managementTab({...item,status:'PENDING_CONFIRMATION'},now)).toBe('草稿');
+        for (const status of ['ACTIVE','RESERVED'] as const) expect(managementStatusText({...item,status},now)).toBe(overdue);
+        expect(managementStatusText({...item,status:'EXPIRED'},now)).toBe(expired);
+        expect(managementTab(item,now)).toBe('已失效');
+        expect(managementStatusText({...item,status:'SOLD'},now)).not.toBe(overdue);
+      }
+    } finally { localStorage.removeItem('user-locale'); }
   });
   it('starts extension after the current deadline or today if already expired', () => {
     const now = new Date('2026-09-26T10:00:00.000Z');

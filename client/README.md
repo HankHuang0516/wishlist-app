@@ -340,3 +340,8 @@ A complete wish/match read with zero matches keeps the existing Taiwan map overv
 Explore source cards, detail controls and shared image states follow Chinese/English. The source map also translates its controls and shows actual photo completeness. Original titles, summary, price facts, dates, addresses, alts, image order and contact/source destinations stay unchanged. Only known generated routing reasons are translated; independently recorded reasons remain original evidence. Imported-complete images are distinct from images successfully viewed this visit.
 
 The public map uses the existing credential-free publicApi, no-store and shared Retry-After. Strict source DTOs and cursor checks cover the complete paginated result without a new item-count limit. One read has a30-second deadline and aborts on departure. Failure hides unverified results and pauses polling/foreground refresh until an explicit reload; cooldown expiry alone sends nothing. Valid zero results, pending reads and failures remain distinct. Original APP and backend contracts are unchanged.
+
+
+## 我的商品狀態核對
+
+我的商品保留原APP狀態區分：待確認歸草稿但顯示原狀態，日期已過的在售／保留商品與EXPIRED區分；六分頁與既有操作 gate 不變。

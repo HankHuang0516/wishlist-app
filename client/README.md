@@ -326,3 +326,7 @@ Web explicitly requests approximate=1 for source list and details. County illust
 ### Manual map display recovery — v641
 
 Web check-in/stop uses the existing encrypted owner/API-scoped listing management journal. The immutable MAP receipt binds the original UUID, complete consent body hash, applied version and original deadline. Reload reads only the original receipt and latest listing; a later device change remains separate. Explicit retries reuse the original operation and cannot renew its deadline. Cancellation fences an uncommitted request. Each new check-in requires a keyboard-accessible Chinese/English confirmation. Existing EDIT/STATUS/EXTEND receipt projections retain their exact shape, and native direct map APIs remain available. Local controlled DEV UI evidence is separate from formal deployment evidence.
+
+## Notification settings language and recovery
+
+The notification page follows the saved Chinese/English website language for guest navigation, consent explanations, confirmed values, pending saves, conflicts, cancellation and read retries. Only the original versioned profile operation changes consent. Email delivery and browser push remain unavailable. A stopped operation does not undo saved consent, and this page does not claim to retain an unsent draft.

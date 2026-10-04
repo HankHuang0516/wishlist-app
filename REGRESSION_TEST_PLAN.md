@@ -318,3 +318,7 @@ CI 執行 marketing-compose.test.mjs 的完整遮罩／遺漏配件／壞遮罩�
 Use isolated PostgreSQL appleReviewRemediation.integration.ts to verify owner-only manual map permission, denial, expiry, stale-version rejection, no renewal on reads/extension, and human-report persistence/receipt ownership even if notification fails. Native regression must verify declining map display permits publishing and expired/cached consent never produces a map pin. Validate both buyer and seller reporting, report retry identity, and blocking stops new messages.
 
 Before submitting the selected new binary, record the exact physical iPhone/iPad build showing terms before login/register, a received report and blocking; include the accessible video reference or completed matching App Review attachment in App Review notes. Fresh native checks must also cover the existing chat, meetup, wishes, account deletion and scene lifecycle. Build 12, internal-only build 13, simulator footage and unchanged-binary evidence cannot close this rejection.
+
+## Notification settings language regression
+
+Check Chinese and English guest return paths, inactive service explanations, opt-in/out, exact receipt recovery after a lost acknowledgement, stale profile conflicts, malformed-profile read recovery and two-step stop/keep controls. Reopening must only GET the original receipt; translated controls must preserve the same operation, ownership and busy locks. Verify English on the deployed notification page without sending email or requesting push permission.

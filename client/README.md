@@ -334,3 +334,9 @@ The notification page follows the saved Chinese/English website language for gue
 ## Confirmed empty Home map overview
 
 A complete wish/match read with zero matches keeps the existing Taiwan map overview, without fabricated markers, new listing searches or geolocation. Its bilingual notice distinguishes an overview from matching items, and the empty panel provides the original Explore destination. Pending, failed or incomplete zero-result reads retain their recovery notices and do not claim a confirmed empty overview; successful partial item maps stay available. Original wish selection, item routes and account/abort fences are unchanged.
+
+## Bilingual retained source leads and explicit public-map recovery
+
+Explore source cards, detail controls and shared image states follow Chinese/English. The source map also translates its controls and shows actual photo completeness. Original titles, summary, price facts, dates, addresses, alts, image order and contact/source destinations stay unchanged. Only known generated routing reasons are translated; independently recorded reasons remain original evidence. Imported-complete images are distinct from images successfully viewed this visit.
+
+The public map uses the existing credential-free publicApi, no-store and shared Retry-After. Strict source DTOs and cursor checks cover the complete paginated result without a new item-count limit. One read has a30-second deadline and aborts on departure. Failure hides unverified results and pauses polling/foreground refresh until an explicit reload; cooldown expiry alone sends nothing. Valid zero results, pending reads and failures remain distinct. Original APP and backend contracts are unchanged.

@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { makeListing, makeMatch, makeMatchPage, makeWish, makeExternalListing, responseOk } from '../__tests__/fixtures/marketplace';
 import type { Bounds } from '../lib/listingSearch';
 import ExplorePage from './ExplorePage';
+import { makeSourceLead } from '../__tests__/fixtures/sourceLead';
 
 const mapState = vi.hoisted(() => ({ failed: false }));
 vi.mock('../components/ExploreMapWeb', () => ({ default: (props: { items: { id: string }[]; frame: unknown; onViewport: (box: Bounds) => void; onCluster: (kind: string, ids: string[]) => void }) => {
@@ -26,6 +27,19 @@ describe('bilingual exploration keeps original filters and verified facts', () =
       : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null }));
   const noWrites = (fetch: ReturnType<typeof vi.fn>) => expect(fetch.mock.calls.some(call =>
     (call[1] as RequestInit | undefined)?.method && (call[1] as RequestInit).method !== 'GET')).toBe(false);
+
+  it('translates retained source cards, details and photos without changing original source facts or contact destination', async () => {
+    english();const item={...makeSourceLead(),title:'來源 {title} $&'};
+    const fetch=vi.fn(async(url:string)=>responseOk(url.includes('/source-leads/')?item:url.includes('/source-leads?')?{enabled:true,items:[item],nextCursor:null}:url.includes('/external-listings?')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}));
+    vi.stubGlobal('fetch',fetch);render(view());fireEvent.click(screen.getByRole('button',{name:'Item list'}));
+    const card=await screen.findByRole('button',{name:`View item details: ${item.title}`});
+    expect(screen.getByText('1 source leads; these are not confirmed available items.')).toBeTruthy();expect(screen.getByRole('button',{name:`View on the map: ${item.title}`})).toBeTruthy();
+    fireEvent.click(card);const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
+    expect(within(dialog).getByText(item.summary)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.priceText)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.originalDateLabel)).toBeTruthy();
+    expect(within(dialog).getByText(/nothing has been forwarded/)).toBeTruthy();expect(within(dialog).getByText('All source item images have been imported (Source: 2; imported: 2)')).toBeTruthy();
+    expect(within(dialog).getByRole('link',{name:'Contact seller'})).toHaveAttribute('href','/chat?source='+item.id);expect(within(dialog).getByRole('link',{name:'Original source'})).toHaveAttribute('href',item.canonicalUrl);
+    fireEvent.click(within(dialog).getByRole('button',{name:'Next source image'}));expect(within(dialog).getByText('Image 2 of 2 imported images')).toBeTruthy();noWrites(fetch);
+  });
 
   it('preserves entered keywords and original enum values across a display-language change, querying only on explicit apply', async () => {
     english(); const item = makeListing('原商品 {title} $& 漫畫'), fetch = sellerFetch(item); stubFetch(fetch);

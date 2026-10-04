@@ -4,6 +4,10 @@ Publishing works with map permission declined. New web publications opt into a o
 
 # React + TypeScript + Vite
 
+## Complete account deletion impact
+
+The read-only deletion preview shows all 23 categories from the original APP 2.0.12, including shared rooms, counterpart-retained messages, meetups, detached purchase links and reports. Counts are independent and can overlap; a preview does not perform deletion. Explicit refresh uses only the authenticated impact GET, with a bounded wait, shared read cooldown and cancelled old-account requests. A failed or malformed refresh retains the previous snapshot with an unverified notice and disables deletion until a valid new preview arrives. Current-password and confirmation input stay in memory. Refresh never creates a deletion journal or sends DELETE; existing permanent-erasure confirmation and recovery remain in place.
+
 ## Account security confirmation
 
 Password updates and revoking device sessions use the existing keyboard-accessible page dialog. Opening the dialog sends no request. It describes the original consequences, permits cancellation and Escape, restores focus, and locks other security actions. The validated payload stays in memory only; a session change drops the unsubmitted confirmation. Confirming once preserves the original security endpoint, response checks and read-only session probe after an unknown reply. No automatic replay, password persistence, APP or backend changes are introduced.

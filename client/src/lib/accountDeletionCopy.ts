@@ -1,5 +1,18 @@
 import { getDisplayLocale } from '../utils/localization';
 const english={
+ '完整資料影響盤點':'Complete data impact preview', '重新盤點':'Refresh impact preview',
+ '正在重新盤點本人資料…':'Refreshing your data impact preview…',
+ '無法取得完整刪除影響盤點；沒有送出刪除。請重新盤點後再確認。':'The complete deletion impact could not be verified. No deletion was sent. Refresh the preview before confirming.',
+ '目前保留上次盤點；尚未確認最新資料，暫時不能送出刪除。':'The last preview is kept. Current data is unverified, so deletion is temporarily disabled.',
+ '本人商品檢舉與證據':'Your listing reports and evidence', '本人檢舉收件與安全放棄回執':'Your report submission and abandonment receipts',
+ '隨本人刊登移除的檢舉案件':'Reports removed with your listings', '隨本人刊登移除的審核紀錄':'Moderation records removed with your listings',
+ '保留但解除本人案件關聯的審核紀錄':'Moderation records retained with your report link removed',
+ '願望':'Wishes', '願望建立操作紀錄':'Wish creation operation records', '刊登':'Listings', '商品照片':'Listing photos',
+ '需封存聊天室':'Conversations to archive', '本人發送訊息':'Messages you authored', '保留對方自有訊息':'Other participants’ messages to retain',
+ '移除面交預約':'Meetup appointments to remove', '其中尚未結束的預約':'Of these, upcoming appointments',
+ '解除帳號關聯的購買紀錄':'Purchase records with your account link removed', '解除他人願望代購占用':'Gift claims in others’ wishlists to release',
+ '解除他人願望原始關聯':'Original-credit links in others’ wishlists to remove', '商品關注':'Item watches',
+ '追蹤關係':'Follow relationships', '封鎖關係':'Block relationships', '意見回報':'Feedback records', '本人分析錯誤紀錄':'Your analysis error records',
  '正在安全讀取原刪除操作…':'Reading the original deletion operation safely…',
  '重試安全讀取刪除恢復資料':'Retry safe deletion recovery reading',
  '刪除 Weesh（Wishlist.ai）帳號與相關資料':'Delete your Weesh (Wishlist.ai) account and related data',

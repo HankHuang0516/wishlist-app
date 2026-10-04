@@ -6,25 +6,11 @@ import { erasePrivatePendingData } from '../lib/webPendingStore';
 import { getDisplayLocale } from '../utils/localization';
 import { deletionText as dt } from '../lib/accountDeletionCopy';
 import { recoverDeletionJournal,publishDeletionJournal,verifyDeletionJournal,clearDeletionJournal } from '../lib/deletionRecoveryWeb';
+import { DELETION_IMPACT_LABELS, useDeletionImpact } from '../lib/deletionImpactWeb';
 import {
   abandonDeletion, createPendingDeletion, lookupDeletion,
   submitDeletion, type DeletionResult, type PendingDeletion,
 } from '../lib/accountDeletionWeb';
-
-type Impact = { capturedAt: string; counts: Record<string, number> };
-
-function parseImpact(value: unknown): Impact {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('刪除影響盤點無效。');
-  const data = value as Record<string, unknown>;
-  if (data.version !== 2 || data.previewOnly !== true || data.accountDeleted !== false ||
-    typeof data.capturedAt !== 'string' || !Number.isFinite(Date.parse(data.capturedAt)) ||
-    !data.counts || typeof data.counts !== 'object' || Array.isArray(data.counts))
-    throw new Error('刪除影響盤點無效。');
-  const counts = data.counts as Record<string, unknown>;
-  for (const key of ['wishlists', 'wishes', 'listings', 'uploadedPhotos', 'messagesAuthored'])
-    if (!Number.isSafeInteger(counts[key]) || Number(counts[key]) < 0) throw new Error('刪除影響盤點無效。');
-  return { capturedAt: data.capturedAt, counts: counts as Record<string, number> };
-}
 
 export default function AccountDeletionPage() {
   const { user,token }=useAuth();
@@ -38,7 +24,6 @@ function DeletionSession() {
   const [initial,setInitial]=useState<{pending:PendingDeletion|null;invalid:boolean;ready:boolean}>({pending:null,invalid:false,ready:false});
   const [pending, setPending] = useState<PendingDeletion | null>(null);
   const [storagePaused,setStoragePaused]=useState(false),[readAttempt,setReadAttempt]=useState(0);
-  const [impact, setImpact] = useState<Impact | null>(null);
   const [result, setResult] = useState<DeletionResult | null>(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -48,6 +33,8 @@ function DeletionSession() {
   const [cleanupAttempt, setCleanupAttempt] = useState(0);
   const operationBusy = useRef(false);
   const foreignPending = !!pending && !!user && user.id !== pending.userId;
+  const impactRead = useDeletionImpact(token, user?.id, initial.ready && !initial.pending && !initial.invalid && !pending && !storagePaused);
+  const { impact } = impactRead;
   useLayoutEffect(()=>{generation.current++;operationBusy.current=true;return()=>{generation.current++;operationBusy.current=true;};},[]);
 
   useEffect(() => {
@@ -78,25 +65,9 @@ function DeletionSession() {
     })();return()=>{live=false;};
   },[readAttempt,user?.id,token]);
 
-  useEffect(() => {
-    if (!initial.ready || initial.pending || initial.invalid || !token || !user) return;
-    let live = true;
-    void (async () => {
-      try {
-        const response = await fetch(`${API_URL}/users/me/deletion-impact`, {
-          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
-        });
-        if (!response.ok) throw new Error('無法取得本人刪除影響盤點；沒有送出刪除。');
-        const value = parseImpact(await response.json());
-        if (live) setImpact(value);
-      } catch { if (live) setIssue('無法取得本人刪除影響盤點；沒有送出刪除。請稍後重新載入。'); }
-    })();
-    return () => { live = false; };
-  }, [initial, token, user]);
-
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (operationBusy.current || !initial.ready || initial.invalid || storagePaused || pending || !impact || !token || !user || !password || confirmation !== confirmationPhrase) return;
+    if (operationBusy.current || !initial.ready || initial.invalid || storagePaused || pending || !impact || !impactRead.canSubmit || !token || !user || !password || confirmation !== confirmationPhrase) return;
     if (!window.confirm(dt("永久刪除目前本人帳號？願望、刊登與本人訊息將無法復原；照片清理可能需要後續處理。"))) return;
     operationBusy.current = true;
     const currentGeneration=generation.current;
@@ -204,11 +175,18 @@ function DeletionSession() {
       {impact ? <div className="rounded-xl bg-gray-50 p-4 text-sm">
         <p>{dt("唯讀盤點時間：")}{new Date(impact.capturedAt).toLocaleString(getDisplayLocale().startsWith('zh')?'zh-TW':'en-US')}{dt("；數量可能重疊且會變動，尚未刪除。")}</p>
         <p>{dt("願望清單")} {impact.counts.wishlists}{dt("、願望")} {impact.counts.wishes}{dt("、刊登")} {impact.counts.listings}{dt("、商品照片")} {impact.counts.uploadedPhotos}{dt("、本人訊息")} {impact.counts.messagesAuthored}{dt('。')}</p>
+        <dl aria-label={dt('完整資料影響盤點')} className="mt-4 grid gap-3 sm:grid-cols-2">
+          {Object.entries(DELETION_IMPACT_LABELS).map(([key,label])=><div key={key} className="flex items-start justify-between gap-3 border-t border-gray-200 pt-2"><dt>{dt(label)}</dt><dd className="font-semibold tabular-nums">{impact.counts[key as keyof typeof DELETION_IMPACT_LABELS]}</dd></div>)}
+        </dl>
       </div> : <p>{dt("尚未取得有效盤點，不可送出刪除。")}</p>}
+      {impactRead.state==='loading' && <p role="status">{dt('正在重新盤點本人資料…')}</p>}
+      {impactRead.state==='failed' && <p role="alert">{dt('無法取得完整刪除影響盤點；沒有送出刪除。請重新盤點後再確認。')}</p>}
+      {impact && !impactRead.canSubmit && <p>{dt('目前保留上次盤點；尚未確認最新資料，暫時不能送出刪除。')}</p>}
+      <button type="button" disabled={busy || impactRead.state==='loading'} onClick={()=>{if(!operationBusy.current)void impactRead.retry();}} className="min-h-11 rounded-xl border px-4 disabled:opacity-50">{dt('重新盤點')}</button>
       <form onSubmit={(event) => void send(event)} className="space-y-4">
         <label className="block text-sm font-medium">{dt("目前密碼")}<input aria-label={dt("刪除帳號的目前密碼")} type="password" autoComplete="current-password" maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={busy} readOnly={storagePaused} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
         <label className="block text-sm font-medium">{dt('輸入「{phrase}」確認',{phrase:confirmationPhrase})}<input aria-label={dt("輸入刪除帳號以確認")} type="text" maxLength={20} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} readOnly={storagePaused} className="mt-2 block w-full rounded-xl border px-4 py-3" /></label>
-        <button type="submit" disabled={busy || storagePaused || !impact || !password || confirmation !== confirmationPhrase} className="w-full rounded-xl bg-rose-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{dt("永久刪除本人帳號")}</button>
+        <button type="submit" disabled={busy || storagePaused || !impactRead.canSubmit || !impact || !password || confirmation !== confirmationPhrase} className="w-full rounded-xl bg-rose-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{dt("永久刪除本人帳號")}</button>
       </form>
     </section>}
   </div>;

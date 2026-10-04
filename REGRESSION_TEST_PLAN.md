@@ -337,3 +337,6 @@ Verify complete strict public pagination, repeated-cursor and malformed-response
 
 - Saturate public data locally and verify authenticated /users/me GET still succeeds; forged credentials remain401 and mutations retain the original data limits. Both verified-user reads and pre-authentication attempts retain500/15min caps, with429 and Retry-After. Existing login/security/write limiters stay active.
 - Public and account frontend cooldowns do not block each other. Waiting never replays an operation; account fallback retains last confirmed identity and an explicit recheck. No production saturation tests, sign-outs or secret logging.
+## 我的商品狀態核對
+
+我的商品：核對DRAFT／PENDING_CONFIRMATION同分頁不同狀態、日期失效ACTIVE／RESERVED與EXPIRED不同標籤、六分頁完整50→100→107、失效延長的原回執與重新讀取／重开恢復；保留未驗項，APP不改。

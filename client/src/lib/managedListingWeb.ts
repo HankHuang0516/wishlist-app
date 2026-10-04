@@ -83,6 +83,13 @@ export function managementTab(item: ManagedListing, now = Date.now()): Managemen
   return item.status === 'RESERVED' ? '已保留' : '在售';
 }
 
+/** Keep the original App's status distinctions inside its shared tab groups. */
+export function managementStatusText(item: ManagedListing, now = Date.now()): string {
+  if (item.status === 'PENDING_CONFIRMATION') return t('待確認');
+  const tab = managementTab(item, now);
+  return tab === '已失效' && item.status !== 'EXPIRED' ? t('已失效 · 日期已過') : t(tab);
+}
+
 export function earliestExtensionDate(expiresAt: string | null, now = new Date()): string {
   const today = taiwanDate(now);
   if (expiresAt === null) return today;

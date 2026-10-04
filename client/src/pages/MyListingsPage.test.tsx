@@ -451,3 +451,32 @@ it('retains an unconfirmed map action and reloads only by GET without replay',as
 it('uses English keyboard-accessible map confirmation without submitting on Escape',async()=>{
  localStorage.setItem('user-locale','en');const fetcher=vi.fn(async()=>ok({items:[{...row,mapVisibleUntil:null}],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Check in on the map for one hour'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Check in on the map for one hour'}));const dialog=screen.getByRole('dialog',{name:'Confirm product map display'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent('never renews automatically');fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
 });
+
+describe('original App status details within tab groups', () => {
+  it('keeps pending confirmation distinct from editable drafts while retaining both in Drafts', async () => {
+    const fetcher=vi.fn(async()=>ok({items:[{...row,status:'DRAFT',title:'原手動草稿',publishedAt:null},{...row,id:second,status:'PENDING_CONFIRMATION',title:'原待確認商品',publishedAt:null}],nextCursor:null}));
+    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('tab',{name:'草稿 (2)'});
+    fireEvent.click(screen.getByRole('tab',{name:'草稿 (2)'}));
+    const pending=screen.getByRole('article',{name:'原待確認商品'}),draft=screen.getByRole('article',{name:'原手動草稿'});
+    expect(within(pending).getByText('待確認 · 二手')).toBeInTheDocument();
+    expect(within(pending).queryByRole('button',{name:'編輯資訊'})).not.toBeInTheDocument();
+    expect(within(draft).getByText('草稿 · 二手')).toBeInTheDocument();
+    expect(within(draft).getByRole('button',{name:'編輯資訊'})).toBeInTheDocument();
+    expect(fetcher.mock.calls).toHaveLength(1);
+  });
+  it('labels a passed deadline separately from an explicit expired state and keeps the expiry gate', async () => {
+    localStorage.setItem('user-locale','en-US');
+    const fetcher=vi.fn(async()=>ok({items:[{...row,expiresAt:'2000-01-01T15:59:59Z',title:'Deadline passed'},{...row,id:second,status:'EXPIRED',title:'Stored expired'}],nextCursor:null}));
+    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('tab',{name:'Expired (2)'});
+    fireEvent.click(screen.getByRole('tab',{name:'Expired (2)'}));
+    const overdue=screen.getByRole('article',{name:'Deadline passed'}),expired=screen.getByRole('article',{name:'Stored expired'});
+    expect(within(overdue).getByText('Expired · deadline passed · Used')).toBeInTheDocument();
+    expect(within(expired).getByText('Expired · Used')).toBeInTheDocument();
+    for (const article of [overdue,expired]) {
+      expect(within(article).queryByRole('button',{name:'Edit details'})).not.toBeInTheDocument();
+      expect(within(article).queryByRole('button',{name:'Mark sold'})).not.toBeInTheDocument();
+      expect(within(article).getByRole('button',{name:'Extend expiry'})).toBeInTheDocument();
+    }
+    expect(fetcher.mock.calls).toHaveLength(1);
+  });
+});

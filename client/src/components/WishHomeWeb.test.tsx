@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WishHomeWeb from './WishHomeWeb';
 import { makeWish, makeMatch, makeMatchPage, makeListing, responseOk } from '../__tests__/fixtures/marketplace';
-vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect }: { items: { id: string }[]; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}</div> }));
+vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect, previewNotice }: { items: { id: string }[]; previewNotice: string; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}<p>{previewNotice}</p></div> }));
 beforeEach(() => localStorage.setItem('user-locale', 'zh-TW'));
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key={token} token={token} userId={userId} /></MemoryRouter>;
@@ -40,6 +40,61 @@ describe('APP-equivalent homepage match UX', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('match-wishes')) return responseOk({ items: [makeWish()], nextCursor: null }); throw new Error('offline'); }));
     render(view()); expect(await screen.findByRole('alert')).toHaveTextContent('這不代表沒有商品');
     expect(screen.queryByText(/目前沒有其他賣家/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: /重新整理願望與配對/ })).toBeEnabled();
+    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
+  });
+  it('retains a truthful empty map after a complete read without inventing items or issuing a search', async () => {
+    const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([])));
+    vi.stubGlobal('fetch', fetch); render(view());
+    const map = await screen.findByTestId('home-map');
+    expect(map.parentElement).toHaveAttribute('aria-label', '沒有吻合商品標記的地圖概覽');
+    expect(map).toHaveTextContent('沒有吻合商品標記');
+    expect(within(map).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(screen.getByText(/目前沒有其他賣家的吻合商品/)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '不套用願望，瀏覽商品地圖' }).every(link => link.getAttribute('href') === '/explore')).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('does not label pending or failed wish reads as empty, and explicitly recovers to the empty overview', async () => {
+    let resolve!: (value: unknown) => void;
+    const fetch = vi.fn().mockImplementationOnce(() => new Promise(done => { resolve = done; }))
+      .mockResolvedValueOnce(responseOk({ items: [], nextCursor: null }));
+    vi.stubGlobal('fetch', fetch); render(view());
+    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新整理願望與配對' })).toBeDisabled();
+    await act(async () => resolve({ ok: false, status: 503, json: async () => ({ error: 'unavailable' }) }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入願望或配對');
+    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
+    expect(screen.queryByText('先留下你的第一個願望')).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '重新整理願望與配對' }));
+    await screen.findByTestId('home-map');
+    expect(screen.getByText('先留下你的第一個願望')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('only shows the empty overview after an explicit successful retry of an incomplete match read', async () => {
+    let matchReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('match-wishes')) return responseOk({ items: [makeWish()], nextCursor: null });
+      return ++matchReads === 1 ? { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) } : responseOk(makeMatchPage([]));
+    }));
+    render(view()); await screen.findByRole('alert');
+    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新整理願望與配對' }));
+    await screen.findByTestId('home-map');
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(screen.getByText(/目前沒有其他賣家的吻合商品/)).toBeInTheDocument();
+    expect(matchReads).toBe(2);
+  });
+  it('describes a confirmed empty overview in English while keeping the original search destination', async () => {
+    localStorage.setItem('user-locale', 'en-US');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([]))));
+    render(view()); const map = await screen.findByTestId('home-map');
+    expect(map.parentElement).toHaveAttribute('aria-label', 'Map overview without matching item markers');
+    expect(map).toHaveTextContent('there are no matching item markers');
+    expect(screen.getByText(/No matching items from other sellers/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View on map' })).toBeEnabled();
+    expect(screen.getAllByRole('link', { name: 'Browse the item map without a wish filter' }).every(link => link.getAttribute('href') === '/explore')).toBe(true);
   });
   it('ignores late private wishes when the account session is replaced', async () => {
     let resolve!: (value: unknown) => void;

@@ -322,3 +322,7 @@ Before submitting the selected new binary, record the exact physical iPhone/iPad
 ## Notification settings language regression
 
 Check Chinese and English guest return paths, inactive service explanations, opt-in/out, exact receipt recovery after a lost acknowledgement, stale profile conflicts, malformed-profile read recovery and two-step stop/keep controls. Reopening must only GET the original receipt; translated controls must preserve the same operation, ownership and busy locks. Verify English on the deployed notification page without sending email or requesting push permission.
+
+## Homepage empty overview regression
+
+Check a genuine complete zero-match read keeps the baseline map without item markers and offers Explore in both languages. Pending or failed wish reads and incomplete match reads must not claim zero results. Induce actual isolated HTTP503 for each read, then use the original explicit refresh and verify successful recovery. Panning the overview must not search or request location. Keep positive item framing/navigation, original APP and all32 parity rows. Separately inspect the real production desktop/mobile empty state; historical visual scores are not new-version acceptance.

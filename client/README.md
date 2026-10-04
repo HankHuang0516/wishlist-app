@@ -330,3 +330,7 @@ Web check-in/stop uses the existing encrypted owner/API-scoped listing managemen
 ## Notification settings language and recovery
 
 The notification page follows the saved Chinese/English website language for guest navigation, consent explanations, confirmed values, pending saves, conflicts, cancellation and read retries. Only the original versioned profile operation changes consent. Email delivery and browser push remain unavailable. A stopped operation does not undo saved consent, and this page does not claim to retain an unsent draft.
+
+## Confirmed empty Home map overview
+
+A complete wish/match read with zero matches keeps the existing Taiwan map overview, without fabricated markers, new listing searches or geolocation. Its bilingual notice distinguishes an overview from matching items, and the empty panel provides the original Explore destination. Pending, failed or incomplete zero-result reads retain their recovery notices and do not claim a confirmed empty overview; successful partial item maps stay available. Original wish selection, item routes and account/abort fences are unchanged.

@@ -80,6 +80,9 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
     const camera = resultCamera(JSON.parse(mapCameraKey));
     return camera ? { serial: Date.now(), camera } : null;
   }, [mapCameraKey]);
+  const complete = !busy && !error && !partial;
+  // An empty overview is useful only after all wish/match reads are confirmed.
+  const showMap = mapItems.length > 0 || complete;
   return <section aria-labelledby="home-matches-heading" className="space-y-4">
     <div><h1 className="text-[22px] font-bold leading-7 text-muji-primary">{homeText('welcome')}</h1><p className="mt-1 text-xs text-gray-500">{homeText('question')}</p></div>
     <div className="rounded-lg border border-muji-border bg-white p-3 shadow-sm">
@@ -99,7 +102,11 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         <h3 className="border-t bg-gray-50 px-2 py-1 text-xs text-gray-600">{homeText('wish', { name: group.wish.name })}</h3>
         {expanded === group.wish.id && <div className="space-y-2 border-t p-2">{group.matches.slice(1).map(match => <Preview key={match.listing.id} match={match} />)}</div>}
       </article>)}</div>
-      {!busy && !error && !partial && wishes.length > 0 && !visible.length && <p className="text-gray-600">{homeText('noMatches')}</p>}
+      {complete && wishes.length > 0 && !visible.length && <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-gray-200 bg-gray-50 p-4 text-center">
+        <Search className="h-8 w-8 text-gray-400" aria-hidden="true" />
+        <p className="max-w-lg text-sm text-gray-600">{homeText('noMatches')}</p>
+        <Link to="/explore" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-blue-700 hover:bg-white"><MapPin className="h-4 w-4" aria-hidden="true" />{homeText('browse')}</Link>
+      </div>}
       {!busy && !error && !wishes.length && <div><h2 className="font-semibold">{homeText('firstWish')}</h2><p className="my-2 text-gray-600">{homeText('eligible')}</p><Link to="/wishes" className="inline-flex min-h-11 items-center text-blue-700 underline">{homeText('goWishes')}</Link></div>}
       <p className="mt-3 text-xs text-gray-500">{homeText('notice')}</p>
     </div>
@@ -116,7 +123,7 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" aria-hidden="true" /><label htmlFor="home-search" className="sr-only">{homeText('search')}</label><input id="home-search" maxLength={100} value={query} onChange={event => setQuery(event.target.value)} placeholder={homeText('searchPlaceholder')} className="h-11 w-full rounded-md border border-gray-200 pl-10 pr-3 focus-visible:outline-muji-primary" /></div>
         <button type="submit" className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-blue-700 hover:bg-gray-50"><MapPin className="h-5 w-5" aria-hidden="true" />{homeText('map')}</button>
       </form>
-      {mapItems.length > 0 && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">{homeText('mapFailed')}</p>}><Suspense fallback={<p role="status">{homeText('mapLoading')}</p>}><div aria-label={homeText('mapPreview')}><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview previewNotice={homeText('mapPosition')} onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
+      {showMap && <MapFallbackBoundary fallback={<p role="status" className="rounded-md bg-amber-50 p-3 text-amber-900">{homeText('mapFailed')}</p>}><Suspense fallback={<p role="status">{homeText('mapLoading')}</p>}><div aria-label={homeText(mapItems.length ? 'mapPreview' : 'emptyMapPreview')}><HomeMap items={mapItems} external={[]} frame={mapFrame} visible preview previewNotice={homeText(mapItems.length ? 'mapPosition' : 'emptyMapNotice')} onViewport={() => {}} onSelect={selection => navigate(exploreLink(undefined, selection.id))} onCluster={() => navigate('/explore')} /></div></Suspense></MapFallbackBoundary>}
       {wishes.length > 0 && <details className="group border-t pt-2"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm focus-visible:outline-muji-primary"><span className="font-semibold">{homeText('question')}</span><span className="text-xs text-gray-500">{homeText('choose')}</span><ChevronDown className="ml-auto h-4 w-4 group-open:rotate-180" aria-hidden="true" /></summary>
       {mapItems.length > 0 && <p className="mt-2 text-xs text-gray-500">{mapText('notice')}</p>}
       <div role="radiogroup" aria-label={homeText('chooseLabel')} className="mt-2 flex gap-3 overflow-x-auto pb-2">

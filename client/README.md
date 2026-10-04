@@ -54,7 +54,7 @@ Published build GET/HEAD resources and all other requests use separate server co
 
 ## Account recovery and shared request limits — 2026-10-03
 
-Account rechecks use the same in-memory Retry-After cooldown as chat and meetups. Expiry alone sends no request; a new explicit recheck is required. Confirmed current401/404 or mismatched identity expires the session, while transport failures keep the last verified identity and original pending operations. Existing abort and account/request generation fences remain in force. Account notices and recheck controls follow Chinese/English with English storage-fault fallback; original names and session/journal data are unchanged.
+Authenticated GET reads under /users/me use an independent in-memory Retry-After cooldown from public browsing, chat and mutations. The server first bounds authentication attempts by IP and verifies the existing live session, then applies a finite per-user read budget; unverified requests cannot borrow it. Expiry alone sends no request; a new explicit recheck is required. Confirmed current401/404 or mismatched identity expires the session, while transport failures keep the last verified identity and original pending operations. Existing abort and account/request generation fences remain in force. Account notices and recheck controls follow Chinese/English with English storage-fault fallback; original names and session/journal data are unchanged.
 
 ## Bilingual chat and meetups — 2026-10-02
 

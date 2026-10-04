@@ -332,3 +332,8 @@ Check a genuine complete zero-match read keeps the baseline map without item mar
 Verify Chinese/English source cards, map/list and detail controls, photo completeness, loaded/failed counts, original order and both source/contact links. Preserve literal source text containing braces and replacement characters, source date/price facts, approved county illustrations and raw independent route reasons. Language or selection changes must not send a request. Imported-complete never means all images loaded.
 
 Verify complete strict public pagination, repeated-cursor and malformed-response rejection, actual transport503 followed by the explicit Reload sources button, paused30-second polling/foreground reads, and Retry-After expiry without automatic recovery. Requests omit credentials and reject writes, use no-store, have one30-second read deadline and abort on departure. A read failure must not claim zero results or remain indefinitely loading. Keep original contact consent/recovery, all32 parity rows, APP and real payment rollout. Check actual deployed UI separately from local injected transport failures; retain new-version Home/Settings visual gates.
+
+### Account read budget isolation — 2026-10-04
+
+- Saturate public data locally and verify authenticated /users/me GET still succeeds; forged credentials remain401 and mutations retain the original data limits. Both verified-user reads and pre-authentication attempts retain500/15min caps, with429 and Retry-After. Existing login/security/write limiters stay active.
+- Public and account frontend cooldowns do not block each other. Waiting never replays an operation; account fallback retains last confirmed identity and an explicit recheck. No production saturation tests, sign-outs or secret logging.

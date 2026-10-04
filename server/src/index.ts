@@ -1,3 +1,4 @@
+import { authenticateToken } from './middleware/auth';
 import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
 import express, { Express, Request, Response } from 'express';
 import { getApiUrl, getClientUrl } from './config/constants';
@@ -40,7 +41,7 @@ import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
 import helmet from 'helmet';
-import { websiteRateLimits } from './middleware/websiteRateLimits';
+import { accountReadBudget, websiteRateLimits } from './middleware/websiteRateLimits';
 
 dotenv.config();
 
@@ -74,6 +75,7 @@ app.use(helmet({
 app.set('trust proxy', 1);
 
 const clientBuildPath = path.join(__dirname, '../../client/dist');
+app.use(accountReadBudget(authenticateToken));
 app.use(...websiteRateLimits(clientBuildPath));
 
 app.use(cors());

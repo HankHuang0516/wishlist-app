@@ -115,13 +115,13 @@ describe('real provider session restoration and isolation', () => {
     fetcher.mockRejectedValue(new Error('offline')); mount(); await screen.findByRole('button', { name: 'Recheck account' });
     expect(screen.getByTestId('identity')).toHaveTextContent('42:舊合成買家:old-fixture');
   });
-  it('shares the origin cooldown with chat and requires a fresh explicit account read after expiry', async () => {
+  it('keeps the account cooldown isolated from chat and requires a fresh explicit account read after expiry', async () => {
     seed(); localStorage.setItem('user-locale', 'en-US'); localStorage.setItem('pending-fixture', 'KEEP');
     let now = Date.now(); vi.spyOn(Date, 'now').mockImplementation(() => now);
     fetcher.mockResolvedValueOnce(new Response('{"errorCode":"RATE_LIMIT_EXCEEDED","error":"SYNTHETIC_PRIVATE_DIAGNOSTIC"}', { status: 429, headers: { 'Retry-After': '120' } })).mockResolvedValue(ok()); mount();
     await screen.findByText(/Account requests are temporarily limited/);
     fireEvent.click(screen.getByRole('button', { name: 'Recheck account' }));
-    await act(async () => { await expect(api('other-fixture', '/chat/conversations')).rejects.toMatchObject({ status: 429, code: 'RATE_LIMIT_COOLDOWN' }); });
+    await act(async () => { await expect(api('other-fixture', '/users/me')).rejects.toMatchObject({ status: 429, code: 'RATE_LIMIT_COOLDOWN' }); });
     expect(fetcher).toHaveBeenCalledTimes(1); expect(readSession(localStorage, getFullApiUrl())?.user.id).toBe(42); expect(localStorage.getItem('pending-fixture')).toBe('KEEP');
     expect(screen.queryByText(/SYNTHETIC_PRIVATE_DIAGNOSTIC/)).not.toBeInTheDocument();
     now += 120_000; await act(async () => {}); expect(fetcher).toHaveBeenCalledTimes(1);

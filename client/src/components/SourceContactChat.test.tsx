@@ -63,10 +63,10 @@ describe('source contact inside the original Explore and Chat',()=>{
   render(<MemoryRouter initialEntries={['/explore']}><Routes><Route path="/explore" element={<ExplorePage/>}/><Route path="/chat" element={<ChatPage/>}/></Routes></MemoryRouter>);
   const fallback=locale==='zh-TW'?'售價待詢問':'Ask about price';
   await screen.findByText(fallback);expect(screen.queryByText(raw)).toBeNull();
-  fireEvent.click(screen.getByRole('button',{name:'查看合成測試來源商品商品詳情'}));
+  fireEvent.click(screen.getByRole('button',{name:locale==='zh-TW'?'查看合成測試來源商品商品詳情':'View item details: 合成測試來源商品'}));
   const detail=await screen.findByRole('dialog',{name:locale==='zh-TW'?'外部來源商品':'External-source item'});
   expect(within(detail).getByText(fallback)).toBeTruthy();
-  fireEvent.click(within(detail).getByRole('link',{name:'聯絡賣家'}));
+  fireEvent.click(within(detail).getByRole('link',{name:locale==='zh-TW'?'聯絡賣家':'Contact seller'}));
   const chat=await screen.findByRole('dialog',{name:locale==='zh-TW'?'Wishlist AI 聊聊':'Wishlist AI chat'});
   expect(within(chat).getByText(fallback)).toBeTruthy();expect(screen.queryByText(raw)).toBeNull();
   expect(f.fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(0);

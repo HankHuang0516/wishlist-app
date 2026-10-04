@@ -326,3 +326,9 @@ Check Chinese and English guest return paths, inactive service explanations, opt
 ## Homepage empty overview regression
 
 Check a genuine complete zero-match read keeps the baseline map without item markers and offers Explore in both languages. Pending or failed wish reads and incomplete match reads must not claim zero results. Induce actual isolated HTTP503 for each read, then use the original explicit refresh and verify successful recovery. Panning the overview must not search or request location. Keep positive item framing/navigation, original APP and all32 parity rows. Separately inspect the real production desktop/mobile empty state; historical visual scores are not new-version acceptance.
+
+## Retained source exploration and public-map recovery
+
+Verify Chinese/English source cards, map/list and detail controls, photo completeness, loaded/failed counts, original order and both source/contact links. Preserve literal source text containing braces and replacement characters, source date/price facts, approved county illustrations and raw independent route reasons. Language or selection changes must not send a request. Imported-complete never means all images loaded.
+
+Verify complete strict public pagination, repeated-cursor and malformed-response rejection, actual transport503 followed by the explicit Reload sources button, paused30-second polling/foreground reads, and Retry-After expiry without automatic recovery. Requests omit credentials and reject writes, use no-store, have one30-second read deadline and abort on departure. A read failure must not claim zero results or remain indefinitely loading. Keep original contact consent/recovery, all32 parity rows, APP and real payment rollout. Check actual deployed UI separately from local injected transport failures; retain new-version Home/Settings visual gates.

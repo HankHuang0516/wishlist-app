@@ -7,7 +7,7 @@ describe('App', () => {
     beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'zh-TW'); window.history.replaceState(null, '', '/'); });
     afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
     it('retains the independently published source-lead route within the recoverable shared shell', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({items:[],nextCursor:null}) } as Response);
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({enabled:true,items:[],nextCursor:null}) } as Response);
         window.history.replaceState(null,'','/source-leads?id=11111111-1111-4111-8111-111111111111');
         render(<App />);
         await screen.findByRole('heading',{name:'來源線索地圖'});

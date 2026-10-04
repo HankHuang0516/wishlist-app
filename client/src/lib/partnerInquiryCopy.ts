@@ -1,7 +1,8 @@
 import { getDisplayLocale } from '../utils/localization';
 const english={
+ 'EClaw 合作名片':'EClaw partnership contact card',
  '提出合作意向':'Submit a partnership inquiry',
- '先討論雙北 3–10 件在售二手商品。提交本表不構成商品、圖文或 AI 處理授權；取得逐件許可後才私人預檢與審核。':'Start with 3–10 second-hand items currently for sale in Taipei or New Taipei. This inquiry does not authorize item, image, text or AI processing. Each item needs permission before private checks and review.',
+ '歡迎全台二手商品來源洽談，先從雙北 3–10 件在售商品小量試點。提交本表不構成商品、圖文或 AI 處理授權；取得逐件許可後才私人預檢與審核。':'We welcome second-hand sources across Taiwan, starting with a small pilot of 3–10 items currently for sale in Taipei or New Taipei. This inquiry does not authorize item, image, text or AI processing. Each item needs permission before private checks and review.',
  '正在安全讀取原合作操作…':'Reading the original partnership operation safely…',
  '尚未安全讀取恢復資料，暫停送出；請重試讀取。':'Recovery data could not be read safely. Sending is paused. Retry reading.',
  '無法安全保存原操作；沒有送出。請保留內容並重試讀取。':'The original operation could not be saved safely. Nothing was sent. Keep your content and retry reading.',

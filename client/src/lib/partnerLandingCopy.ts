@@ -1,9 +1,10 @@
 import { getDisplayLocale } from '../utils/localization';
 
 const english = {
+  'EClaw 合作名片': 'EClaw partnership contact card',
   '供給合作｜Wishlist.ai': 'Supply partnerships | Wishlist.ai',
   '合作原則': 'Partnership principles',
-  '雙北二手商品合作試點': 'Taipei and New Taipei second-hand pilot',
+  '全台二手商品合作招募，先雙北小量試點': 'Taiwan-wide second-hand partnerships, starting with a small Taipei and New Taipei pilot',
   '讓好物，遇見正在尋找它的人。': 'Help good things find the people looking for them.',
   'Wishlist.ai 結合願望清單與附近商品探索，邀請二手店、寄賣夥伴和公共拍賣單位， 一起測試有來源、可更新、能導回原站的商品曝光方式。': 'Wishlist.ai connects wishlists with nearby item discovery. We invite second-hand shops, consignment partners and public auction organizations to test listings with clear sources, updates and links back to the original site.',
   '查看合作方式': 'Explore the process',
@@ -27,7 +28,7 @@ const english = {
   '可追蹤的商品 ID 與原始商品連結': 'A traceable item ID and original item link',
   '商品名稱、實際交易方式與明示價格': 'Item name, actual transaction method and stated price',
   '可展示的原圖／縮圖及其使用授權': 'Displayable original images or thumbnails and permission to use them',
-  '雙北行政區、最後確認在售時間與失效時間': 'Taipei or New Taipei district, last verified availability and expiry',
+  '商品實際所在縣市／行政區／門市、最後確認在售時間與失效時間': 'Actual county or city, district and shop, last verified availability and expiry',
   '售出、下架或撤回時的更新方式': 'How sold, removed or withdrawn items are updated',
   '如為競標，請另提供起標價、目前出價、結標時間與狀態；我們會先確認是否適合以「外站競標」呈現，不套用一般固定售價刊登。': 'For auctions, also provide the starting bid, current bid, closing time and status. We first review whether an external auction presentation is appropriate, rather than using an ordinary fixed-price listing.',
   '歡迎先討論一小批商品': 'Let’s discuss a small set of items',

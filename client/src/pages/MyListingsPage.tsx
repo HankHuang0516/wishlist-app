@@ -10,8 +10,8 @@ import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import DateField from '../components/DateField';
 import ListingEditForm from '../components/ListingEditForm';
 import MarketplaceDialog from '../components/MarketplaceDialog';
-import { parseListingEditDraft } from '../lib/listingEditDraft';
-import type { ListingEditFields } from '../lib/listingEditDraft';
+import { listingFields, parseListingEditDraft, sameEditFields, serializeListingEditDraft } from '../lib/listingEditDraft';
+import type { ListingEditDraft, ListingEditFields } from '../lib/listingEditDraft';
 import { Button } from '../components/ui/Button';
 import { getFullApiUrl } from '../config';
 import { pendingRequestKey, privatePendingStore } from '../lib/webPendingStore';
@@ -30,7 +30,8 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   const [tab, setTab] = useState<ManagementTab>('在售'), [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState(''), [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<string | null>(null), [detailId, setDetailId] = useState<string | null>(null);
-  const [editSeed, setEditSeed] = useState<ListingEditFields | undefined>();
+  const [preparedEdit, setPreparedEdit] = useState<{raw: string; draft: ListingEditDraft} | undefined>();
+  const [competingDraft, setCompetingDraft] = useState<{raw: string; fields: ListingEditFields} | null>(null);
   const [expiryId, setExpiryId] = useState<string | null>(null), [date, setDate] = useState('');
   const [pendingRaw, setPendingRaw] = useState<string | null>(null), [journal, setJournal] = useState<ManagementJournal | null>(null);
   const [outcome, setOutcome] = useState<ManagementResult | null>(null), [latest, setLatest] = useState<ManagedListing | null>(null);
@@ -72,7 +73,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
       const key = await pendingRequestKey(getFullApiUrl(), userId, 'listing-management');
       const raw = await privatePendingStore.get(key), value = raw ? await parseManagementJournal(raw) : null;
       if (!isCurrent(epoch)) return;
-      pendingKey.current = key; setPendingRaw(raw); setJournal(value); setOutcome(null); setLatest(null); setCancelRequested(false); setPendingLoaded(true);
+      pendingKey.current = key; setPendingRaw(raw); setJournal(value); setOutcome(null); setLatest(null); setCompetingDraft(null); setCancelRequested(false); setPendingLoaded(true);
       if (raw) setIssue(t("有原商品操作待查核；重開只讀取回執，不會自動重送。"));
       if (raw && checkReceipt) {
         running.current = true; setBusy(true);
@@ -92,7 +93,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     const epoch = generation.current;
     const saved = await parseManagementJournal(raw);
     if (!isCurrent(epoch)) return;
-    setOutcome(result); setLatest(null); setCancelRequested(false);
+    setOutcome(result); setLatest(null); setCompetingDraft(null); setCancelRequested(false);
     setNotice(result.state === 'APPLIED' ? t("原商品操作已確認完成；不會再次套用。") : result.state === 'CONFLICT' ? t("原商品操作未套用；請比較最新資料與您的修改。") : t("原商品操作已取消；此識別碼不會再套用。"));
     try {
       const current = parse(await api<unknown>(token, `/listings/${saved.body.listingId}`));
@@ -168,21 +169,39 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     } catch { if (isCurrent(epoch)) setIssue(t("仍未取得原操作回執；紀錄保留，不會自動重送。")); }
     finally { if (isCurrent(epoch)) { running.current = false; setBusy(false); } }
   }
-  async function clearPending(keepEdit = false) {
+  async function clearPending(keepEdit = false, reviewedDraft?: string) {
     const epoch = generation.current;
     if (!isCurrent(epoch) || running.current || !pendingRaw || !journal || !outcome || !pendingLoaded) return;
+    if (keepEdit && (outcome.state !== 'CONFLICT' || !latest || journal.body.kind !== 'EDIT' || !['DRAFT','ACTIVE','RESERVED'].includes(latest.status) || managementTab(latest) === '已失效')) return;
     running.current = true; setBusy(true); setIssue('');
     try {
-      if (!await privatePendingStore.clear(pendingKey.current, pendingRaw)) throw new Error();
-      if (!isCurrent(epoch)) return;
       if (keepEdit && latest && journal.body.kind === 'EDIT') {
         const changes = journal.body.changes;
-        setEditSeed({ title: String(changes.title), description: typeof changes.description === 'string' ? changes.description : latest.description ?? '', price: typeof changes.price === 'number' ? String(changes.price) : latest.price === null ? '' : String(latest.price) }); setEditing(latest.id);
+        const fields = { title: String(changes.title), description: typeof changes.description === 'string' ? changes.description : latest.description ?? '', price: typeof changes.price === 'number' ? String(changes.price) : latest.price === null ? '' : String(latest.price) };
+        const draftKey = await pendingRequestKey(getFullApiUrl(), userId, 'listing-edit.' + latest.id);
+        const raw = await privatePendingStore.get(draftKey);
+        const draft = raw ? parseListingEditDraft(raw, latest.id) : null;
+        if (!isCurrent(epoch)) return;
+        if (reviewedDraft !== undefined && raw !== reviewedDraft || reviewedDraft === undefined && draft && !sameEditFields(fields, draft.fields)) {
+          setCompetingDraft(raw && draft ? {raw, fields: draft.fields} : null);
+          setIssue(t("本機草稿與原操作不同；請比較後選擇，兩份紀錄目前都保留。"));
+          return;
+        }
+        const nextRaw = serializeListingEditDraft(latest.id, latest.version, listingFields(latest), fields);
+        if (!isCurrent(epoch)) return;
+        await privatePendingStore.handoffListingEdit(pendingKey.current, pendingRaw, draftKey, raw, nextRaw);
+        if (!isCurrent(epoch)) return;
+        setPreparedEdit({raw: nextRaw, draft: parseListingEditDraft(nextRaw, latest.id)}); setEditing(latest.id);
         setTab(managementTab(latest));
-      } else { setEditing(null); setExpiryId(null); }
+      } else {
+        if (!await privatePendingStore.clear(pendingKey.current, pendingRaw)) throw new Error();
+        if (!isCurrent(epoch)) return;
+        setEditing(null); setExpiryId(null);
+      }
+      setCompetingDraft(null);
       setPendingRaw(null); setJournal(null); setOutcome(null); setLatest(null); setCancelRequested(false);
       setNotice(keepEdit ? t("已保留您的修改；尚未送出。請逐欄比較後明確儲存，會使用最新版本與新操作識別碼。") : t("已讀原操作結果並清理此份本機紀錄；沒有重送。"));
-    } catch { if (isCurrent(epoch)) { setPendingLoaded(false); setIssue(t("紀錄已被另一分頁更新或清理；請重新載入恢復，不會清除其他操作。")); } }
+    } catch { if (isCurrent(epoch)) { setPendingLoaded(false); setIssue(keepEdit ? t("無法安全保存原操作修改；未清理原紀錄或取代草稿，請重新讀取比較。") : t("紀錄已被另一分頁更新或清理；請重新載入恢復，不會清除其他操作。")); } }
     finally { if (isCurrent(epoch)) { running.current = false; setBusy(false); } }
   }
   function statusAction(item: ManagedListing, action: 'reserve' | 'release' | 'sold' | 'remove', _next: ManagedListing['status'], label: string) {
@@ -237,6 +256,12 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         </div><div className="rounded-lg bg-gray-50 p-3"><h3 className="font-semibold">{t("後台最新商品資料（只讀）")}</h3>
           {latest ? <><p>{t("版本：")}{latest.version}{outcome?.appliedVersion && latest.version > outcome.appliedVersion ? t(" · 原操作完成後又有更新") : ''}</p><p>{t("商品名稱：")}{latest.title}</p><p className="whitespace-pre-wrap">{t("商品說明：")}{latest.description ?? t("未填")}</p><p>{t("售價（NT$）：")}{latest.price ?? t("未填")}</p><p>{t("狀態：")}{managementStatusText(latest, now)}</p><p>{t("失效日期（台灣時間）：")}{latest.expiresAt?.slice(0,10) ?? t("未設定")}</p>{journal.body.kind === 'MAP' && <p>{latest.mapVisibleUntil && Date.parse(latest.mapVisibleUntil)>now ? t("地圖顯示至 {time}；不會自動續期。",{time:new Date(latest.mapVisibleUntil).toLocaleString()}) : t("目前不在地圖顯示；需手動確認這次顯示。")}</p>}</> : <p>{t("尚未核對；不會用目前卡片推定原操作成功。")}</p>}
         </div></div>
+      {competingDraft && <section aria-label={t("原操作修改與另一份本機草稿比較")} className="rounded-lg border bg-amber-50 p-3 space-y-3 text-sm break-words">
+        <h3 className="font-semibold">{t("另一份已保存的本機草稿")}</h3>
+        <p>{t("商品名稱：")}{competingDraft.fields.title}</p><p className="whitespace-pre-wrap">{t("商品說明：")}{competingDraft.fields.description || t("未填")}</p><p>{t("售價（NT$）：")}{competingDraft.fields.price || t("未填")}</p>
+        <p>{t("取代只會保存上方的原操作修改為本機草稿，不會更新後台商品。草稿再次變動時會停止，需重新比較。")}</p>
+        <div className="flex flex-wrap gap-2"><Button disabled={busy || !pendingLoaded} onClick={() => void clearPending(true, competingDraft.raw)}>{t("保留原操作修改，取代這份本機草稿")}</Button><Button variant="outline" disabled={busy} onClick={() => setCompetingDraft(null)}>{t("先保留兩份紀錄")}</Button></div>
+      </section>}
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy || !pendingLoaded} onClick={() => void recover()}>{t("只查核原操作回執與最新商品")}</Button>
         {!outcome ? <><Button variant="outline" disabled={busy || !pendingLoaded} onClick={() => void pendingAction('retry')}>{t("明確重試同一原操作")}</Button>
           {!cancelRequested ? <Button variant="outline" disabled={busy || !pendingLoaded} onClick={() => setCancelRequested(true)}>{t("取消原操作…")}</Button> : <><span>{t("若已完成會保留真實結果；取消不會刪除商品。")}</span><Button disabled={busy || !pendingLoaded} onClick={() => void pendingAction('abandon')}>{t("確認取消此原操作")}</Button><Button variant="outline" disabled={busy} onClick={() => setCancelRequested(false)}>{t("返回查核")}</Button></>}
@@ -256,7 +281,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
           {item.publishedAt && <><Button variant="outline" onClick={() => void share(item)}>{t("分享連結")}</Button><Link className="p-2 text-blue-700 underline" to={`/listings/${item.id}?v=${item.version}`}>{t("商品網址")}</Link></>}
           {['ACTIVE','RESERVED'].includes(item.status) && !expired && <><Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,true)}>{t("手動顯示地圖一小時")}</Button>{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil)>now && <Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,false)}>{t("停止地圖顯示")}</Button>}</>}
-          {editable && <Button variant="outline" disabled={blocked} onClick={() => { setEditSeed(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
+          {editable && <Button variant="outline" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
           {item.status === 'ACTIVE' && !expired && detailId === item.id && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
           {item.status === 'RESERVED' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}
           {['ACTIVE', 'RESERVED'].includes(item.status) && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'sold', 'SOLD', t("標記售出"))}>{t("標記售出")}</Button>}
@@ -265,7 +290,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         </div>
         {expired && <p className="text-sm text-gray-600">{t("此商品已失效；請先延長期限，再編輯或繼續刊登。")}</p>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <p className="text-sm text-gray-600">{t("分享連結仍可複製，但其他人只會看到「已停止刊登」。")}</p>}
-        {editing === item.id && <ListingEditForm key={item.id} item={item} token={token} userId={userId} locked={blocked} seed={editSeed}
+        {editing === item.id && <ListingEditForm key={`${item.id}:${preparedEdit?.draft.revision ?? 'normal'}`} item={item} token={token} userId={userId} locked={blocked} preparedDraft={preparedEdit}
           onClose={() => setEditing(null)} onSave={changes => mutate(item, 'EDIT', changes)}
           beforeApprove={async () => {
             const epoch = generation.current;

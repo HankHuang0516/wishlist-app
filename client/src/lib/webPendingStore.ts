@@ -143,6 +143,31 @@ function createEncryptedPendingStore(dbName:string,factory:IDBFactory,crypt:Cryp
     }),
   };
   return { ...store,
+    // Transfer one reviewed conflict into its owned editable draft atomically.
+    // Separate draft-save and journal-clear transactions can lose the proposal.
+    handoffListingEdit: (operationKey: string, expectedOperation: string, draftKey: string, expectedDraft: string | null, draftBody: string) => wrap(async () => {
+      validBody(expectedOperation); validBody(draftBody); if (expectedDraft !== null) validBody(expectedDraft);
+      const scope = scopeForKey(operationKey);
+      if (!operationKey.endsWith('.listing-management') || !/\.listing-edit\.[0-9a-f-]{36}$/.test(draftKey) || scopeForKey(draftKey) !== scope) throw new PendingStoreError();
+      const [operation, draft] = await Promise.all([read(operationKey), read(draftKey)]);
+      if (operation.erased || draft.erased || !operation.entry ||
+          await decode(operationKey, operation.entry, operation.secret) !== expectedOperation ||
+          (draft.entry ? await decode(draftKey, draft.entry, draft.secret) : null) !== expectedDraft) throw new PendingStoreError();
+      const iv = crypt.getRandomValues(new Uint8Array(12));
+      const cipher = await crypt.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(draftKey) }, operation.secret!, new TextEncoder().encode(draftBody));
+      const db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readwrite', { durability: 'strict' }), done = completed(tx);
+      const table = tx.objectStore('pending');
+      const [currentOperation, currentDraft, erased, secret] = await Promise.all([
+        request<Entry | undefined>(table.get(operationKey)), request<Entry | undefined>(table.get(draftKey)),
+        request(tx.objectStore('erased').get(scope)), request(tx.objectStore('keys').get(scope)),
+      ]);
+      if (erased || !secret || currentOperation?.revision !== operation.entry.revision || currentDraft?.revision !== draft.entry?.revision) {
+        tx.abort(); await done; throw new PendingStoreError();
+      }
+      table.put({ revision: crypt.randomUUID(), iv, cipher } satisfies Entry, draftKey);
+      table.delete(operationKey);
+      await done;
+    }),
     clearComposerDraft: (key:string,body:string) => wrap(async()=>{
       if(!/\.listing-compose\.[0-9a-f-]{36}$/.test(key))throw new PendingStoreError();
       return store.clear(key,body);

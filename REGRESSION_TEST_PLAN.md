@@ -1,5 +1,12 @@
 # Wishlist.ai Regression Test Plan
 
+### Account security page confirmation
+
+- Chinese and English confirmations state the original effects on all sessions and personal API keys. Opening, cancelling, Escape and closing never send a security request, store a password or sign out. Focus returns to the original action.
+- While confirming, original security inputs and sign-out/deletion actions are locked. A changed session discards the unsubmitted payload; a pending reload disables submission and still permits cancellation. Each explicit confirmation sends at most one original operation.
+- In an isolated synthetic environment, verify wrong current password leaves the session valid, confirmed revocation signs out, and a committed lost reply performs only the original read-only session probe. Observe real browser results as well as unit/HTTP results. Changing a credential through browser UI still requires the human to enter and submit the new password.
+- Verify the published bilingual dialog by read-only open/cancel operations. Do not change the real QA account password or revoke its sessions as production verification.
+
 ### Public friend wishlist target identity
 
 - Actual authenticated social routes reject numeric suffixes, decimals, exponent syntax, leading zeros, zero, negative, whitespace and overflow with INVALID_INPUT / 400; no public-account aliasing. Anonymous requests remain 401.

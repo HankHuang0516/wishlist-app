@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, User as UserIcon, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t } from "../utils/localization";
@@ -26,8 +26,9 @@ export default function SettingsPage() {
 }
 
 function SettingsSession() {
-    const { token, user } = useAuth();
+    const { token, user, redirectingToLogin } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const settings = useSettingsProfile(token, user?.id);
     const installation = useWebAppInstall();
     const { profile, loading, savedField, update: handleUpdate } = settings;
@@ -41,7 +42,9 @@ function SettingsSession() {
     useEffect(() => {
         let current = true;
         const controller = new AbortController();
-        if (!token) navigate('/login?next=%2Fsettings');
+        if (!token) {
+            if (!redirectingToLogin && location.pathname === '/settings') navigate('/login?next=%2Fsettings');
+        }
         else void (async () => {
             try {
                 const res = await fetch(`${API_URL}/users/me/ai-usage`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
@@ -51,7 +54,7 @@ function SettingsSession() {
             } catch { /* unavailable is not zero */ }
         })();
         return () => { current = false; controller.abort(); };
-    }, [token, navigate]);
+    }, [token, navigate, location.pathname, redirectingToLogin]);
 
     const [changingLang, setChangingLang] = useState(false);
     const [securityBusy, setSecurityBusy] = useState(false);

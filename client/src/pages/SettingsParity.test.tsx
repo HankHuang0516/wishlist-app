@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { AuthContext, AuthProvider } from '../context/AuthContext';
+import { persistSession, readSession } from '../lib/authSession';
+import { getFullApiUrl } from '../config';
 import SettingsPage from './SettingsPage';
 import { parseProfileJournal } from '../lib/profileWeb';
 import { privatePendingStore, PendingStoreError } from '../lib/webPendingStore';
@@ -15,6 +17,24 @@ const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 
   isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
+function LoginDestination() { const route=useLocation();return <output aria-label="Login destination">{route.pathname+route.search}</output>; }
+const routedSettings=()=> <MemoryRouter initialEntries={['/settings']}><AuthProvider><Routes><Route path="/settings" element={<SettingsPage/>}/><Route path="/login" element={<LoginDestination/>}/></Routes></AuthProvider></MemoryRouter>;
+describe('actual settings and auth provider security navigation',()=>{
+  it.each(['sessions-revoked','security-unconfirmed'])('keeps the %s result after the authenticated settings session unmounts',async notice=>{
+    persistSession(localStorage,{token:'fixture-session',user:{id:19,phoneNumber:'fixture'}},getFullApiUrl());localStorage.setItem('pending-fixture','KEEP');let revoked=false;
+    const fetcher=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith('/sessions/revoke')){revoked=true;return notice==='sessions-revoked'?ok({changed:true,requiresLogin:true}):{ok:false,status:503,json:async()=>({errorCode:'UNAVAILABLE'})};}
+      if(revoked && url.endsWith('/users/me'))return {ok:false,status:401,json:async()=>({errorCode:'UNAUTHORIZED'})};
+      return ok(profile);
+    });vi.stubGlobal('fetch',fetcher);render(routedSettings());await screen.findByLabelText('暱稱');fireEvent.click(screen.getByRole('button',{name:'帳號安全',exact:true}));fireEvent.change(screen.getByLabelText('目前密碼'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'撤銷所有裝置登入',exact:true}));
+    expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/sessions/revoke'))).toHaveLength(0);fireEvent.click(screen.getByRole('button',{name:'確認撤銷登入',exact:true}));
+    await waitFor(()=>expect(screen.getByLabelText('Login destination')).toHaveTextContent('/login?security='+notice));
+    expect(readSession(localStorage,getFullApiUrl())).toBeNull();expect(localStorage.getItem('pending-fixture')).toBe('KEEP');expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/sessions/revoke'))).toHaveLength(1);
+  });
+  it('still returns an anonymous settings visit to login with its settings destination',async()=>{
+    vi.stubGlobal('fetch',vi.fn());render(routedSettings());await waitFor(()=>expect(screen.getByLabelText('Login destination')).toHaveTextContent('/login?next=%2Fsettings'));expect(fetch).not.toHaveBeenCalled();
+  });
+});
 it('freezes language reload during AI instruction acquisition without dispatching when advanced is closed',async()=>{
   let finish!:(value:unknown)=>void;const fetcher=vi.fn(async(url:string,init?:RequestInit)=>url.endsWith('/ai-prompt')?new Promise(resolve=>{finish=resolve;}):ok(url.endsWith('/feedback/test')?{userId:19,canSend:false}:profile));vi.stubGlobal('fetch',fetcher);
   render(view());await screen.findByLabelText('暱稱');expect(fetcher.mock.calls.some(([url])=>url.endsWith('/ai-prompt'))).toBe(false);const advanced=screen.getByText('進階功能').closest('details')!;advanced.open=true;fireEvent(advanced,new Event('toggle'));fireEvent.click(await screen.findByRole('button',{name:'一鍵複製 AI 指令'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'English'})).toBeDisabled();await act(async()=>finish({ok:false,status:503,json:async()=>({errorCode:'API_INTEGRATION_UNAVAILABLE'})}));await screen.findByText('結果未確認；重開不會自動建立或複製。');expect(screen.getByRole('button',{name:'English'})).toBeEnabled();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
@@ -144,6 +164,10 @@ describe('settings language preserves recoverable operations and unsent drafts',
     const reloads=preventReload();render(view());await screen.findByRole('heading',{name:'Personal profile'});fireEvent.click(screen.getByRole('button',{name:'Account security'}));
     fireEvent.change(screen.getByLabelText('Current password'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'Revoke all device sessions'}));
     expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(reloads).toHaveLength(0);
+    expect(screen.getByRole('dialog')).toHaveTextContent('including this device');expect(finish).toBeUndefined();
+    fireEvent.click(screen.getByRole('button',{name:'Confirm session revocation',exact:true}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(window.confirm).not.toHaveBeenCalled();
     await act(async()=>finish({ok:false,status:401,json:async()=>({errorCode:'INVALID_CREDENTIALS'})}));await screen.findByText('The current password is incorrect. No changes are confirmed.');
     expect(screen.getByRole('button',{name:'繁體中文'})).toBeEnabled();expect(screen.getByLabelText('Current password')).toHaveValue('');
   });

@@ -13,6 +13,7 @@ interface AuthContextType {
   logout: () => void;
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
+  redirectingToLogin?: boolean;
 }
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 function restore(): { session: AuthSession | null; notice: AuthNotice } {
@@ -21,6 +22,7 @@ function restore(): { session: AuthSession | null; notice: AuthNotice } {
 }
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initial] = useState(restore), [session, setSession] = useState(initial.session), [notice, setNotice] = useState(initial.notice);
+  const [redirectingToLogin, setRedirectingToLogin] = useState(false);
   const current = useRef(session), generation = useRef(0), request = useRef(0), active = useRef(true), controller = useRef<AbortController | null>(null);
   const navigate = useNavigate(), location = useLocation(), route = useRef(location);
   const navigation = useRef(navigate); navigation.current = navigate;
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     current.current = next; setSession(next);
   }, []);
   const signOut = useCallback((expired: boolean) => {
+    setRedirectingToLogin(true);
     replace(null);
     try {
       const clean = persistSession(localStorage, null, getFullApiUrl());
@@ -41,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const next = authReturnTo(route.current.pathname + route.current.search);
     navigation.current(expired ? '/login?next=' + encodeURIComponent(next) : '/login', { replace: true });
   }, [replace]);
+  useEffect(() => { if (location.pathname === '/login') setRedirectingToLogin(false); }, [location.pathname]);
   const login = useCallback((token: string, user: AuthUser, returnTo: AuthReturnTo = '/dashboard') => {
     const next = authSession(token, user);
     let clean: boolean;
@@ -91,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
   }, [replace, refreshUser]);
-  return <AuthContext.Provider value={{ user: session?.user ?? null, token: session?.token ?? null, login, logout: () => signOut(false), refreshUser, isAuthenticated: Boolean(session) }}>
+  return <AuthContext.Provider value={{ user: session?.user ?? null, token: session?.token ?? null, login, logout: () => signOut(false), refreshUser, isAuthenticated: Boolean(session), redirectingToLogin }}>
     {notice && <div role="status" className="m-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm"><p>{authNotice(notice)}</p>{session && <button className="mt-2 min-h-11 rounded-xl border px-4" onClick={() => void refreshUser()}>{authNotice('recheck')}</button>}</div>}
     {children}
   </AuthContext.Provider>;

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { SafeAreaModal } from './SafeAreaModal';
 import * as Crypto from 'expo-crypto';
 import { createApi } from './api';
 import { chatReportBody, chatReportReceipt, CHAT_REPORT_REASONS } from './chatReport';
@@ -53,13 +53,13 @@ export function ChatReportSheet({ api, apiUrl, userId, roomId, reportedUserId, m
     finally { running.current = false; if (alive.current) setBusy(false); }
   }
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled || busy} style={[s.button, (disabled || busy) && s.disabled]} onPress={action}><Text style={s.buttonText}>{label}</Text></Pressable>;
-  return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={s.screen}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+  return <SafeAreaModal visible animationType="slide" onRequestClose={onClose} contentStyle={s.screen}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
     <Text style={s.title}>檢舉聊天內容或對方</Text><Text style={s.body}>{messageId ? '這次檢舉會附上你選擇的對方訊息編號。' : '檢舉這段對話中的不當內容或對方。'} 檢舉會交由人工查閱；也可回聊天室封鎖對方停止新訊息。</Text>
     {!receipt && <>{CHAT_REPORT_REASONS.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: reason === value, disabled: !!pending || !ready || busy }} disabled={!!pending || !ready || busy} style={s.option} onPress={() => setReason(value)}><Text style={s.body}>{reason === value ? '●' : '○'} {label}</Text></Pressable>)}
       <TextInput accessibilityLabel="聊天檢舉補充說明" placeholder="補充說明（選填，最多 2000 字）" maxLength={2000} multiline editable={!pending && ready && !busy} value={details} onChangeText={setDetails} style={s.input} />
       {button(pending ? '重試原檢舉' : '送出檢舉', () => void submit(), !ready)}{pending && button('只查核原收件', () => void verify())}{!ready && button('重試恢復', () => void restore())}</>}
     {!!receipt && <Text accessibilityRole="alert" style={s.body}>已收件，收件編號：{receipt}。由人工查閱；尚不代表已移除內容或封鎖對方。</Text>}
     {!!issue && <Text accessibilityRole="alert" style={s.error}>{issue}</Text>}{busy && <ActivityIndicator />}{button(receipt ? '完成，返回聊天' : '返回聊天', onClose)}
-  </ScrollView></SafeAreaView></Modal>;
+  </ScrollView></SafeAreaModal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, content: { padding: iosSpacing.lg, gap: iosSpacing.md }, title: { ...iosType.title2, color: iosColors.label }, body: { ...iosType.body, color: iosColors.label }, option: { minHeight: 48, justifyContent: 'center' }, input: { ...iosType.body, color: iosColors.label, minHeight: 110, backgroundColor: iosColors.surface, borderRadius: iosRadius.control, padding: iosSpacing.md }, button: { minHeight: 48, backgroundColor: iosColors.tint, borderRadius: iosRadius.control, alignItems: 'center', justifyContent: 'center', padding: iosSpacing.sm }, buttonText: { ...iosType.headline, color: iosColors.white }, disabled: { opacity: 0.4 }, error: { ...iosType.body, color: iosColors.danger } });

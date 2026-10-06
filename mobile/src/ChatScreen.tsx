@@ -2,8 +2,9 @@ import { SourceLeadInquiry, type SourceChatContext } from './SourceLeadExplorer'
 import { ChatReportSheet } from './ChatReportSheet';
 import { ChatMessageBubble } from './ChatPresentation';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
+import { SafeAreaModal } from './SafeAreaModal';
+import { ChatInboxList, type SourceInquiryThread } from './ChatInboxList';
 import * as Crypto from 'expo-crypto';
 import { Ionicons } from '@expo/vector-icons';
 import { ApiError, createApi } from './api';
@@ -23,7 +24,7 @@ function ChatListingPhoto({ room, apiUrl, token }: { room: ChatRoomRecord; apiUr
 }
 
 export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange, activeSourceChat, onSourceChatChange }: Props) {
-  const [sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceChatContext}[]>([]),[sourceError,setSourceError]=useState(''),[sourceCursor,setSourceCursor]=useState<string|null>(null);
+  const [sourceThreads,setSourceThreads]=useState<SourceInquiryThread[]>([]),[sourceError,setSourceError]=useState(''),[sourceCursor,setSourceCursor]=useState<string|null>(null);
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const sequence = useRef(0); const alive = useRef(true); const loading = useRef(false);
   async function load(next?: string) {
@@ -44,19 +45,17 @@ export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange
   }
   useEffect(()=>{void loadSources();},[api,userId,activeSourceChat]);
   useEffect(() => { alive.current = true; void load(); const timer = setInterval(() => { if (AppState.currentState === 'active' && !activeRoom) void load(); }, 30_000); return () => { alive.current = false; sequence.current++; loading.current = false; clearInterval(timer); }; }, [api, userId, activeRoom]);
-  return <View style={s.screen}><View style={s.inboxHeader}><Text style={s.heading}>聊天與面交</Text><Text style={s.inboxSubtitle}>與買家或賣家聯繫，討論商品細節並約面交。</Text>{busy && <ActivityIndicator style={s.inboxActivity} />}</View>{!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    <View style={s.list}><Text style={s.heading}>Wishlist AI 代問</Text>{sourceThreads.map(t=><Pressable key={t.id} accessibilityRole="button" style={s.inboxCard} onPress={()=>onSourceChatChange?.(t.context)}><View style={s.inboxCardBody}><Text style={s.inboxTitle}>{t.context.title}</Text><Text style={s.inboxPreview}>Wishlist AI · {t.state==='WAITING_ROUTE'?'待核實原賣家，未送出':t.state==='DELIVERED'?'已代轉，等待賣家回覆':t.state==='CANCELLED'?'已取消':'查看問題與下一步'}</Text></View></Pressable>)}{!!sourceError&&<Text accessibilityRole="alert">{sourceError}</Text>}{sourceCursor&&<Pressable onPress={()=>void loadSources(sourceCursor)}><Text>載入較早代問</Text></Pressable>}<Pressable onPress={()=>void loadSources()}><Text>更新代問收件</Text></Pressable></View><FlatList data={rooms} keyExtractor={room => room.id} contentContainerStyle={[s.list, !rooms.length && s.emptyList]} renderItem={({ item }) => <Pressable accessibilityRole="button" accessibilityLabel={`${item.listing.title}，與${(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || '商品聯絡人'}聊天${item.unreadCount ? `，${item.unreadCount} 則未讀` : ''}`} style={s.inboxCard} onPress={() => onRoomChange(item.id)}>
-      <ChatListingPhoto room={item} apiUrl={apiUrl} token={token} />
-      <View style={s.inboxCardBody}><View style={s.inboxCardTop}><Text numberOfLines={1} style={s.inboxTitle}>{item.listing.title}</Text><Text style={s.inboxTime}>{new Date(item.lastMessageAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</Text></View>
-        <Text numberOfLines={1} style={s.inboxContact}>與 {(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || (item.archived ? '已移除的帳號' : '商品聯絡人')} · {listingPrice(item)}</Text>
-        <Text numberOfLines={1} style={s.inboxPreview}>{item.archived ? '已封存 · 僅供查看' : item.blocked ? '已封鎖 · 歷史仍可查看' : !item.listingAvailable ? '商品已停止刊登 · 歷史仍可查看' : item.lastMessageText || '開始討論這件商品'}</Text>
-      </View>{item.unreadCount > 0 && <View style={s.unreadDot} accessibilityLabel={`${item.unreadCount} 則未讀`} />}</Pressable>} ListEmptyComponent={!busy && !error ? <View style={s.empty}><View style={s.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={40} color={iosColors.tertiaryLabel} /></View><Text style={s.emptyTitle}>其他商品尚無聊天</Text><Text style={s.emptyDescription}>當有買家或賣家聯繫時，對話會顯示在這裡。</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} ListFooterComponent={rooms.length ? <View style={s.list}>{cursor && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>載入較早的聊天</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} />
-    {!!activeSourceChat && <Modal visible animationType="slide" onRequestClose={()=>onSourceChatChange?.(null)}><SafeAreaProvider><SourceLeadInquiry key={String(userId)+activeSourceChat.id} api={api} apiUrl={apiUrl} userId={userId} context={activeSourceChat} onBack={()=>onSourceChatChange?.(null)}/></SafeAreaProvider></Modal>}
+  return <View style={s.screen}>
+    <ChatInboxList rooms={rooms} sourceThreads={sourceThreads} apiUrl={apiUrl} token={token} userId={userId}
+      busy={busy} error={error} sourceError={sourceError} cursor={cursor} sourceCursor={sourceCursor}
+      onRoomChange={onRoomChange} onSourceChatChange={onSourceChatChange}
+      onRefresh={() => void load()} onLoadMore={() => { if (cursor) void load(cursor); }}
+      onRefreshSources={() => void loadSources()} onLoadMoreSources={() => { if (sourceCursor) void loadSources(sourceCursor); }} />
+    {!!activeSourceChat && <SafeAreaModal visible animationType="slide" contentStyle={s.screen} onRequestClose={()=>onSourceChatChange?.(null)}><SourceLeadInquiry key={String(userId)+activeSourceChat.id} api={api} apiUrl={apiUrl} userId={userId} context={activeSourceChat} onBack={()=>onSourceChatChange?.(null)}/></SafeAreaModal>}
     {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} token={token} userId={userId} roomId={activeRoom} onClose={() => { onRoomChange(null); void load(); }} />}
   </View>;
 }
 function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props['api']; apiUrl: string; token: string; userId: number; roomId: string; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
   const { fontScale, width } = useWindowDimensions();
   const [reportMessage, setReportMessage] = useState<string | null | undefined>(undefined);
   const [showMeetup, setShowMeetup] = useState(false);
@@ -192,7 +191,7 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
     </View>}
     {!!meetupIssue && <Text accessibilityRole="alert" style={s.meetupIssue}>{meetupIssue}</Text>}
   </View> : null;
-  return <Modal visible animationType="slide" onRequestClose={onClose}><View style={[s.roomScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+  return <SafeAreaModal visible animationType="slide" onRequestClose={onClose} contentStyle={s.roomScreen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <View style={s.roomHeader}><Pressable accessibilityRole="button" accessibilityLabel="返回" style={s.roomBack} onPress={onClose}><Ionicons name="chevron-back" color={iosColors.tint} size={22} /><Text style={s.backText}>返回</Text></Pressable><Text numberOfLines={1} accessibilityLabel={room?.listing.title || '商品聊天'} style={s.roomHeading}>{fontScale >= 1.5 || width < 360 ? '商品聊天' : room?.listing.title || '商品聊天'}</Text><View style={s.roomHeaderActions}><Pressable accessibilityRole="button" accessibilityLabel="更新聊天" disabled={manualRefreshing} style={s.roomRefresh} onPress={() => void refreshByUser()}>{manualRefreshing ? <ActivityIndicator size="small" /> : <Ionicons name="refresh-outline" color={iosColors.tint} size={21} />}</Pressable><Pressable accessibilityRole="button" disabled={busy || !room || room.archived} style={s.roomBlock} onPress={() => void block()}><Text style={s.blockText}>{room?.blockedByMe ? '解除封鎖' : '封鎖'}</Text></Pressable></View></View>
     {room && <View style={s.productContext}><ChatListingPhoto room={room} apiUrl={apiUrl} token={token} /><View style={s.productContextBody}><Text numberOfLines={fontScale >= 1.5 ? 2 : 1} style={s.productTitle}>{room.listing.title}</Text><Text style={s.productPrice}>{listingPrice(room)}{room.listingAvailable ? '' : ' · 已停止刊登'}</Text></View></View>}
     {room && !room.archived && <Pressable accessibilityRole="button" accessibilityLabel="檢舉聊天內容或對方" style={s.chip} onPress={() => setReportMessage(null)}><Text style={s.blockText}>檢舉聊天內容或對方</Text></Pressable>}
@@ -202,21 +201,9 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
     <View style={s.composer}>{pending && <Text style={s.small}>{room?.archived ? '聊天室已封存，待確認訊息不會重新送出。可更新聊天核對先前結果。' : '上一則訊息結果尚未確認，已安全保存；重試不會建立重複訊息。'}</Text>}{!ready && <Pressable accessibilityRole="button" style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復</Text></Pressable>}<View style={s.composerRow}><TextInput testID="商品聊天訊息" accessibilityLabel="商品聊天訊息" accessibilityState={{ disabled: inputDisabled }} placeholder="輸入訊息，預約前請確認商品狀態" value={text} onChangeText={setText} maxLength={2000} multiline editable={!inputDisabled} style={[s.input, s.composerInput]} /><Pressable accessibilityRole="button" accessibilityLabel={pending ? '重試相同訊息' : '傳送'} disabled={busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))} style={[s.sendButton, (busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))) && s.sendDisabled]} onPress={() => void send()}><Ionicons name="send" size={23} color={iosColors.white} /></Pressable></View>{busy && <ActivityIndicator />}</View>
     {reportMessage !== undefined && room && !room.archived && <ChatReportSheet api={api} apiUrl={apiUrl} userId={userId} roomId={roomId} reportedUserId={(room.buyerUserId === userId ? room.sellerUserId : room.buyerUserId)!} messageId={reportMessage} onClose={() => setReportMessage(undefined)} />}
     {showMeetup && room && !room.archived && <MeetupSheet key={room.id} api={api} apiUrl={apiUrl} userId={userId} room={room} onClose={() => { setShowMeetup(false); void refresh(); }} />}
-  </KeyboardAvoidingView></View></Modal>;
+  </KeyboardAvoidingView></SafeAreaModal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, flexDirection: 'row', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.sm, paddingVertical: iosSpacing.xs, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, heading: { ...iosType.title, color: iosColors.label }, title: { ...iosType.headline, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.footnote, color: iosColors.secondaryLabel },
-  inboxHeader: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.lg, paddingBottom: iosSpacing.sm, gap: iosSpacing.xxs },
-  inboxSubtitle: { ...iosType.subheadline, color: iosColors.secondaryLabel },
-  inboxActivity: { position: 'absolute', right: iosSpacing.lg, top: iosSpacing.xl },
-  inboxCard: { minHeight: 88, padding: iosSpacing.sm, borderRadius: iosRadius.card, backgroundColor: iosColors.surface,
-    flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, ...iosShadow },
-  inboxCardBody: { flex: 1, minWidth: 0, gap: iosSpacing.xxs },
-  inboxCardTop: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
-  inboxTitle: { ...iosType.headline, color: iosColors.label, flex: 1 },
-  inboxTime: { ...iosType.footnote, color: iosColors.secondaryLabel },
-  inboxContact: { ...iosType.footnote, color: iosColors.label },
-  inboxPreview: { ...iosType.footnote, color: iosColors.secondaryLabel },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: iosColors.tint },
   photoShell: { width: 56, height: 56, borderRadius: iosRadius.small, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.surfaceSecondary },
   photo: { width: 56, height: 56, borderRadius: iosRadius.small },
   roomScreen: { flex: 1, backgroundColor: iosColors.surface },
@@ -253,11 +240,6 @@ const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.back
   composerInput: { flex: 1 },
   sendButton: { width: minimumTapSize, height: minimumTapSize, borderRadius: minimumTapSize / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.tint },
   sendDisabled: { opacity: 0.45 },
-  list: { padding: iosSpacing.md, gap: iosSpacing.sm }, emptyList: { flexGrow: 1, justifyContent: 'center' },
-  empty: { alignItems: 'center', gap: iosSpacing.md, paddingHorizontal: iosSpacing.xl },
-  emptyIcon: { width: 76, height: 76, borderRadius: 24, backgroundColor: iosColors.surfaceSecondary,
-    alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { ...iosType.title2, color: iosColors.label, textAlign: 'center' },
-  emptyDescription: { ...iosType.subheadline, color: iosColors.secondaryLabel, textAlign: 'center' },
+  list: { padding: iosSpacing.md, gap: iosSpacing.sm },
   card: { padding: iosSpacing.md, borderRadius: iosRadius.card, backgroundColor: iosColors.surface, gap: iosSpacing.xs, ...iosShadow }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderRadius: iosRadius.pill, backgroundColor: iosColors.tint, justifyContent: 'center', alignItems: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, padding: iosSpacing.sm, backgroundColor: iosColors.dangerSoft }, notice: { padding: iosSpacing.sm, color: iosColors.secondaryLabel, ...iosType.subheadline }, bubble: { paddingHorizontal: iosSpacing.md, paddingVertical: 10, borderRadius: 18, maxWidth: '82%', gap: iosSpacing.xxs }, mine: { alignSelf: 'flex-end', backgroundColor: iosColors.tint, borderBottomRightRadius: 5 }, mineText: { color: iosColors.white }, mineMeta: { color: '#D9ECFF' }, theirs: { alignSelf: 'flex-start', backgroundColor: iosColors.surface, borderBottomLeftRadius: 5, ...iosShadow }, composer: { padding: iosSpacing.sm, gap: iosSpacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: iosColors.separator, backgroundColor: iosColors.surface }, input: { maxHeight: 130, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.card, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, backgroundColor: iosColors.surfaceSecondary, fontSize: 17, color: iosColors.label }, row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
 });

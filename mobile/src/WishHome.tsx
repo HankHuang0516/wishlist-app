@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createApi } from './api';
+import { ApiError, createApi } from './api';
 import { PublicListing, emptySearchFilters, listingPrice, TAIWAN_BOUNDS } from './listingSearch';
 import { MatchWish, WishMatch, parseMatchWishes, parseWishMatchPage, rankHomeMatches, wishMatchPath } from './wishData';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
@@ -27,7 +27,7 @@ export function WishHome({ api, apiUrl, userId, onExplore, onWishes }: { api: Re
         setWishes(all); setSelected(old => all.some(w => w.id === old) ? old : all[0]?.id ?? null);
         if (!all.length) setProgress('尚無可比對的願望');
       }
-    } catch { if (alive.current && seq === wishSeq.current) setError('無法載入願望，請確認網路或登入後重試。'); }
+    } catch (failure) { if (alive.current && seq === wishSeq.current) setError(failure instanceof ApiError && failure.status === 429 ? failure.message : '無法載入願望，請確認網路或登入後重試。'); }
     finally { if (alive.current && seq === wishSeq.current) setLoading(false); }
   }
   async function matchAll(items: MatchWish[]) {

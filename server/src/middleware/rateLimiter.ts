@@ -14,6 +14,7 @@ export const registerLimiter = rateLimit({
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 10, // 10 login attempts per 15 minutes per IP
+    skipSuccessfulRequests: true, // Successful sign-ins cannot lock out this IP.
     message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
     standardHeaders: true,
     legacyHeaders: false,

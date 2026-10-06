@@ -56,3 +56,17 @@ describe('native API safety', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://example.com/api' + path);
   });
 });
+
+it('keeps 429 distinct from a revoked login and shows a bounded retry time without retrying', async () => {
+ const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '900' }), json: async () => ({ errorCode: 'RATE_LIMIT_EXCEEDED', error: 'private-stack' }) });
+ vi.stubGlobal('fetch', fetchMock);
+ const api = createApi('https://example.com', () => 'synthetic-token');
+ await expect(api('/native-wishes/lists')).rejects.toMatchObject({ status: 429, retryAfterSeconds: 900, message: expect.stringContaining('900 秒') });
+ expect(fetchMock).toHaveBeenCalledTimes(1);
+ expect(new ApiError(429).message).toContain('不必登出');
+ expect(new ApiError(401).message).toBe('登入已失效，請重新登入。');
+});
+it.each(['90000', 'not-a-time', '-1'])('does not display an untrusted retry time %s', async retry => {
+ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': retry }), json: async () => ({}) }));
+ await expect(createApi('https://example.com', () => null)('/users/me')).rejects.toMatchObject({ status: 429, retryAfterSeconds: undefined });
+});

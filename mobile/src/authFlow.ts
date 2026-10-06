@@ -75,7 +75,7 @@ export async function admitLogin(value: unknown, apiUrl: string, getProfile: (to
 export function authErrorMessage(failure: unknown) {
   if (failure instanceof AuthFlowError) return failure.code === 'storage-unavailable' ? '無法安全儲存登入，請重試；不會改存成明文。' : '服務回應不完整，尚未確認成功，請重試。';
   if (failure instanceof ApiError) {
-    if (failure.status === 429) return '操作過於頻繁，請稍後重試。';
+    if (failure.status === 429) return failure.message;
     if (failure.code === 'EMAIL_NOT_VERIFIED') return '請先驗證 Email；可以重新寄送驗證信。';
     if (failure.code === 'USER_EXISTS') return '此手機或 Email 已註冊，請登入或使用忘記密碼。';
     if (failure.code === 'WEAK_PASSWORD') return '密碼需為 8–72 個字元，包含英文字母與數字及允許的符號。';

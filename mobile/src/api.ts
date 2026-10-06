@@ -1,6 +1,7 @@
 export class ApiError extends Error {
-  constructor(public readonly status: number, public readonly code?: string) {
-    super(status === 401 ? '登入已失效，請重新登入。' : '目前無法完成，請稍後再試。');
+  constructor(public readonly status: number, public readonly code?: string, public readonly retryAfterSeconds?: number) {
+    super(status === 401 ? '登入已失效，請重新登入。' : status === 429 ?
+      `服務請求過於頻繁，${retryAfterSeconds ? `請等待 ${retryAfterSeconds} 秒後再試` : '請稍後再試'}；不必登出或重設密碼。` : '目前無法完成，請稍後再試。');
   }
 }
 
@@ -52,7 +53,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, allowL
     try {
       const response = await fetch(`${base}/api${path}`, { ...fetchOptions, headers, signal: abort.signal, redirect: 'error' });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new ApiError(response.status, typeof body?.errorCode === 'string' ? body.errorCode : undefined);
+      if (!response.ok) {
+        const retry = response.headers?.get('Retry-After');
+        const seconds = retry && /^\d{1,5}$/.test(retry) ? Number(retry) : undefined;
+        throw new ApiError(response.status, typeof body?.errorCode === 'string' ? body.errorCode : undefined,
+          response.status === 429 && seconds && seconds <= 3600 ? seconds : undefined);
+      }
       return body as T;
     } finally {
       clearTimeout(timeout);

@@ -30,26 +30,43 @@ export function isAccountRead(req: Request): boolean {
   return req.method === 'GET' && /^\/api\/users\/me(?:\/|$)/.test(req.path);
 }
 
+function isAccountRequest(req: Request): boolean {
+  if (isAccountRead(req)) return true;
+  const credentials = typeof req.headers.authorization === 'string' || typeof req.headers['x-api-key'] === 'string';
+  return credentials && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
+    /^\/api\/(?:users|wishlists|items|native-wishes|chat|listings|listing-media|listing-reports|feedback|source-leads|partner-inquiries)(?:\/|$)/.test(req.path);
+}
+
+// These registered account recovery endpoints already enforce their own
+// login/register/security limits. Public browsing must not consume that budget.
+function hasDedicatedAuthLimit(req: Request): boolean {
+  return req.method === 'POST' && /^\/api\/auth\/(?:login|register|verify-email|reset-password|forgot-password|resend-verification)$/.test(req.path);
+}
+
 // Only the existing live-session authenticator can admit this budget. A header
 // or claimed user id alone never suffices. Bound authentication attempts by IP
 // before doing database work, independently of public browsing saturation.
 export function accountReadBudget(authenticate: RequestHandler): RequestHandler {
-  const attempt = rateLimit({ windowMs: 15 * 60 * 1000, limit: 500, standardHeaders: true, legacyHeaders: false,
+  const attempt = rateLimit({ windowMs: 15 * 60 * 1000, limit: 1500, standardHeaders: true, legacyHeaders: false,
     message: { errorCode: 'ACCOUNT_AUTH_READ_RATE_LIMIT' } });
   const verified = rateLimit({ windowMs: 15 * 60 * 1000, limit: 500, standardHeaders: true, legacyHeaders: false,
     keyGenerator: req => 'user:' + String((req as Request & { user?: { id: number } }).user!.id),
     message: { errorCode: 'ACCOUNT_READ_RATE_LIMIT' } });
+  const writes = rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: req => 'user:' + String((req as Request & { user?: { id: number } }).user!.id),
+    message: { errorCode: 'ACCOUNT_WRITE_RATE_LIMIT' } });
   return (req, res, next) => {
-    if (!isAccountRead(req)) return next();
+    if (!isAccountRequest(req)) return next();
     attempt(req, res, error => {
       if (error) return next(error);
       authenticate(req, res, error => {
         if (error) return next(error);
         const id = (req as Request & { user?: { id: number } }).user?.id;
         if (!Number.isSafeInteger(id) || Number(id) <= 0) return res.status(401).json({ errorCode: 'INVALID_TOKEN' });
-        verified(req, res, error => {
+        const budget = req.method === 'GET' || req.method === 'HEAD' ? verified : writes;
+        budget(req, res, error => {
           if (error) return next(error);
-          res.locals.verifiedAccountRead = true;
+          res.locals.verifiedAccountRequest = true;
           next();
         });
       });
@@ -71,5 +88,5 @@ export function websiteRateLimits(buildRoot: string) {
   // Separate process-local stores, each retaining the original500/IP/15min.
   // Downloading a new shell cannot exhaust account/chat reads, and saturated
   // data requests cannot stop downloading the recovery/update interface.
-  return [create((req, res) => isBuildRead(req) || res.locals.verifiedAccountRead === true), create(req => !isBuildRead(req))];
+  return [create((req, res) => isBuildRead(req) || res.locals.verifiedAccountRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req))];
 }

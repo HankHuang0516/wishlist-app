@@ -3,7 +3,7 @@ import { ChatReportSheet } from './ChatReportSheet';
 import { ChatMessageBubble } from './ChatPresentation';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import { Ionicons } from '@expo/vector-icons';
 import { ApiError, createApi } from './api';
@@ -51,7 +51,7 @@ export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange
         <Text numberOfLines={1} style={s.inboxContact}>與 {(item.buyerUserId === userId ? item.seller.name : item.buyer.name) || (item.archived ? '已移除的帳號' : '商品聯絡人')} · {listingPrice(item)}</Text>
         <Text numberOfLines={1} style={s.inboxPreview}>{item.archived ? '已封存 · 僅供查看' : item.blocked ? '已封鎖 · 歷史仍可查看' : !item.listingAvailable ? '商品已停止刊登 · 歷史仍可查看' : item.lastMessageText || '開始討論這件商品'}</Text>
       </View>{item.unreadCount > 0 && <View style={s.unreadDot} accessibilityLabel={`${item.unreadCount} 則未讀`} />}</Pressable>} ListEmptyComponent={!busy && !error ? <View style={s.empty}><View style={s.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={40} color={iosColors.tertiaryLabel} /></View><Text style={s.emptyTitle}>其他商品尚無聊天</Text><Text style={s.emptyDescription}>當有買家或賣家聯繫時，對話會顯示在這裡。</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} ListFooterComponent={rooms.length ? <View style={s.list}>{cursor && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>載入較早的聊天</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View> : null} />
-    {!!activeSourceChat && <Modal visible animationType="slide" onRequestClose={()=>onSourceChatChange?.(null)}><SourceLeadInquiry key={String(userId)+activeSourceChat.id} api={api} apiUrl={apiUrl} userId={userId} context={activeSourceChat} onBack={()=>onSourceChatChange?.(null)}/></Modal>}
+    {!!activeSourceChat && <Modal visible animationType="slide" onRequestClose={()=>onSourceChatChange?.(null)}><SafeAreaProvider><SourceLeadInquiry key={String(userId)+activeSourceChat.id} api={api} apiUrl={apiUrl} userId={userId} context={activeSourceChat} onBack={()=>onSourceChatChange?.(null)}/></SafeAreaProvider></Modal>}
     {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} token={token} userId={userId} roomId={activeRoom} onClose={() => { onRoomChange(null); void load(); }} />}
   </View>;
 }

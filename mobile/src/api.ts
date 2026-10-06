@@ -1,7 +1,7 @@
 export class ApiError extends Error {
   constructor(public readonly status: number, public readonly code?: string, public readonly retryAfterSeconds?: number) {
     super(status === 401 ? '登入已失效，請重新登入。' : status === 429 ?
-      `服務暫時限制請求，${retryAfterSeconds ? `請等待 ${retryAfterSeconds} 秒後再試` : '請稍後再試'}；不必登出或重設密碼。` : '目前無法完成，請稍後再試。');
+      `服務請求過於頻繁，${retryAfterSeconds ? `請等待 ${retryAfterSeconds} 秒後再試` : '請稍後再試'}；不必登出或重設密碼。` : '目前無法完成，請稍後再試。');
   }
 }
 

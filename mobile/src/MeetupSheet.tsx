@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaModal } from './SafeAreaModal';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Crypto from 'expo-crypto';
 import { ApiError, createApi } from './api';
@@ -11,7 +11,6 @@ import { PendingStoreError } from './pendingStore';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 const labels = { PROPOSED: '提議中', CONFIRMED: '雙方已確認', CANCELLED: '已取消', COMPLETED: '雙方已回報完成' };
 export function MeetupSheet({ api, apiUrl, userId, room, onClose }: { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; room: ChatRoomRecord; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
   const [appointment, setAppointment] = useState<MeetupRecord | null>(null), [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [pending, setPending] = useState<string | null>(null), [editing, setEditing] = useState(false), [startsAt, setStartsAt] = useState(new Date(Date.now() + 86400000)), [picker, setPicker] = useState<'date' | 'time' | null>(null);
   const [place, setPlace] = useState(''), [notes, setNotes] = useState(''), [duration, setDuration] = useState('60'), [latitude, setLatitude] = useState(''), [longitude, setLongitude] = useState('');
@@ -70,7 +69,7 @@ export function MeetupSheet({ api, apiUrl, userId, room, onClose }: { api: Retur
   const myCompleted = appointment && (buyer ? appointment.buyerCompletedAt : appointment.sellerCompletedAt);
   const frozen = !ready || !loaded || busy || !!pending;
   const displayTime = (date: string) => new Date(date).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
-  return <Modal visible animationType="slide" onRequestClose={onClose}><View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><View style={s.row}><Pressable accessibilityRole="button" onPress={onClose} style={s.chip}><Text style={s.text}>返回聊天</Text></Pressable><Text style={s.heading}>面交預約</Text>{busy && <ActivityIndicator />}</View>
+  return <SafeAreaModal visible animationType="slide" onRequestClose={onClose} contentStyle={s.screen}><View style={s.row}><Pressable accessibilityRole="button" onPress={onClose} style={s.chip}><Text style={s.text}>返回聊天</Text></Pressable><Text style={s.heading}>面交預約</Text>{busy && <ActivityIndicator />}</View>
     <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}><Text style={s.small}>僅買賣雙方可見。預約不代表付款、平台交易保障或自動保留商品；請優先選擇安全的公共場所。</Text>
       {!room.listingAvailable && <Text style={s.error}>商品已停止刊登，請先與賣家確認；仍可取消既有預約。</Text>}{room.blocked && <Text style={s.error}>已封鎖，不能新增或確認面交；仍可取消。</Text>}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{!!notice && <Text accessibilityRole="alert" style={s.text}>{notice}</Text>}
@@ -90,6 +89,6 @@ export function MeetupSheet({ api, apiUrl, userId, room, onClose }: { api: Retur
       {!pending && appointment?.status === 'CONFIRMED' && !myCompleted && Date.parse(appointment.startsAt) <= Date.now() && <Pressable accessibilityRole="button" disabled={frozen} style={s.button} onPress={() => void act('COMPLETE')}><Text style={s.white}>我已完成面交（仍需對方回報）</Text></Pressable>}
       {!pending && appointment && ['PROPOSED', 'CONFIRMED'].includes(appointment.status) && <Pressable accessibilityRole="button" disabled={frozen} style={s.chip} onPress={() => void act('CANCEL')}><Text style={s.text}>取消第{appointment.version}版預約</Text></Pressable>}
       <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void refresh()}><Text style={s.text}>更新預約狀態</Text></Pressable>
-    </ScrollView></KeyboardAvoidingView></View></Modal>;
+    </ScrollView></KeyboardAvoidingView></SafeAreaModal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, content: { padding: iosSpacing.lg, gap: iosSpacing.md, paddingBottom: 48 }, row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, padding: iosSpacing.sm }, heading: { ...iosType.title2, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, error: { ...iosType.subheadline, color: iosColors.danger, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm }, card: { backgroundColor: iosColors.surface, borderRadius: iosRadius.card, padding: iosSpacing.md, gap: iosSpacing.sm, ...iosShadow }, chip: { minHeight: minimumTapSize, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: 52, backgroundColor: iosColors.tint, borderRadius: iosRadius.control, padding: iosSpacing.md, justifyContent: 'center', alignItems: 'center' }, white: { color: iosColors.white, ...iosType.headline }, input: { minHeight: 52, padding: iosSpacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, color: iosColors.label, backgroundColor: iosColors.surface, fontSize: 17 } });

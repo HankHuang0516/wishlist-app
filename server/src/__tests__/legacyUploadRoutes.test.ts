@@ -13,6 +13,9 @@ describe('legacy public uploads', () => {
             const privateDir = path.join(root, 'listing-media', '123e4567-e89b-42d3-a456-426614174000');
             await fs.mkdir(privateDir, { recursive: true });
             await fs.writeFile(path.join(privateDir, 'image.webp'), 'private');
+            const receipts = path.join(root, '.source-sync-receipts');
+            await fs.mkdir(receipts, { mode: 0o700 });
+            await fs.writeFile(path.join(receipts, 'deployment-verification.json'), 'PRIVATE_RECEIPT_SYNTHETIC_ONLY', { mode: 0o600 });
             const app = express(); app.use('/uploads', createLegacyUploadRoutes(root));
             const legacy = await request(app).get('/uploads/avatar_123.jpg');
             expect(legacy.status).toBe(200); expect(legacy.body.toString('utf8')).toBe('legacy');
@@ -20,6 +23,10 @@ describe('legacy public uploads', () => {
                 '/uploads/listing-media/123e4567-e89b-42d3-a456-426614174000/image.webp',
                 '/uploads/listing-media%2f123e4567-e89b-42d3-a456-426614174000%2fimage.webp',
                 '/uploads/.env',
+                '/uploads/.source-sync-receipts/deployment-verification.json',
+                '/uploads/%2esource-sync-receipts/deployment-verification.json',
+                '/uploads/.source-sync-receipts%2fdeployment-verification.json',
+                '/uploads/.source-sync-receipts/',
             ]) expect((await request(app).get(url)).status).toBe(404);
         } finally {
             await fs.rm(root, { recursive: true, force: true });

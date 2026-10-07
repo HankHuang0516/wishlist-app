@@ -14,6 +14,7 @@ export DATABASE_URL="$TEST_DATABASE_URL"
 echo "📦 Server build、單元測試與實際 DB 整合驗證"
 npm run build --prefix server
 npm test --prefix server -- --runInBand
+node --test server/scripts/source-sync-once.test.cjs server/scripts/source-sync-receipt-check.test.cjs
 echo "🌐 建置當前 Web 供實際瀏覽器整合測試"
 npm run build --prefix client
 cd server

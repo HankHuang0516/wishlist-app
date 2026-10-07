@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.681',date:'2026-10-07',title:'來源同步工具與私人回執保護',type:'Backend',items:[{type:'Security',content:'部署需逐次核准的受限來源同步工具與私人回執驗證；核准工作清單維持空，不執行商品匯入或新增公開操作入口。'}]},
  {version:'2.0.669',date:'2026-10-04',title:'全台合作招募與直接聯絡入口',type:'Fullstack',items:[{type:'Enhancement',content:'合作頁與表單歡迎全台來源洽談，先雙北小量試點；提供 Wishlist.AI 的 Hank、EClaw 合作名片及 Email，保留逐件授權與原收件流程。'}]},
  {version:'2.0.662',date:'2026-10-04',title:'帳號讀取與公開查詢限流隔離',type:'Fullstack',items:[{type:'Fix',content:'公開查詢受限時仍可核對已登入帳號；帳號讀取須先確認身分並保留有限額度，前端分開等待，不重送操作或清除上次確認內容。'}]},
  {version:'2.0.642',date:'2026-10-04',title:'買家搜尋、代售紀錄查詢與多輪詢問',type:'Fullstack',items:[{type:'Fix',content:'明確非販售QA商品停止買家推薦與新交易；搜尋、篩選及列表模式可透過網址保留。'},{type:'New',content:'只查本人已歸檔且同意代理詢問的代售來源，依商品ID引用原紀錄，自刊聊天排除；未知面交不猜測。'},{type:'Fix',content:'已交付詢問可逐次同意追問，保留各輪回執與賣家回覆，不把晚回或重試當作新的送達。'},{type:'Enhancement',content:'來源照片可查已收錄與實際載入狀態；無照片明確提示，不假稱未取得授權。'}]},

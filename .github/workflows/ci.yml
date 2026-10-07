@@ -83,6 +83,9 @@ jobs:
     - name: Run tests
       run: npm test
 
+    - name: Test restricted source sync and private receipt verification
+      run: node --test scripts/source-sync-once.test.cjs scripts/source-sync-receipt-check.test.cjs
+
     - name: Test local MiniMax vision pilot without account access
       run: node --test ../tools/minimax-vision-bridge/server.test.mjs
 

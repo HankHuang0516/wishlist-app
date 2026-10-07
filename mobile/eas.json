@@ -24,7 +24,11 @@
     "simulator": {
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://wishlist-app-production.up.railway.app/api"
       }
     }
   }

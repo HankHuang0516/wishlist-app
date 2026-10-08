@@ -9,7 +9,7 @@ test('deployment probe is private, same-volume and preserved across new checks',
   try {
     const first = checkDirectory(dir, true), second = checkDirectory(dir, true), third = checkDirectory(dir);
     assert.equal(first.directoryMode, '0700'); assert.equal(first.fileMode, '0600'); assert.equal(first.sameVolume, true);
-    assert.equal(first.approvedJobCount, 0); assert.equal(first.probeSHA256, second.probeSHA256); assert.equal(first.probeSHA256, third.probeSHA256);
+    assert.equal(first.approvedJobCount, Object.keys(require('./source-sync-approved-jobs.cjs')).length); assert.equal(first.probeSHA256, second.probeSHA256); assert.equal(first.probeSHA256, third.probeSHA256);
     assert.equal(fs.readdirSync(dir).length, 1);
   } finally { fs.rmSync(parent, { recursive: true, force: true }); }
 });

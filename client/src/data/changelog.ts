@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.683',date:'2026-10-09',title:'三件既有來源的限定維護',type:'Backend',items:[{type:'Enhancement',content:'依單次核准維護三件既有來源的查核與照片紀錄；保留原商品識別及時效門檻，在售與賣家授權仍待確認。'}]},
  {version:'2.0.681',date:'2026-10-07',title:'來源同步工具與私人回執保護',type:'Backend',items:[{type:'Security',content:'部署需逐次核准的受限來源同步工具與私人回執驗證；核准工作清單維持空，不執行商品匯入或新增公開操作入口。'}]},
  {version:'2.0.669',date:'2026-10-04',title:'全台合作招募與直接聯絡入口',type:'Fullstack',items:[{type:'Enhancement',content:'合作頁與表單歡迎全台來源洽談，先雙北小量試點；提供 Wishlist.AI 的 Hank、EClaw 合作名片及 Email，保留逐件授權與原收件流程。'}]},
  {version:'2.0.662',date:'2026-10-04',title:'帳號讀取與公開查詢限流隔離',type:'Fullstack',items:[{type:'Fix',content:'公開查詢受限時仍可核對已登入帳號；帳號讀取須先確認身分並保留有限額度，前端分開等待，不重送操作或清除上次確認內容。'}]},

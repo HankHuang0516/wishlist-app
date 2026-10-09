@@ -1,33 +1,18 @@
 import {parsePhotoInventory, photoCompleteness} from './sourcePhotoInventory';
 import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL, UNKNOWN_SOURCE_DISTRICT} from './sourceCountyIllustration';
 import {publicCommentRoute} from './sourcePublicComment';
-import { createHash } from 'crypto';
 import { sourceLeadMediaDTO } from './sourceLeadMedia';
 import type { ExternalSourceLead } from '@prisma/client';
 import { archiveGate } from './sourceLeadDateGate';
 import { TAIWAN_DISTRICTS } from './taiwanAdministrativeDistricts';
 import { forbiddenListingField, privateContactField } from './listingPolicy';
-export class LeadError extends Error {
-}
-const canonical = (v: any): any => v instanceof Date ? v.toISOString() : Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
-export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
-export const ref = (v: unknown): v is string => typeof v === 'string' && /^(?:self|review|source|consent):[A-Za-z0-9._/-]{4,180}$/.test(v);
+import { LeadError, digest, ref, publicUrl } from './sourceLeadPrimitives';
+export { LeadError, digest, ref, publicUrl } from './sourceLeadPrimitives';
 export const object = (v: unknown): Record<string, any> => { if (!v || typeof v !== 'object' || Array.isArray(v))
     throw new LeadError('INVALID_OBJECT'); return v as Record<string, any>; };
 export function exact(v: Record<string, any>, keys: string[]) { if (Object.keys(v).some(k => !keys.includes(k)))
     throw new LeadError('UNEXPECTED_FIELD'); }
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && !!v.trim() && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
-export function publicUrl(v: unknown, host?: string) {
-    if (!text(v, 2048))
-        throw new LeadError('INVALID_PUBLIC_URL');
-    const u = new URL(v);
-    if (u.protocol !== 'https:' || u.username || u.password || u.port || u.search || u.hash || u.pathname === '/' || (host && u.hostname !== host))
-        throw new LeadError('INVALID_PUBLIC_URL');
-    // No private/loopback destinations. UI opens links only; backend never fetches them.
-    if (!/^(?:[a-z0-9-]+\.)+[a-z]{2,63}$/.test(u.hostname) || /(?:^|\.)(?:localhost|local|internal)$/.test(u.hostname))
-        throw new LeadError('INVALID_PUBLIC_URL');
-    return u.href;
-}
 export function date(v: unknown) { if (typeof v !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(v) || !Number.isFinite(Date.parse(v)))
     throw new LeadError('ORIGINAL_DATE_REQUIRED'); return new Date(v); }
 export function parseLead(input: unknown, now = new Date()) {

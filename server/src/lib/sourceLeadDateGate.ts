@@ -1,5 +1,8 @@
+// Reuse the formatter for bounded batch validation; creating thousands of ICU
+// formatters wastes native memory without changing the calendar-month rule.
+const taipeiDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function archiveGate(row: { originalPostedAt: Date | null; originalPostedEarliestAt?: Date | null; originalPostedLatestAt?: Date | null; verifiedAddress: string | null; addressEvidenceRef: string | null; verifiedLatitude: number | null; verifiedLongitude: number | null }, now = new Date()) {
-    const taipeiDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const taipeiDate = taipeiDateFormatter.format(now);
     const [year, month, day] = taipeiDate.split('-').map(Number);
     const monthStart = new Date(Date.UTC(year, month - 3, 1));
     const end = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();

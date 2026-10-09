@@ -1,4 +1,5 @@
 import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound} from '../lib/sourceInquiryRounds';
+import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {publicCommentRoute,publicCommentPayload} from '../lib/sourcePublicComment';
@@ -23,6 +24,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
     router.use(marketplaceAdmin(getCredential));
     router.use((_q, r, n) => { r.set('Cache-Control', 'private, no-store'); n(); });
     router.use(rateLimit({ windowMs: 60000, limit: 30 }));
+    router.use('/pending-imports', createSemiAutoImportRoutes(getCredential));
     router.post('/import', async (req, res) => {
         try {
             const b = object(req.body);

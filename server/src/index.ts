@@ -1,5 +1,6 @@
 import { authenticateToken } from './middleware/auth';
 import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
+import { pendingImportBodyAdmission } from './routes/semiAutoImportRoutes';
 import express, { Express, Request, Response } from 'express';
 import { getApiUrl, getClientUrl } from './config/constants';
 import { imageSources } from './config/imageSources';
@@ -79,6 +80,7 @@ app.use(accountReadBudget(authenticateToken));
 app.use(...websiteRateLimits(clientBuildPath));
 
 app.use(cors());
+app.use('/api/source-lead-admin/pending-imports', ...pendingImportBodyAdmission());
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/api/auth', authRoutes);

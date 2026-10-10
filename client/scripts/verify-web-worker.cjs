@@ -34,3 +34,4 @@ for (const url of [...install.icons.map(icon => icon.url), install.appleTouchIco
   assert.equal(calls.entries.some(entry => entry.url === url.slice(1)), true, 'Installation artwork must be included in the built public precache.');
 }
 console.log('Installation PNG dimensions, Safari Home Screen icon, theme and public precache verified.');
+console.log('Version-specific icon review and actual build bytes verified.', require('./verify-web-icons.cjs').verifyWebIcons(path.join(__dirname, '..'), dist));

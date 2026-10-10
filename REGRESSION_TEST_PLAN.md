@@ -1,5 +1,10 @@
 # Wishlist.ai Regression Test Plan
 
+### Every-release Web H icon review
+
+- Inspect this version's actual `client/dist` logo, 512/192px PWA icons and 180px Web Clip icon at actual sizes and 32/48/64px. Compare applicable rounded/circle masks and available browser rendering. Preserve the true original canvas and fixed H color/opacity; no separate H row, band or footer, and no gift/bow overlap.
+- Record the version-specific manual review under `client/icon-source/reviews`; keep evidence externally. The postbuild gate checks the version and actual artifact hashes against that review. Missing, pending, preview-only or stale reviews block publication. Hashes do not prove legibility; native OS installation lifecycle remains an independent parity requirement.
+
 ### Complete account deletion impact
 
 - Compare all 23 categories and labels with original APP 2.0.12 and the real version-2 impact DTO. Counts are independent, include valid zeroes and must not be added into a deletion total.

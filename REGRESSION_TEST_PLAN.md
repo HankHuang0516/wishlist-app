@@ -1,5 +1,11 @@
 # Wishlist.ai Regression Test Plan
 
+### Product notice visit lifetime
+
+- Reproduce storage failure, explicitly continue for this visit, then navigate login → registration within one App root. The notice stays collapsed, original form input is unchanged before navigation and no authentication request is sent.
+- A cold reload or new App root rechecks storage and reminds again when no confirmed acknowledgement exists. A different validated service cannot borrow the visit acknowledgement. Busy form requests disable both notice choices.
+- Verify confirmed persistence separately from visit-only continuation, with real browser storage restrictions in an isolated QA frame. Record the QA environment and build mode; do not claim a local development build is the published production bundle. Production readback checks the actual release and normal remembered flow.
+
 ### Every-release Web H icon review
 
 - Inspect this version's actual `client/dist` logo, 512/192px PWA icons and 180px Web Clip icon at actual sizes and 32/48/64px. Compare applicable rounded/circle masks and available browser rendering. Preserve the true original canvas and fixed H color/opacity; no separate H row, band or footer, and no gift/bow overlap.

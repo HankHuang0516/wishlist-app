@@ -1,3 +1,7 @@
+## Product notice for the current Web visit — 2.0.705
+
+After an unconfirmed browser-storage write, "Continue for this visit without remembering" keeps the notice collapsed while moving between login and registration in the same open application. The acknowledgement lives only in the App root and is scoped to the validated notice revision and API service. Reloading starts a new visit and rechecks the original browser record. A different service reopens its own notice. Confirmation never submits either form, accepts terms or stores account data; pending form requests disable both notice buttons.
+
 ## Manual product map permission — 2026-10-03
 
 Publishing works with map permission declined. New web publications opt into a one-hour map check-in only when explicitly checked; legacy immutable journals keep their original hashes. Owner-only manual check-in and stop controls use the current listing version, with explicit confirmation and read-only reload after an unknown reply. Reads, normal edits and extensions never renew map display. Shared public maps omit declined, legacy and expired cached pins; the backend serves current results with no-store caching. This is an approximate product location, not a user's live position.

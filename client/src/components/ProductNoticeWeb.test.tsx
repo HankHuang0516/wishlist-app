@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { AUTH_SESSION_KEY } from '../lib/authSession';
 import { hasProductNoticeAck, productNoticeBody, PRODUCT_NOTICE_KEY } from '../lib/productNotice';
@@ -8,15 +8,53 @@ import { getFullApiUrl } from '../config';
 import { t } from '../utils/localization';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
+import ProductNoticeWeb from './ProductNoticeWeb';
+import { ProductNoticeVisitProvider } from '../context/ProductNoticeVisitContext';
+import * as config from '../config';
 
 const ackLabel = 'I understand, remember this notice';
 const summary = 'Weesh → Wishlist.ai: accounts and data';
 function authView(page: React.ReactNode) {
-  return render(<MemoryRouter><AuthContext.Provider value={{ user: null, token: null, isAuthenticated: false, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn() }}>{page}</AuthContext.Provider></MemoryRouter>);
+  return render(<MemoryRouter><AuthContext.Provider value={{ user: null, token: null, isAuthenticated: false, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn() }}><ProductNoticeVisitProvider>{page}</ProductNoticeVisitProvider></AuthContext.Provider></MemoryRouter>);
 }
 beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'en-US'); vi.stubGlobal('fetch', vi.fn()); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 describe('Web alternative for the native product notice', () => {
+  it('rechecks a different service during the same visit and disables acknowledgement while busy', async () => {
+    const service = vi.spyOn(config, 'getFullApiUrl').mockReturnValue('https://first.example.invalid/api');
+    const original = localStorage.setItem.bind(localStorage);
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => { if (key === PRODUCT_NOTICE_KEY) throw new Error('synthetic-storage-fault'); original(key, value); });
+    const view = render(<ProductNoticeVisitProvider><ProductNoticeWeb/></ProductNoticeVisitProvider>);
+    fireEvent.click(screen.getByRole('button', { name: ackLabel }));
+    expect(await screen.findByRole('status')).toHaveTextContent('could not confirm');
+    view.rerender(<ProductNoticeVisitProvider><ProductNoticeWeb disabled/></ProductNoticeVisitProvider>);
+    const continuation = screen.getByRole('button', { name: 'Continue for this visit without remembering' });
+    expect(continuation).toBeDisabled(); fireEvent.click(continuation);
+    expect(screen.getByText(summary).closest('details')).toHaveAttribute('open');
+    view.rerender(<ProductNoticeVisitProvider><ProductNoticeWeb/></ProductNoticeVisitProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue for this visit without remembering' }));
+    await waitFor(() => expect(screen.getByText(summary).closest('details')).not.toHaveAttribute('open'));
+    service.mockReturnValue('https://second.example.invalid/api');
+    view.rerender(<ProductNoticeVisitProvider><ProductNoticeWeb/></ProductNoticeVisitProvider>);
+    expect(screen.getByText(summary).closest('details')).toHaveAttribute('open');
+    expect(localStorage.getItem(PRODUCT_NOTICE_KEY)).toBeNull(); expect(fetch).not.toHaveBeenCalled();
+  });
+  it('keeps a visit-only acknowledgement when moving between login and registration in the same open application', async () => {
+    const original = localStorage.setItem.bind(localStorage);
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => { if (key === PRODUCT_NOTICE_KEY) throw new Error('synthetic-storage-fault'); original(key, value); });
+    authView(<Routes><Route path="/" element={<Login/>}/><Route path="/register" element={<Register/>}/></Routes>);
+    fireEvent.change(screen.getByLabelText(t('login.phoneOrEmail')), { target: { value: 'synthetic@example.invalid' } });
+    fireEvent.click(screen.getByRole('button', { name: ackLabel }));
+    expect(await screen.findByRole('status')).toHaveTextContent('could not confirm');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue for this visit without remembering' }));
+    await waitFor(() => expect(screen.getByText(summary).closest('details')).not.toHaveAttribute('open'));
+    expect(screen.getByLabelText(t('login.phoneOrEmail'))).toHaveValue('synthetic@example.invalid');
+    fireEvent.click(screen.getByRole('link', { name: t('login.signUp'), exact: true }));
+    expect(await screen.findByLabelText('Display name')).toBeInTheDocument();
+    expect(screen.getByText(summary).closest('details')).not.toHaveAttribute('open');
+    expect(localStorage.getItem(PRODUCT_NOTICE_KEY)).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it('remembers across login and registration without submitting, touching auth or discarding the original login input', async () => {
     localStorage.setItem(AUTH_SESSION_KEY, 'untouched-auth-record');
     const view = authView(<Login/>);

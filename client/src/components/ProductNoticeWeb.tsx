@@ -3,10 +3,19 @@ import { ChevronDown } from 'lucide-react';
 import { getFullApiUrl } from '../config';
 import { getDisplayLocale } from '../utils/localization';
 import { hasProductNoticeAck, productNoticeBody, PRODUCT_NOTICE_KEY } from '../lib/productNotice';
+import { useProductNoticeVisit } from '../context/ProductNoticeVisitContext';
 
 export default function ProductNoticeWeb({ disabled = false }: { disabled?: boolean }) {
   const api = getFullApiUrl(), local = import.meta.env.DEV;
+  let body: string | null = null;
+  try { body = productNoticeBody(api, local); } catch { /* Invalid services cannot share an acknowledgement. */ }
+  return <ProductNotice key={body ?? api} api={api} local={local} body={body} disabled={disabled}/>;
+}
+
+function ProductNotice({ api, local, body, disabled }: { api: string; local: boolean; body: string | null; disabled: boolean }) {
+  const visit = useProductNoticeVisit();
   const [open, setOpen] = useState(() => {
+    if (body !== null && visit?.body === body) return false;
     try { return !hasProductNoticeAck(localStorage.getItem(PRODUCT_NOTICE_KEY), api, local); }
     catch { return true; }
   });
@@ -15,11 +24,17 @@ export default function ProductNoticeWeb({ disabled = false }: { disabled?: bool
   function acknowledge() {
     if (disabled) return;
     try {
-      const body = productNoticeBody(api, local);
+      if (body === null) throw new Error('Invalid notice service');
       localStorage.setItem(PRODUCT_NOTICE_KEY, body);
       if (localStorage.getItem(PRODUCT_NOTICE_KEY) !== body) throw new Error('Notice persistence unconfirmed');
+      visit?.acknowledge(body);
       setStorageIssue(false); setOpen(false);
     } catch { setStorageIssue(true); }
+  }
+  function continueForVisit() {
+    if (disabled) return;
+    if (body !== null) visit?.acknowledge(body);
+    setStorageIssue(false); setOpen(false);
   }
   return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} className="group rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm">
     <summary className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">{chinese ? 'Weesh → Wishlist.ai：帳號與資料說明' : 'Weesh → Wishlist.ai: accounts and data'}<ChevronDown aria-hidden="true" className="ml-auto h-4 w-4 shrink-0 group-open:rotate-180"/></summary>
@@ -30,7 +45,7 @@ export default function ProductNoticeWeb({ disabled = false }: { disabled?: bool
       {storageIssue && <p role="status" className="text-amber-800">{chinese ? '無法確認此瀏覽器是否記住說明。可以重試，或這次收合；下次依瀏覽器紀錄再次核對。' : 'The browser could not confirm that it remembered this notice. Retry or collapse it for this visit; future visits recheck the browser record.'}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={disabled} onClick={acknowledge} className="min-h-11 rounded-md border bg-white px-3">{chinese ? '我了解，記住這份說明' : 'I understand, remember this notice'}</button>
-        {storageIssue && <button type="button" disabled={disabled} onClick={() => { setStorageIssue(false); setOpen(false); }} className="min-h-11 rounded-md border bg-white px-3">{chinese ? '這次繼續，不記住' : 'Continue for this visit without remembering'}</button>}
+        {storageIssue && <button type="button" disabled={disabled} onClick={continueForVisit} className="min-h-11 rounded-md border bg-white px-3">{chinese ? '這次繼續，不記住' : 'Continue for this visit without remembering'}</button>}
       </div>
     </div>
   </details>;

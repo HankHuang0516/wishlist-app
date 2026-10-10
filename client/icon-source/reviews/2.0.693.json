@@ -1,0 +1,47 @@
+{
+  "version": "2.0.693",
+  "status": "passed",
+  "actualBuildInspected": true,
+  "inputHashes": {
+    "original": "d825c9cecea10d9b2b70b7c38c6a0b663eba3dead5190052900dc66ce6a33b55",
+    "H": "29bb4c6f54024441b675d9f04233dc0283dcc3dff2b78fbb08cd61581d61b9fa"
+  },
+  "outputHashes": {
+    "logo.png": "65a61ffa303408bda3ae0a85f466077d1b718c935bf5eee48369e63f7a93692b",
+    "pwa-icon-512.png": "97d1f1dca8e7eac1b30a8acbd0d191d34e49494594e6084fd9b216d6e83fd0f1",
+    "pwa-icon-192.png": "5bee6f2b9858c852fb6dcdc69449038ca2f0510b4d9ab6d96faf8757343afe47",
+    "apple-touch-icon.png": "d4c5578b3b13b463059bf5be91835a53db8d5003d5cf2fa0e463609d86b668bd"
+  },
+  "reviewer": "Codex fresh direct visual inspection of v2.0.693 actual build",
+  "date": "2026-10-11",
+  "languageVariants": "Shared text-free Web artwork for Chinese and English.",
+  "realSizesInspected": [
+    32,
+    48,
+    64,
+    180,
+    192,
+    512,
+    1024
+  ],
+  "actualArtifacts": [
+    "client/dist/logo.png 1024",
+    "client/dist/pwa-icon-512.png 512",
+    "client/dist/pwa-icon-192.png 192",
+    "client/dist/apple-touch-icon.png 180"
+  ],
+  "visualConclusion": "Fresh 693 sheets inspected directly: H is complete in the background left of the bow, without covering gift or bow. Two pillars and crossbeam remain at 32px, with finer metallic texture simplified; complete and recognizable at 48/64px and larger sizes. No independent H row, band or footer. Original composition unchanged.",
+  "masks": "Fresh actual 693 square, rounded Web Clip and circle comparisons retain the full H. Web manifest declares any-purpose icons. No native adaptive icon changes.",
+  "pixelEvidence": "True no-H original baseline: zero changed pixels outside the fixed H alpha footprint. Fixed H color and alpha unchanged apart from ordinary resize.",
+  "runtime": "Actual built 512px icon opened from the 693 local build in an owned browser tab under a live GUI lease.",
+  "evidence": [
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/extension-recovery-20261011/actual-build-icons-real-sizes.png",
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/extension-recovery-20261011/actual-build-icons-masks.png",
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/extension-recovery-20261011/actual-build-icon-pixel-proof.json",
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/extension-recovery-20261011/local-icon693-browser.png"
+  ],
+  "separateGoalItemsPending": [
+    "Actual native OS installation/lifecycle acceptance is not part of this unchanged-APP Web release."
+  ],
+  "automatedIntegrityIsNotVisualAcceptance": true
+}

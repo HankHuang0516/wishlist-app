@@ -100,6 +100,7 @@ const english = {
   "新的失效日期（台灣時間）": "New expiry date (Taiwan time)",
   "取消延長": "Cancel extension",
   "確認延長": "Confirm extension",
+  "確認這次延長": "Confirm this extension",
   "載入或確認中…": "Loading or verifying…",
   "載入更多我的商品": "Load more listings",
   "重新載入": "Reload",

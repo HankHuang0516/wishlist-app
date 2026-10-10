@@ -133,8 +133,12 @@ describe('native-equivalent owner management', () => {
     fireEvent.click(screen.getByRole('button', { name: '選擇 2101-01-15' }));
     expect(date).toHaveValue('2101-01-15');
     fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
+    const dialog=screen.getByRole('dialog',{name:'確認延長'});
+    expect(within(dialog).getByText('確認延長至 2101-01-15？延長刊登不會自動更新地圖顯示。')).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button',{name:'確認這次延長'}));
     await screen.findByText('原商品操作已確認完成；不會再次套用。');
-    expect(window.confirm).toHaveBeenCalledWith('確認延長至 2101-01-15？延長刊登不會自動更新地圖顯示。');
+    expect(window.confirm).not.toHaveBeenCalled();
     const writes = fetch.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(writes).toHaveLength(1);
     expect(writes[0][0]).toContain('/listings/management-operations/');
@@ -151,6 +155,49 @@ describe('native-equivalent owner management', () => {
     }
     expect(window.confirm).not.toHaveBeenCalled(); expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it.each(['Escape','cancel'] as const)('cancels an extension through %s without a journal or request, retaining the date and focus', async action => {
+    const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);
+    render(view());await screen.findByRole('heading',{name:row.title});await ready();
+    fireEvent.click(screen.getByRole('button',{name:'延長期限',exact:true}));
+    const date=screen.getByLabelText('新的失效日期（台灣時間）');
+    fireEvent.change(date,{target:{value:'2100-12-15'}});
+    const opener=screen.getByRole('button',{name:'確認延長',exact:true});opener.focus();fireEvent.click(opener);
+    const dialog=screen.getByRole('dialog',{name:'確認延長',exact:true});
+    expect(date).toBeDisabled();expect(fetcher).toHaveBeenCalledTimes(1);expect(journals.size).toBe(0);
+    if(action==='Escape')fireEvent.keyDown(dialog,{key:'Escape'});
+    else fireEvent.click(within(dialog).getByRole('button',{name:'取消延長',exact:true}));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(opener).toHaveFocus();
+    expect(date).toHaveValue('2100-12-15');expect(date).toBeEnabled();expect(journals.size).toBe(0);
+    expect(fetcher).toHaveBeenCalledTimes(1);expect(window.confirm).not.toHaveBeenCalled();
+  });
+  it('confirms the same date and original version in English once despite repeated activation',async()=>{
+    localStorage.setItem('user-locale','en');
+    const fetcher=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith(`/listings/${id}`)?ok({...row,expiresAt:'2100-12-15T15:59:59Z',version:2}):ok({items:[row],nextCursor:null}));
+    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('heading',{name:row.title});
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry',exact:true})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:'Extend expiry',exact:true}));
+    fireEvent.change(screen.getByLabelText('New expiry date (Taiwan time)'),{target:{value:'2100-12-15'}});
+    fireEvent.click(screen.getByRole('button',{name:'Confirm extension',exact:true}));
+    const dialog=screen.getByRole('dialog',{name:'Confirm extension',exact:true});
+    expect(within(dialog).getByText('Extend expiry to 2100-12-15? Extending a listing does not renew map display.')).toBeInTheDocument();
+    const confirm=within(dialog).getByRole('button',{name:'Confirm this extension',exact:true});
+    fireEvent.click(confirm);fireEvent.click(confirm);
+    await waitFor(()=>expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1));
+    const write=fetcher.mock.calls.find(([,init])=>init?.method==='POST')!;
+    expect(JSON.parse(String(write[1]?.body))).toEqual({kind:'EXTEND',listingId:id,expectedVersion:1,changes:{expiryDate:'2100-12-15'}});
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+  it('removes the old account extension confirmation when the session changes without sending it',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>ok({items:init?.headers&&String((init.headers as Record<string,string>).Authorization).includes('other-session')?[]:[row],nextCursor:null})));
+    const mounted=render(view());await screen.findByRole('heading',{name:row.title});await ready();
+    fireEvent.click(screen.getByRole('button',{name:'延長期限',exact:true}));
+    fireEvent.change(screen.getByLabelText('新的失效日期（台灣時間）'),{target:{value:'2100-12-15'}});
+    fireEvent.click(screen.getByRole('button',{name:'確認延長',exact:true}));
+    expect(screen.getByRole('dialog',{name:'確認延長',exact:true})).toBeInTheDocument();
+    mounted.rerender(view({...auth,user:{id:20,phoneNumber:'other-fixture'},token:'other-session'}));
+    await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(journals.size).toBe(0);expect(vi.mocked(fetch).mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+  });
   it('recovers a lost extension reply through GET without repeating the extension', async () => {
     let receipt:unknown;
     const fetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -162,6 +209,7 @@ describe('native-equivalent owner management', () => {
     await ready();fireEvent.click(screen.getByRole('button', { name: '延長期限' }));
     fireEvent.change(screen.getByLabelText('新的失效日期（台灣時間）'), { target: { value: '2100-12-15' } });
     fireEvent.click(screen.getByRole('button', { name: '確認延長' }));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'確認延長'})).getByRole('button',{name:'確認這次延長'}));
     await screen.findByRole('button', { name: '只查核原操作回執與最新商品' });
     expect(screen.getByRole('button', { name: '確認延長' })).toBeDisabled();
     expect(screen.getByLabelText('新的失效日期（台灣時間）')).toHaveValue('2100-12-15');
@@ -434,7 +482,11 @@ describe('complete owner paging and English recovery', () => {
     vi.stubGlobal('fetch',fetch);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Extend expiry'}));
     fireEvent.click(screen.getByRole('button',{name:'Open calendar for New expiry date (Taiwan time)'}));expect(screen.getByRole('heading',{name:'October 2100'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Select 2100-10-31'}));fireEvent.click(screen.getByRole('button',{name:'Confirm extension'}));
-    await screen.findByText('Version: 2');expect(window.confirm).toHaveBeenCalledWith('Extend expiry to 2100-10-31? Extending a listing does not renew map display.');
+    const dialog=screen.getByRole('dialog',{name:'Confirm extension'});
+    expect(within(dialog).getByText('Extend expiry to 2100-10-31? Extending a listing does not renew map display.')).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button',{name:'Confirm this extension'}));
+    await screen.findByText('Version: 2');expect(window.confirm).not.toHaveBeenCalled();
     const writes=fetch.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'EXTEND',expectedVersion:1,changes:{expiryDate:'2100-10-31'}});
   });
   it('retains English unsaved text and blocks submission when local persistence fails', async () => {

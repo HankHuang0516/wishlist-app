@@ -37,6 +37,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   const [outcome, setOutcome] = useState<ManagementResult | null>(null), [latest, setLatest] = useState<ManagedListing | null>(null);
   const [pendingLoaded, setPendingLoaded] = useState(false), [cancelRequested, setCancelRequested] = useState(false);
   const [mapConfirmation, setMapConfirmation] = useState<{item: ManagedListing; display: boolean} | null>(null);
+  const [extensionConfirmation, setExtensionConfirmation] = useState<{item: ManagedListing; date: string} | null>(null);
   const pendingKey = useRef('');
   const unconfirmed = pendingRaw ? journal?.body.listingId ?? 'restoring' : null;
   const [loaded, setLoaded] = useState(false);
@@ -209,11 +210,11 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     void mutate(item, 'STATUS', { action });
   }
   function extend(item: ManagedListing) {
+    if (running.current || unconfirmed || !pendingLoaded || extensionConfirmation) return;
     const minimum = earliestExtensionDate(item.expiresAt);
     const timestamp = Date.parse(`${date}T12:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < minimum || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== date) { setIssue(t("請選擇 {minimum} 或之後的有效日期。", { minimum })); return; }
-    if (!window.confirm(t("確認延長至 {date}？{warning}", { date, warning: t("延長刊登不會自動更新地圖顯示。") }))) return;
-    void mutate(item, 'EXTEND', { expiryDate: date });
+    setExtensionConfirmation({ item, date });
   }
   function mapPresence(item: ManagedListing, display: boolean) {
     const epoch = generation.current;
@@ -230,8 +231,13 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     } catch (error) { if (isCurrent(epoch) && !(error instanceof DOMException && error.name === 'AbortError')) setIssue(t("無法開啟分享或複製連結，請使用下方商品網址。")); }
   }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);
-  const blocked = busy || !!unconfirmed || !pendingLoaded || !!mapConfirmation;
+  const blocked = busy || !!unconfirmed || !pendingLoaded || !!mapConfirmation || !!extensionConfirmation;
   return <div className="max-w-3xl mx-auto p-4 space-y-5 [&_button]:min-h-11">
+    {extensionConfirmation && <MarketplaceDialog title={t("確認延長")} closeLabel={t("取消延長")} onClose={()=>setExtensionConfirmation(null)}>
+      <p className="mb-3 font-semibold break-words">{extensionConfirmation.item.title}</p>
+      <p className="mb-5 text-sm leading-6">{t("確認延長至 {date}？{warning}", { date: extensionConfirmation.date, warning: t("延長刊登不會自動更新地圖顯示。") })}</p>
+      <Button disabled={busy || !!unconfirmed || !pendingLoaded} onClick={()=>{const confirmation=extensionConfirmation;setExtensionConfirmation(null);void mutate(confirmation.item,'EXTEND',{expiryDate:confirmation.date});}}>{t("確認這次延長")}</Button>
+    </MarketplaceDialog>}
     {mapConfirmation && <MarketplaceDialog title={t("確認商品地圖顯示")} closeLabel={t("取消")} onClose={()=>setMapConfirmation(null)}>
       <p className="mb-3 font-semibold break-words">{mapConfirmation.item.title}</p>
       <p className="mb-5 text-sm leading-6">{mapConfirmation.display ? t("這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。") : t("停止地圖顯示？商品刊登及聊天仍保留。")}</p>

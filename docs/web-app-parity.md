@@ -1,3 +1,7 @@
+## Current Web update — 2.0.708
+
+Row18 wish management now retains exact uncertain update targets/fields across root reload using the existing encrypted account/API scope. Reads are GET only; this legacy API has no historical update receipt, so current fields or 404 are never presented as operation proof. Explicit exact-record cleanup performs no update/delete. Scope includes staging failure, corrupt records, another tab conflict, late old-account ACK and successful write followed by failed read. This bounded Web fix does not complete the32-row original APP2.0.12 acceptance, native OS lifecycle, real-account/mail or pending irreversible branches.
+
 ## 2026-10-11：2.0.705 商品說明的本次開啟期間
 
 原 APP 2.0.12 的 noticeNeeded 由 App 根元件維持；儲存失敗後選擇本次繼續，在同次開啟不再次要求說明。Web 原先只由登入／註冊各自的元件維持，路由切換重新展開。新增 App 根層記憶，只保存已驗證的說明版本／API 範圍，不寫瀏覽器記錄。重新載入重新核對原紀錄，服務變更不沿用；未提交表單不因確認說明而清空，忙碌時不可確認。本批只處理第25／26列此缺口；其他32列、原生UI、真外部供應商／郵件／OS及永久操作驗收繼續保留。首頁／設定來源未改，既有視覺評分不是本版新評分。

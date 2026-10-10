@@ -12,13 +12,11 @@ import { getDisplayLocale } from '../utils/localization';
 import { safeDetailLink } from '../lib/legacyDetailWeb';
 import PrivatePhoto from '../components/PrivateMarketplacePhoto';
 import { lookupWishPhotoRemoval, parseWishPhotoRemovalJournal, submitWishPhotoRemoval, type WishPhotoRemovalReceipt } from '../lib/wishPhotoRemoval';
+import { confirmWishUpdate, parseWishUpdateOperation, readWishUpdate, type WishUpdateOperation, type WishUpdateView } from '../lib/wishUpdateRecovery';
 const button = 'min-h-11 rounded-xl border bg-white px-4 py-2 disabled:opacity-50';
 const input = 'mt-2 min-h-11 w-full rounded-xl border bg-white p-3';
+const updateFieldLabels: Record<string, Parameters<typeof pageText>[0]> = {title:'清單名稱',description:'清單說明（選填）',isPublic:'公開清單',name:'願望名稱（必填）',notes:'備註（公開清單會顯示）',link:'參考商品連結（選填）',maxPrice:'最高預算（選填）',priceCurrency:'預算幣別',isHidden:'隱藏願望',isPurchased:'標記完成'};
 type Editor = { kind: 'LIST'; list?: ManagedList } | { kind: 'ITEM'; wish?: ManagedWish };
-function confirmWishFields(result: object, body: object) {
-  const fields = result as Record<string, unknown>;
-  if (Object.entries(body).some(([key,value]) => fields[key] !== value)) throw new WishManagementError('回覆與送出的願望欄位不一致，尚未確認更新');
-}
 function WishImage({ wish }: { wish: ManagedWish }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [wish.imageUrl]);
@@ -35,6 +33,8 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   const [selected, setSelected] = useState<ManagedList | null>(null), [wishes, setWishes] = useState<ManagedWish[]>([]), [wishCursor, setWishCursor] = useState<number | null>(null), [detailLoaded, setDetailLoaded] = useState(false);
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [mutationUnknown, setMutationUnknown] = useState(false);
+  const [updateRaw, setUpdateRaw] = useState<string | null>(null), [update, setUpdate] = useState<WishUpdateOperation | null>(null);
+  const [updateChecked, setUpdateChecked] = useState(false), [updateKnown, setUpdateKnown] = useState(false), [updateView, setUpdateView] = useState<WishUpdateView | null>(null);
   const [pending, setPending] = useState<string | null>(null), [known, setKnown] = useState<WishReceipt | null>(null);
   const [photoRaw, setPhotoRaw] = useState<string | null>(null), [photo, setPhoto] = useState<WishPhotoRecord | null>(null), [photoFile, setPhotoFile] = useState<File | null>(null);
   const [removalRaw, setRemovalRaw] = useState<string | null>(null), [removalKnown, setRemovalKnown] = useState<WishPhotoRemovalReceipt | null>(null);
@@ -42,7 +42,8 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   const [editor, setEditor] = useState<Editor | null>(null), [draft, setDraft] = useState<WishDraft>({ ...emptyWishDraft });
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [isPublic, setPublic] = useState(false);
   const [filter, setFilter] = useState(''), [sort, setSort] = useState('newest'), [confirmDelete, setConfirmDelete] = useState<{ kind: 'LIST' | 'ITEM'; id: number; title: string } | null>(null);
-  const active = useRef(true), gate = useRef(false), keys = useRef<{ create: string; photo: string; removal: string } | null>(null), selection = useRef(initialListId);
+  const active = useRef(true), gate = useRef(false), keys = useRef<{ create: string; photo: string; removal: string; update: string } | null>(null), selection = useRef(initialListId);
+  const updateBody = useRef<string | null>(null), updateAckConfirmed = useRef(false);
   const photoBody = useRef<string | null>(null);
   const album = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null);
   const blocked = busy || !ready || pending !== null || removalRaw !== null || mutationUnknown;
@@ -93,6 +94,7 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   }
   async function clearExact(key: string, raw: string) {
     const current = await privatePendingStore.get(key);
+    if (!active.current) throw new PendingStoreError();
     if (current === null) return;
     if (current !== raw || !await privatePendingStore.clear(key, raw)) throw new PendingStoreError();
   }
@@ -121,19 +123,22 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   async function initialize() {
     if (!begin()) return; setReady(false);
     try {
-      const scoped = { create: await pendingRequestKey(getFullApiUrl(), userId, 'wish-create'), photo: await pendingRequestKey(getFullApiUrl(), userId, 'wish-photo'), removal: await pendingRequestKey(getFullApiUrl(), userId, 'wish-photo-remove') };
-      const [raw, upload, removal] = await Promise.all([privatePendingStore.get(scoped.create), privatePendingStore.get(scoped.photo), privatePendingStore.get(scoped.removal)]);
+      const scoped = { create: await pendingRequestKey(getFullApiUrl(), userId, 'wish-create'), photo: await pendingRequestKey(getFullApiUrl(), userId, 'wish-photo'), removal: await pendingRequestKey(getFullApiUrl(), userId, 'wish-photo-remove'), update: await pendingRequestKey(getFullApiUrl(), userId, 'wish-update') };
+      const [raw, upload, removal, originalUpdate] = await Promise.all([privatePendingStore.get(scoped.create), privatePendingStore.get(scoped.photo), privatePendingStore.get(scoped.removal), privatePendingStore.get(scoped.update)]);
       if (raw) parseWebWishJournal(raw);
       if (upload) parseWishPhotoJournal(upload);
       if (removal) parseWishPhotoRemovalJournal(removal);
+      const updateOperation = originalUpdate ? parseWishUpdateOperation(originalUpdate) : null;
       if (!active.current) return;
       keys.current = scoped; photoBody.current = upload; setPending(raw); setPhotoRaw(upload); setRemovalRaw(removal);
+      updateBody.current = originalUpdate; updateAckConfirmed.current = false; setUpdateRaw(originalUpdate); setUpdate(updateOperation); setUpdateKnown(false); setUpdateChecked(false); setUpdateView(null); setMutationUnknown(!!originalUpdate);
       if (removal) { try { const receipt = await lookupWishPhotoRemoval(token, removal); if (active.current) await cleanPhotoRemoval(removal, receipt); } catch { if (active.current) setError(pageText("原照片移除仍待確認；查不到照片不等於已移除，只查核原回執。")); } }
       if (photoBody.current) { try { const record = await lookupWishPhoto(token, photoBody.current); if (active.current) setPhoto(record); } catch { if (active.current && !removal) setNotice(pageText("有待確認照片；先查核或選回原照片明確重試，不會自動上傳。")); } }
       if (!active.current) return;
       setReady(true);
       if (raw) { try { const receipt = await lookupWishCreate(token, raw); if (active.current) await cleanKnown(raw, receipt); } catch { if (active.current) setError(pageText("尚未查到原建立回執；不代表未成立，只有明確重試才會送出原內容。")); } }
       await readLists(); if (selection.current && active.current) await readDetail(selection.current);
+      if (originalUpdate && active.current) { try { await inspectOriginalUpdate(originalUpdate); } catch { if (active.current) setError(pageText("仍無法取得最新資料，更新操作繼續暫停。")); } }
     } catch { if (active.current) setError(pageText("無法安全恢復願望或讀取資料，請重試；不會在未確認時建立新願望。")); }
     finally { end(); }
   }
@@ -159,19 +164,19 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   }
   async function save() {
     if (blocked || !editor || !begin()) return;
-    let mutationAttempted = false;
+    let updateConfirmed = false;
     try {
       if (editor.kind === 'LIST') {
         const body = listDraftBody(title, description, isPublic);
-        if (editor.list) { mutationAttempted = true; const result = parseManagedList(await api(token, `${wishRoot}/lists/${editor.list.id}`, { method: 'PUT', body: JSON.stringify(body) })); if (result.id !== editor.list.id) throw new WishManagementError(); confirmWishFields(result,body); if (!active.current) return; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readLists(); if (selection.current === result.id) await readDetail(result.id); }
+        if (editor.list) { if (!await sendUpdate('LIST', editor.list.id, editor.list.title, body) || !active.current) return; updateConfirmed = true; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readLists(); if (selection.current === editor.list.id) await readDetail(editor.list.id); }
         else await create(JSON.stringify({ kind: 'LIST', listId: null, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) }));
       } else {
         if (!selected || photoRaw && !photo && !editor.wish) throw new WishManagementError('請先查核照片上傳，或完成照片移除標記清理');
         if (!editor.wish && photo && (photo.listingId !== null || photo.wishItemId !== null)) throw new WishManagementError('照片已用於另一筆商品或願望，請查核原資料，不會重複附加');
-        if (editor.wish) { const patch = wishEditBody(draft); mutationAttempted = true; const result = parseWebManagedWish(await api(token, `${wishRoot}/items/${editor.wish.id}`, { method: 'PUT', body: JSON.stringify(patch) })); if (result.id !== editor.wish.id || result.wishlistId !== selected.id) throw new WishManagementError(); confirmWishFields(result,patch); if (!active.current) return; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readDetail(selected.id); await readLists(); }
+        if (editor.wish) { const patch = wishEditBody(draft); if (!await sendUpdate('ITEM', editor.wish.id, editor.wish.name, patch) || !active.current) return; updateConfirmed = true; setEditor(null); setNotice(pageText("後台已確認願望資料修改。")); await readDetail(selected.id); await readLists(); }
         else { const body = wishDraftBody(draft, photo?.id ?? null); await create(JSON.stringify({ kind: 'ITEM', listId: selected.id, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), ...body }) })); }
       }
-    } catch (failure) { if (active.current) { if (mutationAttempted) setMutationUnknown(true); setError(wishDisplayError(failure, '尚未確認保存；請先查核原回執，不會自動另建。')); } }
+    } catch (failure) { if (active.current) { if (updateConfirmed) setReady(false); setError(updateConfirmed ? pageText('更新已確認，但目前願望讀取失敗；請重新讀取，不會再次更新。') : wishDisplayError(failure, updateBody.current ? '更新結果尚未確認，請重新讀取核對；不會自動重送或顯示假成功。' : '尚未確認保存；請先查核原回執，不會自動另建。')); } }
     finally { end(); }
   }
   async function recoverCreate(retry: boolean) {
@@ -221,25 +226,68 @@ export function WishesSession({ token, userId, initialListId = null }: { token: 
   }
   async function mutate(kind: 'LIST' | 'ITEM', id: number, body?: object) {
     if (blocked || !begin()) return;
+    let updateConfirmed = false;
     try {
-      const result = await api<{ id: unknown; deleted?: boolean }>(token, `${wishRoot}/${kind === 'LIST' ? 'lists' : 'items'}/${id}`, { method: body ? 'PUT' : 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) });
-      if (result.id !== id || !body && result.deleted !== true) throw new WishManagementError();
-      if (body) confirmWishFields(result,body);
-      if (!active.current) return;
+      const originalTitle = kind === 'LIST' ? selected?.title : wishes.find(wish => wish.id === id)?.name;
+      if (!originalTitle || !await sendUpdate(kind, id, originalTitle, body) || !active.current) return;
+      updateConfirmed = true;
       setConfirmDelete(null); setNotice(pageText("後台已確認更新。")); if (!body && kind === 'LIST') { selection.current = null; setSelected(null); setWishes([]); }
       await readLists(); if (selection.current) await readDetail(selection.current);
-    } catch { if (active.current) { setMutationUnknown(true); setError(pageText("更新結果尚未確認，請重新讀取核對；不會自動重送或顯示假成功。")); } } finally { end(); }
+    } catch (failure) { if (active.current) { if (updateConfirmed) setReady(false); setError(updateConfirmed ? pageText('更新已確認，但目前願望讀取失敗；請重新讀取，不會再次更新。') : wishDisplayError(failure, '更新結果尚未確認，請重新讀取核對；不會自動重送或顯示假成功。')); } } finally { end(); }
+  }
+  async function sendUpdate(kind: 'LIST' | 'ITEM', id: number, originalTitle: string, body?: object) {
+    if (!keys.current || updateBody.current) throw new PendingStoreError();
+    let staged = false;
+    try {
+      const raw = JSON.stringify({ version: 1, localOperationId: crypto.randomUUID(), kind, listId: kind === 'LIST' ? id : selected?.id, itemId: kind === 'ITEM' ? id : null, title: originalTitle, method: body ? 'PUT' : 'DELETE', body: body ?? null });
+      const operation = parseWishUpdateOperation(raw);
+      await privatePendingStore.save(keys.current.update, raw); staged = true;
+      if (!active.current) return false;
+      updateBody.current = raw; updateAckConfirmed.current = false; setUpdateRaw(raw); setUpdate(operation); setUpdateKnown(false); setUpdateChecked(false); setUpdateView(null); setMutationUnknown(true);
+      const response = await api(token, `${wishRoot}/${kind === 'LIST' ? 'lists' : 'items'}/${id}`, { method: operation.method, ...(body ? { body: JSON.stringify(body) } : {}) });
+      if (!active.current) return false;
+      confirmWishUpdate(response, operation); updateAckConfirmed.current = true; setUpdateKnown(true);
+      await clearExact(keys.current.update, raw);
+      if (!active.current) return false;
+      updateBody.current = null; updateAckConfirmed.current = false; setUpdateRaw(null); setUpdate(null); setUpdateKnown(false); setUpdateChecked(false); setMutationUnknown(false); return true;
+    } catch (failure) {
+      if (active.current && !staged) setReady(false);
+      if (active.current && updateAckConfirmed.current) setNotice(pageText("後台已確認更新，但本機原紀錄仍待清理。"));
+      throw failure;
+    }
+  }
+  async function inspectOriginalUpdate(raw: string) {
+    const view = await readWishUpdate(token, parseWishUpdateOperation(raw));
+    if (!active.current || updateBody.current !== raw) return;
+    setUpdateView(view); setUpdateChecked(true); setError(''); setNotice(pageText("目前狀態不是原操作回執，不能證明原更新是否成功。"));
   }
   async function inspectMutation() {
     if (!begin()) return;
-    try { await readLists(); if (selection.current) { try { await readDetail(selection.current); } catch (failure) { if (!(failure instanceof ApiFailure) || failure.status !== 404) throw failure; if (active.current) { selection.current=null;setSelected(null);setWishes([]);setNotice(pageText("原清單目前無法查看，請回清單核對；此讀取不是操作回執。")); } } } if (active.current) { setMutationUnknown(false);setEditor(null);setConfirmDelete(null); } }
+    setUpdateChecked(false);
+    try { await readLists(); if (selection.current) { try { await readDetail(selection.current); } catch (failure) { if (!(failure instanceof ApiFailure) || failure.status !== 404) throw failure; if (active.current) { selection.current=null;setSelected(null);setWishes([]);setNotice(pageText("原清單目前無法查看，請回清單核對；此讀取不是操作回執。")); } } } if (updateBody.current && active.current) await inspectOriginalUpdate(updateBody.current); }
     catch { if (active.current) setError(pageText("仍無法取得最新資料，更新操作繼續暫停。")); } finally { end(); }
+  }
+  async function clearUpdate() {
+    if (!updateRaw || !keys.current || !updateKnown && !updateChecked || !begin()) return;
+    try {
+      await clearExact(keys.current.update, updateRaw);
+      if (!active.current) return;
+      updateBody.current = null; updateAckConfirmed.current = false; setUpdateRaw(null); setUpdate(null); setUpdateKnown(false); setUpdateChecked(false); setUpdateView(null); setMutationUnknown(false); setEditor(null); setConfirmDelete(null);
+      setNotice(pageText("已清理原本機紀錄；沒有再次更新或刪除願望。"));
+    } catch { if (active.current) { setReady(false); setError(pageText("原願望更新紀錄尚未清理；只重試清理，不會再次操作。")); } } finally { end(); }
   }
   const status = <>
     {busy && <p role="status">{pageText("正在處理願望…")}</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-blue-50 p-3">{notice}</p>}
-    {mutationUnknown && <button className={button} disabled={busy} onClick={() => void inspectMutation()}>{pageText("只核對最新更新狀態")}</button>}
+    {mutationUnknown && update && <section aria-label={pageText("原願望更新待查核")} className="space-y-3 rounded-xl border border-amber-400 bg-amber-50 p-3">
+      <p>{pageText("保留原更新內容；重新開頁只讀目前狀態，不會自動重送。")}</p>
+      <p>{pageText("原操作對象：")}{update.title}{' · '}{pageText(update.method === 'DELETE' ? '刪除願望資料' : '更新願望資料')}</p>
+      {update.body && <div><p className="font-semibold">{pageText("原送出內容")}</p><dl>{Object.entries(update.body).map(([field,value]) => <div key={field} className="whitespace-pre-wrap break-words"><dt>{pageText(updateFieldLabels[field])}</dt><dd>{typeof value === 'boolean' ? pageText(value ? '是' : '否') : value === null ? pageText('未填寫') : String(value)}</dd></div>)}</dl></div>}
+      {updateView && <div className="whitespace-pre-wrap break-words"><p className="font-semibold">{pageText("目前讀取結果（不是原操作回執）")}</p>{updateView.unavailable ? <p>{pageText("原資料目前無法查看，不能推定已刪除。")}</p> : updateView.item ? <p>{updateView.item.name}{' · '}{updateView.item.notes ?? ''}{' · '}{updateView.item.maxPrice ?? pageText('未設定預算')}{' '}{updateView.item.priceCurrency ?? ''}{' · '}{pageText(updateView.item.isHidden ? '已隱藏' : '未隱藏')}{' · '}{pageText(updateView.item.isPurchased ? '已完成' : '未完成')}</p> : <p>{updateView.list?.title}{' · '}{updateView.list?.description}{' · '}{pageText(updateView.list?.isPublic ? '公開' : '私人')}</p>}</div>}
+      <button className={button} disabled={busy} onClick={() => void inspectMutation()}>{pageText("只核對最新更新狀態")}</button>
+      {(updateKnown || updateChecked) && <button className={button} disabled={busy} onClick={() => void clearUpdate()}>{pageText(updateKnown ? "只清理已確認更新紀錄" : "已讀目前狀態，清理原紀錄並恢復操作")}</button>}
+    </section>}
     {!ready && <button className={button} disabled={busy} onClick={() => void initialize()}>{pageText("重試安全恢復")}</button>}
     {pending && <div className="space-y-2 rounded-xl border p-3">
       <p>{known ? pageText("原建立已確認；只需要清理本機標記。") : pageText("有原建立待確認，新建立暫停；重新開啟只查核，不會自動送出。")}</p>

@@ -102,10 +102,10 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
         <h3 className="border-t bg-gray-50 px-2 py-1 text-xs text-gray-600">{homeText('wish', { name: group.wish.name })}</h3>
         {expanded === group.wish.id && <div className="space-y-2 border-t p-2">{group.matches.slice(1).map(match => <Preview key={match.listing.id} match={match} />)}</div>}
       </article>)}</div>
-      {complete && wishes.length > 0 && !visible.length && <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-gray-200 bg-gray-50 p-4 text-center">
-        <Search className="h-8 w-8 text-gray-400" aria-hidden="true" />
-        <p className="max-w-lg text-sm text-gray-600">{homeText('noMatches')}</p>
-        <Link to="/explore" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-blue-700 hover:bg-white"><MapPin className="h-4 w-4" aria-hidden="true" />{homeText('browse')}</Link>
+      {complete && wishes.length > 0 && !visible.length && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-dashed border-gray-200 bg-gray-50 px-3 py-2">
+        <Search className="h-5 w-5 flex-none text-gray-400" aria-hidden="true" />
+        <p className="min-w-0 flex-1 text-sm text-gray-600">{homeText('noMatches')}</p>
+        <Link to="/explore" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-2 text-sm font-medium text-blue-700 hover:bg-white sm:ml-8 sm:w-auto sm:justify-start"><MapPin className="h-4 w-4" aria-hidden="true" />{homeText('browse')}</Link>
       </div>}
       {!busy && !error && !wishes.length && <div><h2 className="font-semibold">{homeText('firstWish')}</h2><p className="my-2 text-gray-600">{homeText('eligible')}</p><Link to="/wishes" className="inline-flex min-h-11 items-center text-blue-700 underline">{homeText('goWishes')}</Link></div>}
       <p className="mt-3 text-xs text-gray-500">{homeText('notice')}</p>

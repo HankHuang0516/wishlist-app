@@ -241,6 +241,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     {mapConfirmation && <MarketplaceDialog title={t("確認商品地圖顯示")} closeLabel={t("取消")} onClose={()=>setMapConfirmation(null)}>
       <p className="mb-3 font-semibold break-words">{mapConfirmation.item.title}</p>
       <p className="mb-5 text-sm leading-6">{mapConfirmation.display ? t("這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。") : t("停止地圖顯示？商品刊登及聊天仍保留。")}</p>
+      <p className="mb-5 text-sm leading-6 text-gray-600">{t("停止後，新的地圖搜尋不再顯示此商品；商品頁的公開照片與約略位置仍保留。先前已載入的地圖資料需重新載入才能更新。")}</p>
       <Button disabled={busy || !!unconfirmed || !pendingLoaded} onClick={()=>{const {item,display}=mapConfirmation;setMapConfirmation(null);void mutate(item,'MAP',{display,consentToMap:display});}}>{mapConfirmation.display ? t("確認這次顯示一小時") : t("確認停止地圖顯示")}</Button>
     </MarketplaceDialog>}
     <Link to="/settings" className="text-blue-700">{t("返回我的／設定")}</Link>

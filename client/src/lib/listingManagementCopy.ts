@@ -28,6 +28,7 @@ const english = {
   "延長刊登不會自動更新地圖顯示。": "Extending a listing does not renew map display.",
   "這次顯示商品約 2 公里模糊位置一小時？可取消；不顯示使用者即時位置，不會自動續期。": "Display the approximate product location for one hour? You can cancel. This does not show a user's live location and never renews automatically.",
   "停止地圖顯示？商品刊登及聊天仍保留。": "Stop map display? The listing and chat will remain available.",
+  "停止後，新的地圖搜尋不再顯示此商品；商品頁的公開照片與約略位置仍保留。先前已載入的地圖資料需重新載入才能更新。": "After stopping, new map searches will omit this listing. Its public photos and approximate location remain on the listing page. Previously loaded map data needs to be reloaded to reflect the change.",
   "已確認這次地圖顯示，一小時後停止；不會自動續期。": "Map display confirmed for this check-in. It stops after one hour and never renews automatically.",
   "已停止地圖顯示。": "Map display stopped.",
   "地圖顯示尚未確認；請重新載入查看最新期限，不會自動重送。": "Map display is unconfirmed. Reload to check the latest deadline; this will not resend automatically.",

@@ -1,3 +1,7 @@
+## Original wish update recovery — 2.0.708
+
+List edits and privacy changes, wish edits, hidden/completed toggles and deletions preserve the exact target and original fields in the existing encrypted account/API-scoped journal before a write. Reopening performs GET-only reads and keeps new writes paused. This legacy API has no historical update receipt: current matching fields or unavailable data cannot prove the original operation succeeded. Explicitly acknowledging the current read clears only the exact original local record, without another PUT or DELETE. A strict successful response followed by cleanup failure offers cleanup only; failed post-success reads remain labelled as reads. Unavailable/corrupt storage and changed records fail closed; late old-account results are ignored. Native APP and update endpoints remain unchanged.
+
 ## Product notice for the current Web visit — 2.0.705
 
 After an unconfirmed browser-storage write, "Continue for this visit without remembering" keeps the notice collapsed while moving between login and registration in the same open application. The acknowledgement lives only in the App root and is scoped to the validated notice revision and API service. Reloading starts a new visit and rechecks the original browser record. A different service reopens its own notice. Confirmation never submits either form, accepts terms or stores account data; pending form requests disable both notice buttons.

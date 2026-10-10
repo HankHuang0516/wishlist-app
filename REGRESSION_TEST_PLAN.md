@@ -1,5 +1,11 @@
 # Wishlist.ai Regression Test Plan
 
+### Original wish update recovery — 2.0.708
+
+- Reproduce a committed PUT with lost reply, reload a fresh root and verify the original target/fields remain in encrypted scoped storage. All new writes remain disabled; GET-only current state does not claim a historical update receipt.
+- Verify full multiline notes, nullable fields, zero USD budget, strict ACK target/fields, current 404 vs failed reads, explicit exact-record cleanup without another mutation, cleanup failure, unavailable/corrupt storage, another tab replacement and late old-account results.
+- Distinguish a confirmed write from a failed later read. Exercise both languages and narrow-screen recovery with real compiled handlers and isolated PostgreSQL; preserve the before-fix reproduction and exact-candidate CI/deployment readback. Permanent-deletion execution requires its existing explicit human confirmation and is not implied by these non-destructive checks.
+
 ### Product notice visit lifetime
 
 - Reproduce storage failure, explicitly continue for this visit, then navigate login → registration within one App root. The notice stays collapsed, original form input is unchanged before navigation and no authentication request is sent.

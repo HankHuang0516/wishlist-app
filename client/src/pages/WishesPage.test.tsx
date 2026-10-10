@@ -194,10 +194,79 @@ describe('native-parity wish web workflows',()=>{
     let finish!:(v:unknown)=>void;api.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));const view=mount();await waitFor(()=>expect(finish).toBeDefined());view.unmount();await act(async()=>finish({items:[list],nextCursor:null}));expect(posts()).toHaveLength(0);expect(store.clear).not.toHaveBeenCalled();
   });
   it('requires a fresh GET after uncertain edits, not a blind toggle retry',async()=>{
-    items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{if(args[2]?.method==='PUT'){items=[{...wish,isHidden:true}];throw new Error('lost ACK');}return base(...args);});mount(1);await screen.findByText('合成願望');fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));await screen.findByText(/更新結果尚未確認/);expect(screen.getByRole('button',{name:'隱藏願望'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'只核對最新更新狀態'}));await screen.findByRole('button',{name:'取消隱藏'});expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
+    items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{if(args[2]?.method==='PUT'){items=[{...wish,isHidden:true}];throw new Error('lost ACK');}return base(...args);});mount(1);await screen.findByText('合成願望');fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));await screen.findByText(/更新結果尚未確認/);expect(screen.getByRole('button',{name:'隱藏願望'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'只核對最新更新狀態'}));await screen.findByRole('button',{name:'取消隱藏'});expect(screen.getByRole('button',{name:'取消隱藏'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'已讀目前狀態，清理原紀錄並恢復操作'}));await waitFor(()=>expect(screen.getByRole('button',{name:'取消隱藏'})).toBeEnabled());expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
   });
   it('labels camera/library controls as optional and includes budget units rather than using the legacy analyze endpoint',async()=>{
     mount(1);await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});fireEvent.click(screen.getByRole('button',{name:'新增願望 · 拍照／上傳／手動'}));expect(screen.getByText('快捷選用 · 照片交給 AI')).toBeInTheDocument();expect(screen.getByRole('button',{name:'拍攝願望照片'})).toBeInTheDocument();expect(screen.getByLabelText('最高預算（選填） · TWD')).toBeInTheDocument();expect(screen.getByLabelText('拍攝願望照片檔案')).toHaveAttribute('capture','environment');expect(api.mock.calls.some(c=>c[1].includes('/ai/analyze-image'))).toBe(false);
+  });
+});
+
+describe('durable wish update recovery',()=>{
+  it('ignores an old account ACK after a new account is mounted and retains the old exact journal',async()=>{
+    items=[wish];const base=api.getMockImplementation()!;let finish!:(v:unknown)=>void;
+    api.mockImplementation(async(...args)=>args[2]?.method==='PUT'?new Promise(resolve=>{finish=resolve;}):base(...args));
+    const first=mount(1);await screen.findByText('合成願望');await waitFor(()=>expect(screen.getByRole('button',{name:'隱藏願望'})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));await waitFor(()=>expect(finish).toBeDefined());const original=data.get('42.wish-update');first.unmount();
+    render(<MemoryRouter><WishesSession token="new-account" userId={77}/></MemoryRouter>);await screen.findByText('合成清單');await waitFor(()=>expect(screen.getByRole('button',{name:'建立願望清單'})).toBeEnabled());
+    await act(async()=>finish({...wish,isHidden:true}));expect(data.get('42.wish-update')).toBe(original);expect(data.has('77.wish-update')).toBe(false);expect(store.clear).not.toHaveBeenCalled();expect(screen.queryByRole('region',{name:'原願望更新待查核'})).not.toBeInTheDocument();
+  });
+  it('keeps another tab replacement and leaves updates disabled when original-record cleanup conflicts',async()=>{
+    const original=JSON.stringify({version:1,localOperationId:clientRequestId,kind:'ITEM',listId:1,itemId:4,title: wish.name,method:'PUT',body:{isHidden:true}});
+    data.set('42.wish-update',original);items=[{...wish,isHidden:true}];mount(1);await screen.findByRole('button',{name:'已讀目前狀態，清理原紀錄並恢復操作'});
+    const replacement=JSON.stringify({...JSON.parse(original),localOperationId:'d2c33f70-d94c-4a9d-9c49-81d195e7166c',body:{isPurchased:true}});data.set('42.wish-update',replacement);
+    fireEvent.click(screen.getByRole('button',{name:'已讀目前狀態，清理原紀錄並恢復操作'}));await screen.findByText('原願望更新紀錄尚未清理；只重試清理，不會再次操作。');
+    expect(data.get('42.wish-update')).toBe(replacement);expect(store.clear).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'取消隱藏'})).toBeDisabled();expect(api.mock.calls.filter(c=>['PUT','DELETE'].includes(c[2]?.method))).toHaveLength(0);
+  });
+  it('retains corrupt original records and prevents every HTTP write',async()=>{
+    data.set('42.wish-update','corrupt-original');mount(1);await screen.findByRole('alert');expect(data.get('42.wish-update')).toBe('corrupt-original');expect(screen.getByRole('button',{name:'建立願望清單'})).toBeDisabled();expect(api).not.toHaveBeenCalled();
+  });
+  it('reports a confirmed update separately from a failed later read without repeating the update',async()=>{
+    items=[wish];const base=api.getMockImplementation()!;let committed=false;
+    api.mockImplementation(async(...args)=>{if(args[2]?.method==='PUT'){committed=true;return{...wish,isHidden:true};}if(committed)throw new Error('read failed');return base(...args);});
+    mount(1);await screen.findByText('合成願望');await waitFor(()=>expect(screen.getByRole('button',{name:'隱藏願望'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));
+    await screen.findByText('更新已確認，但目前願望讀取失敗；請重新讀取，不會再次更新。');expect(data.has('42.wish-update')).toBe(false);expect(screen.queryByRole('region',{name:'原願望更新待查核'})).not.toBeInTheDocument();expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
+  });
+  it('sends no update when encrypted record staging fails',async()=>{
+    items=[wish];mount(1);await screen.findByText('合成願望');await waitFor(()=>expect(screen.getByRole('button',{name:'隱藏願望'})).toBeEnabled());
+    store.save.mockRejectedValueOnce(new Error('storage unavailable'));fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));await screen.findByRole('alert');
+    expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(0);expect(screen.getByRole('button',{name:'隱藏願望'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'重試安全恢復'})).toBeInTheDocument();
+  });
+  it('retains the original text and zero USD budget across reload when later reads fail',async()=>{
+    items=[wish];const base=api.getMockImplementation()!;api.mockImplementation(async(...args)=>{if(args[2]?.method==='PUT')throw new Error('unknown update');return base(...args);});
+    const first=mount(1);await screen.findByText('合成願望');await waitFor(()=>expect(screen.getByRole('button',{name:'編輯願望'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'編輯願望'}));
+    fireEvent.change(screen.getByLabelText('願望名稱（必填）'),{target:{value:'原修改名稱'}});fireEvent.change(screen.getByLabelText('備註（公開清單會顯示）'),{target:{value:'保留換行\n原備註'}});fireEvent.change(screen.getByLabelText('最高預算（選填） · TWD'),{target:{value:'0'}});fireEvent.change(screen.getByLabelText('預算幣別'),{target:{value:'USD'}});
+    fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));await screen.findByText(/更新結果尚未確認/);
+    const raw=data.get('42.wish-update')!;expect(JSON.parse(raw).body).toMatchObject({name:'原修改名稱',notes:'保留換行\n原備註',maxPrice:0,priceCurrency:'USD'});
+    first.unmount();api.mockImplementation(async(...args)=>{if(args[1]==='/native-wishes/lists/1')throw new Error('current read unavailable');return base(...args);});mount();
+    await screen.findByRole('region',{name:'原願望更新待查核'});expect(screen.getByText('原修改名稱')).toBeInTheDocument();expect(screen.getByText('USD')).toBeInTheDocument();
+    expect(data.get('42.wish-update')).toBe(raw);expect(screen.queryByRole('button',{name:'已讀目前狀態，清理原紀錄並恢復操作'})).not.toBeInTheDocument();expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
+  });
+  it('keeps a confirmed update blocked when cleanup fails and retries cleanup without another write',async()=>{
+    items=[wish];mount(1);await screen.findByText('合成願望');await waitFor(()=>expect(screen.getByRole('button',{name:'隱藏願望'})).toBeEnabled());
+    store.clear.mockRejectedValueOnce(new Error('local cleanup unavailable'));fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));
+    await screen.findByText('後台已確認更新，但本機原紀錄仍待清理。');expect(data.has('42.wish-update')).toBe(true);fireEvent.click(screen.getByRole('button',{name:'只清理已確認更新紀錄'}));
+    await screen.findByText('已清理原本機紀錄；沒有再次更新或刪除願望。');expect(data.has('42.wish-update')).toBe(false);expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
+  });
+  it('keeps a committed uncertain hide blocked after a fresh root reload until explicit read acknowledgement',async()=>{
+    items=[wish];const base=api.getMockImplementation()!;
+    api.mockImplementation(async(...args)=>{
+      if(args[2]?.method==='PUT'){items=[{...wish,isHidden:true}];throw new Error('lost ACK after commit');}
+      return base(...args);
+    });
+    const first=mount(1);await screen.findByText('合成願望');
+    await waitFor(()=>expect(screen.getByRole('button',{name:'隱藏願望'})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:'隱藏願望'}));await screen.findByText(/更新結果尚未確認/);
+    first.unmount();mount(1);await screen.findByRole('button',{name:'取消隱藏'});
+    expect(screen.getByRole('button',{name:'取消隱藏'})).toBeDisabled();
+    expect(data.has('42.wish-update')).toBe(true);
+    await screen.findByText('目前狀態不是原操作回執，不能證明原更新是否成功。');
+    expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
+    const resume=screen.getByRole('button',{name:'已讀目前狀態，清理原紀錄並恢復操作'});
+    await waitFor(()=>expect(resume).toBeEnabled());fireEvent.click(resume);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'取消隱藏'})).toBeEnabled());
+    expect(data.has('42.wish-update')).toBe(false);
+    expect(api.mock.calls.filter(c=>c[2]?.method==='PUT')).toHaveLength(1);
   });
 });
 

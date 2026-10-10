@@ -350,3 +350,6 @@ The public map uses the existing credential-free publicApi, no-store and shared 
 ## 商品衝突與另一分頁草稿
 
 保留原操作修改時，先比較不同的已保存本機草稿；可保留兩份或明確取代剛才核對的草稿。加密儲存以同一交易核對兩份原紀錄、保存以最新版本編輯的草稿並清理原操作。任一紀錄再次變動、儲存失敗或帳號已清除時全部停止，既有紀錄保持。這一步不更新後台商品；之後仍須明確儲存。編輯器只接受這份已保存草稿的完整識別與版本，不在開啟時另寫一份或改用不同草稿。APP、後台契約與所有欄位保持。
+## Bilingual consignment search — 2026-10-11
+
+The existing archived consignment search follows the saved Chinese/English preference, including failure, empty, incomplete, same-name separation and citation labels. A new search clears the previous incomplete-result flag, so a subsequent failed read cannot present that old limit as a current result. Known server summaries retain their original uncertainty; unrecognized summaries remain unchanged. Item names, quoted messages, identifiers and submitted queries are preserved literally. Citation times retain the original timestamp and display Taiwan time. Language rendering does not submit another search or send an inquiry. Original ownership, archive/consent eligibility, request cancellation and result limits remain in force; APP and server contracts are unchanged.

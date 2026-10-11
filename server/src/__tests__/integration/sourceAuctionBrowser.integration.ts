@@ -97,7 +97,7 @@ describe('official auction real Web date disclosure',()=>{
    expect(traffic.slice(beforeChat).some(x=>x.method==='GET'&&x.path.startsWith('/api/source-leads/'+id+'?dateContract=auction-v1')&&x.status===200)).toBe(true);
    await page.evaluate(()=>document.fonts.ready.then(()=>window.scrollTo(0,0)));
    chatCaptures.push(await page.evaluate(()=>({width:innerWidth,text:document.body.textContent,fonts:document.fonts.status,scrollWidth:document.documentElement.scrollWidth})));
-   expect(chatCaptures.at(-1).scrollWidth).toBeLessThanOrEqual(width);
+   expect(chatCaptures[chatCaptures.length-1].scrollWidth).toBeLessThanOrEqual(width);
    await page.screenshot({path:webQaEvidence('auction-first-chat-'+width+'.png')});
    await page.screenshot({path:webQaEvidence('auction-first-chat-'+width+'-full.png'),fullPage:true});
   }

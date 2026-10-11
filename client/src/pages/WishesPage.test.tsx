@@ -26,6 +26,70 @@ beforeEach(()=>{
 });
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 const posts=()=>api.mock.calls.filter(c=>c[2]?.method==='POST');
+describe('known wishlist capacity before a new operation',()=>{
+  function capacityFixture(initialCount:number) {
+    let count=initialCount;
+    const base=api.getMockImplementation()!;
+    items=Array.from({length:50},(_,index)=>({...wish,id:index+4,name:`容量願望 ${index+1}`}));
+    api.mockImplementation(async(...args)=>{
+      const header={...list,_count:{items:count}};
+      if(args[1]==='/native-wishes/lists'&&!args[2]?.method)return{items:[header],nextCursor:null};
+      if(args[1]==='/native-wishes/lists/1')return{list:header,items,nextCursor:53};
+      if(args[1]==='/native-wishes/lists/1/items'&&args[2]?.method==='POST'){
+        count++;return{resource:{...wish,name:JSON.parse(args[2].body as string).name},replayed:false};
+      }
+      return base(...args);
+    });
+    return(value:number)=>{count=value;};
+  }
+  it.each([
+    ['zh-TW','新增願望 · 拍照／上傳／手動','清單已達上限（100/100）。仍可編輯現有願望或使用其他清單；重新讀取可核對最新容量。','編輯願望','編輯清單與公開設定'],
+    ['en-US','Add wish · camera, upload or manual','This list is full (100/100). You can still edit existing wishes or use another list. Read again to check the latest capacity.','Edit wish','Edit list and visibility'],
+  ])('uses the server total rather than the loaded page, without blocking existing edits: %s',async(locale,add,notice,edit,listEdit)=>{
+    localStorage.setItem('user-locale',locale);capacityFixture(100);mount(1);
+    await screen.findByText(notice);expect(screen.getByRole('button',{name:add})).toBeDisabled();
+    expect(screen.getAllByRole('article')).toHaveLength(50);
+    await waitFor(()=>expect(screen.getAllByRole('button',{name:edit})[0]).toBeEnabled());
+    expect(screen.getByRole('button',{name:listEdit})).toBeEnabled();
+    expect(posts()).toHaveLength(0);expect(store.save).not.toHaveBeenCalled();expect(data.size).toBe(0);
+  });
+  it('allows the last slot and blocks another create after the confirmed reread reaches100',async()=>{
+    capacityFixture(99);mount(1);const add=await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});
+    await waitFor(()=>expect(add).toBeEnabled());fireEvent.click(add);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'最後一個容量'}});
+    fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    await screen.findByText('清單已達上限（100/100）。仍可編輯現有願望或使用其他清單；重新讀取可核對最新容量。');
+    expect(add).toBeDisabled();expect(posts()).toHaveLength(1);expect(data.size).toBe(0);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+  it('reenables a new wish only after a successful fresh count below the limit',async()=>{
+    const setCount=capacityFixture(100);mount(1);const add=await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});
+    await waitFor(()=>expect(add).toBeDisabled());setCount(99);
+    fireEvent.click(screen.getByRole('button',{name:'重新讀取願望'}));
+    await waitFor(()=>expect(add).toBeEnabled());
+    expect(screen.queryByText(/清單已達上限/)).not.toBeInTheDocument();expect(posts()).toHaveLength(0);expect(data.size).toBe(0);
+  });
+  it('retains an original unknown create and keeps its GET-only receipt check usable at capacity',async()=>{
+    capacityFixture(100);data.set('42.wish-create',raw);mount(1);
+    await screen.findByText('尚未查到原建立回執；不代表未成立，只有明確重試才會送出原內容。');
+    const check=screen.getByRole('button',{name:'只查核原建立回執'});
+    await waitFor(()=>expect(check).toBeEnabled());const before=api.mock.calls.filter(c=>c[1].includes('/receipts/')).length;
+    fireEvent.click(check);await screen.findByText('原建立仍待確認，識別碼與內容已保留；不會自行重建或丟棄。');
+    expect(api.mock.calls.filter(c=>c[1].includes('/receipts/'))).toHaveLength(before+1);
+    expect(posts()).toHaveLength(0);expect(data.get('42.wish-create')).toBe(raw);expect(store.clear).not.toHaveBeenCalled();
+  });
+  it('preserves an unsent draft without a journal or POST when a fresh count fills its open editor',async()=>{
+    const setCount=capacityFixture(99);mount(1);const add=await screen.findByRole('button',{name:'新增願望 · 拍照／上傳／手動'});
+    await waitFor(()=>expect(add).toBeEnabled());fireEvent.click(add);
+    fireEvent.change(screen.getByLabelText('願望名稱（有照片可留空）'),{target:{value:'原未送出草稿'}});
+    setCount(100);fireEvent.click(screen.getByRole('button',{name:'重新讀取願望'}));
+    await screen.findByText('清單已達上限（100/100）。仍可編輯現有願望或使用其他清單；重新讀取可核對最新容量。');
+    fireEvent.click(screen.getByRole('button',{name:'儲存願望資料'}));
+    expect(screen.getByRole('dialog')).toHaveTextContent('清單已達上限（100/100）');
+    expect(screen.getByLabelText('願望名稱（有照片可留空）')).toHaveValue('原未送出草稿');
+    expect(posts()).toHaveLength(0);expect(store.save).not.toHaveBeenCalled();expect(data.size).toBe(0);
+  });
+});
 describe('English wish UI preserves the original workflow and content',()=>{
   beforeEach(()=>localStorage.setItem('user-locale','en-US'));
   it('shows private counts and preserves original titles, notes, zero budgets and reference cents',async()=>{

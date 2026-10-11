@@ -78,6 +78,7 @@ const en = {
   "公開清單：未隱藏願望與備註可供他人查看": "Public list: other people can view wishes and notes that are not hidden",
   "私人清單：只有自己可查看": "Private list: visible only to you",
   "新增願望 · 拍照／上傳／手動": "Add wish · camera, upload or manual",
+  "清單已達上限（{count}/{max}）。仍可編輯現有願望或使用其他清單；重新讀取可核對最新容量。": "This list is full ({count}/{max}). You can still edit existing wishes or use another list. Read again to check the latest capacity.",
   "這個清單還沒有願望。": "This list has no wishes yet.",
   "AI 參考價格": "AI reference price",
   "幣別未確認": "Currency unconfirmed",

@@ -1,3 +1,7 @@
+Explore count semantics: totals are publication records by type, not deduplicated physical objects or qualified live supply. One source post can contain several different items; do not collapse records by source URL. A published source reference remains in publication totals when its public switch is off, with zero explorable references. Partner publication counts require rollout and enabled source; display additionally requires existing authorization and observation gates.
+
+Browser evidence scope: the isolated Chromium test uses built Web, real compiled handlers and local PostgreSQL; desktop/narrow screenshots and JSON are retained in the CI artifact. External basemap network is blocked, so it does not accept production tiles, authenticated production account behavior or native OS rendering. Source pending/error and count unavailable are explicit controlled transport failures, not forged successful data.
+
 ### Explore global publication counts — draft 2026-10-11
 
 Root cause: Mobile summed only loaded seller/partner results and could announce zero before source references completed, while both clients lacked an authoritative global count. The new GET /api/explore-counts returns aggregate publication and explorable counts from one repeatable-read snapshot, never private rows or viewport-filtered totals. Source PUBLISHED is a reference publication state, not verified stock or seller permission. No TTL, image, rights, map-check-in or publication gate is relaxed.

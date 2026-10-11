@@ -37,7 +37,7 @@ function screenHarness(source: {count:number;ready:boolean;busy:boolean;error:st
   const read=api??(()=>Promise.resolve({}));
   function render(){dirty=false;state=0;effect=0;tree=module.exports.ExploreScreen({api:read,apiUrl:'https://example.com/api',userId:1,onOpenChat:()=>{},onOpenSourceChat:()=>{}});while(pending.length)pending.shift()!();if(dirty)render();}
   function text(v:any):string{if(typeof v==='string')return v;if(Array.isArray(v))return v.map(text).join(' ');if(v&&typeof v==='object')return Object.values(v).map(text).join(' ');return '';}
-  function retry(v:any):boolean{if(v?.props?.onPress&&text(v.props.children)==='重新讀取全站數量'){expect(v.props.disabled).toBe(false);v.props.onPress();return true;}if(Array.isArray(v))return v.some(retry);if(v&&typeof v==='object')return Object.values(v).some(retry);return false;}
+  function retry(v:any):boolean{if(v?.props?.onPress&&text(v.props.children).includes('重新讀取全站數量')){expect(v.props.disabled).toBe(false);v.props.onPress();return true;}if(Array.isArray(v))return v.some(retry);if(v&&typeof v==='object')return Object.values(v).some(retry);return false;}
   render();return {text:()=>text(tree),flush:async()=>{for(let i=0;i<10;i++)await Promise.resolve();render();},retry:()=>{expect(retry(tree)).toBe(true);render();},unmount:()=>cleanup?.()};
 }
 function screenText(source:{count:number;ready:boolean;busy:boolean;error:string},list:boolean){return screenHarness(source,list).text();}

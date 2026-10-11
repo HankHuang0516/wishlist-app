@@ -11,7 +11,7 @@ const ok = (user: unknown = old) => ({ ok: true, status: 200, json: async () => 
 const fetcher = vi.fn();
 function Probe() {
   const auth = useAuth(), route = useLocation();
-  return <><p data-testid="identity">{auth.user ? `${auth.user.id}:${auth.user.name}:${auth.token}` : 'signed-out'}</p><p data-testid="route">{route.pathname + route.search}</p>
+  return <><p data-testid="identity">{auth.user ? `${auth.user.id}:${auth.user.name}:${auth.token}` : 'signed-out'}</p><p data-testid="route">{route.pathname + route.search}</p><p data-testid="route-key">{route.key}</p>
     <button onClick={() => auth.login('new-fixture', next, '/settings')}>切換帳號</button><button onClick={auth.logout}>測試登出</button><button onClick={() => void auth.refreshUser()}>讀取帳號</button></>;
 }
 const mount = (path = '/settings', strict = false) => {
@@ -55,6 +55,29 @@ describe('real provider session restoration and isolation', () => {
       expect(screen.getByTestId('route')).toHaveTextContent('/login?next=' + encodeURIComponent('/chat?room=' + room));
     });
     expect(localStorage.getItem('pending-fixture')).toBe('KEEP'); expect(readSession(localStorage, getFullApiUrl())).toBeNull();
+  });
+  describe.each([401, 404])('stored session expires with HTTP %i on the login page', status => {
+    it.each(['/my-listings', '/explore', '/settings', '/chat?room=c11fde58-d143-423c-99f1-a13d60068f58'])
+      ('keeps the original destination %s for reauthentication', async destination => {
+        seed(); localStorage.setItem('pending-fixture', 'KEEP');
+        fetcher.mockResolvedValue(new Response('{}', { status }));
+        mount('/login?next=' + encodeURIComponent(destination));
+        const initialRouteKey = screen.getByTestId('route-key').textContent;
+        await waitFor(() => {
+          expect(screen.getByTestId('route-key').textContent).not.toBe(initialRouteKey);
+          expect(screen.getByTestId('identity')).toHaveTextContent('signed-out');
+          expect(screen.getByTestId('route')).toHaveTextContent('/login?next=' + encodeURIComponent(destination));
+        });
+        expect(readSession(localStorage, getFullApiUrl())).toBeNull();
+        expect(localStorage.getItem('pending-fixture')).toBe('KEEP');
+      });
+    it.each(['//evil.example', 'https://evil.example/', '/login?next=%2Fexplore', '/chat?room=not-a-room'])
+      ('still rejects the unsafe or invalid login destination %s', async destination => {
+        seed(); fetcher.mockResolvedValue(new Response('{}', { status }));
+        mount('/login?next=' + encodeURIComponent(destination));
+        await waitFor(() => expect(screen.getByTestId('route')).toHaveTextContent('/login?next=%2Fdashboard'));
+        expect(screen.getByTestId('identity')).toHaveTextContent('signed-out');
+      });
   });
   it('treats network/server failure as unverified, not as logout or a successful update', async () => {
     seed(); fetcher.mockRejectedValue(new Error('offline')); mount(); await screen.findByText(/目前顯示上次確認內容/); expect(screen.getByTestId('identity')).toHaveTextContent('42:舊合成買家:old-fixture');

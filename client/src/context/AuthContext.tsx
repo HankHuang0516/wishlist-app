@@ -41,7 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       for (const key of [AUTH_SESSION_KEY, 'token', 'user']) { try { localStorage.removeItem(key); } catch { /* Visible warning below. */ } }
       setNotice('logoutUnverified');
     }
-    const next = authReturnTo(route.current.pathname + route.current.search);
+    const { pathname, search } = route.current;
+    const next = authReturnTo(pathname === '/login' ? new URLSearchParams(search).get('next') : pathname + search);
     navigation.current(expired ? '/login?next=' + encodeURIComponent(next) : '/login', { replace: true });
   }, [replace]);
   useEffect(() => { if (location.pathname === '/login') setRedirectingToLogin(false); }, [location.pathname]);

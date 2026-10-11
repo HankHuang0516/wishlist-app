@@ -36,8 +36,8 @@ it('counts a full publication snapshot, not the first page or map check-in; stal
   expect(tx.externalListingCandidate.findMany.mock.calls[0][0].where.status).toBe('APPROVED');
   expect(JSON.stringify(r.body)).not.toContain('checkedAt'); expect(r.body.stockVerified).toBe(false);
 });
-it('rejects bounds/filters rather than changing the global scope', async () => {
-  expect((await request(app).get('/counts?bbox=121,24,122,25')).status).toBe(400);
+it.each(['bbox=121,24,122,25','q=camera','category=books','minPrice=10','cursor=next','checkIn=1','limit=1'])('rejects scope-changing filters %s', async query => {
+  expect((await request(app).get('/counts?'+query)).status).toBe(400);
   expect(prisma.$transaction).not.toHaveBeenCalled();
 });
 it('returns unavailable, never a fabricated zero, when the snapshot fails', async () => {

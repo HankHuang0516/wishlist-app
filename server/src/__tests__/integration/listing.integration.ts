@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { createServer } from 'http';
 import prisma from '../../lib/prisma';
 import listingRoutes from '../../routes/listingRoutes';
+import exploreCountRoutes from '../../routes/exploreCountRoutes';
 
 const db = process.env.TEST_DATABASE_URL;
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(db);
@@ -20,6 +21,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use('/api/listings', listingRoutes);
+app.use('/api/explore-counts', exploreCountRoutes);
 // Own one real listener for the suite. Passing the Express function creates
 // and closes a transient listener per request, including every concurrent pair.
 const server = createServer(app);
@@ -296,4 +298,48 @@ describe('listing API / PostgreSQL integration', () => {
         expect(published.body.expiresAt).toBe('2028-01-01T15:59:59.999Z');
         expect(published.body.expiryMode).toBe('CUSTOM_DATE');
     });
+});
+
+it('counts real isolated publication rows globally while map presence and private/QA rows stay separate', async () => {
+  const before=(await request(server).get('/api/explore-counts')).body;
+  const sourceIds:string[]=[];
+  try {
+    const reserved=await create({mapCheckIn:false});
+    await prisma.listing.update({where:{id:reserved.id},data:{status:'RESERVED'}});
+    await create({mapCheckIn:false});
+    const expired=await create({mapCheckIn:false});
+    await prisma.listing.update({where:{id:expired.id},data:{expiresAt:new Date(Date.now()-1000)}});
+    await create({title:'【QA測試非販售】 count fixture',mapCheckIn:false});
+    await create({publish:false});
+    const removed=await create({mapCheckIn:false});
+    await prisma.listing.update({where:{id:removed.id},data:{status:'REMOVED'}});
+    const run=randomUUID(),now=new Date(),old=new Date(now.getTime()-49*3600000);
+    for(let i=0;i<103;i++) {
+      const row=await prisma.externalSourceLead.create({data:{
+        archiveItemId:'integration-count-'+run+'-'+i,libraryFileId:'libfile_'+'a'.repeat(32),
+        archiveVersion:0,archiveSha256:'a'.repeat(64),contentHash:'b'.repeat(64),
+        title:i===102?'【QA測試非販售】 source fixture':'isolated count reference',
+        summary:'Synthetic database-only count fixture',canonicalUrl:'https://example.com/count/'+run+'/'+i,
+        county:'臺南市',district:'永康區',publicPlaceName:'synthetic',publicAddress:'synthetic',
+        latitude:23,longitude:120,postedEarliestAt:now,postedLatestAt:now,checkedAt:old,
+        status:i===101?'WITHDRAWN':'PUBLISHED',evidence:{},
+      },select:{id:true}});
+      sourceIds.push(row.id);
+    }
+    const r=await request(server).get('/api/explore-counts');
+    expect(r.status).toBe(200);
+    expect(r.body.published.sellerListings-before.published.sellerListings).toBe(2);
+    expect(r.body.published.sourceReferences-before.published.sourceReferences).toBe(101);
+    expect(r.body.explorable.sellerListings).toBe(before.explorable.sellerListings);
+    expect(r.body.explorable.sourceReferences).toBe(before.explorable.sourceReferences);
+    expect(r.body.stockVerified).toBe(false);
+    expect(JSON.stringify(r.body)).not.toContain(run);
+    expect((await request(server).get('/api/explore-counts?q=camera')).status).toBe(400);
+    const again=await request(server).get('/api/explore-counts');
+    expect(again.body.published).toEqual(r.body.published);
+  } finally {
+    await prisma.externalSourceLead.deleteMany({where:{id:{in:sourceIds}}});
+    await prisma.listing.deleteMany({where:{ownerUserId:{in:[seller,buyer,third]}}});
+    await prisma.listingMedia.deleteMany({where:{ownerUserId:{in:[seller,buyer,third]}}});
+  }
 });

@@ -15,3 +15,12 @@ export function parseExploreCounts(value: unknown): ExploreCounts {
   if (['sellerListings','sourceReferences','partnerListings','total'].some(k => b.explorable[k] > b.published[k])) throw Error('全站數量未取得');
   return { asOf: b.asOf, published: { ...b.published }, explorable: { ...b.explorable } };
 }
+
+/** Empty viewport notices must wait for all three layers; a failed read is unknown. */
+export function isExploreViewportEmpty(input: {
+  loading: boolean; errors: string[]; sourceReady: boolean; sourceCount: number;
+  listingCount: number; hasBounds: boolean;
+}) {
+  return input.hasBounds && !input.loading && input.sourceReady &&
+    !input.errors.some(Boolean) && input.sourceCount === 0 && input.listingCount === 0;
+}

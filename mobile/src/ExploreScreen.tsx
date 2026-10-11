@@ -1,4 +1,4 @@
-import { parseExploreCounts, type ExploreCounts } from './exploreCounts';
+import { parseExploreCounts, isExploreViewportEmpty, type ExploreCounts } from './exploreCounts';
 import { ListingPhoto, listingPresentation } from './ListingPhoto';
 import { useSourceLeads, type SourceChatContext } from './SourceLeadExplorer';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -421,7 +421,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
           {!!resultFrame && <Pressable accessibilityRole="button" accessibilityLabel="回到搜尋結果" style={s.mapAction} onPress={returnToResults}><Text style={s.scopeText}>回到結果</Text></Pressable>}
         </View>
         {canExpand && <Pressable accessibilityRole="button" style={s.mapAction} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
-        {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && !leads.count && leads.ready && !leads.busy && !leads.error && bounds && !error && !externalError) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
+        {(mapError || (isExploreViewportEmpty({ loading:busy || externalBusy || leads.busy, errors:[error,externalError,leads.error], sourceReady:leads.ready, sourceCount:leads.count, listingCount:loadedCount, hasBounds:!!bounds })) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
       </View>
       {chosen && card(chosen, true)}
       {chosenExternal && externalCard(chosenExternal, true)}

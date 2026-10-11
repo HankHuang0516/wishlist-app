@@ -1,3 +1,14 @@
+### Explore global publication counts — draft 2026-10-11
+
+Root cause: Mobile summed only loaded seller/partner results and could announce zero before source references completed, while both clients lacked an authoritative global count. The new GET /api/explore-counts returns aggregate publication and explorable counts from one repeatable-read snapshot, never private rows or viewport-filtered totals. Source PUBLISHED is a reference publication state, not verified stock or seller permission. No TTL, image, rights, map-check-in or publication gate is relaxed.
+
+Release gates:
+- Existing scripts/validate-before-push.sh runs server tests (exploreCounts.test.ts), real isolated PostgreSQL listing.integration.ts, Web tests (exploreCounts.test.ts and ExplorePage.test.tsx), Mobile typecheck/tests (exploreCounts.test.ts). Existing CI runs those same suites; any failed job blocks release. No workflow permission or branch protection change.
+- Test full >100-row pagination, un-checked-in seller listings in the global total, stale PUBLISHED references retained in the publication total but excluded from display, drafts/removed/explicit non-sale QA rows excluded, scope-changing query parameters rejected, unknown API reads never fabricated as zero, and Mobile source/pending/error admission.
+- Synthetic fixtures use only the existing isolated TEST_DATABASE_URL guard and are cleaned up; they never prove real inventory or production counts.
+- Before publishing: full required local validation, version/changelog, exact-candidate CI and this build's actual H-icon self-review must pass. Current remote draft has no local validation or icon review claim while the workspace root is blocked.
+- After authorized deployment: inspect the actual authenticated Web and affected installed Mobile Explore screens at wide/narrow sizes. Record displayed site-wide/category and loaded-area counts against the same-time aggregate response; move map, change keyword/category/price and page, verify primary count stays independent. Verify source present/pending/error and unavailable total states without creating production goods. Record build/account scope and timestamps. API health or unit tests alone cannot mark screen acceptance complete; any untested screen remains UNVERIFIED.
+
 ### Meetup summary synchronization — 2.0.714
 
 Verify that the chat summary and open dialog agree immediately after confirm/cancel and read-only original receipt recovery, without closing or waiting for polling. Reproduce on 711 before fixing. Retain the message draft, original request UUID/version and pending body; recovery sends no additional POST. Delay an earlier parent appointment GET until after the dialog reads the current result and verify that the stale reply cannot replace it. Run existing chat/meetup recovery, account departure, privacy and full client tests.

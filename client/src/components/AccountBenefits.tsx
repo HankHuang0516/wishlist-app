@@ -3,7 +3,7 @@ import { Heart, Sparkles, Award, Crown, ChevronRight } from 'lucide-react';
 import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
-import { settingsText as st } from '../lib/settingsCopy';
+import { settingsChinese, settingsText as st } from '../lib/settingsCopy';
 
 type Allowance = { freeMonthlyLimit: number; freeUsedThisMonth: number; permanentCreditsRemaining: number; paidPurchasesAvailable: boolean };
 export function parseAllowance(value: unknown): Allowance {
@@ -16,6 +16,7 @@ export function parseAllowance(value: unknown): Allowance {
 
 export default function AccountBenefits() {
   const { token } = useAuth();
+  const chinese = settingsChinese();
   const [state, setState] = useState<{ token: string; allowance: Allowance; premium: boolean } | null>(null);
   const [issue, setIssue] = useState(false), [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -40,7 +41,13 @@ export default function AccountBenefits() {
       <div className="space-y-2 pb-3 text-sm text-gray-600"><p>{st("目前未開放收款，不會導向付款頁。")}</p><p>{st("商店付款與後端驗單尚未開放；既有權益不受影響。")}</p></div></details>
     <details className="border-t"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm"><Award className="h-4 w-4 shrink-0 text-amber-600" aria-hidden /><span className="font-medium">{st("尊榮版訂閱 · NT$90／月")}</span><ChevronRight className="ml-auto h-4 w-4" aria-hidden /></summary>
       <div className="space-y-2 pb-3 text-sm text-gray-600"><p>{current ? current.premium ? st("既有尊榮會員；請於原付款平台管理訂閱。") : st("每月 100 次行銷額度；購買尚未開放。") : st("會員狀態暫時無法確認。")}</p>
-        <p>{st("若有持續扣款，請由原付款平台管理；未驗證的商店交易不會開通權益。")}</p></div></details>
+        <p>{st("若有持續扣款，請由原付款平台管理；未驗證的商店交易不會開通權益。")}</p>
+        <p>{st('請選擇當初付款的平台，並使用原訂閱帳號。開啟說明不會變更訂閱或開通權益。')}</p>
+        <div className="flex flex-wrap gap-2">
+          <a href={`https://support.apple.com/${chinese ? 'zh-tw' : 'en-us'}/118428`} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="inline-flex min-h-11 items-center rounded-md border px-3 text-blue-700 underline">{st('Apple 訂閱管理說明')}</a>
+          <a href={`https://support.google.com/googleplay/answer/7018481?hl=${chinese ? 'zh-Hant' : 'en'}&co=GENIE.Platform%3DDesktop`} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="inline-flex min-h-11 items-center rounded-md border px-3 text-blue-700 underline">{st('Google Play 訂閱管理說明')}</a>
+        </div>
+      </div></details>
     <details className="border-t"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm"><Sparkles className="h-4 w-4 shrink-0 text-amber-600" aria-hidden /><span className="font-medium">{st("行銷小助手加值 · US$1／10 次")}</span><ChevronRight className="ml-auto h-4 w-4" aria-hidden /></summary>
       <p className="pb-3 text-sm text-gray-600">{st("次數不限期；購買尚未開放。")}</p></details>
     <p className="border-t pt-2 text-xs text-gray-600" aria-live="polite">{st('永久加值剩餘：{balance}',{balance:current?st('{count} 次',{count:current.allowance.permanentCreditsRemaining}):st('暫時無法核對')})}</p>

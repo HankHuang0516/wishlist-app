@@ -1,5 +1,11 @@
 # Wishlist.ai Regression Test Plan
 
+### Settings account-switch privacy — 2.0.711
+
+- Reproduce old-account unsent name, nickname, address and birthday appearing after an in-place account switch, old profile retained on sign-out, and a previous in-flight save leaving the replacement account busy. Verify no old profile is exposed during the transition render.
+- Keep the replacement account editable without borrowing old cleanup acknowledgements. Held old edit/save/display/recovery callbacks must have no effect. Returning to the original account reads its original receipt and clears only that exact encrypted record, without another POST.
+- Same-owner token refresh and safe rereads retain unsent drafts. Verify the actual Settings component against isolated real handlers and synthetic accounts; record the controlled account-switch harness scope separately from normal production login. Run full Web tests, fresh actual-build H inspection, exact-candidate CI and published byte readback before release.
+
 ### Original wish update recovery — 2.0.708
 
 - Reproduce a committed PUT with lost reply, reload a fresh root and verify the original target/fields remain in encrypted scoped storage. All new writes remain disabled; GET-only current state does not claim a historical update receipt.

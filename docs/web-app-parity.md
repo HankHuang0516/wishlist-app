@@ -1,3 +1,7 @@
+## Settings profile isolation — 2.0.711
+
+The profile hook independently isolates ephemeral owner state, rejects held prior-owner callbacks and preserves encrypted original-owner receipt recovery. The actual SettingsPage already remounts on owner/token changes; that protection remains unchanged. Direct-hook privacy/sign-out/in-flight-save failures were reproduced before the fix; focused68 and full Web133files/2080tests pass. Same-owner hook token refresh/read preserves unsent fields. Original APP and backend contracts remain unchanged. Runtime, exact CI and publication evidence are retained under QA/profile-account-drafts-711-20261011; this bounded backstop does not close the full32-row goal or any pending native, permanent, real-account/mail/provider/OS branch.
+
 ## Current Web update — 2.0.708
 
 Row18 wish management now retains exact uncertain update targets/fields across root reload using the existing encrypted account/API scope. Reads are GET only; this legacy API has no historical update receipt, so current fields or 404 are never presented as operation proof. Explicit exact-record cleanup performs no update/delete. Scope includes staging failure, corrupt records, another tab conflict, late old-account ACK and successful write followed by failed read. This bounded Web fix does not complete the32-row original APP2.0.12 acceptance, native OS lifecycle, real-account/mail or pending irreversible branches.

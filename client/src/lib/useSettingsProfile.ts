@@ -14,6 +14,9 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
   const generation = useRef(0), locked = useRef(false), pendingRef = useRef<string | null>(null), keyRef = useRef('');
   const confirmed = useRef<OwnProfile | null>(null), drafts = useRef<ProfilePatch>({}), acknowledged = useRef<ProfileResult | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const ownerScope = token && userId ? userId : undefined;
+  const activeOwner = useRef(ownerScope);
+  const scopeMatches = activeOwner.current === ownerScope;
   const adopt = (remote: OwnProfile) => { confirmed.current = remote; setProfile({...remote,...drafts.current} as OwnProfile); };
   const markPending = (raw: string | null) => { pendingRef.current = raw; setPending(raw); };
   const finish = async (result: ProfileResult, raw: string, epoch: number) => {
@@ -48,6 +51,13 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
   };
   useEffect(() => {
     const epoch = ++generation.current, abort = new AbortController(); locked.current = true; setLoading(true); setStorageError(false); setNotice('');
+    // Old requests retain their encrypted owner-scoped journals, not the new view's locks or drafts.
+    setBusy(false); setSavedField(null); setDiscardConfirm(false);
+    if (activeOwner.current !== ownerScope) {
+      activeOwner.current = ownerScope;
+      confirmed.current = null; drafts.current = {}; acknowledged.current = null; keyRef.current = '';
+      markPending(null); setProfile(null);
+    }
     if (token && userId) void (async () => {
       try {
         const key = await pendingRequestKey(API_URL,userId,'profile');
@@ -66,12 +76,12 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
     return () => { generation.current++; abort.abort(); clearTimeout(savedTimer.current); };
   },[token,userId,reload]);
   const edit = (field: ProfileField, value: string) => {
-    if (locked.current || pendingRef.current || storageError) return;
+    if (activeOwner.current !== ownerScope || locked.current || pendingRef.current || storageError) return;
     drafts.current[field] = value; setSavedField(null);
     setProfile(prev => prev ? {...prev,[field]:value} : null);
   };
   const update = async (updates: ProfilePatch) => {
-    if (!token || !userId || !confirmed.current || locked.current || pendingRef.current || storageError) return;
+    if (activeOwner.current !== ownerScope || !token || !userId || !confirmed.current || locked.current || pendingRef.current || storageError) return;
     const epoch = generation.current; locked.current = true; setBusy(true); setSavedField(null); setNotice('正在保存與確認…');
     let raw: string | null = null, persisted = false;
     try {
@@ -92,7 +102,7 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
   };
   const recover = async (mode: 'read' | 'retry' | 'abandon' | 'cleanup') => {
     const raw = pendingRef.current;
-    if (!token || !userId || !raw || locked.current) return;
+    if (activeOwner.current !== ownerScope || !token || !userId || !raw || locked.current) return;
     const epoch = generation.current; locked.current = true; setBusy(true); setDiscardConfirm(false);
     try {
       const result = acknowledged.current ?? (mode === 'retry' ? await sendProfileOperation(token,raw,userId,privatePendingStore,keyRef.current,() => generation.current === epoch) : mode === 'abandon' ? await abandonProfileOperation(token,raw,userId,() => generation.current === epoch) : await readProfileOperation(token,raw,userId));
@@ -101,7 +111,7 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
     finally { if (generation.current === epoch) { locked.current = false; setBusy(false); } }
   };
   const canReload = () => {
-    if (locked.current) return false;
+    if (activeOwner.current !== ownerScope || locked.current) return false;
     try {
       const submitted: ProfilePatch = pendingRef.current ? JSON.parse(pendingRef.current).updates : {};
       return Object.entries(drafts.current).every(([field,value]) => {
@@ -110,9 +120,12 @@ export function useSettingsProfile(token: string | null, userId: number | undefi
       });
     } catch { return false; }
   };
-  return { profile, loading, busy, pending, notice, savedField, storageError, discardConfirm, setDiscardConfirm, canReload,
-    locked: loading || busy || !!pending || storageError, emailReadOnly: !!confirmed.current?.email,
+  return { profile: scopeMatches ? profile : null, loading: !scopeMatches || loading,
+    busy: scopeMatches && busy, pending: scopeMatches ? pending : null, notice: scopeMatches ? notice : '',
+    savedField: scopeMatches ? savedField : null, storageError: scopeMatches && storageError,
+    discardConfirm: scopeMatches && discardConfirm, setDiscardConfirm, canReload,
+    locked: !scopeMatches || loading || busy || !!pending || storageError, emailReadOnly: scopeMatches && !!confirmed.current?.email,
     edit,update,recover, retryRead: () => setReload(value => value+1),
-    patchDisplay: (patch: Partial<OwnProfile>) => setProfile(prev => prev ? {...prev,...patch} : null),
-    cleanupOnly: !!acknowledged.current };
+    patchDisplay: (patch: Partial<OwnProfile>) => { if (activeOwner.current === ownerScope) setProfile(prev => prev ? {...prev,...patch} : null); },
+    cleanupOnly: scopeMatches && !!acknowledged.current };
 }

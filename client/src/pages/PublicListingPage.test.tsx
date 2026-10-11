@@ -21,6 +21,28 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 });
 
 describe('public listing share destination', () => {
+  it('keeps incomplete map/public listing projections rejected even when metadata can describe absent photos', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk({ ...listing(), media: [], location: null, deliveryMethods: [] })));
+    mount('/listings/' + id);
+    await screen.findByRole('heading', { name: '暫時無法載入商品' });
+    expect(screen.queryByRole('button', { name: '分享商品' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+  it('labels selected AI imagery as an illustration rather than an item photograph', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk({ ...listing(), media: listing().media.map(photo => ({ ...photo, capturePurpose: 'AI_MARKETING' })) })));
+    mount('/listings/' + id);
+    await screen.findByRole('heading', { name: '二手檯燈' });
+    expect(screen.getByRole('img', { name: '二手檯燈商品行銷示意圖1' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '二手檯燈商品照片1' })).not.toBeInTheDocument();
+  });
+  it('keeps the same honest AI image description in English', async () => {
+    localStorage.setItem('user-locale', 'en-US');
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk({ ...listing(), media: listing().media.map(photo => ({ ...photo, capturePurpose: 'AI_MARKETING' })) })));
+    mount('/listings/' + id);
+    await screen.findByRole('heading', { name: '二手檯燈' });
+    expect(screen.getByRole('img', { name: '二手檯燈 item marketing illustration 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '二手檯燈 item photo 1' })).not.toBeInTheDocument();
+  });
   it('shows the public listing to a visitor without login or private fields', async () => {
     const fetch = vi.fn(async () => responseOk({ ...listing(), privatePhone: 'DO_NOT_SHOW' }));
     vi.stubGlobal('fetch', fetch);

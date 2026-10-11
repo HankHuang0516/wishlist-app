@@ -1,3 +1,7 @@
+## Product-share photo truth — 2.0.726
+
+Share metadata without media retains the actual title, price and current-version link. It omits image metadata rather than label website artwork as a product photo. A real seller photo remains preferred over selected marketing art; selected AI-only art is described as marketing imagery. The detail page also labels selected AI art honestly in Chinese and English. Public DTO validation and publication requirements remain unchanged: incomplete pagination-only fixtures are rejected by the detail page. No listing permissions, source photos, native APP2.0.12 or payment availability change. Actual third-party display and cache refresh remain independently verifiable.
+
 ## Original-platform subscription guidance — 2.0.723
 
 Settings → Premium subscription now exposes bilingual Apple and Google Play official instructions. Users select the original billing platform and account; the Web app does not infer a billing provider from browser or membership state. Help links are available when benefit reads fail and carry no account values. Purchases remain paused and benefit reads use the existing backend.

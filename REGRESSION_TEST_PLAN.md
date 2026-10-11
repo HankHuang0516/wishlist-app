@@ -1,3 +1,11 @@
+## 商品分享照片真實性 — 2.0.726
+
+- 無照片的公開商品保留真實名稱、付費／贈送／未知價格與目前版本連結；不輸出網站通用圖或商品照片的替代描述，文字卡不宣稱大圖。
+- 有原商品照片時優先使用原照片，不因行銷圖排序在前而改用它；僅有已選用行銷圖時說明標示行銷示意圖。商品詳細頁已選用 AI 圖的中英文替代描述同樣標示行銷示意圖。
+- 草稿、失效、移除、售出及未知 ID 不暴露商品 metadata；原照片匿名可讀資格由原 media gate 判定，不改權限或擴大公開範圍。
+- 實際 compiled SSR route／現有隔離 DB 比較改前與改後；瀏覽器查看符合公開資料契約的原圖商品及手動分享文字。分頁專用無照片／無地點 ACTIVE fixture 不符合正式公開 DTO，詳細頁拒絕為正確行為，不放寬 parser 或上架條件；其 SSR 僅作無照片 metadata 防禦核對。外部社群可能保留先前預覽快取，本次初始 HTML 不能冒稱已更新全部平台快取。
+- 原 APP2.0.12 不改；保留全32項義務、付款暫停及待核跨端流程。發布前重新目視核對本版實際 icon 的 H。
+
 ### Original-platform subscription guidance — 2.0.723
 
 - Verify Chinese/English instructions for premium, standard and unverified membership; collapsed by default, exact official help destinations, no account/session values or referrer, no payment action or mutation.

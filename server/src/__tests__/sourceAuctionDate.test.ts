@@ -4,7 +4,7 @@ const ref='source:auction-period-fixture';
 const now=new Date('2026-10-11T04:00:00Z');
 const fixture=()=>({sourceType:'OFFICIAL_AUCTION',dateBasis:'ACTIVE_AUCTION_WINDOW',originalPublishedAt:null,priceType:'STARTING_BID',authorityRef:'source:official-authority-fixture',activeAuctionWindow:{startsAt:'2026-10-11T02:00:00Z',endsAt:'2026-11-10T02:00:00Z',timeZone:'Asia/Taipei',sourceUrl:url,periodRef:ref}});
 describe('official auction evidence basis, without inventing a publication date',()=>{
- test('accepts only an active bound official item window and leaves original date unknown',()=>expect(parseOfficialAuction(fixture(),url,ref,now)).toEqual({sourceType:'OFFICIAL_AUCTION',dateBasis:'ACTIVE_AUCTION_WINDOW',originalPublishedAt:null,priceType:'STARTING_BID',activeAuctionWindow:{startsAt:'2026-10-11T02:00:00Z',endsAt:'2026-11-10T02:00:00Z',timeZone:'Asia/Taipei'}}));
+ test('accepts only an active bound official item window and leaves original date unknown',()=>expect(parseOfficialAuction(fixture(),url,ref,now)).toEqual({sourceType:'OFFICIAL_AUCTION',dateBasis:'ACTIVE_AUCTION_WINDOW',originalPublishedAt:null,priceType:'STARTING_BID',activeAuctionWindow:{startsAt:'2026-10-11T02:00:00.000Z',endsAt:'2026-11-10T02:00:00.000Z',timeZone:'Asia/Taipei'}}));
  test.each(['https://www.facebook.com/groups/123/posts/456','https://example.gov.tw/Product/Detail/00000000-0000-4000-8000-000000000001',url+'?x=1',url+'#x',url.replace('recycledstuff.ntpc.gov.tw','recycledstuff.ntpc.gov.tw.example.com'),url.replace('/Product/Detail/','/Other/')])('rejects unreviewed or modified route %s',bad=>expect(()=>officialAuctionUrl(bad)).toThrow());
  test.each([
   {originalPublishedAt:'2026-10-11T02:00:00Z'},

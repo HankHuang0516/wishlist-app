@@ -1,3 +1,10 @@
+## Explore report-history entry — 2.0.732
+
+- In Chinese and English, open My item reports from Explore, read the same private history without a new-report form, and close back to the unchanged keywords/list/map session.
+- An unsuccessful history read remains a failure rather than an empty-history success; existing report receipt/pending-store tests continue to cover recovery.
+- Verify actual browser entry/history/close at desktop and390px, original settings route, unique Settings navigation, and no new report/chat/message mutation.
+- Run focused tests, complete client suite/build, fresh actual-build H review, CI, exact Railway deployment and published feature/visual readback. Original APP183 source must remain unchanged. Full32 and inherited human actions remain pending.
+
 ## Visible marketing-image disclosure — 2.0.729
 
 Verify known AI_MARKETING cover and mixed detail media in Traditional Chinese and English, preserving ID-bound image URLs and order. Verify the caption remains visible while loading/failing and clears for original-photo replacement. Unknown metadata is not inferred as AI. Read-only controlled HTTP metadata in a local fixture is presentation evidence, not a real provider-quality claim. Run meaningful caption regressions, full CI, actual browser, fresh actual729 icon/H review and exact deployment asset readback. Original32 native/provider/permission/account/failure/recovery requirements and human-only steps remain.

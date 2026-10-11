@@ -25,6 +25,7 @@ import ExploreMapWeb, { type MapFrame, type MapSelection } from '../components/E
 import MarketplaceDialog from '../components/MarketplaceDialog';
 import MapFallbackBoundary from '../components/MapFallbackBoundary';
 import ListingReportWeb from '../components/ListingReportWeb';
+import { reportText } from '../lib/listingReportCopy';
 import ProductActionsWeb from '../components/ProductActionsWeb';
 
 const MAX_LOADED = 500;
@@ -76,7 +77,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const [selection, setSelection] = useState<MapSelection | null>(null), [frame, setFrame] = useState<MapFrame | null>(null);
   const [locationMessage, setLocationMessage] = useState(''), [clock, setClock] = useState(Date.now()), [queryError, setQueryError] = useState('');
   const [detail, setDetail] = useState<{ kind: MapSelection['kind']; id: string; seller?: PublicListing; external?: ExternalListing; source?:SourceLead; loading: boolean; error: string } | null>(null);
-  const [report, setReport] = useState<PublicListing | null>(null);
+  const [report, setReport] = useState<PublicListing | 'history' | null>(null);
   const viewport = useRef<Bounds>(TAIWAN_BOUNDS), frameNumber = useRef(0), initialTarget = useRef<PublicListing | null>(null);
   const currentQuery = useRef(query); currentQuery.current = query;
   const currentSeller = useRef(seller); currentSeller.current = seller;
@@ -290,7 +291,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     ? text('查詢暫時受限，請等待 {seconds} 秒後再試。等待期間可調整地圖與條件，不會自動搜尋。', { seconds: Math.ceil((retryUntil - clock) / 1000) })
     : text('等待已結束；請明確重試搜尋、載入更多或重新核對商品，不會自動執行。')}</p>;
   return <section className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p className="mt-1 text-sm text-gray-500">{text("在附近，找到願望的另一種可能。")}</p></div><Link to="/sell" className="rounded-xl bg-green-800 px-4 py-3 text-white">{text("拍照刊登好物")}</Link></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p className="mt-1 text-sm text-gray-500">{text("在附近，找到願望的另一種可能。")}</p></div><div className="flex flex-wrap gap-3"><button type="button" onClick={() => setReport('history')} className="min-h-11 rounded-xl border bg-white px-4 py-3">{reportText('我的商品檢舉')}</button><Link to="/sell" className="min-h-11 rounded-xl bg-green-800 px-4 py-3 text-white">{text("拍照刊登好物")}</Link></div></div>
     {initError && <div role="alert" className="rounded-xl bg-red-50 p-4"><p>{exploreMessage(initError)}</p><Link to="/explore" aria-disabled={readBlocked} onClick={event => { if (waiting()) event.preventDefault(); }} className="underline">{text("清除連結條件，重新探索")}</Link></div>}
     {!detail && waitNotice}
     {!query && !initError && <p role="status">{text("正在準備搜尋條件…")}</p>}
@@ -337,6 +338,6 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       {detail.source&&<div className="space-y-4"><p className="text-sm text-gray-600">{sourceText('外部來源 · Wishlist AI代問，非站內賣家；庫存與交易待確認。')}</p><h3 className="text-xl font-semibold">{detail.source.title}</h3><p className="font-semibold text-green-800">{sourceLeadPrice(detail.source.publicFacts?.priceText)}</p><ListingPhotoGallery photos={detail.source.media??[]} title={detail.source.title} completeness={detail.source.photoCompleteness}/><p className="whitespace-pre-wrap break-words">{detail.source.summary}</p><p role="status" className="text-sm text-stone-600">{sourceLeadRoutingReason(detail.source.contactRouting)}</p><p>{detail.source.county} · {detail.source.district} · {text(sourceLocationLabel(detail.source))}：{detail.source.publicPlaceName}；{text('不是商品或賣家所在地。')}</p><p>{detail.source.publicFacts?.originalDateLabel}</p><Link className="inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 text-white" to={'/chat?source='+detail.source.id}>{sourceText('聯絡賣家')}</Link><a className="inline-flex min-h-11 items-center rounded-xl border px-4" href={detail.source.canonicalUrl} target="_blank" rel="noreferrer">{sourceText('原始來源')}</a></div>}{detail.external && <div className="space-y-4"><p className="text-sm text-amber-800">{text("外部來源 · 非站內賣家；請至原網站確認價格、庫存及交易方式。")}</p><h3 className="text-xl font-semibold">{detail.external.title}</h3><p className="font-semibold">{exploreSourcePrice(detail.external)}</p><ExternalDetailPhoto item={detail.external} /><p className="whitespace-pre-wrap">{detail.external.description}</p>{detail.external.aiSupplement && <p className="rounded-xl bg-amber-50 p-3">{text('AI 補充（不是來源保證）：')}{detail.external.aiSupplement}</p>}
         <p className="text-sm text-gray-600">{detail.external.county} · {detail.external.district}{text(' 行政區中心，並非商品確切所在地。資料確認：')}{exploreTime(detail.external.observedAt)}{text('（台灣時間）')}</p><a href={detail.external.canonicalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-xl border px-4">{text('前往來源網站（{host}）', { host: detail.external.source.host })}</a></div>}
     </MarketplaceDialog>}
-    {report && <ListingReportWeb key={`${userId}:${token}:${report.id}`} token={token} userId={userId} listing={{ id: report.id, title: report.title, available: Date.parse(report.expiresAt) > Date.now() }} onClose={() => setReport(null)} />}
+    {report && <ListingReportWeb key={`${userId}:${token}:${report === 'history' ? 'history' : report.id}`} token={token} userId={userId} listing={report === 'history' ? undefined : { id: report.id, title: report.title, available: Date.parse(report.expiresAt) > Date.now() }} onClose={() => setReport(null)} />}
   </section>;
 }

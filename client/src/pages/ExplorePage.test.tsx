@@ -28,6 +28,27 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   const noWrites = (fetch: ReturnType<typeof vi.fn>) => expect(fetch.mock.calls.some(call =>
     (call[1] as RequestInit | undefined)?.method && (call[1] as RequestInit).method !== 'GET')).toBe(false);
 
+  it.each(['zh-TW', 'en-US'])('opens private report history from Explore in %s and keeps the current list and keyword when closed', async locale => {
+    localStorage.setItem('user-locale', locale);
+    const item = makeListing('原搜尋商品'), fetch = vi.fn(async (url: string) => responseOk(
+      url.includes('/listing-reports/mine') || url.includes('match-wishes') ? { items: [], nextCursor: null }
+        : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null }));
+    stubFetch(fetch); render(view('/explore?view=list&q=' + encodeURIComponent('漫畫')));
+    const itemLabel = locale === 'zh-TW' ? `查看${item.title}商品詳情` : `View item details: ${item.title}`;
+    await screen.findByRole('button', { name: itemLabel });
+    expect(fetch.mock.calls.some(([url]) => url.includes('/listing-reports/'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: locale === 'zh-TW' ? '我的商品檢舉' : 'My item reports' }));
+    const dialog = await screen.findByRole('dialog', { name: locale === 'zh-TW' ? '我的商品檢舉' : 'My item reports' });
+    await within(dialog).findByText(locale === 'zh-TW' ? '尚無已收件紀錄。' : 'No received reports yet.');
+    expect(within(dialog).queryByRole('button', { name: locale === 'zh-TW' ? '送出檢舉' : 'Submit report' })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: locale === 'zh-TW' ? '關閉' : 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: locale === 'zh-TW' ? '商品關鍵字' : 'Item keywords' })).toHaveValue('漫畫');
+    expect(screen.getByRole('button', { name: itemLabel })).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([url]) => url.includes('/listing-reports/mine'))).toHaveLength(1);
+    noWrites(fetch);
+  });
+
   it.each([['zh-TW', 'AI 行銷示意圖'], ['en-US', 'AI marketing illustration']])('visibly distinguishes the AI cover and mixed detail media in %s without changing their order or URLs', async (locale, caption) => {
     localStorage.setItem('user-locale', locale);
     const original = makeListing('合成商品圖片分類'), first = original.media[0];

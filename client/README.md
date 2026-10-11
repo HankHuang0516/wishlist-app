@@ -1,3 +1,9 @@
+## Explore report-history entry — 2.0.732
+
+Original APP2.0.12 ExploreScreen exposes My reports in its toolbar. Web Explore now opens the existing private ListingReportWeb history dialog directly; closing retains the same search, loaded list and map session. Chinese/English labels reuse the report copy. Authentication, encrypted pending operations and report APIs are unchanged. The existing Settings reports route remains available.
+
+Original32 scope remains open. Current729 actual synthetic report/chat lost-response and GET-only recovery evidence is in `QA/report-chat-729-20261012/`; this entry does not claim native device acceptance or production write recovery.
+
 ## Visible marketing-image disclosure — 2.0.729
 
 Public item pages and Explore seller previews/details show a bilingual caption below AI_MARKETING media. Known metadata determines the caption; original photos are not labelled AI. Image URLs, sequence, item fields, permissions, native source and payment behavior remain unchanged. This display improvement does not certify provider image quality or all32 parity.

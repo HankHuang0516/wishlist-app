@@ -92,7 +92,7 @@ describe('real Web global publication count acceptance',()=>{
   await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
   const open=async(search:string)=>{await page.goto(origin+'/explore'+search,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('[data-explore-global-counts]')?.textContent?.includes('全站已上架 102 件'));};
   const shot=async(name:string)=>{
-   await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);});
+   await page.evaluate(()=>document.fonts.ready.then(()=>{window.scrollTo(0,0);}));
    expect(await page.evaluate(()=>document.fonts.status)).toBe('loaded');
    const measure=await page.evaluate(()=>{
     const global=document.querySelector('[data-explore-global-counts]')!,local=document.querySelector('[data-explore-viewport-summary]')!;

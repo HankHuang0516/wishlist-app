@@ -102,7 +102,7 @@ export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = 
         throw new Error('回執格式錯誤');
 } return r as LeadRoom; }
 
-export const sourceLocationLabel=(r:Pick<SourceLead,'locationPrecision'|'sourceType'>)=>r.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':lead.sourceType==='OFFICIAL_AUCTION'?'官方公開取貨點':'公共面交點';
+export const sourceLocationLabel=(r:Pick<SourceLead,'locationPrecision'|'sourceType'>)=>r.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':r.sourceType==='OFFICIAL_AUCTION'?'官方公開取貨點':'公共面交點';
 
 export function sourceLeadFresh(r:Pick<SourceLead,'canonicalUrl'|'postedEarliestAt'|'postedLatestAt'|'checkedAt'|'sourceType'|'dateBasis'|'originalPublishedAt'|'priceType'|'activeAuctionWindow'>,now=Date.now()){
  const checked=Date.parse(r.checkedAt);if(!Number.isFinite(checked)||checked>now||now-checked>48*3600000)return false;

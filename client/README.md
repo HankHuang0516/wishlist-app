@@ -1,3 +1,7 @@
+## Settings drafts when switching accounts — 2.0.711
+
+The profile hook now independently guards owner changes; the existing SettingsSession owner/token key is preserved. An in-place hook account change or sign-out immediately hides the previous owner's profile and clears that view's unsent private fields, saved indicator, cleanup acknowledgement and busy state. Held old-account callbacks cannot edit, save or replace the new profile. Existing encrypted owner/API-scoped recovery records remain intact; returning to the original account performs the original GET-only receipt recovery. Same-owner token refresh and safe rereads retain unsent drafts. APP and backend contracts are unchanged.
+
 ## Original wish update recovery — 2.0.708
 
 List edits and privacy changes, wish edits, hidden/completed toggles and deletions preserve the exact target and original fields in the existing encrypted account/API-scoped journal before a write. Reopening performs GET-only reads and keeps new writes paused. This legacy API has no historical update receipt: current matching fields or unavailable data cannot prove the original operation succeeded. Explicitly acknowledging the current read clears only the exact original local record, without another PUT or DELETE. A strict successful response followed by cleanup failure offers cleanup only; failed post-success reads remain labelled as reads. Unavailable/corrupt storage and changed records fail closed; late old-account results are ignored. Native APP and update endpoints remain unchanged.

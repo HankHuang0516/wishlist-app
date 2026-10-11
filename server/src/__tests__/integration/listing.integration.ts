@@ -308,7 +308,9 @@ it('counts real isolated publication rows globally while map presence and privat
     await prisma.listing.update({where:{id:reserved.id},data:{status:'RESERVED'}});
     await create({mapCheckIn:false});
     const expired=await create({mapCheckIn:false});
-    await prisma.listing.update({where:{id:expired.id},data:{expiresAt:new Date(Date.now()-1000)}});
+    const past=Date.now();
+    await prisma.listing.update({where:{id:expired.id},data:{publishedAt:new Date(past-31*86400000),
+      expiresAt:new Date(past-86400000),lastVerifiedAt:new Date(past-31*86400000)}});
     await create({title:'【QA測試非販售】 count fixture',mapCheckIn:false});
     await create({publish:false});
     const removed=await create({mapCheckIn:false});

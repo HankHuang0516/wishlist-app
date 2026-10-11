@@ -48,7 +48,7 @@ describe('official auction real Web date disclosure',()=>{
    const asset=target.startsWith(root+path.sep)&&fs.existsSync(target)&&fs.statSync(target).isFile()?target:path.join(root,'index.html');
    await req.respond({status:200,contentType:path.extname(asset)==='.js'?'application/javascript':path.extname(asset)==='.css'?'text/css':path.extname(asset)==='.png'?'image/png':'text/html',body:fs.readFileSync(asset)});
   }catch{try{await req.abort();}catch{}}});
-  const captures=[];
+  const captures=[];const detailCaptures:any[]=[];const chatCaptures:any[]=[];
   for(const width of [1280,390]){
    await page.setViewport({width,height:900});await page.goto(origin+'/source-leads?id='+id,{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.body.textContent?.includes('原刊日未知；有效拍賣期間'));
@@ -67,14 +67,43 @@ describe('official auction real Web date disclosure',()=>{
    await page.evaluate(()=>document.fonts.ready.then(()=>window.scrollTo(0,0)));
    const detail=await page.$eval('[role="dialog"]',(el:Element)=>el.textContent||'');expect(detail).toContain('起標價非成交價');expect(detail).toContain('公開官方拍賣參考');expect(detail).toContain('官方拍賣來源');expect(detail).not.toContain('1970');
    await page.screenshot({path:webQaEvidence('auction-explore-detail-'+width+'.png')});
-   await (await page.$('[role="dialog"]'))!.screenshot({path:webQaEvidence('auction-explore-detail-'+width+'-full.png')});
+   // fullPage does not expand a fixed overflow dialog. Capture every actual scroll segment.
+   const metrics=await page.$eval('[role="dialog"]',(el:Element)=>({height:el.clientHeight,total:el.scrollHeight}));
+   for(let segment=0,top=0;;segment++,top+=Math.max(1,Math.floor(metrics.height*.65))){
+    await page.$eval('[role="dialog"]',(el:Element,y:number)=>{el.scrollTop=y;},Math.min(top,metrics.total-metrics.height));
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    const visible=await page.$eval('[role="dialog"]',(el:Element)=>{
+     const box=el.getBoundingClientRect();return {scrollTop:el.scrollTop,clientHeight:el.clientHeight,scrollHeight:el.scrollHeight,
+      visible:[...el.querySelectorAll('p,a')].filter(node=>{const r=node.getBoundingClientRect();return r.top>=box.top&&r.bottom<=box.bottom;}).map(node=>node.textContent||'')};
+    });
+    detailCaptures.push({width,segment,...visible});
+    await page.screenshot({path:webQaEvidence('auction-explore-detail-'+width+'-scroll-'+segment+'.png')});
+    if(visible.scrollTop+visible.clientHeight>=visible.scrollHeight-1)break;
+   }
+   const shown=detailCaptures.filter(x=>x.width===width).flatMap(x=>x.visible).join('\n');
+   expect(shown).toContain('原刊日未知；有效拍賣期間');expect(shown).toContain('起標價非成交價');
+   expect(shown).toContain('公開官方拍賣參考');expect(shown).toContain('聯絡賣家');expect(shown).toContain('原始來源');
+   const beforeChat=traffic.length;
    await page.click('a[href="/chat?source='+id+'"]');
-   await page.waitForFunction(()=>location.pathname==='/chat'&&document.querySelector('[role="dialog"]')?.textContent?.includes('合成拍賣畫面驗收'));
+   // Exclude the stale Explore dialog and the lazy route loading screen.
+   await page.waitForFunction((sourceId:string)=>{
+    const dialog=document.querySelector('section[role="dialog"]'),field=dialog?.querySelector('textarea')as HTMLTextAreaElement|null;
+    return location.pathname==='/chat'&&location.search==='?source='+sourceId&&
+     [...document.querySelectorAll('h1')].some(el=>el.textContent==='聊天與面交')&&
+     !!dialog?.textContent?.includes('合成拍賣畫面驗收')&&!!dialog?.textContent?.includes(sourceId)&&
+     !!field&&!field.disabled&&!document.body.textContent?.includes('正在載入頁面…')&&
+     !document.body.textContent?.includes('正在讀取來源對話…');
+   },{},id);
+   expect(traffic.slice(beforeChat).some(x=>x.method==='GET'&&x.path.startsWith('/api/source-leads/'+id+'?dateContract=auction-v1')&&x.status===200)).toBe(true);
+   await page.evaluate(()=>document.fonts.ready.then(()=>window.scrollTo(0,0)));
+   chatCaptures.push(await page.evaluate(()=>({width:innerWidth,text:document.body.textContent,fonts:document.fonts.status,scrollWidth:document.documentElement.scrollWidth})));
+   expect(chatCaptures.at(-1).scrollWidth).toBeLessThanOrEqual(width);
    await page.screenshot({path:webQaEvidence('auction-first-chat-'+width+'.png')});
+   await page.screenshot({path:webQaEvidence('auction-first-chat-'+width+'-full.png'),fullPage:true});
   }
   expect(traffic.some(x=>x.path.startsWith('/api/source-leads/'+id+'?dateContract=auction-v1')&&x.status===200)).toBe(true);
   expect(traffic.some(x=>x.method==='POST'&&x.path.includes('/inquiry'))).toBe(false);
   expect(errors).toEqual([]);
-  fs.writeFileSync(webQaEvidence('auction-date-report.png').replace(/\.png$/,'.json'),JSON.stringify({head:process.env.AUCTION_QA_HEAD_SHA,syntheticOnly:true,productionWrites:0,nativeAcceptance:false,basemapAccepted:false,errors,captures,traffic},null,2));
+  fs.writeFileSync(webQaEvidence('auction-date-report.png').replace(/\.png$/,'.json'),JSON.stringify({head:process.env.AUCTION_QA_HEAD_SHA,syntheticOnly:true,productionWrites:0,nativeAcceptance:false,basemapAccepted:false,errors,captures,detailCaptures,chatCaptures,traffic},null,2));
  },60000);
 });

@@ -17,7 +17,7 @@ describe('real Web global publication count acceptance',()=>{
  const prefix='SYNTHETIC-EXPLORE-'+randomUUID();
  const saved={api:process.env.API_URL,secret:process.env.JWT_SECRET,source:process.env.SOURCE_LEADS_PUBLIC_ENABLED,external:process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED};
  let sourceMode:'ok'|'pending'|'failed'='ok',countsFailed=false,releaseSource:(()=>void)|undefined;
- const rows:string[]=[],traffic:{path:string,status:number}[]=[],screens:string[]=[];
+ const rows:string[]=[],traffic:{path:string,status:number}[]=[],screens:string[]=[],captures:any[]=[];
  beforeAll(async()=>{
   require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
   if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Equal isolated database required');
@@ -91,7 +91,27 @@ describe('real Web global publication count acceptance',()=>{
   await page.type('#identifier',prefix);await page.type('#password','synthetic-explore-password');
   await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
   const open=async(search:string)=>{await page.goto(origin+'/explore'+search,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('[data-explore-global-counts]')?.textContent?.includes('全站已上架 102 件'));};
-  const shot=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.status)).toBe('loaded');await page.screenshot({path:webQaEvidence(name)});screens.push(name);};
+  const shot=async(name:string)=>{
+   await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);});
+   expect(await page.evaluate(()=>document.fonts.status)).toBe('loaded');
+   const measure=await page.evaluate(()=>{
+    const global=document.querySelector('[data-explore-global-counts]')!,local=document.querySelector('[data-explore-viewport-summary]')!;
+    const rect=(e:Element)=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+    return {viewportWidth:innerWidth,viewportHeight:innerHeight,scrollWidth:document.documentElement.scrollWidth,global:rect(global),state:rect(local),
+     globalText:global.textContent,stateText:local.textContent,
+     lines:Array.from(local.querySelectorAll('p')).map(e=>({text:e.textContent,...rect(e)}))};
+   });
+   expect(measure.scrollWidth).toBeLessThanOrEqual(measure.viewportWidth);
+   expect(measure.global.left).toBeGreaterThanOrEqual(0);expect(measure.global.right).toBeLessThanOrEqual(measure.viewportWidth);
+   expect(measure.global.top).toBeGreaterThanOrEqual(0);expect(measure.global.bottom).toBeLessThanOrEqual(measure.viewportHeight);
+   for(const line of measure.lines){expect(line.left).toBeGreaterThanOrEqual(measure.state.left);expect(line.right).toBeLessThanOrEqual(measure.state.right);
+    expect(line.top).toBeGreaterThanOrEqual(measure.state.top);expect(line.bottom).toBeLessThanOrEqual(measure.state.bottom);}
+   await page.screenshot({path:webQaEvidence(name)});screens.push(name);
+   const stateName=name.replace(/\.png$/,'-status.png');
+   await (await page.$('[data-explore-viewport-summary]'))!.screenshot({path:webQaEvidence(stateName)});screens.push(stateName);
+   if(name==='explore-counts-source-failed.png'){const full='explore-counts-source-failed-full.png';await page.screenshot({path:webQaEvidence(full),fullPage:true});screens.push(full);}
+   captures.push({name,stateName,...measure});await page.evaluate(()=>window.scrollTo(0,0));
+  };
   const ordered=async()=>page.evaluate(()=>{
    const global=document.querySelector('[data-explore-global-counts]')!,form=document.querySelector('input#explore-search')!;
    const local=document.querySelector('[data-explore-viewport-summary]')!,canvas=document.querySelector('.maplibregl-canvas');
@@ -129,7 +149,7 @@ describe('real Web global publication count acceptance',()=>{
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('來源線索未完成讀取'));
   expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');await shot('explore-counts-source-failed.png');
   expect(errors).toEqual([]);
-  const report={head:process.env.EXPLORE_QA_HEAD_SHA??process.env.GITHUB_SHA??null,checkoutSha:process.env.GITHUB_SHA??null,syntheticLocalOnly:true,productionWrites:0,nativeAcceptance:false,basemapNetwork:'BLOCKED_NOT_ACCEPTED',desktop,narrow,sourceRows:rows.length,screens,traffic,errors,
+  const report={head:process.env.EXPLORE_QA_HEAD_SHA??process.env.GITHUB_SHA??null,checkoutSha:process.env.GITHUB_SHA??null,syntheticLocalOnly:true,productionWrites:0,nativeAcceptance:false,basemapNetwork:'BLOCKED_NOT_ACCEPTED',desktop,narrow,sourceRows:rows.length,screens,captures,traffic,errors,
    verified:['global-before-map-and-local-results','source-pagination-101','viewport-and-filter-independent-global-count','unavailable-not-zero','source-pending-not-empty','source-error-not-empty']};
   fs.writeFileSync(webQaEvidence('explore-counts-result.png').replace(/\.png$/,'.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({syntheticBrowserAcceptance:true,sourceRows:101,screens,errors,desktop,narrow,nativeAcceptance:false,basemapNetworkAccepted:false}));

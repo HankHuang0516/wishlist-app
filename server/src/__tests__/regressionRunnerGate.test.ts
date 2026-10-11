@@ -4,7 +4,7 @@ import vm from 'vm';
 
 // Only exercise the runner's completion decision. Child commands are mocked;
 // no npm install, credentials, network or deployment is performed here.
-it.each([[],['--quick'],['--skip-build']])('cannot label skipped/partial checks release-ready %j', flags=>{
+it.each([{flags:[] as string[]},{flags:['--quick']},{flags:['--skip-build']}])('cannot label skipped/partial checks release-ready %j', ({flags})=>{
   const code=fs.readFileSync(path.resolve(__dirname,'../../../scripts/regression-test.js'),'utf8');
   const exits:number[]=[],logs:string[]=[];
   vm.runInNewContext(code,{__dirname:path.resolve(__dirname,'../../../scripts'),Date,

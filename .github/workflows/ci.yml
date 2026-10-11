@@ -122,7 +122,8 @@ jobs:
 
     - name: Real marketplace HTTP and database tests
       env:
-        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/.qa-artifacts
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-artifacts
+        EXPLORE_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       run: npm test -- --config jest.marketplace.config.js --runInBand
 
     - name: Preserve isolated Explore browser evidence
@@ -130,8 +131,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: explore-browser-${{ github.sha }}
-        path: .qa-artifacts/explore-counts-*
-        if-no-files-found: warn
+        path: qa-artifacts/explore-counts-*
+        if-no-files-found: error
         retention-days: 14
 
   mobile-checks:

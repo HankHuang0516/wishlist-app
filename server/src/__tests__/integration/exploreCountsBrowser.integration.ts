@@ -129,7 +129,7 @@ describe('real Web global publication count acceptance',()=>{
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('來源線索未完成讀取'));
   expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');await shot('explore-counts-source-failed.png');
   expect(errors).toEqual([]);
-  const report={head:process.env.GITHUB_SHA??null,syntheticLocalOnly:true,productionWrites:0,nativeAcceptance:false,basemapNetwork:'BLOCKED_NOT_ACCEPTED',desktop,narrow,sourceRows:rows.length,screens,traffic,errors,
+  const report={head:process.env.EXPLORE_QA_HEAD_SHA??process.env.GITHUB_SHA??null,checkoutSha:process.env.GITHUB_SHA??null,syntheticLocalOnly:true,productionWrites:0,nativeAcceptance:false,basemapNetwork:'BLOCKED_NOT_ACCEPTED',desktop,narrow,sourceRows:rows.length,screens,traffic,errors,
    verified:['global-before-map-and-local-results','source-pagination-101','viewport-and-filter-independent-global-count','unavailable-not-zero','source-pending-not-empty','source-error-not-empty']};
   fs.writeFileSync(webQaEvidence('explore-counts-result.png').replace(/\.png$/,'.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({syntheticBrowserAcceptance:true,sourceRows:101,screens,errors,desktop,narrow,nativeAcceptance:false,basemapNetworkAccepted:false}));

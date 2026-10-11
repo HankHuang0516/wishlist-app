@@ -4,6 +4,7 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  '官方公開取貨點':'Official public pickup location',
   "概略位置，非取貨點": "Approximate location, not a pickup point",
   "公共面交點": "Public meeting point",
   "不是商品或賣家所在地。": "Not the item or seller location.",

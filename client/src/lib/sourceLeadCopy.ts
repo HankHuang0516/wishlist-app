@@ -2,6 +2,7 @@ import { getDisplayLocale } from '../utils/localization';
 import type { ContactRouting } from './sourceLeadData';
 
 const english = {
+  '官方公開取貨點':'Official public pickup location',
   '目前沒有可顯示的商品圖片': 'No item image is available',
   '圖片暫時無法載入': 'The image could not be loaded',
   '圖片載入中…': 'Loading image…',

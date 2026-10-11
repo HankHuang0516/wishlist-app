@@ -66,7 +66,7 @@ describe('real Web global publication count acceptance',()=>{
  });
  test('desktop/narrow order, source pagination, viewport independence, explicit unavailable and source pending/error',async()=>{
   const page=await browser.newPage(),errors:string[]=[];
-  await page.evaluateOnNewDocument(()=>{localStorage.setItem('user-locale','zh-TW');Object.defineProperty(navigator,'language',{get:()=> 'zh-TW'});});
+  await page.evaluateOnNewDocument((expectedOrigin:string)=>{if(window!==window.top||location.origin!==expectedOrigin)return;localStorage.setItem('user-locale','zh-TW');Object.defineProperty(navigator,'language',{get:()=> 'zh-TW'});},origin);
   await page.setRequestInterception(true);page.on('pageerror',(e:Error)=>errors.push(e.message));
   page.on('request',async(req:any)=>{
    try{

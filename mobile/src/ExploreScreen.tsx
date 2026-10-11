@@ -418,7 +418,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
         <View pointerEvents="box-none" style={s.mapMetaRow}>
 
           <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://www.openstreetmap.org/copyright')}><Text style={s.small}>© OpenStreetMap contributors · 線索座標 ODbL</Text></Pressable>
-          <Text style={s.small}>來源線索 {leads.count} 筆 · 待確認，非在售件數</Text>
+          <Text style={s.small}>{leads.hidden?'來源線索未列入目前篩選。':leads.error?'來源線索數量未取得；不代表沒有資料。':leads.busy||!leads.ready?'來源線索數量讀取中…':`來源線索 ${leads.count} 筆 · 待確認，非在售件數`}</Text>
           <Text accessibilityLabel={resultSummary} accessibilityLiveRegion="polite" numberOfLines={1} style={s.mapCount}>已載入 {loadedCount} 件{externalEnabled ? ` · 外部 ${externalVisible.length}` : ''}</Text>
           {!!resultFrame && <Pressable accessibilityRole="button" accessibilityLabel="回到搜尋結果" style={s.mapAction} onPress={returnToResults}><Text style={s.scopeText}>回到結果</Text></Pressable>}
         </View>

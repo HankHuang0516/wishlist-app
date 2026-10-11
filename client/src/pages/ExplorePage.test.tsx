@@ -306,3 +306,19 @@ it('shows counts unavailable rather than zero after a failed count read', async 
   await screen.findByText('全站已上架數量未取得');
   expect(screen.queryByText('全站已上架 0 件')).not.toBeInTheDocument();
 });
+
+it('keeps a pending source count unknown until a successful empty response', async()=>{
+ let finish!:(v:unknown)=>void;
+ vi.stubGlobal('fetch',vi.fn((url:string)=>url.includes('/source-leads?')?new Promise(resolve=>{finish=resolve;}):Promise.resolve(responseOk(url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}))));
+ render(view());await screen.findByText('來源線索數量讀取中…');
+ expect(screen.queryByText('0 筆來源線索；不是已確認在售商品。')).not.toBeInTheDocument();
+ await waitFor(()=>expect(finish).toBeDefined());
+ await act(async()=>finish(responseOk({enabled:true,items:[],nextCursor:null})));
+ await screen.findByText('0 筆來源線索；不是已確認在售商品。');
+});
+it('does not present a failed source read as zero',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/source-leads?'))throw Error('source unavailable');
+ return responseOk(url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null});}));
+ render(view());await screen.findByText('來源線索數量未取得；不代表沒有資料。');
+ expect(screen.queryByText('0 筆來源線索；不是已確認在售商品。')).not.toBeInTheDocument();
+});

@@ -76,3 +76,12 @@ describe('actual count effect to screen state under controlled hooks',()=>{
   h.unmount();finish(response(99));await h.flush();expect(h.text()).not.toContain('全站已上架 99 件');
  });
 });
+
+it('map source summary is unknown while pending/failed and zero only after success',()=>{
+ const list=false;
+ expect(screenText({count:0,ready:false,busy:true,error:''},list)).not.toContain('來源線索 0 筆');
+ expect(screenText({count:0,ready:true,busy:false,error:'來源503'},list)).not.toContain('來源線索 0 筆');
+ expect(screenText({count:0,ready:false,busy:true,error:''},list)).toContain('來源線索數量讀取中');
+ expect(screenText({count:0,ready:true,busy:false,error:'來源503'},list)).toContain('來源線索數量未取得');
+ expect(screenText({count:0,ready:true,busy:false,error:''},list)).toContain('來源線索 0 筆');
+});

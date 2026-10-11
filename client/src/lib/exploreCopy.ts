@@ -4,6 +4,9 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  '來源線索未列入目前篩選。':'Source references excluded by the current filters.',
+  '來源線索數量未取得；不代表沒有資料。':'Source reference count unavailable; this does not mean there are no records.',
+  '來源線索數量讀取中…':'Reading source reference count…',
   "全站已上架 {count} 件": "Published site-wide: {count} items",
   "全站已上架數量讀取中…": "Reading site-wide publication counts…",
   "全站已上架數量未取得": "Site-wide publication counts unavailable",

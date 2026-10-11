@@ -133,6 +133,7 @@ describe('real Web global publication count acceptance',()=>{
   await page.setViewport({width:390,height:844});const narrow=await ordered();expect(narrow.beforeForm&&narrow.beforeLocal&&narrow.beforeMap).toBe(true);expect(narrow.globalTop).toBeLessThan(narrow.formTop);await shot('explore-counts-narrow-list.png');
   await open('?view=list&bbox=121.5,25,121.6,25.1');
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('目前地圖範圍沒有符合'));
+  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).toContain('0 筆來源線索');
   await shot('explore-counts-empty-viewport.png');
   await page.type('#explore-search','no-match-synthetic');await page.click('button[type="submit"]');
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('目前地圖範圍沒有符合'));
@@ -143,11 +144,15 @@ describe('real Web global publication count acceptance',()=>{
   countsFailed=false;sourceMode='pending';await open('?view=map');
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('正在讀取目前範圍'));
   expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');
+  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('0 筆來源線索');
+  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).toContain('來源線索數量讀取中');
   await shot('explore-counts-source-pending.png');
   sourceMode='ok';releaseSource?.();await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('101 筆來源線索'));
   sourceMode='failed';await open('?view=list');
   await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('來源線索未完成讀取'));
-  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');await shot('explore-counts-source-failed.png');
+  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('0 筆來源線索');
+  expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).toContain('來源線索數量未取得');
+  await shot('explore-counts-source-failed.png');
   expect(errors).toEqual([]);
   const report={head:process.env.EXPLORE_QA_HEAD_SHA??process.env.GITHUB_SHA??null,checkoutSha:process.env.GITHUB_SHA??null,syntheticLocalOnly:true,productionWrites:0,nativeAcceptance:false,basemapNetwork:'BLOCKED_NOT_ACCEPTED',desktop,narrow,sourceRows:rows.length,screens,captures,traffic,errors,
    verified:['global-before-map-and-local-results','source-pagination-101','viewport-and-filter-independent-global-count','unavailable-not-zero','source-pending-not-empty','source-error-not-empty']};

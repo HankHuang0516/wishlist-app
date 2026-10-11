@@ -1,3 +1,15 @@
+<!-- HANK_EXTERNAL_TARGET_CODEX_2T_20261011_BEGIN -->
+## 最新外接儲存目標：codex_2T（Hank，2026-10-11）
+
+Hank 直接指示：「因為那顆硬碟壞了現在目前都要改到 `/Volumes/codex_2T/`」。本節更新所有專案的外接儲存目標，覆蓋下方仍把 `/Volumes/codex`、`/Volumes/CodexData` 或舊 Hank-2TB 當成目前目標的說明；搬移／復原的資料保護與各專案最新授權仍須遵守。
+
+- 新實體碟是 `/Volumes/codex_2T`，Volume UUID `4E209AF2-AF33-3CF7-8F47-54D26FE14F19`，目前 ExFAT。長期專案與資料的目標以此碟為準；Git、symlink、POSIX 權限與活躍 SQLite 使用此碟上經確認的 APFS 資料區。APFS 資料區的掛載名稱可能不同，須核對映像檔實際位於新碟，不能只看路徑名稱。測試執行、必要測試快取／暫存與模擬器留在本機 SSD，仍保留 20 GiB 系統空間。
+- 舊 `/Volumes/CodexData` 是 `/Volumes/codex/CodexData.sparsebundle` 的 APFS 掛載點；它不是新碟。目前舊資料區未掛載，指向它的連結不能視為可用工程。不得把舊碟 UUID 當成新碟身分。
+- 各專案須先找到可讀且完整的來源，保留未提交／未追蹤資料、Git/worktree 引用及檔案語意，確認新位置與來源一致並協調停止寫入後，才切換原入口。已有專案完成新碟切換時沿用其已驗證路徑；不要重複搬移。來源不可讀則記錄「待復原／未切換」，不能把連結改到空目錄、建立假的掛載點或用遠端 Git 宣稱原工程已恢復。
+- 作品網站的編寫工程 `/Users/hank/Desktop/Project/app-showcase-site` 仍指向舊資料區，尚未找回完整工程；新碟內同名入口只是失效的轉接。另已查明可讀部署工程 `/Users/hank/Desktop/Project/EClaw-ai-hank-apps-route`，網站檔案在其 `backend/public/AiHankApps/`，對應既有 `/AiHankApps/` 路徑。此工作副本含未提交修改，新增頁面應保留這些修改並從最新主線隔離工作。部署工程可讀不代表原編寫工程已恢復或已搬到新碟。現況與後續切換紀錄查 `/Users/hank/.local/share/project-storage/storage-policy-20261011.json`；2026-10-09 舊政策、manifest／receipt 保留為歷史與復原依據。
+- 全域 `project-storage` CLI 目前仍為 `internal`；本節只更新目標與已查明狀態，不宣稱整體切換完成，不重啟舊搬移程序、不搬動正在寫入的資料庫，也不恢復暫停目標。新專案／工作副本沿用本節與 H 浮水印發布前自檢規定，發布與清理仍按各自授權及檢查辦理。
+<!-- HANK_EXTERNAL_TARGET_CODEX_2T_20261011_END -->
+
 <!-- HANK_ICON_WATERMARK_POLICY_20261010_BEGIN -->
 ## 全專案 H 浮水印與每次更新發布前自檢（Hank，2026-10-10）
 

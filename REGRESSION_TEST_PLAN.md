@@ -1,3 +1,7 @@
+### Meetup summary synchronization — 2.0.714
+
+Verify that the chat summary and open dialog agree immediately after confirm/cancel and read-only original receipt recovery, without closing or waiting for polling. Reproduce on 711 before fixing. Retain the message draft, original request UUID/version and pending body; recovery sends no additional POST. Delay an earlier parent appointment GET until after the dialog reads the current result and verify that the stale reply cannot replace it. Run existing chat/meetup recovery, account departure, privacy and full client tests.
+
 # Wishlist.ai Regression Test Plan
 
 ### Settings account-switch privacy — 2.0.711

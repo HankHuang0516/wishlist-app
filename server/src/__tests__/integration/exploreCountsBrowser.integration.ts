@@ -91,7 +91,7 @@ describe('real Web global publication count acceptance',()=>{
   await page.type('#identifier',prefix);await page.type('#password','synthetic-explore-password');
   await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
   const open=async(search:string)=>{await page.goto(origin+'/explore'+search,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('[data-explore-global-counts]')?.textContent?.includes('全站已上架 102 件'));};
-  const shot=async(name:string)=>{await page.screenshot({path:webQaEvidence(name)});screens.push(name);};
+  const shot=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.status)).toBe('loaded');await page.screenshot({path:webQaEvidence(name)});screens.push(name);};
   const ordered=async()=>page.evaluate(()=>{
    const global=document.querySelector('[data-explore-global-counts]')!,form=document.querySelector('input#explore-search')!;
    const local=document.querySelector('[data-explore-viewport-summary]')!,canvas=document.querySelector('.maplibregl-canvas');

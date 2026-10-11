@@ -120,6 +120,12 @@ jobs:
     - name: Build actual Web for isolated browser tests
       run: npm run build --prefix ../client
 
+    - name: Install Traditional Chinese browser fonts
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes fonts-noto-cjk
+        fc-match -f '%{family}\\n' 'Noto Sans CJK TC'
+
     - name: Real marketplace HTTP and database tests
       env:
         WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-artifacts

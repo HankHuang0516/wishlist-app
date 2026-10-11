@@ -8,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 describe('official auction real Web date disclosure',()=>{
  const origin='https://wishlist-auction-qa.invalid',root=path.resolve(__dirname,'../../../../client/dist');
- let server:any,browser:any,db:any,id:string,buyer:number;const errors:string[]=[];
+ let server:any,browser:any,db:any,id:string,buyer:number;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
  const saved={api:process.env.API_URL,enabled:process.env.SOURCE_LEADS_PUBLIC_ENABLED,secret:process.env.JWT_SECRET,external:process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED};
  beforeAll(async()=>{
   require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -19,6 +19,7 @@ describe('official auction real Web date disclosure',()=>{
   id=(await db.externalSourceLead.create({data:require('../../../dist/lib/sourceLeadRules').parseLead(b)})).id;
   buyer=(await db.user.create({data:{phoneNumber:'synthetic-auction-ui-'+id,password:await require('bcryptjs').hash('synthetic-auction-ui-pass',4),name:'合成拍賣UI',isEmailVerified:true}})).id;
   const app=express();app.use(express.json());
+  app.use('/api/chat',require('../../../dist/routes/chatRoutes').default);
   app.use('/api/auth',require('../../../dist/routes/authRoutes').default);
   app.get('/api/users/me',require('../../../dist/middleware/auth').authenticateToken,require('../../../dist/controllers/userController').getMe);
   app.use('/api/listings',require('../../../dist/routes/listingRoutes').default);
@@ -41,7 +42,7 @@ describe('official auction real Web date disclosure',()=>{
   await page.evaluateOnNewDocument((host:string)=>{if(window===window.top&&location.origin===host)localStorage.setItem('user-locale','zh-TW');},origin);
   page.on('request',async(req:any)=>{try{
    const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}
-   if(u.pathname.startsWith('/api/')){let actual=(request(server)as any)[req.method().toLowerCase()](u.pathname+u.search);const headers=req.headers();if(headers.authorization)actual=actual.set('Authorization',headers.authorization);if(headers['content-type'])actual=actual.set('Content-Type',headers['content-type']);if(req.postData())actual=actual.send(req.postData());const result=await actual;
+   if(u.pathname.startsWith('/api/')){let actual=(request(server)as any)[req.method().toLowerCase()](u.pathname+u.search);const headers=req.headers();if(headers.authorization)actual=actual.set('Authorization',headers.authorization);if(headers['content-type'])actual=actual.set('Content-Type',headers['content-type']);if(req.postData())actual=actual.send(req.postData());const result=await actual;traffic.push({method:req.method(),path:u.pathname+u.search,status:result.status});
     await req.respond({status:result.status,contentType:result.headers['content-type']||'application/json',body:Buffer.isBuffer(result.body)?result.body:result.text});return;}
    const target=path.resolve(root,u.pathname==='/'?'index.html':'.'+u.pathname);
    const asset=target.startsWith(root+path.sep)&&fs.existsSync(target)&&fs.statSync(target).isFile()?target:path.join(root,'index.html');
@@ -67,8 +68,13 @@ describe('official auction real Web date disclosure',()=>{
    const detail=await page.$eval('[role="dialog"]',(el:Element)=>el.textContent||'');expect(detail).toContain('起標價非成交價');expect(detail).toContain('公開官方拍賣參考');expect(detail).toContain('官方拍賣來源');expect(detail).not.toContain('1970');
    await page.screenshot({path:webQaEvidence('auction-explore-detail-'+width+'.png')});
    await (await page.$('[role="dialog"]'))!.screenshot({path:webQaEvidence('auction-explore-detail-'+width+'-full.png')});
+   await page.click('a[href="/chat?source='+id+'"]');
+   await page.waitForFunction(()=>location.pathname==='/chat'&&document.querySelector('[role="dialog"]')?.textContent?.includes('合成拍賣畫面驗收'));
+   await page.screenshot({path:webQaEvidence('auction-first-chat-'+width+'.png')});
   }
+  expect(traffic.some(x=>x.path.startsWith('/api/source-leads/'+id+'?dateContract=auction-v1')&&x.status===200)).toBe(true);
+  expect(traffic.some(x=>x.method==='POST'&&x.path.includes('/inquiry'))).toBe(false);
   expect(errors).toEqual([]);
-  fs.writeFileSync(webQaEvidence('auction-date-report.png').replace(/\.png$/,'.json'),JSON.stringify({head:process.env.AUCTION_QA_HEAD_SHA,syntheticOnly:true,productionWrites:0,nativeAcceptance:false,basemapAccepted:false,errors,captures},null,2));
+  fs.writeFileSync(webQaEvidence('auction-date-report.png').replace(/\.png$/,'.json'),JSON.stringify({head:process.env.AUCTION_QA_HEAD_SHA,syntheticOnly:true,productionWrites:0,nativeAcceptance:false,basemapAccepted:false,errors,captures,traffic},null,2));
  },60000);
 });

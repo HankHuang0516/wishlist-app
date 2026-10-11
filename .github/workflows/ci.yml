@@ -136,7 +136,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: auction-browser-${{ github.sha }}
-        path: qa-auction-artifacts/auction-date-*
+        path: qa-auction-artifacts/auction-*
         if-no-files-found: error
         retention-days: 14
 

@@ -7,6 +7,7 @@ import prisma from '../../lib/prisma';
 import { createExternalIntakeRoutes } from '../../routes/externalIntakeRoutes';
 import { expireExternalCandidates } from '../../lib/externalCandidateExpiry';
 import externalListingRoutes from '../../routes/externalListingRoutes';
+import exploreCountRoutes from '../../routes/exploreCountRoutes';
 
 const { assertTestDatabase } = require('../../../../scripts/assert-test-database.cjs');
 assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -21,6 +22,7 @@ beforeEach(() => { publicVisitor++; });
 app.use((req, _res, next) => { req.headers['x-forwarded-for'] ??= '192.0.2.' + publicVisitor; next(); });
 app.use('/api/external-intake', createExternalIntakeRoutes(() => adminKey));
 app.use('/api/external-listings', externalListingRoutes);
+app.use('/api/explore-counts', exploreCountRoutes);
 const server=createServer(app);
 beforeAll(async()=>{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});});
 const url = '/api/external-intake';
@@ -741,3 +743,43 @@ describe('admin-only attributed external supply staging', () => {
         }
     });
 });
+
+it('aggregates actual reviewed partner rows with rollout, rights, source and 24-hour display gates intact',async()=>{
+ const previous=process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED='1';
+ const admin=(p:string)=>request(server).post(url+p).set('x-admin-key',adminKey).set('x-forwarded-for','203.0.113.222');
+ const baseline=(await request(server).get('/api/explore-counts')).body;
+ const created=await admin('/sources').send({...sourceBody,name:'Synthetic global-count '+randomUUID()});
+ expect(created.status).toBe(201);const id:string=created.body.id;
+ try{
+  expect((await admin('/sources/'+id+'/activate').send({authorizationRef:sourceBody.authorizationRef,confirmRights:true})).status).toBe(200);
+  const staged=await admin('/sources/'+id+'/candidates').send({items:[candidate()]});expect(staged.status).toBe(202);
+  const candidateId=staged.body.items[0].id;
+  const pending=await prisma.externalListingCandidate.findUniqueOrThrow({where:{id:candidateId}});
+  expect((await request(server).get('/api/explore-counts')).body.published.partnerListings).toBe(baseline.published.partnerListings);
+  expect((await admin('/candidates/'+candidateId+'/approve').send({expectedContentHash:pending.contentHash,authorizationRef:sourceBody.authorizationRef,reviewRef:'review:synthetic-counts',confirmRights:true,confirmItem:true})).status).toBe(200);
+  let count=(await request(server).get('/api/explore-counts')).body;
+  expect(count.published.partnerListings-baseline.published.partnerListings).toBe(1);
+  expect(count.explorable.partnerListings-baseline.explorable.partnerListings).toBe(1);
+  process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED='0';
+  count=(await request(server).get('/api/explore-counts')).body;expect(count.published.partnerListings).toBe(0);expect(count.explorable.partnerListings).toBe(0);
+  process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED='1';
+  await prisma.externalListingCandidate.update({where:{id:candidateId},data:{observedAt:new Date(Date.now()-25*3600000)}});
+  count=(await request(server).get('/api/explore-counts')).body;
+  expect(count.published.partnerListings-baseline.published.partnerListings).toBe(1);
+  expect(count.explorable.partnerListings).toBe(baseline.explorable.partnerListings);
+  await prisma.externalListingCandidate.update({where:{id:candidateId},data:{observedAt:new Date()}});
+  await prisma.externalListingSource.update({where:{id},data:{imageReuseAllowed:false}});
+  count=(await request(server).get('/api/explore-counts')).body;
+  expect(count.published.partnerListings-baseline.published.partnerListings).toBe(1);expect(count.explorable.partnerListings).toBe(baseline.explorable.partnerListings);
+  await prisma.externalListingSource.update({where:{id},data:{enabled:false}});
+  count=(await request(server).get('/api/explore-counts')).body;
+  expect(count.published.partnerListings).toBe(baseline.published.partnerListings);expect(count.explorable.partnerListings).toBe(baseline.explorable.partnerListings);
+  expect(count.stockVerified).toBe(false);
+ }finally{
+  await prisma.externalCandidateReviewEvent.deleteMany({where:{candidate:{sourceId:id}}});
+  await prisma.externalListingCandidate.deleteMany({where:{sourceId:id}});
+  await prisma.externalIntakeBatch.deleteMany({where:{sourceId:id}});
+  await prisma.externalListingSource.delete({where:{id}});
+  if(previous===undefined)delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED=previous;
+ }
+},30000);

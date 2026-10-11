@@ -100,6 +100,9 @@ describe('real Web global publication count acceptance',()=>{
   });
   await open('?view=map');await page.waitForFunction(()=>document.querySelector('[data-explore-viewport-summary]')?.textContent?.includes('101 筆來源線索'));
   expect((await request(server).get('/api/explore-counts')).body).toMatchObject({published:{total:102,sellerListings:1,sourceReferences:101,partnerListings:0},explorable:{total:101},stockVerified:false});
+  process.env.SOURCE_LEADS_PUBLIC_ENABLED='0';
+  expect((await request(server).get('/api/explore-counts')).body).toMatchObject({published:{sourceReferences:101},explorable:{sourceReferences:0}});
+  process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';
   const desktop=await ordered();expect(desktop.beforeForm&&desktop.beforeLocal&&desktop.beforeMap).toBe(true);expect(desktop.globalTop).toBeLessThan(desktop.formTop);
   expect(await page.$eval('[data-explore-viewport-summary]',(el:Element)=>el.textContent)).not.toContain('目前地圖範圍沒有符合');
   await shot('explore-counts-desktop-map.png');

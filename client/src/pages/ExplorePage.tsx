@@ -3,7 +3,8 @@ import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 import {sourceLeadText as sourceText,sourceLeadRoutingReason} from '../lib/sourceLeadCopy';
 import {parseLead,sourceLocationLabel,type SourceLead} from '../lib/sourceLeadData';
 import {ProductCardWeb} from '../components/ProductCardWeb';
-import {ListingPhoto,ListingPhotoGallery} from '../components/ListingPhoto';
+import {ListingPhoto,ListingPhotoGallery,ListingPhotoDisclosure} from '../components/ListingPhoto';
+import {publicListingPhotoLabel} from '../lib/publicListingCopy';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LocateFixed, MapPin, Search } from 'lucide-react';
@@ -36,7 +37,7 @@ const errorText = exploreFailureKey;
 function SellerCard({ item, match, own, onMap, onDetail, readBlocked }: { item: PublicListing; match?: WishMatch; own: boolean; onMap: () => void; onDetail: () => void; readBlocked: boolean }) {
   return <article className="min-w-0 rounded-2xl border bg-white p-4 shadow-sm">
     <button type="button" disabled={readBlocked} onClick={onDetail} aria-label={text('查看{title}商品詳情', { title: item.title })} className="flex w-full items-start gap-3 text-left disabled:opacity-60">
-      <ListingPhoto src={item.media[0].thumbnailUrl} alt={item.title} />
+      <ListingPhoto src={item.media[0].thumbnailUrl} alt={item.media[0].capturePurpose === 'AI_MARKETING' ? publicListingPhotoLabel(item.title,1,true) : item.title} marketing={item.media[0].capturePurpose === 'AI_MARKETING'} />
       <span className="min-w-0"><span className="block break-words font-semibold">{item.title}</span><span className="mt-1 block font-semibold text-green-800">{listingPrice(item)}</span>
         <span className="mt-1 block text-sm text-gray-500">{item.location.county} · {item.location.district}</span>
         <span className="block text-xs text-gray-500">{text(item.condition === 'USED' ? '二手' : '新品')} · {text(item.status === 'RESERVED' ? '已保留' : '在售')}{own ? text(' · 我的刊登預覽') : ''}</span>
@@ -329,7 +330,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     {detail && <MarketplaceDialog title={text(detail.kind === 'seller' ? '商品詳情' : '外部來源商品')} closeLabel={text('關閉')} onClose={() => { detailRequest.current?.abort(); setDetail(null); }}>
       {waitNotice}
       {detail.loading && <p role="status">{text("正在核對商品最新狀態…")}</p>}{detail.error && <div role="alert" className="text-red-700"><p>{exploreMessage(detail.error)}</p><button type="button" disabled={readBlocked} onClick={() => void showDetail(detail.kind, detail.id)} className="min-h-11 underline disabled:opacity-50">{text('重新核對此商品')}</button></div>}
-      {detail.seller && <div className="space-y-4"><h3 className="text-xl font-semibold">{detail.seller.title}</h3><p className="font-semibold text-green-800">{listingPrice(detail.seller)}</p><div className="flex gap-3 overflow-x-auto">{detail.seller.media.map(photo => <img key={photo.id} src={photo.thumbnailUrl} alt={detail.seller!.title} referrerPolicy="no-referrer" className="h-48 w-48 flex-none rounded-xl object-contain" />)}</div>
+      {detail.seller && <div className="space-y-4"><h3 className="text-xl font-semibold">{detail.seller.title}</h3><p className="font-semibold text-green-800">{listingPrice(detail.seller)}</p><div className="flex gap-3 overflow-x-auto">{detail.seller.media.map((photo,index) => <figure key={photo.id} className="w-48 flex-none"><img src={photo.thumbnailUrl} alt={publicListingPhotoLabel(detail.seller!.title,index+1,photo.capturePurpose === 'AI_MARKETING')} referrerPolicy="no-referrer" className="h-48 w-48 rounded-xl object-contain" />{photo.capturePurpose === 'AI_MARKETING'&&<ListingPhotoDisclosure/>}</figure>)}</div>
         <p className="whitespace-pre-wrap break-words">{detail.seller.description}</p><dl className="space-y-2 text-sm"><div><dt className="inline font-medium">{text("品牌：")}</dt><dd className="inline">{detail.seller.brand ?? text('未提供')}</dd></div><div><dt className="inline font-medium">{text("新舊與狀態：")}</dt><dd className="inline">{text(detail.seller.condition === 'USED' ? '二手' : '新品')} · {text(detail.seller.status === 'RESERVED' ? '已保留' : '在售')}</dd></div><div><dt className="inline font-medium">{text("約略地點：")}</dt><dd className="inline">{detail.seller.location.county} · {detail.seller.location.district}{text('（非精確地址）')}</dd></div><div><dt className="inline font-medium">{text("交付：")}</dt><dd className="inline">{detail.seller.deliveryMethods.map(method => text(method === 'MEETUP' ? '面交' : '寄送')).join('、')} · {text(detail.seller.negotiable ? '可議價' : '不議價')}</dd></div><div><dt className="inline font-medium">{text("失效時間：")}</dt><dd className="inline">{exploreTime(detail.seller.expiresAt)}{text('（台灣時間）')}</dd></div></dl>
         <div className="flex flex-wrap gap-3"><Link to={`/listings/${detail.seller.id}`} className="inline-flex min-h-11 items-center rounded-xl border px-4">{text("開啟可分享商品頁")}</Link>
           <ProductActionsWeb listing={detail.seller} onReport={() => { setReport(detail.seller!); setDetail(null); }} /></div></div>}

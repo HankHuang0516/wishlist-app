@@ -33,6 +33,7 @@ describe('public listing share destination', () => {
     mount('/listings/' + id);
     await screen.findByRole('heading', { name: '二手檯燈' });
     expect(screen.getByRole('img', { name: '二手檯燈商品行銷示意圖1' })).toBeInTheDocument();
+    expect(screen.getByText('AI 行銷示意圖')).toBeVisible();
     expect(screen.queryByRole('img', { name: '二手檯燈商品照片1' })).not.toBeInTheDocument();
   });
   it('keeps the same honest AI image description in English', async () => {
@@ -41,6 +42,7 @@ describe('public listing share destination', () => {
     mount('/listings/' + id);
     await screen.findByRole('heading', { name: '二手檯燈' });
     expect(screen.getByRole('img', { name: '二手檯燈 item marketing illustration 1' })).toBeInTheDocument();
+    expect(screen.getByText('AI marketing illustration')).toBeVisible();
     expect(screen.queryByRole('img', { name: '二手檯燈 item photo 1' })).not.toBeInTheDocument();
   });
   it('shows the public listing to a visitor without login or private fields', async () => {
@@ -56,6 +58,7 @@ describe('public listing share destination', () => {
     expect(screen.getByRole('link', { name: '登入以聯絡賣家或檢舉商品' })).toHaveAttribute('href', '/login?next=' + encodeURIComponent('/listings/' + id));
     expect(screen.getByRole('link', { name: '在探索地圖定位此商品' })).toHaveAttribute('href', '/explore?listing=' + id);
     expect(screen.getByRole('img', { name: '二手檯燈商品照片1' })).toHaveAttribute('referrerpolicy', 'no-referrer');
+    expect(screen.queryByText('AI 行銷示意圖')).not.toBeInTheDocument();
   });
   it('hides removed goods from visitors and does not fetch invalid IDs', async () => {
     const fetch = vi.fn(async () => new Response('{"errorCode":"NOT_FOUND"}', { status: 404 }));

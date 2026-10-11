@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.729',date:'2026-10-12',title:'行銷示意圖清楚標示',type:'Frontend',items:[{type:'Enhancement',content:'商品分享頁與探索商品預覽在行銷圖下方顯示繁中／英文示意圖標示，保留原照片與圖片順序。'},{type:'Fix',content:'探索商品詳情的圖片說明區分原照與行銷示意圖；圖片載入失敗時仍保留示意圖標示。'}]},
  {version:'2.0.726',date:'2026-10-11',title:'商品分享預覽據實顯示照片',type:'Backend',items:[{type:'Fix',content:'未提供商品照片時，分享預覽保留名稱、價格與連結，移除被誤標為商品照片的網站通用圖。'},{type:'Enhancement',content:'分享預覽優先使用原商品照片；只有已選用的行銷圖時，圖片說明明確標示為行銷示意圖。'}]},
  {version:'2.0.723',date:'2026-10-11',title:'原付款平台訂閱管理說明',type:'Frontend',items:[{type:'Enhancement',content:'尊榮版訂閱區新增 Apple 與 Google Play 官方管理說明，依原付款平台與訂閱帳號查看步驟。'},{type:'Security',content:'說明連結不包含帳號資料；購買仍暫停，開啟說明不會變更訂閱或開通權益。'}]},
  {version:'2.0.720',date:'2026-10-11',title:'重新登入後返回原頁面',type:'Frontend',items:[{type:'Fix',content:'在登入頁遇到舊登入失效時，重新登入仍可返回原本的探索、聊天或商品管理頁。'},{type:'Security',content:'返回位置沿用安全檢查，無效頁面與外部網址仍回到願望清單首頁。'}]},

@@ -28,6 +28,24 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   const noWrites = (fetch: ReturnType<typeof vi.fn>) => expect(fetch.mock.calls.some(call =>
     (call[1] as RequestInit | undefined)?.method && (call[1] as RequestInit).method !== 'GET')).toBe(false);
 
+  it.each([['zh-TW', 'AI 行銷示意圖'], ['en-US', 'AI marketing illustration']])('visibly distinguishes the AI cover and mixed detail media in %s without changing their order or URLs', async (locale, caption) => {
+    localStorage.setItem('user-locale', locale);
+    const original = makeListing('合成商品圖片分類'), first = original.media[0];
+    const secondId = 'a2377304-60af-40c4-b568-37170d93e605';
+    const item = { ...original, media: [{ ...first, capturePurpose: 'AI_MARKETING' }, { ...first, id: secondId, imageUrl: first.imageUrl.replace(first.id, secondId), thumbnailUrl: first.thumbnailUrl.replace(first.id, secondId), capturePurpose: 'MANUAL_PHOTO' }] };
+    const fetch = sellerFetch(item); stubFetch(fetch); render(view('/explore?view=list'));
+    const open = await screen.findByRole('button', { name: locale === 'zh-TW' ? `查看${item.title}商品詳情` : `View item details: ${item.title}` });
+    expect(screen.getByText(caption)).toBeVisible();
+    fireEvent.click(open);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText(caption);
+    expect(within(dialog).getAllByRole('img').map(image => image.getAttribute('src'))).toEqual(item.media.map(photo => photo.thumbnailUrl));
+    expect(within(dialog).getAllByText(caption)).toHaveLength(1);
+    expect(within(dialog).getAllByRole('img')[0]).toHaveAttribute('alt', locale === 'zh-TW' ? `${item.title}商品行銷示意圖1` : `${item.title} item marketing illustration 1`);
+    expect(within(dialog).getAllByRole('img')[1]).toHaveAttribute('alt', locale === 'zh-TW' ? `${item.title}商品照片2` : `${item.title} item photo 2`);
+    noWrites(fetch);
+  });
+
   it('translates retained source cards, details and photos without changing original source facts or contact destination', async () => {
     english();const item={...makeSourceLead(),title:'來源 {title} $&'};
     const fetch=vi.fn(async(url:string)=>responseOk(url.includes('/source-leads/')?item:url.includes('/source-leads?')?{enabled:true,items:[item],nextCursor:null}:url.includes('/external-listings?')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}));

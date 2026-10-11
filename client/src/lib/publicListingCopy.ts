@@ -1,6 +1,7 @@
 import { getDisplayLocale } from '../utils/localization';
 
 const english = {
+  'AI 行銷示意圖': 'AI marketing illustration',
   '商品已失效，請重新載入核對。': 'This item has expired. Reload to check its current status.',
   '商品資訊與連結已複製': 'Item details and link copied',
   '無法分享，請稍後重試。': 'The item could not be shared. Try again later.',

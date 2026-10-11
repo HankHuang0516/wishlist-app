@@ -291,7 +291,9 @@ it('shows the site-wide publication total before an empty viewport, without fetc
   const fetch=vi.fn(async (url:string)=>responseOk(url.endsWith('/explore-counts')?counts:
     url.includes('source-leads')||url.includes('external-listings')?{enabled:true,items:[],nextCursor:null}:{items:[],nextCursor:null}));
   vi.stubGlobal('fetch',fetch);render(view());
-  await screen.findByText('全站已上架 85 件');
+  const total=await screen.findByText('全站已上架 85 件');
+  const map=screen.getByTestId('map-frame');
+  expect(total.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await screen.findByText(/目前地圖範圍沒有符合/);
   fireEvent.click(screen.getByRole('button',{name:'模擬移動地圖'}));
   expect(screen.getByText('全站已上架 85 件')).toBeInTheDocument();

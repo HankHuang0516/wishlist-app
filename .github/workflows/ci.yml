@@ -121,7 +121,18 @@ jobs:
       run: npm run build --prefix ../client
 
     - name: Real marketplace HTTP and database tests
+      env:
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/.qa-artifacts
       run: npm test -- --config jest.marketplace.config.js --runInBand
+
+    - name: Preserve isolated Explore browser evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: explore-browser-${{ github.sha }}
+        path: .qa-artifacts/explore-counts-*
+        if-no-files-found: warn
+        retention-days: 14
 
   mobile-checks:
     name: Native App Typecheck and Unit Tests

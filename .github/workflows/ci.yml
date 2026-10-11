@@ -123,7 +123,7 @@ jobs:
     - name: Install Traditional Chinese browser fonts
       run: |
         sudo apt-get update
-        sudo apt-get install --yes fonts-noto-cjk
+        sudo apt-get install --yes fonts-noto-cjk python3-pil
         fc-match -f '%{family}\\n' 'Noto Sans CJK TC'
 
     - name: Real marketplace HTTP and database tests
@@ -154,6 +154,19 @@ jobs:
           client/icon-source/general-H.png
           client/icon-source/recipe.json
           client/icon-source/README.md
+        if-no-files-found: error
+        retention-days: 14
+
+    - name: Generate isolated H placement candidates for visual review
+      env:
+        ICON_CANDIDATE_DIR: ${{ github.workspace }}/qa-icon-candidates
+      run: /usr/bin/python3 ../client/scripts/generate-web-icon-candidates.py
+
+    - name: Preserve isolated H candidates
+      uses: actions/upload-artifact@v4
+      with:
+        name: explore-icon-candidates-${{ github.sha }}
+        path: qa-icon-candidates
         if-no-files-found: error
         retention-days: 14
 

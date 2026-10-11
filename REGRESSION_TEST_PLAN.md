@@ -1,6 +1,6 @@
 ### Known wishlist capacity — 2.0.717
 
-Reproduce full100 overflow on714 (409 plus preserved pending journal). Verify100 server total with50 loaded items, last99→100 creation, full→fresh99 enablement, existing edits at capacity, original unknown create GET-only recovery, and open unsent draft preserved when a fresh count reaches100. Verify real server pagination and public/hidden/private permissions. Concurrent server rejection remains authoritative; no unknown record is discarded. Run full client tests, actual browser operations, fresh built H inspection and exact formal asset readback.
+Reproduce full100 overflow on714 (409 plus preserved pending journal). Verify100 server total with50 loaded items, last99→100 creation, full→fresh99 enablement, existing edits at capacity, original unknown create GET-only recovery, and open unsent draft preserved when a fresh count reaches100, no misleading edit guidance while an original operation blocks writes, and original photo recovery accessible at capacity. Verify real server pagination and public/hidden/private permissions. Concurrent server rejection remains authoritative; no unknown record is discarded. Run full client tests, actual browser operations, fresh built H inspection and exact formal asset readback.
 
 ### Meetup summary synchronization — 2.0.714
 

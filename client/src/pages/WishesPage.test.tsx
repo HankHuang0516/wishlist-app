@@ -72,6 +72,7 @@ describe('known wishlist capacity before a new operation',()=>{
   it('retains an original unknown create and keeps its GET-only receipt check usable at capacity',async()=>{
     capacityFixture(100);data.set('42.wish-create',raw);mount(1);
     await screen.findByText('尚未查到原建立回執；不代表未成立，只有明確重試才會送出原內容。');
+    expect(screen.queryByText(/清單已達上限/)).not.toBeInTheDocument();
     const check=screen.getByRole('button',{name:'只查核原建立回執'});
     await waitFor(()=>expect(check).toBeEnabled());const before=api.mock.calls.filter(c=>c[1].includes('/receipts/')).length;
     fireEvent.click(check);await screen.findByText('原建立仍待確認，識別碼與內容已保留；不會自行重建或丟棄。');
@@ -88,6 +89,18 @@ describe('known wishlist capacity before a new operation',()=>{
     expect(screen.getByRole('dialog')).toHaveTextContent('清單已達上限（100/100）');
     expect(screen.getByLabelText('願望名稱（有照片可留空）')).toHaveValue('原未送出草稿');
     expect(posts()).toHaveLength(0);expect(store.save).not.toHaveBeenCalled();expect(data.size).toBe(0);
+  });
+  it('keeps original photo recovery accessible at capacity without starting a new upload or wish',async()=>{
+    capacityFixture(100);
+    const originalPhoto=JSON.stringify({version:1,clientUploadId:clientRequestId,digest:'a'.repeat(64)});
+    data.set('42.wish-photo',originalPhoto);mount(1);
+    const review=await screen.findByRole('button',{name:'處理原照片'});
+    await waitFor(()=>expect(review).toBeEnabled());fireEvent.click(review);
+    const checks=api.mock.calls.filter(c=>c[1].startsWith('/listing-media/by-upload-id/')).length;
+    fireEvent.click(screen.getByRole('button',{name:'只查核原照片'}));
+    await screen.findByText('照片仍待確認；若需要重送，請選回同一照片後明確重試。');
+    expect(api.mock.calls.filter(c=>c[1].startsWith('/listing-media/by-upload-id/'))).toHaveLength(checks+1);
+    expect(data.get('42.wish-photo')).toBe(originalPhoto);expect(posts()).toHaveLength(0);expect(store.save).not.toHaveBeenCalled();expect(store.clear).not.toHaveBeenCalled();
   });
 });
 describe('English wish UI preserves the original workflow and content',()=>{

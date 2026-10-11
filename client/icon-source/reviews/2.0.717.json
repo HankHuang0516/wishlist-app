@@ -32,12 +32,14 @@
   ],
   "masks": "Square, rounded Web Clip and circle comparisons preserve complete H; Web manifest any-purpose. This release changes only Web source.",
   "pixelEvidence": "True original-no-H outside fixed H footprint: zero changed pixels; fixed H colors/alpha unchanged apart from standard output resize.",
-  "reviewedAt": "2026-10-11T03:33:12.506653+00:00",
-  "reviewer": "Codex fresh actual717 build visual inspection",
+  "reviewedAt": "2026-10-11T03:43:50.596447+00:00",
+  "reviewer": "Codex fresh final717 build icon inspection",
   "visualConclusion": "Fresh actual717 output contact boards32/48/64/180/192, square/rounded/circle masks, full1024 logo and512 PWA viewed alongside genuine original-no-H and selected H. Angled H retains both legs and crossbar within the original artwork beside the bow. No separate row, border, canvas change, gift/bow obstruction or mask clipping. Fixed source color/alpha retained; tiny sizes show the complete H rather than an isolated color dot. Web-only release; native icon not changed.",
   "evidence": [
     "QA/wish-capacity-717-20261011/actual-build-icons-real-sizes.png",
     "QA/wish-capacity-717-20261011/actual-build-icons-masks.png",
     "QA/wish-capacity-717-20261011/actual-build-icon-pixel-proof.json"
-  ]
+  ],
+  "featureSourceSha256": "5159097933262ae835e79292cb8402ce7f305e493a81e1e7c092ea24f40976e4",
+  "finalBuildAfterCopyAndPhotoRecovery": true
 }

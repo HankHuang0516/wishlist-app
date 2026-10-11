@@ -1,6 +1,6 @@
 ## Wishlist capacity before a new operation — 2.0.717
 
-The management detail uses the server total, including unloaded wishes. A full list disables starting a new wish and explains the count in Chinese and English, while existing edits and original receipt checks remain usable. A fresh total below the limit reopens creation. Known-full guards stop new draft saves and fresh photo uploads before creating a journal; original photo and creation recovery retain their existing behavior. The server remains authoritative for concurrent writers and unknown responses keep their original encrypted records. Native APP and backend code are unchanged.
+The management detail uses the server total, including unloaded wishes. A full list disables starting a new wish and explains the count in Chinese and English, while existing edits and original receipt checks remain usable. A fresh total below the limit reopens creation. Known-full guards stop new draft saves and fresh photo uploads before creating a journal; original photo and creation recovery retain their existing behavior. The server remains authoritative for concurrent writers and unknown responses keep their original encrypted records. A retained photo has a dedicated recovery entry at capacity; it never bypasses the create guard. An unresolved operation takes precedence over editable-capacity guidance. Native APP and backend code are unchanged.
 
 ## Meetup summary synchronization — 2.0.714
 

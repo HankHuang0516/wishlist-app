@@ -1,4 +1,4 @@
-import {parseOfficialAuction} from './sourceAuctionDate';
+import {parseOfficialAuction,parseAuctionInstant} from './sourceAuctionDate';
 import {parsePhotoInventory, photoCompleteness} from './sourcePhotoInventory';
 import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL, UNKNOWN_SOURCE_DISTRICT} from './sourceCountyIllustration';
 import {publicCommentRoute} from './sourcePublicComment';
@@ -33,7 +33,7 @@ export function parseLead(input: unknown, now = new Date()) {
         throw new LeadError('CONCRETE_PUBLIC_PLACE_REQUIRED');
     if ([b.publicPlaceName, b.publicAddress].some(v => privateContactField({ title: v }) || forbiddenListingField({ title: v })))
         throw new LeadError('SAFE_PUBLIC_PLACE_REQUIRED');
-    const postedEarliestAt = auction?null:date(b.postedEarliestAt), postedLatestAt = auction?null:date(b.postedLatestAt), checkedAt = date(b.checkedAt);
+    const postedEarliestAt = auction?null:date(b.postedEarliestAt), postedLatestAt = auction?null:date(b.postedLatestAt), checkedAt = auction?parseAuctionInstant(b.checkedAt):date(b.checkedAt);
     if(approximate) {
         const c=object(e.countyIllustration),point=countyIllustration(b.county);
         exact(c,['county','sourceUrl','sourceCountyRef','representativeKey','approvalRef','districtStatus']);

@@ -43,7 +43,7 @@ export default function SourceLeadMapPage() {
         const all: SourceLead[] = [], ids = new Set<string>(), cursors = new Set<string>();
         let cursor: string | null = null;
         do {
-          const page = parseLeadPage(await publicApi('/source-leads?presentation=1&photos=2&approximate=1' +
+          const page = parseLeadPage(await publicApi('/source-leads?dateContract=auction-v1&presentation=1&photos=2&approximate=1' +
             (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), { signal }));
           if (stopped) return;
           if (signal.aborted) throw signal.reason;

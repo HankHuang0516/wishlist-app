@@ -26,3 +26,8 @@ describe('official auction evidence basis, without inventing a publication date'
  ])('rejects inactive, invalid or unbound window %j',patch=>expect(()=>parseOfficialAuction({...fixture(),activeAuctionWindow:{...fixture().activeAuctionWindow,...patch}},url,ref,now)).toThrow());
  test('checks the active period boundary without interpreting it as stock or rights',()=>{expect(()=>parseOfficialAuction(fixture(),url,ref,new Date('2026-11-10T02:00:00Z'))).toThrow();expect(parseOfficialAuction(fixture(),url,ref,new Date('2026-10-11T02:00:00Z')).originalPublishedAt).toBeNull();});
 });
+
+test.each(['.1Z','.12Z'])('normalizes valid fractional UTC milliseconds %s',fraction=>{
+ const b=fixture();b.activeAuctionWindow.startsAt='2026-10-11T02:00:00'+fraction;
+ expect(parseOfficialAuction(b,url,ref,now).activeAuctionWindow.startsAt).toBe(new Date(b.activeAuctionWindow.startsAt).toISOString());
+});

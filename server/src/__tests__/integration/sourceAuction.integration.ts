@@ -15,10 +15,16 @@ it('real isolated DB/admin/public roundtrip preserves null original dates and ex
  const body=auctionFixture(),dry=await http.post('/api/source-lead-admin/import').set('x-admin-key',key).send({items:[body],dryRun:true});expect(dry.status).toBe(200);expect(dry.body).toMatchObject({validatedCount:1,persistedCount:0,qualifiedSupplyCount:0});
  const apply=await http.post('/api/source-lead-admin/import').set('x-admin-key',key).send({items:[body],dryRun:false});expect(apply.status).toBe(200);ids.push(...apply.body.ids);
  const stored=await prisma.externalSourceLead.findUniqueOrThrow({where:{id:ids[0]}});expect(stored.postedEarliestAt).toBeNull();expect(stored.postedLatestAt).toBeNull();
- const read=await http.get('/api/source-leads/'+ids[0]+'?presentation=1&photos=2&approximate=1');expect(read.status).toBe(200);expect(read.body).toMatchObject({dateBasis:'ACTIVE_AUCTION_WINDOW',postedEarliestAt:null,postedLatestAt:null,originalPublishedAt:null,stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false});
+ expect((await http.get('/api/source-leads/'+ids[0]+'?presentation=1')).status).toBe(404);
+ const legacy=await http.get('/api/source-leads?presentation=1');
+ expect(legacy.status).toBe(200);expect(legacy.body.items.some((x:any)=>x.id===ids[0])).toBe(false);
+ expect((await http.get('/api/source-leads?dateContract=invalid')).status).toBe(400);
+ const opted=await http.get('/api/source-leads?dateContract=auction-v1&presentation=1');
+ expect(opted.body.items.some((x:any)=>x.id===ids[0])).toBe(true);
+ const read=await http.get('/api/source-leads/'+ids[0]+'?dateContract=auction-v1&presentation=1&photos=2&approximate=1');expect(read.status).toBe(200);expect(read.body).toMatchObject({dateBasis:'ACTIVE_AUCTION_WINDOW',postedEarliestAt:null,postedLatestAt:null,originalPublishedAt:null,stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false});
  const e:any=stored.evidence;e.officialAuction.activeAuctionWindow.endsAt=new Date(Date.now()-1000).toISOString();
  await prisma.externalSourceLead.update({where:{id:ids[0]},data:{evidence:e}});
- expect((await http.get('/api/source-leads/'+ids[0]+'?presentation=1')).status).toBe(404);
+ expect((await http.get('/api/source-leads/'+ids[0]+'?dateContract=auction-v1&presentation=1')).status).toBe(404);
 });
 it('DB CHECK rejects legacy null original dates and mixed auction dates',async()=>{
  const b=auctionFixture();const {parseLead}=require('../../lib/sourceLeadRules');const row=parseLead(b);const {officialAuction,...legacyEvidence}=b.evidence;

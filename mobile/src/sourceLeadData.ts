@@ -111,8 +111,10 @@ export function sourceLeadFresh(r:Pick<SourceLead,'canonicalUrl'|'postedEarliest
   if(r.sourceType!=='OFFICIAL_AUCTION'||r.dateBasis!=='ACTIVE_AUCTION_WINDOW'||r.originalPublishedAt!==null||r.priceType!=='STARTING_BID'||r.postedEarliestAt!==null||r.postedLatestAt!==null||
    u.protocol!=='https:'||u.username!==''||u.password!==''||u.search!==''||u.hash!==''||u.port!==''||u.hostname!=='recycledstuff.ntpc.gov.tw'||!/^\/Product\/Detail\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(u.pathname)||
    !w||Object.keys(w).some(k=>!['startsAt','endsAt','timeZone'].includes(k))||w.timeZone!=='Asia/Taipei')return false;
-  if(typeof w.startsAt!=='string'||typeof w.endsAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(w.startsAt)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(w.endsAt))return false;
-  const start=Date.parse(w.startsAt),end=Date.parse(w.endsAt);return Number.isFinite(start)&&Number.isFinite(end)&&start<=now&&now<end&&start<end;
+  if(typeof w.startsAt!=='string'||typeof w.endsAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(w.startsAt)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(w.endsAt))return false;
+  const start=Date.parse(w.startsAt),end=Date.parse(w.endsAt);
+  const normalized=(s:string)=>s.replace(/(?:\.(\d{1,3}))?Z$/,(_m,digits:string|undefined)=>'.'+(digits??'').padEnd(3,'0')+'Z');
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(r.checkedAt)&&new Date(checked).toISOString()===normalized(r.checkedAt)&&Number.isFinite(start)&&Number.isFinite(end)&&new Date(start).toISOString()===normalized(w.startsAt)&&new Date(end).toISOString()===normalized(w.endsAt)&&start<=checked&&start<=now&&now<end&&start<end;
  }
  if(r.dateBasis!==undefined||r.originalPublishedAt!==undefined||r.priceType!==undefined||r.activeAuctionWindow!==undefined||typeof r.postedEarliestAt!=='string'||typeof r.postedLatestAt!=='string')return false;
  const lower=Date.parse(r.postedEarliestAt),upper=Date.parse(r.postedLatestAt);

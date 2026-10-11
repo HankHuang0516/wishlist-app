@@ -1,3 +1,7 @@
+## Original-platform subscription guidance — 2.0.723
+
+Settings → Premium subscription now exposes bilingual Apple and Google Play official instructions. Users select the original billing platform and account; the Web app does not infer a billing provider from browser or membership state. Help links are available when benefit reads fail and carry no account values. Purchases remain paused and benefit reads use the existing backend.
+
 ## Login destination after session expiry — 2.0.720
 
 When an old session expires while the browser is already on login, the provider preserves the validated original `next` destination. Ordinary protected-route expiry and intentional sign-out keep their existing behavior. The existing return whitelist still rejects external URLs, recursive login destinations and malformed room IDs. Pending encrypted operation records, native APP and backend code remain unchanged.

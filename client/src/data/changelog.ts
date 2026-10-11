@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.723',date:'2026-10-11',title:'原付款平台訂閱管理說明',type:'Frontend',items:[{type:'Enhancement',content:'尊榮版訂閱區新增 Apple 與 Google Play 官方管理說明，依原付款平台與訂閱帳號查看步驟。'},{type:'Security',content:'說明連結不包含帳號資料；購買仍暫停，開啟說明不會變更訂閱或開通權益。'}]},
  {version:'2.0.720',date:'2026-10-11',title:'重新登入後返回原頁面',type:'Frontend',items:[{type:'Fix',content:'在登入頁遇到舊登入失效時，重新登入仍可返回原本的探索、聊天或商品管理頁。'},{type:'Security',content:'返回位置沿用安全檢查，無效頁面與外部網址仍回到願望清單首頁。'}]},
  {version:'2.0.717',date:'2026-10-11',title:'願望清單滿額提示',type:'Frontend',items:[{type:'Fix',content:'清單已滿時在新增前顯示容量提示，件數包含尚未載入的願望；仍可編輯現有資料，重新讀取核對最新容量。'},{type:'Enhancement',content:'最後一個名額保存後立即更新滿額狀態；原待確認操作繼續查核，不會自動重送或丟棄。'}]},
  {version:'2.0.714',date:'2026-10-11',title:'面交預約摘要即時同步',type:'Frontend',items:[{type:'Fix',content:'面交詳情成功更新或查回原操作結果後，聊天室摘要同步顯示同一狀態，無須等待重新整理。'},{type:'Fix',content:'較早的讀取回覆不覆寫最新結果；待確認操作與未送出訊息繼續保留，不會自動重送。'}]},

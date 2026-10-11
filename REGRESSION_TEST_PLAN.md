@@ -1,3 +1,9 @@
+### Original-platform subscription guidance — 2.0.723
+
+- Verify Chinese/English instructions for premium, standard and unverified membership; collapsed by default, exact official help destinations, no account/session values or referrer, no payment action or mutation.
+- Verify actual candidate and production Settings expansion, link opening, mobile wrapping/44px targets and unique Settings entry; reset temporary viewport after QA. Do not manage any real subscription.
+- Original APP2.0.12 and backend unchanged; fresh actual build H review and CI required before merge/deploy.
+
 ### Return destination during login expiry — 2.0.720
 
 Reproduce current-profile 401 and 404 while already on login with a safe next path. Wait for the router transition itself before asserting the destination; an earlier signed-out render can still contain the old URL. Verify my-listings, explore, settings and a valid chat room, and reject external, recursive login and malformed chat destinations. Preserve unrelated pending recovery records. Use the existing synthetic account for normal browser reauthentication, fresh actual-build H inspection, green exact-candidate CI and published bytes; native/backend remain unchanged.

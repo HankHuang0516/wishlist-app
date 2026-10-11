@@ -45,6 +45,7 @@ export function parseLead(input: unknown, now = new Date()) {
         throw new LeadError('BOUND_PUBLIC_EVIDENCE_REQUIRED');
     publicUrl(e.locationSourceUrl);
     publicUrl(e.coordinateSourceUrl);
+    if(auction){const u=new URL(e.coordinateSourceUrl);if(u.hostname==='mapcarta.com'||u.hostname.endsWith('.mapcarta.com')||u.hostname==='www.openstreetmap.org'&&(!/^\/node\/\d+$/.test(u.pathname)||e.coordinateNodeVersion===undefined))throw new LeadError('AUCTION_COORDINATE_PROVENANCE_UNSUPPORTED');}
     if (e.publicFacts !== undefined) {
         const f = object(e.publicFacts);
         exact(f, ['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation', 'coordinateQualityNotes']);

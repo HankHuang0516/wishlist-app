@@ -8,3 +8,5 @@ describe('official auction full source parser remains an unqualified reference',
  test.each([{postedEarliestAt:'2026-10-11T01:00:00Z'},{postedLatestAt:'2026-10-11T01:00:00Z'},{district:'板橋區'},{latitude:0},{publicAddress:''}])('rejects invented original date or unsupported location %j',patch=>expect(()=>parseLead({...auctionFixture(),...patch})).toThrow());
  test('rejects missing disclosure and approximate administrative center mode',()=>{const b=auctionFixture();expect(()=>parseLead({...b,evidence:{...b.evidence,publicFacts:undefined}})).toThrow();expect(()=>parseLead({...b,evidence:{...b.evidence,locationType:'COUNTY_ILLUSTRATION',countyIllustration:{county:'臺北市'}}})).toThrow();});
 });
+
+test.each(['https://www.openstreetmap.org/way/1245756939','https://mapcarta.com/W1245756939'])('auction reference never drops unsupported coordinate provenance %s',url=>{const b=auctionFixture();expect(()=>parseLead({...b,evidence:{...b.evidence,coordinateSourceUrl:url}})).toThrow('AUCTION_COORDINATE_PROVENANCE_UNSUPPORTED');});

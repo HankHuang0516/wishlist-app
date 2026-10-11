@@ -56,6 +56,31 @@ it('prefers an original seller photo over selected AI marketing artwork', async 
     expect(response.text).not.toContain('b5509492-26d5-460d-ae47-c281bb313c1c');
 });
 
+it.each([
+    ['priced', new Prisma.Decimal('275'), 'NT$ 275'],
+    ['free', new Prisma.Decimal('0'), '免費贈送'],
+    ['price unknown', null, '價格洽詢'],
+])('keeps %s photo-less product metadata without presenting website art as its photo', async (_label, price, displayPrice) => {
+    findUnique.mockResolvedValue(fakeListing({ media: [], price }));
+    const response = await request(app).get(`/listings/${listingId}?v=1`);
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.text).toContain(`來自北極的禮物｜${displayPrice}｜Wishlist.ai`);
+    expect(response.text).toContain(`/listings/${listingId}?v=3`);
+    expect(response.text).not.toMatch(/(?:og:image|twitter:image)/);
+    expect(response.text).not.toContain('/og-image.png');
+    expect(response.text).toContain('<meta property="twitter:card" content="summary" />');
+});
+
+it('describes selected AI-only artwork as marketing imagery, not a product photograph', async () => {
+    findUnique.mockResolvedValue(fakeListing({ media: [{ id: photoId, capturePurpose: 'AI_MARKETING' }] }));
+    const response = await request(app).get(`/listings/${listingId}`);
+    expect(response.status).toBe(200);
+    expect(response.text).toContain(`/api/listing-media/${photoId}/thumbnail`);
+    expect(response.text).toContain('<meta property="og:image:alt" content="來自北極的禮物商品行銷示意圖" />');
+    expect(response.text).not.toContain('來自北極的禮物商品照片');
+});
+
 it('escapes user-supplied text and formats free or missing prices honestly', async () => {
     findUnique.mockResolvedValue(fakeListing({ title: '漫畫 "限定" <script>', description: '盒裝 & 附件 <b>完整</b>', price: new Prisma.Decimal('0') }));
     const free = await request(app).get(`/listings/${listingId}`);

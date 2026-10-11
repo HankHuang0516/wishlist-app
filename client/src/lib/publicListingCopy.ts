@@ -50,7 +50,8 @@ export function publicListingText(key: PublicListingCopyKey): string { return ch
 export function publicListingPrice(price: number): string {
   return price === 0 ? chinese() ? '免費贈送' : 'Free' : `NT$ ${new Intl.NumberFormat(chinese() ? 'zh-TW' : 'en-US', { maximumFractionDigits: 2 }).format(price)}`;
 }
-export function publicListingPhotoLabel(title: string, index: number): string {
+export function publicListingPhotoLabel(title: string, index: number, marketing = false): string {
+  if (marketing) return chinese() ? `${title}商品行銷示意圖${index}` : `${title} item marketing illustration ${index}`;
   return chinese() ? `${title}商品照片${index}` : `${title} item photo ${index}`;
 }
 export function publicListingTime(value: string): string {

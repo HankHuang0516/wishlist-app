@@ -43,7 +43,10 @@ export function renderListingShareHtml(template: string, listing: ListingShareDa
     const description = `${listing.condition === 'NEW' ? '新品' : '二手'}商品 · ${price}${details ? ` · ${details}` : ''}`;
     // Prefer a real seller photo even when AI marketing art is positioned first.
     const photo = listing.media.find(media => media.capturePurpose !== 'AI_MARKETING') ?? listing.media[0];
-    const image = photo ? `${origin}/api/listing-media/${photo.id}/thumbnail` : `${origin}/og-image.png`;
+    const imageTags = photo ? [
+        meta('property', 'og:image', `${origin}/api/listing-media/${photo.id}/thumbnail`),
+        meta('property', 'og:image:alt', `${listing.title}${photo.capturePurpose === 'AI_MARKETING' ? '商品行銷示意圖' : '商品照片'}`),
+    ] : [];
     const tags = [
         `  <title>${escapeHtml(title)}</title>`,
         meta('name', 'title', title),
@@ -52,15 +55,14 @@ export function renderListingShareHtml(template: string, listing: ListingShareDa
         meta('property', 'og:url', url),
         meta('property', 'og:title', title),
         meta('property', 'og:description', description),
-        meta('property', 'og:image', image),
-        meta('property', 'og:image:alt', `${listing.title}商品照片`),
+        ...imageTags,
         meta('property', 'og:locale', 'zh_TW'),
         meta('property', 'og:site_name', 'Wishlist.ai'),
-        meta('property', 'twitter:card', 'summary_large_image'),
+        meta('property', 'twitter:card', photo ? 'summary_large_image' : 'summary'),
         meta('property', 'twitter:url', url),
         meta('property', 'twitter:title', title),
         meta('property', 'twitter:description', description),
-        meta('property', 'twitter:image', image),
+        ...(photo ? [meta('property', 'twitter:image', `${origin}/api/listing-media/${photo.id}/thumbnail`)] : []),
     ].join('\n');
     return `${template.slice(0, start)}${START}\n${tags}\n  ${template.slice(end)}`;
 }

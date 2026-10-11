@@ -1,3 +1,7 @@
+## Meetup summary synchronization — 2.0.714
+
+Validated appointment reads, action responses and original receipt recovery in the meetup dialog immediately update the containing chat summary. An earlier in-flight summary read cannot overwrite that result. Unknown responses never imply agreement, and the original pending operation stays intact until its receipt is acknowledged. This shares already verified state without adding requests or writes; chat text, account boundaries and native APP source are preserved.
+
 ## Settings drafts when switching accounts — 2.0.711
 
 The profile hook now independently guards owner changes; the existing SettingsSession owner/token key is preserved. An in-place hook account change or sign-out immediately hides the previous owner's profile and clears that view's unsent private fields, saved indicator, cleanup acknowledgement and busy state. Held old-account callbacks cannot edit, save or replace the new profile. Existing encrypted owner/API-scoped recovery records remain intact; returning to the original account performs the original GET-only receipt recovery. Same-owner token refresh and safe rereads retain unsent drafts. APP and backend contracts are unchanged.

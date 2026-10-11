@@ -277,6 +277,10 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
         {pending && <button type="button" className={button} disabled={busy || !room} onClick={() => void checkPending()}>{chatText("只查核原訊息回執")}</button>}
         {room && !('IntersectionObserver' in window) && <><p className="text-sm">{chatText("此瀏覽器無法偵測訊息可見範圍，不會自動標記已讀；可由你明確確認。")}</p><button type="button" className={button} disabled={!messages.length || autoPause.paused} onClick={() => { viewed.current = Math.max(viewed.current, ...messages.map(m => m.sequence)); void markRef.current(); }}>{chatText("將目前已載入訊息標記為已讀")}</button></>}
       </div>
-    </form>{showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onReadPause={() => { if (active.current) autoPause.pause(); }} onClose={() => { setShowMeetup(false); void refresh(undefined, true); }} />}
+    </form>{showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onAppointmentChange={appointment => {
+      if (!active.current || !roomRef.current || roomRef.current.archived) return;
+      // The dialog has a validated current result; an earlier summary read must not replace it.
+      meetupSequence.current++; setMeetup(appointment); setMeetupIssue('');
+    }} onReadPause={() => { if (active.current) autoPause.pause(); }} onClose={() => { setShowMeetup(false); void refresh(undefined, true); }} />}
   </div>;
 }

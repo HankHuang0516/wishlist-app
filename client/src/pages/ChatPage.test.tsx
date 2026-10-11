@@ -1,8 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../context/AuthContext';
-import { makeMessage, makeRoom, roomId } from '../__tests__/fixtures/chat';
+import { makeMessage, makeMeetup, makeRoom, roomId } from '../__tests__/fixtures/chat';
+import { meetupRequestHash } from '../lib/chatWeb';
 import ChatPage, { ChatRoomWeb } from './ChatPage';
 import { ApiFailure } from '../lib/marketplaceApi';
 const { api, data, store } = vi.hoisted(() => ({ api: vi.fn(), data: new Map<string, string>(), store: { get: vi.fn(), save: vi.fn(), clear: vi.fn() } }));
@@ -32,6 +33,74 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <ChatRoomWeb {...value} />;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('updates the chat summary immediately after confirmation and cancellation in the open meetup dialog', async () => {
+    const base = api.getMockImplementation()!;
+    let appointment = makeMeetup();
+    api.mockImplementation(async (...args) => {
+      if (args[1].endsWith('/meetup')) {
+        if (args[2]?.method === 'POST') {
+          const request = JSON.parse(args[2].body as string);
+          appointment = { ...appointment, status: request.action === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED', buyerConfirmedAt: '2026-10-11T00:00:00.000Z' };
+          return { appointment, replayed: false, receipt: { conversationId: roomId, actorUserId: 42, clientActionId: request.clientActionId, action: request.action, resultingVersion: 1, abandoned: false } };
+        }
+        return { appointment };
+      }
+      return base(...args);
+    });
+    render(roomView());
+    const summary = await screen.findByRole('region', { name: '聊天面交預約' });
+    await within(summary).findByRole('heading', { name: '面交預約 · 提議中 · 第1版' });
+    fireEvent.click(within(summary).getByRole('button', { name: '查看或提議面交預約' }));
+    fireEvent.click(await screen.findByRole('button', { name: '同意第1版時間與地點' }));
+    await within(summary).findByRole('heading', { name: '面交預約 · 雙方已確認 · 第1版' });
+    expect(within(summary).queryByText(/仍待雙方確認/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消第1版預約' }));
+    await within(summary).findByRole('heading', { name: '面交預約 · 已取消 · 第1版' });
+    expect(posts().filter(call => call[1].endsWith('/meetup'))).toHaveLength(2);
+  });
+  it('updates the chat summary from an original receipt without replaying the pending meetup operation or clearing message text', async () => {
+    const base = api.getMockImplementation()!, request = { clientActionId: crypto.randomUUID(), action: 'CONFIRM' as const, expectedVersion: 1 };
+    const pendingKey = `42.meetup.${roomId}`, body = JSON.stringify(request), proposed = makeMeetup();
+    const confirmed = makeMeetup({ status: 'CONFIRMED', buyerConfirmedAt: '2026-10-11T00:00:00.000Z' });
+    data.set(pendingKey, body);
+    api.mockImplementation(async (...args) => {
+      if (args[1].includes('/meetup/operations/')) return { appointment: confirmed, replayed: true, receipt: { conversationId: roomId, actorUserId: 42, clientActionId: request.clientActionId, action: request.action, resultingVersion: 1, abandoned: false, requestHash: await meetupRequestHash(request) } };
+      if (args[1].endsWith('/meetup')) return { appointment: proposed };
+      return base(...args);
+    });
+    render(roomView());
+    const summary = await screen.findByRole('region', { name: '聊天面交預約' });
+    await within(summary).findByRole('heading', { name: '面交預約 · 提議中 · 第1版' });
+    fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: '本人尚未送出的訊息' } });
+    fireEvent.click(within(summary).getByRole('button', { name: '查看或提議面交預約' }));
+    fireEvent.click(await screen.findByRole('button', { name: '只查核原面交回執' }));
+    await within(summary).findByRole('heading', { name: '面交預約 · 雙方已確認 · 第1版' });
+    expect(posts()).toHaveLength(0);
+    expect(data.has(pendingKey)).toBe(false);
+    expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toHaveValue('本人尚未送出的訊息');
+  });
+  it('ignores an older chat-summary read after the meetup dialog has read the confirmed state', async () => {
+    const base = api.getMockImplementation()!, proposed = makeMeetup();
+    const confirmed = makeMeetup({ status: 'CONFIRMED', buyerConfirmedAt: '2026-10-11T00:00:00.000Z' });
+    let completeOldRead!: (value: unknown) => void, reads = 0;
+    api.mockImplementation(async (...args) => {
+      if (args[1].endsWith('/meetup')) {
+        if (++reads === 1) return new Promise(resolve => { completeOldRead = resolve; });
+        return { appointment: confirmed };
+      }
+      return base(...args);
+    });
+    render(roomView());
+    await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const summary = screen.getByRole('region', { name: '聊天面交預約' });
+    fireEvent.click(within(summary).getByRole('button', { name: '查看或提議面交預約' }));
+    await within(screen.getByRole('dialog')).findByRole('heading', { name: '雙方已確認 · 第1版' });
+    await within(summary).findByRole('heading', { name: '面交預約 · 雙方已確認 · 第1版' });
+    await act(async () => completeOldRead({ appointment: proposed }));
+    expect(within(summary).getByRole('heading', { name: '面交預約 · 雙方已確認 · 第1版' })).toBeInTheDocument();
+    expect(within(summary).queryByRole('heading', { name: '面交預約 · 提議中 · 第1版' })).not.toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+  });
   it('keeps QA history readable but disables new messages in an existing explicitly non-sale room',async()=>{
     room={...room,listingAvailable:false,listing:{...room.listing,title:'【QA測試非販售】歷史商品',thumbnailUrl:null}};
     rows=[makeMessage(1,{text:'原有歷史'})];room={...room,lastMessageSequence:1};

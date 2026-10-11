@@ -10,7 +10,7 @@ import { pendingRequestKey, privatePendingStore, PendingStoreError } from '../li
 import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
 const input = 'mt-2 min-h-11 w-full rounded-xl border p-3';
-export default function MeetupWeb({ token, userId, room, onClose, onReadPause }: { token: string; userId: number; room: ChatRoomRecord; onClose: () => void; onReadPause?: () => void }) {
+export default function MeetupWeb({ token, userId, room, onClose, onReadPause, onAppointmentChange }: { token: string; userId: number; room: ChatRoomRecord; onClose: () => void; onReadPause?: () => void; onAppointmentChange?: (appointment: MeetupRecord | null) => void }) {
   const [appointment, setAppointment] = useState<MeetupRecord | null>(null), [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false);
   const [pending, setPending] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [editing, setEditing] = useState(false), [editVersion, setEditVersion] = useState(0), [date, setDate] = useState('');
@@ -21,6 +21,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
   const autoPause = useChatReadPause();
   const current = useRef(appointment); current.current = appointment;
   const latestRoom = useRef(room); latestRoom.current = room;
+  const appointmentChange = useRef(onAppointmentChange); appointmentChange.current = onAppointmentChange;
   const read = (path: string, init?: RequestInit) => { if (!active.current) return Promise.reject(new Error('已關閉')); return api<unknown>(token, path, init).then(value => { if (!active.current) throw new Error('已關閉'); return value; }).catch(failure => { if (active.current && shouldPauseChatReads(failure)) { autoPause.pause(); onReadPause?.(); } throw failure; }); };
   async function refresh(automatic = false) {
     if (reading.current || gate.current || !active.current || latestRoom.current.archived || automatic && autoPause.control.current.paused) return;
@@ -28,7 +29,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
     try {
       const result = await read(`/chat/conversations/${room.id}/meetup`) as { appointment: unknown };
       const next = parseMeetup(result.appointment, latestRoom.current);
-      if (active.current && seq === sequence.current) { current.current = next; setAppointment(next); setLoaded(true); setError(''); if (!automatic) autoPause.resume(pauseGeneration); }
+      if (active.current && seq === sequence.current) { current.current = next; setAppointment(next); setLoaded(true); setError(''); appointmentChange.current?.(next); if (!automatic) autoPause.resume(pauseGeneration); }
     } catch (failure) { if (active.current && seq === sequence.current) setError(failure instanceof ApiFailure && failure.status === 429 ? '請求暫時受限，已暫停自動讀取；請稍後再試，原內容與待確認操作會保留。' : '無法更新面交預約；不代表尚無預約或已確認，請重試。'); }
     finally { reading.current = false; }
   }
@@ -57,6 +58,7 @@ export default function MeetupWeb({ token, userId, room, onClose, onReadPause }:
   function acceptResult(result: Awaited<ReturnType<typeof submitMeetupAction>>, abandon = false) {
     if (!active.current) return;
     current.current = result.appointment; setAppointment(result.appointment); setLoaded(true); setEditing(false);
+    appointmentChange.current?.(result.appointment);
     if (result.pendingCleared) { saved.current = null; setPending(null); setConfirmFence(false); }
     else setError('後台操作已確認，但本機待確認標記尚未清除；請查核或重試同一操作，暫不建立新操作。');
     setNotice(result.abandoned ? '原待確認操作已安全放棄；這不會取消已成立的預約。' : result.acknowledgedVersion! < result.appointment!.version ? `已確認先前第${result.acknowledgedVersion}版操作；目前第${result.appointment!.version}版仍需重新核對。` : abandon ? '原操作已先完成，已確認結果；放棄操作沒有取消目前預約。' : '操作已確認；是否雙方同意請查看預約狀態。');

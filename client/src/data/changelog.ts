@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.714',date:'2026-10-11',title:'面交預約摘要即時同步',type:'Frontend',items:[{type:'Fix',content:'面交詳情成功更新或查回原操作結果後，聊天室摘要同步顯示同一狀態，無須等待重新整理。'},{type:'Fix',content:'較早的讀取回覆不覆寫最新結果；待確認操作與未送出訊息繼續保留，不會自動重送。'}]},
  {version:'2.0.684',date:'2026-10-09',title:'私人待審半自動匯入',type:'Backend',items:[{type:'New',content:'管理者可分批匯入人工整理或獲准使用的 CSV／JSON，保留待審游標、查閱紀錄與成對匯出；未知授權及庫存維持待確認。'},{type:'Security',content:'母檔準備綁定雙版本與雜湊，拒絕讀取中變動；不自動公開商品、不新增操作畫面。'}]},
  {version:'2.0.683',date:'2026-10-09',title:'三件既有來源的限定維護',type:'Backend',items:[{type:'Enhancement',content:'依單次核准維護三件既有來源的查核與照片紀錄；保留原商品識別及時效門檻，在售與賣家授權仍待確認。'}]},
  {version:'2.0.681',date:'2026-10-07',title:'來源同步工具與私人回執保護',type:'Backend',items:[{type:'Security',content:'部署需逐次核准的受限來源同步工具與私人回執驗證；核准工作清單維持空，不執行商品匯入或新增公開操作入口。'}]},

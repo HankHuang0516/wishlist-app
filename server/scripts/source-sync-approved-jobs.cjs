@@ -2,7 +2,38 @@
 // Reviewed one-time approval: Sentinel_896dc75e447081919307bc01242cba39.
 // Only three existing source references; other repo STOP and all public gates remain.
 // Neither archive input nor command-line arguments can expand this policy.
+// Reviewed bank3 v31 pins from the parent handoff. No new credential or public gate.
 module.exports = Object.freeze({
+  'source-bank-three-20261011-v31': Object.freeze({
+  "jobId": "source-bank-three-20261011-v31",
+  "allowWrite": true,
+  "notBefore": "2026-10-11T05:25:00.000Z",
+  "expiresAt": "2026-10-11T06:25:00.000Z",
+  "libraryFileId": "libfile_25e175109c8481919ed4d997137ffb79",
+  "archiveVersion": 31,
+  "archiveSha256": "34c07f4042358749714f9d5df0a4f5cc9f1c9a34afd3299fc07bff3ccc0da312",
+  "payloadSha256": "c9d7babc978be0421d5058cff7aa5b9b1b79aba5a3a5e529bb2ed27fb296df47",
+  "items": [
+    {
+      "archiveItemId": "FB138730922963023-3595865567249524-01",
+      "canonicalUrl": "https://www.facebook.com/groups/138730922963023/posts/3595865567249524",
+      "checkedAt": "2026-10-11T02:05:32Z",
+      "itemSha256": "a1bff9c06f3f19108d1f2318e2b69b1fd476b3bfbbeb7366e4ed5ec2a3c8688f"
+    },
+    {
+      "archiveItemId": "FB138730922963023-3595865567249524-02",
+      "canonicalUrl": "https://www.facebook.com/groups/138730922963023/posts/3595865567249524",
+      "checkedAt": "2026-10-11T02:05:32Z",
+      "itemSha256": "4b8aa03c8740786afb3bc008b3e0150a855c2d2891223def19d305b9554580ce"
+    },
+    {
+      "archiveItemId": "FB138730922963023-3595865567249524-03",
+      "canonicalUrl": "https://www.facebook.com/groups/138730922963023/posts/3595865567249524",
+      "checkedAt": "2026-10-11T02:05:32Z",
+      "itemSha256": "41f77493fcee1ae191ddd516f8522bed0659a94e4d688e50ebc826374ea98fce"
+    }
+  ]
+}),
   'source-maintenance-20261008-three': Object.freeze({
   "jobId": "source-maintenance-20261008-three",
   "allowWrite": true,

@@ -1,3 +1,4 @@
+import { parseExploreCounts, type ExploreCounts } from '../lib/exploreCounts';
 import {useSourceLeadSearch} from '../lib/useSourceLeadSearch';
 import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 import {sourceLeadText as sourceText,sourceLeadRoutingReason} from '../lib/sourceLeadCopy';
@@ -69,6 +70,17 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const [wishBusy, setWishBusy] = useState(false), [retryUntil, setRetryUntil] = useState(0);
   const [seller, setSeller] = useState<SellerState>(blankSeller), [external, setExternal] = useState<ExternalState>(blankExternal);
   const source=useSourceLeadSearch(token,query);
+  const [counts, setCounts] = useState<ExploreCounts | null>(null);
+  const [countsBusy, setCountsBusy] = useState(true);
+  const [countsRead, setCountsRead] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setCounts(null); setCountsBusy(true);
+    void api<unknown>(token, '/explore-counts').then(parseExploreCounts).then(value => {
+      if (current) setCounts(value);
+    }).catch(() => { if (current) setCounts(null); }).finally(() => { if (current) setCountsBusy(false); });
+    return () => { current = false; };
+  }, [token, countsRead]);
   const sourceFrameCycle=useRef(0);
   const [sellerSerial,setSellerSerial]=useState(0),[externalSerial,setExternalSerial]=useState(0);
   const [listMode, setListMode] = useState(new URLSearchParams(search).get('view') === 'list'), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
@@ -316,7 +328,10 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       {resultsFrame.current && <button type="button" onClick={() => { const saved = resultsFrame.current!; viewport.current = saved.bounds; showFrame(saved.camera); switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("返回目前結果")}</button>}
     </div>{locationMessage && <p role="status" className="text-sm text-gray-600">{exploreMessage(locationMessage)}</p>}
     {query && <MapFallbackBoundary fallback={<p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">{text('互動地圖暫時無法使用，請切換「商品列表」繼續搜尋與閱覽。')}</p>}><ExploreMapWeb items={liveItems} external={liveExternal} sourceLeads={source.items} frame={frame} visible={!listMode} onViewport={bounds => { viewport.current = bounds; }} onSelect={item => { setSelection(item); setCluster(null); }} onCluster={(kind, ids) => { setCluster({ kind, ids }); switchList(true); }} /></MapFallbackBoundary>}
-    <div aria-live="polite" className="space-y-2 text-sm text-gray-600">{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && <p>{text('目前範圍已載入：{count} 件站內商品{own}、{external} 件外部來源。這不是全站商品總數。', { count: liveItems.length, own: query.wishId ? text('（含 {count} 件自有預覽）', { count: liveItems.filter(item => item.owner.id === userId).length }) : '', external: liveExternal.length })}</p>}
+    <div aria-live="polite" className="space-y-2 text-sm text-gray-600">
+      <p className="font-semibold">{counts ? text('全站已上架 {count} 件', {count:counts.published.total}) : countsBusy ? text('全站已上架數量讀取中…') : text('全站已上架數量未取得')}</p>
+      {counts && <><p>{text('自刊 {seller} 件 · 來源參考 {source} 件 · 合作商品 {partner} 件', {seller:counts.published.sellerListings,source:counts.published.sourceReferences,partner:counts.published.partnerListings})}</p><p>{text('目前全站可探索展示 {count} 件；來源參考不是已確認在售或取得賣家授權的商品。', {count:counts.explorable.total})}</p><p>{text('數量查核：{time}（台灣時間）',{time:exploreTime(counts.asOf)})}</p></>}
+      <button type="button" disabled={countsBusy || readBlocked} onClick={() => setCountsRead(value => value + 1)} className="min-h-11 underline disabled:opacity-50">{text('重新讀取全站數量')}</button>{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && <p>{text('目前範圍已載入：{count} 件站內商品{own}、{external} 件外部來源。這不是全站商品總數。', { count: liveItems.length, own: query.wishId ? text('（含 {count} 件自有預覽）', { count: liveItems.filter(item => item.owner.id === userId).length }) : '', external: liveExternal.length })}</p>}
       <p>{sourceText('{count} 筆來源線索；不是已確認在售商品。',{count:source.items.length})}</p>{source.error&&<p role="alert" className="text-red-700">{text(source.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}{source.hidden&&<p>{sourceText('目前篩選條件不能由來源線索驗證，來源層未列入。')}</p>}{external.skipped && <p>{text("目前條件無法由外部來源驗證，外部商品未列入。")}</p>}{!external.enabled && !external.skipped && !external.busy && !external.error && <p>{text("外部來源目前未開放，顯示站內商品。")}</p>}
       {seller.error && <p role="alert" className="text-red-700">{text('站內商品查詢未完成：')}{exploreMessage(seller.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}
       {external.error && <p role="alert" className="text-red-700">{text('外部商品查詢未完成：')}{exploreMessage(external.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}

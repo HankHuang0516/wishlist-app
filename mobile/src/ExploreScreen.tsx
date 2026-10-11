@@ -1,3 +1,4 @@
+import { parseExploreCounts, type ExploreCounts } from './exploreCounts';
 import { ListingPhoto, listingPresentation } from './ListingPhoto';
 import { useSourceLeads, type SourceChatContext } from './SourceLeadExplorer';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,6 +43,16 @@ function ExternalDetailPhoto({ imageUrl, thumbnailUrl }: { imageUrl: string; thu
 
 export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceChat, wishItemId, onClearWish, initialSourceId,onInitialSourceHandled, initialListing, onInitialListingHandled }: Props) {
   const insets = useSafeAreaInsets();
+  const [counts, setCounts] = useState<ExploreCounts | null>(null);
+  const [countsBusy, setCountsBusy] = useState(true);
+  const [countsRead, setCountsRead] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setCounts(null); setCountsBusy(true);
+    void api<unknown>('/explore-counts').then(parseExploreCounts).then(value => { if (current) setCounts(value); })
+      .catch(() => { if (current) setCounts(null); }).finally(() => { if (current) setCountsBusy(false); });
+    return () => { current = false; };
+  }, [api, countsRead]);
   const { fontScale, width } = useWindowDimensions();
   const compactControls = fontScale >= 1.3;
   const narrowMapCard = width <= 360 && fontScale < 1.3;
@@ -397,13 +408,16 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
       </NativeMap>
       <View pointerEvents="box-none" style={s.mapTopActions}>
         <View pointerEvents="box-none" style={s.mapMetaRow}>
+          <Text accessibilityLiveRegion="polite" style={s.mapCount}>{counts ? `全站已上架 ${counts.published.total} 件` : countsBusy ? '全站已上架數量讀取中…' : '全站已上架數量未取得'}</Text>
+          {counts && <Text style={s.small}>自刊 {counts.published.sellerListings} · 來源參考 {counts.published.sourceReferences} · 合作商品 {counts.published.partnerListings}；全站可探索展示 {counts.explorable.total} 件。來源參考非確認在售。</Text>}
+          <Pressable accessibilityRole="button" disabled={countsBusy} onPress={() => setCountsRead(value => value + 1)}><Text style={s.small}>重新讀取全站數量</Text></Pressable>
           <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://www.openstreetmap.org/copyright')}><Text style={s.small}>© OpenStreetMap contributors · 線索座標 ODbL</Text></Pressable>
           <Text style={s.small}>來源線索 {leads.count} 筆 · 待確認，非在售件數</Text>
           <Text accessibilityLabel={resultSummary} accessibilityLiveRegion="polite" numberOfLines={1} style={s.mapCount}>已載入 {loadedCount} 件{externalEnabled ? ` · 外部 ${externalVisible.length}` : ''}</Text>
           {!!resultFrame && <Pressable accessibilityRole="button" accessibilityLabel="回到搜尋結果" style={s.mapAction} onPress={returnToResults}><Text style={s.scopeText}>回到結果</Text></Pressable>}
         </View>
         {canExpand && <Pressable accessibilityRole="button" style={s.mapAction} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
-        {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && bounds && !error && !externalError) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
+        {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && !leads.count && leads.ready && !leads.busy && !leads.error && bounds && !error && !externalError) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
       </View>
       {chosen && card(chosen, true)}
       {chosenExternal && externalCard(chosenExternal, true)}

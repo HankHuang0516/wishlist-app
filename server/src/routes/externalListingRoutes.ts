@@ -12,7 +12,7 @@ import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../lib/externalListingIntake';
 const router = Router();
 router.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false,
     message: { error: '外部商品查詢過於頻繁', errorCode: 'EXTERNAL_INDEX_RATE_LIMIT' } }));
-const select = { id: true, sourceItemId: true, status: true, canonicalUrl: true, imageUrl: true, thumbnailUrl: true,
+export const select = { id: true, sourceItemId: true, status: true, canonicalUrl: true, imageUrl: true, thumbnailUrl: true,
     title: true, description: true,
     priceTwd: true, condition: true, county: true, district: true, observedAt: true, expiresAt: true, contentHash: true,
     approvedContentHash: true, approvedAuthorizationRef: true, approvedAt: true,
@@ -21,7 +21,7 @@ const select = { id: true, sourceItemId: true, status: true, canonicalUrl: true,
         imageReuseAllowed: true, aiProcessingAllowed: true, authorizationRef: true, canonicalHost: true, imageHost: true } },
 } satisfies Prisma.ExternalListingCandidateSelect;
 type SelectedCandidate = Prisma.ExternalListingCandidateGetPayload<{ select: typeof select }>;
-const publicCandidate = (row: SelectedCandidate, now: Date) => {
+export const publicCandidate = (row: SelectedCandidate, now: Date) => {
     const location = districtCenter(row.county, row.district);
     if (row.status !== 'APPROVED' || row.approvedContentHash !== row.contentHash ||
         row.approvedAuthorizationRef !== row.source.authorizationRef || !location ||

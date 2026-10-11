@@ -233,11 +233,12 @@ export function createSourceLeadRoutes() {
         try {
             if (!enabled())
                 return res.json({ items: [], nextCursor: null, enabled: false });
-            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'photos', 'approximate'].includes(k)))
+            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'photos', 'approximate', 'dateContract'].includes(k)))
                 throw new LeadError('INVALID_QUERY');
             if (req.query.presentation !== undefined && req.query.presentation !== '1') throw new LeadError('INVALID_PRESENTATION');
             if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
             if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
+            if(req.query.dateContract!==undefined&&req.query.dateContract!=='auction-v1')throw new LeadError('INVALID_DATE_CONTRACT');
             const q = String(req.query.q ?? '');
             if (q.length > 80)
                 throw new LeadError('INVALID_QUERY');
@@ -262,7 +263,7 @@ export function createSourceLeadRoutes() {
                 }
                 for (const r of rows) {
                     next = r.id;
-                    if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1'))
+                    if (leadCurrent(r) && (!object(r.evidence).officialAuction||req.query.dateContract==='auction-v1') && (!isCountyIllustration(r.evidence)||req.query.approximate==='1'))
                         items.push(leadDTO(r, req.query.presentation === '1',req.query.photos==='2'));
                     if (items.length === 25)
                         break;
@@ -278,13 +279,13 @@ export function createSourceLeadRoutes() {
             return fail(res, e);
         }
     });
-    router.get('/coordinate-layer', async (_req, res) => { try {
+    router.get('/coordinate-layer', async (req, res) => { try {
         if (!enabled())
             return res.json({ items: [], enabled: false });
         const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED' } });
         const values = new Map();
         for (const r of rows) {
-            if (!leadCurrent(r))
+            if (!leadCurrent(r)||object(r.evidence).officialAuction&&req.query.dateContract!=='auction-v1')
                 continue;
             const e = object(r.evidence);
             if (!e.coordinateNodeVersion)
@@ -315,10 +316,10 @@ export function createSourceLeadRoutes() {
         if (!enabled() || !isListingId(req.params.id))
             return res.sendStatus(404);
         const l = await prisma.externalSourceLead.findUnique({ where: { id: String(req.params.id) } });
-        if (Object.keys(req.query).some(k => !['presentation','photos','approximate'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
+        if (Object.keys(req.query).some(k => !['presentation','photos','approximate','dateContract'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
         if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
             if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
-        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1',req.query.photos==='2')) : res.sendStatus(404);
+        return l && leadCurrent(l) && (!object(l.evidence).officialAuction||req.query.dateContract==='auction-v1') && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1',req.query.photos==='2')) : res.sendStatus(404);
     }
     catch (e) {
         return fail(res, e);

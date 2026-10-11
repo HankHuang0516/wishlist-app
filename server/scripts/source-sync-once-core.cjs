@@ -20,7 +20,10 @@ function prepare({archiveBytes, payloadBytes, policy, parseLead, now}) {
     const pin = pins.get(item.archiveItemId), original = archive.items.filter(x=>x.id === item.archiveItemId);
     if (!pin || original.length !== 1 || pin.canonicalUrl !== item.canonicalUrl || pin.checkedAt !== item.checkedAt || hash(Buffer.from(JSON.stringify(item))) !== pin.itemSha256) fail('ITEM_BINDING_MISMATCH');
     const observed = original[0].current_source_check;
-    if (!observed || observed.status !== 'read_original_post' || observed.checked_at_utc !== pin.checkedAt || observed.source_url !== item.canonicalUrl || original[0].stock_status !== 'unknown' || original[0].qualified !== false) fail('SOURCE_OBSERVATION_REQUIRED');
+    const auction=item.evidence?.officialAuction;
+    if (!observed || observed.status !== (auction?'read_official_auction':'read_original_post') || observed.checked_at_utc !== pin.checkedAt || observed.source_url !== item.canonicalUrl || original[0].stock_status !== 'unknown' || original[0].qualified !== false) fail('SOURCE_OBSERVATION_REQUIRED');
+    if(auction && (original[0].original_published_at !== null || original[0].date_basis !== 'ACTIVE_AUCTION_WINDOW' ||
+      !original[0].official_auction_evidence || hash(Buffer.from(JSON.stringify(original[0].official_auction_evidence))) !== hash(Buffer.from(JSON.stringify(auction))))) fail('AUCTION_ARCHIVE_EVIDENCE_MISMATCH');
     if (item.libraryFileId !== policy.libraryFileId || item.archiveVersion !== policy.archiveVersion || item.archiveSha256 !== policy.archiveSha256) fail('ARCHIVE_BINDING_MISMATCH');
     try { parseLead(item, now); } catch { fail('IMPORT_RULE_REJECTED'); }
   }

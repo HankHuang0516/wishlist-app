@@ -1010,8 +1010,8 @@ model ExternalSourceLead {
   publicAddress String
   latitude Float
   longitude Float
-  postedEarliestAt DateTime
-  postedLatestAt DateTime
+  postedEarliestAt DateTime?
+  postedLatestAt DateTime?
   checkedAt DateTime
   status String @default("PUBLISHED")
   evidence Json

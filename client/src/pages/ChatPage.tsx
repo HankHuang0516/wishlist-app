@@ -66,7 +66,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
         if(sourceId){
           const old=all.find(thread=>thread.context.id===sourceId);
           try {
-            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1&photos=2&approximate=1',{signal:controller.signal}));
+            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?dateContract=auction-v1&presentation=1&photos=2&approximate=1',{signal:controller.signal}));
             if(controller.signal.aborted)throw Error();
             if(current.id!==sourceId)throw Error();
             if(valid&&!controller.signal.aborted)setSource({...current,publicFacts:current.publicFacts??undefined});

@@ -120,8 +120,25 @@ jobs:
     - name: Build actual Web for isolated browser tests
       run: npm run build --prefix ../client
 
+    - name: Install Traditional Chinese fonts for auction browser review
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes fonts-noto-cjk
+
     - name: Real marketplace HTTP and database tests
+      env:
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-auction-artifacts
+        AUCTION_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       run: npm test -- --config jest.marketplace.config.js --runInBand
+
+    - name: Preserve isolated auction Web evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: auction-browser-${{ github.sha }}
+        path: qa-auction-artifacts/auction-*
+        if-no-files-found: error
+        retention-days: 14
 
   mobile-checks:
     name: Native App Typecheck and Unit Tests

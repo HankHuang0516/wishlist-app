@@ -351,6 +351,12 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
   return <View style={s.screen}>
+    <View style={s.notice}>
+          <Text accessibilityLiveRegion="polite" style={s.cardTitle}>{counts ? `全站已上架 ${counts.published.total} 件` : countsBusy ? '全站已上架數量讀取中…' : '全站已上架數量未取得'}</Text>
+          {counts && <Text style={s.small}>自刊 {counts.published.sellerListings} · 來源參考 {counts.published.sourceReferences} · 合作商品 {counts.published.partnerListings}；全站可探索展示 {counts.explorable.total} 件。來源參考非確認在售。</Text>}
+          <Pressable accessibilityRole="button" disabled={countsBusy} onPress={() => setCountsRead(value => value + 1)}><Text style={s.small}>重新讀取全站數量</Text></Pressable>
+          {counts && <Text style={s.small}>數量查核：{new Date(counts.asOf).toLocaleString('zh-TW', {timeZone:'Asia/Taipei'})}（台灣時間）</Text>}
+    </View>
     {wishItemId && <View style={s.wishBanner}>
       <View style={s.wishBannerRow}>
         <Text style={s.wishBannerTitle}>符合所選願望</Text>
@@ -408,9 +414,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
       </NativeMap>
       <View pointerEvents="box-none" style={s.mapTopActions}>
         <View pointerEvents="box-none" style={s.mapMetaRow}>
-          <Text accessibilityLiveRegion="polite" style={s.mapCount}>{counts ? `全站已上架 ${counts.published.total} 件` : countsBusy ? '全站已上架數量讀取中…' : '全站已上架數量未取得'}</Text>
-          {counts && <Text style={s.small}>自刊 {counts.published.sellerListings} · 來源參考 {counts.published.sourceReferences} · 合作商品 {counts.published.partnerListings}；全站可探索展示 {counts.explorable.total} 件。來源參考非確認在售。</Text>}
-          <Pressable accessibilityRole="button" disabled={countsBusy} onPress={() => setCountsRead(value => value + 1)}><Text style={s.small}>重新讀取全站數量</Text></Pressable>
+
           <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://www.openstreetmap.org/copyright')}><Text style={s.small}>© OpenStreetMap contributors · 線索座標 ODbL</Text></Pressable>
           <Text style={s.small}>來源線索 {leads.count} 筆 · 待確認，非在售件數</Text>
           <Text accessibilityLabel={resultSummary} accessibilityLiveRegion="polite" numberOfLines={1} style={s.mapCount}>已載入 {loadedCount} 件{externalEnabled ? ` · 外部 ${externalVisible.length}` : ''}</Text>

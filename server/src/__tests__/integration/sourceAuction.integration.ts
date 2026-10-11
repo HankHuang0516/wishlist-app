@@ -18,7 +18,7 @@ it('real isolated DB/admin/public roundtrip preserves null original dates and ex
  expect((await http.get('/api/source-leads/'+ids[0]+'?presentation=1')).status).toBe(404);
  const legacy=await http.get('/api/source-leads?presentation=1');
  expect(legacy.status).toBe(200);expect(legacy.body.items.some((x:any)=>x.id===ids[0])).toBe(false);
- expect((await http.get('/api/source-leads?dateContract=invalid')).status).toBe(400);
+ const invalid=await http.get('/api/source-leads?dateContract=invalid');expect(invalid.status).toBe(409);expect(invalid.body.errorCode).toBe('INVALID_DATE_CONTRACT');
  const opted=await http.get('/api/source-leads?dateContract=auction-v1&presentation=1');
  expect(opted.body.items.some((x:any)=>x.id===ids[0])).toBe(true);
  const read=await http.get('/api/source-leads/'+ids[0]+'?dateContract=auction-v1&presentation=1&photos=2&approximate=1');expect(read.status).toBe(200);expect(read.body).toMatchObject({dateBasis:'ACTIVE_AUCTION_WINDOW',postedEarliestAt:null,postedLatestAt:null,originalPublishedAt:null,stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false});

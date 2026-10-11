@@ -13,3 +13,9 @@ Rollback: once a real auction null-date row exists, the old nonnullable generate
 Actual address and coordinates must refer to the item's stated pickup facility. Facility footprint coordinates are not entrances, item stock locations or fake administrative-center points. OSM-derived coordinates remain candidates until provenance, ODbL attribution/segregation and database obligations are resolved. This draft provides no such storage segregation and accepts no candidate into production.
 
 First real batch at most20; missing address/coordinates/evidence stays private candidate. No image scraping or rights inference. Qualified=false, stock=UNKNOWN and checkout=false must remain explicit. Current formal auction additions:0.
+
+## Integration now prepared, not production enabled
+
+Server parser/current checks, nullable DB migration, DTO, consignment read and Web/mobile parsers/displays are included for isolated CI. Explicit typed contracts distinguish original date bounds from active auction windows. Private evidence retains authorityRef/periodRef/sourceUrl; public DTO exposes only date facts. Source-sync full archive pinning accepts read_official_auction only with original_published_at=null, date_basis=ACTIVE_AUCTION_WINDOW and official_auction_evidence exactly matching the payload officialAuction object, in addition to all existing raw/full archive/payload/item/version hashes. These archive field names are a proposed explicit contract; real source sample adaptation must be checked before import.
+
+Tests include full parser gates, UNKNOWN/qualifiedfalse/checkoutfalse, real isolated API/DB null serialization and expiry, DB CHECK rejection, Web/mobile disclosure, archive evidence substitution and existing Facebook regression. No formal migration or actual auction import has run. OSM way/Mapcarta candidates remain unsupported/unapproved for database reuse; no coordinate provenance exception is added.

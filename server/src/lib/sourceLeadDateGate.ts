@@ -10,7 +10,11 @@ export function archiveGate(row: { originalPostedAt: Date | null; originalPosted
     const lower = row.originalPostedAt ?? row.originalPostedEarliestAt;
     const upper = row.originalPostedAt ?? row.originalPostedLatestAt;
     return !!lower && !!upper && lower <= upper && lower.getTime() >= cutoff && upper <= now &&
-        !!row.verifiedAddress?.trim() && !!row.addressEvidenceRef?.trim() &&
+        sourcePublicPlaceGate(row);
+}
+
+export function sourcePublicPlaceGate(row:{verifiedAddress:string|null;addressEvidenceRef:string|null;verifiedLatitude:number|null;verifiedLongitude:number|null}){
+ return !!row.verifiedAddress?.trim() && !!row.addressEvidenceRef?.trim() &&
         typeof row.verifiedLatitude === 'number' && Number.isFinite(row.verifiedLatitude) && row.verifiedLatitude >= 20 && row.verifiedLatitude <= 26.6 &&
         typeof row.verifiedLongitude === 'number' && Number.isFinite(row.verifiedLongitude) && row.verifiedLongitude >= 117 && row.verifiedLongitude <= 123.8;
 }

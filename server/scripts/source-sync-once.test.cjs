@@ -50,3 +50,20 @@ test('journal refuses public permissions, symlink directories and stale next fil
  const dir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'wishlist-synthetic-journal-')));
  try{fs.chmodSync(dir,0o755);assert.throws(()=>createJournal(dir,'test-job'));fs.chmodSync(dir,0o700);const link=dir+'-link';fs.symlinkSync(dir,link);try{assert.throws(()=>createJournal(link,'test-job'));}finally{fs.unlinkSync(link);}const j=createJournal(dir,'test-job');j.begin({state:'APPLY_STARTED'});fs.writeFileSync(path.join(dir,'test-job.json.next'),'retained-crash-marker',{mode:0o600});assert.throws(()=>j.save({state:'DONE'}));assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'test-job.json'))).state,'APPLY_STARTED');assert.equal(fs.readFileSync(path.join(dir,'test-job.json.next'),'utf8'),'retained-crash-marker');}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+function auctionSyncFixture(){
+ const f=fixture(),r=f.rows[0],url='https://recycledstuff.ntpc.gov.tw/Product/Detail/00000000-0000-4000-8000-000000000001';
+ r.canonicalUrl=url;r.postedEarliestAt=null;r.postedLatestAt=null;
+ r.evidence={...r.evidence,sourceUrl:url,locationType:'PUBLIC_PICKUP_POINT',publicFacts:{priceText:'起標價 NT$140',priceUnitStatus:'每件起標價',currencyStatus:'新台幣',sourceAccessNotice:'合成官方參考',originalDateLabel:'原刊日未知',locationRelation:'公開取貨點',coordinateQualityNotes:[]},officialAuction:{sourceType:'OFFICIAL_AUCTION',dateBasis:'ACTIVE_AUCTION_WINDOW',originalPublishedAt:null,priceType:'STARTING_BID',authorityRef:'source:synthetic-authority',activeAuctionWindow:{startsAt:'2026-10-06T00:00:00Z',endsAt:'2026-10-08T00:00:00Z',timeZone:'Asia/Taipei',sourceUrl:url,periodRef:r.evidence.dateRef}}};
+ f.archiveBytes=Buffer.from(JSON.stringify({items:[{id:r.archiveItemId,stock_status:'unknown',qualified:false,original_published_at:null,date_basis:'ACTIVE_AUCTION_WINDOW',official_auction_evidence:r.evidence.officialAuction,current_source_check:{status:'read_official_auction',checked_at_utc:r.checkedAt,source_url:url}}]}));
+ r.archiveSha256=hash(f.archiveBytes);f.payloadBytes=Buffer.from(JSON.stringify({items:[r],dryRun:true}));
+ f.policy={...f.policy,archiveSha256:hash(f.archiveBytes),payloadSha256:hash(f.payloadBytes),items:[{archiveItemId:r.archiveItemId,canonicalUrl:url,checkedAt:r.checkedAt,itemSha256:hash(Buffer.from(JSON.stringify(r)))}]};
+ return f;
+}
+test('official auction requires exact full archive evidence and preserves unknown original publication',()=>{
+ const f=auctionSyncFixture();assert.equal(prepare({...f,now:NOW}).length,1);
+ const archive=JSON.parse(f.archiveBytes);archive.items[0].official_auction_evidence.authorityRef='source:different-authority';
+ f.archiveBytes=Buffer.from(JSON.stringify(archive));f.policy.archiveSha256=hash(f.archiveBytes);f.rows[0].archiveSha256=f.policy.archiveSha256;
+ f.payloadBytes=Buffer.from(JSON.stringify({items:f.rows,dryRun:true}));f.policy.payloadSha256=hash(f.payloadBytes);f.policy.items[0].itemSha256=hash(Buffer.from(JSON.stringify(f.rows[0])));
+ assert.throws(()=>prepare({...f,now:NOW}),e=>e.safeCode==='AUCTION_ARCHIVE_EVIDENCE_MISMATCH');
+});

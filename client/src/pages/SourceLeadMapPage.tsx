@@ -1,4 +1,4 @@
-import { sourceLocationLabel, parseLeadPage, type SourceLead } from '../lib/sourceLeadData';
+import { sourceLocationLabel, sourceLeadFresh, sourceDateLabel, parseLeadPage, type SourceLead } from '../lib/sourceLeadData';
 import { sourceLeadText as text, sourceLeadRoutingReason } from '../lib/sourceLeadCopy';
 import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 import { ApiFailure, publicApi } from '../lib/marketplaceApi';
@@ -10,13 +10,8 @@ export const mapPoint = (latitude: number, longitude: number) => ({
   x: ((longitude + 180) / 360 * 128 - 106) * 256,
   y: ((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 128 - 53) * 256,
 });
-export function currentLead(lead: Pick<SourceLead, 'postedEarliestAt' | 'postedLatestAt' | 'checkedAt'>, now = Date.now()) {
-  const [year, month, day] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now)).split('-').map(Number);
-  const first = new Date(Date.UTC(year, month - 3, 1));
-  const end = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  const cutoff = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, end)) - 8 * 3600000;
-  const lower = Date.parse(lead.postedEarliestAt), upper = Date.parse(lead.postedLatestAt), checked = Date.parse(lead.checkedAt);
-  return Number.isFinite(lower) && Number.isFinite(upper) && Number.isFinite(checked) && lower >= cutoff && lower <= upper && upper <= now && checked <= now && now - checked <= 48 * 3600000;
+export function currentLead(lead: Parameters<typeof sourceLeadFresh>[0], now = Date.now()) {
+  return sourceLeadFresh(lead,now);
 }
 
 export default function SourceLeadMapPage() {
@@ -133,7 +128,7 @@ export default function SourceLeadMapPage() {
           <p className="text-sm text-stone-600">{selected.locationPrecision === 'COUNTY_ILLUSTRATION' ? selected.publicAddress : selected.publicPlaceName + '：' + selected.publicAddress}</p>
           <p role="status" className="text-sm text-stone-600">{sourceLeadRoutingReason(selected.contactRouting)}</p>
         </div>
-      </article><p>{selected.publicFacts?.originalDateLabel}</p><p>{selected.publicFacts?.sourceAccessNotice}</p>
+      </article><p>{sourceDateLabel(selected)}</p><p>{selected.publicFacts?.sourceAccessNotice}</p>
         <a className="underline" href={selected.canonicalUrl} target="_blank" rel="noreferrer">{text('查看原始來源')}</a>
         <button className="min-h-12 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white" onClick={() => navigate('/chat?source=' + selected.id)}>{text('聯絡賣家')}</button>
       </>}

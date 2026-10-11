@@ -5,7 +5,11 @@ export type ContactRouting={status:'VERIFIED'|'UNAVAILABLE'|'UNVERIFIED';reason:
 export function parseContactRouting(value:unknown):ContactRouting {
  const c=obj(value);if(Object.keys(c).some(k=>!['status','reason','checkedAt'].includes(k))||!['VERIFIED','UNAVAILABLE','UNVERIFIED'].includes(c.status)||typeof c.reason!=='string'||!c.reason.trim()||c.reason.length>240||!(c.checkedAt===null||typeof c.checkedAt==='string'&&Number.isFinite(Date.parse(c.checkedAt))))throw new Error('來源聯絡狀態錯誤');return c as ContactRouting;
 }
-export type SourceLead = {
+export type ActiveAuctionWindow={startsAt:string;endsAt:string;timeZone:'Asia/Taipei'};
+export type SourceDateBasis=
+ | {sourceType?:never;dateBasis?:never;originalPublishedAt?:never;priceType?:never;activeAuctionWindow?:never;postedEarliestAt:string;postedLatestAt:string}
+ | {sourceType:'OFFICIAL_AUCTION';dateBasis:'ACTIVE_AUCTION_WINDOW';originalPublishedAt:null;priceType:'STARTING_BID';activeAuctionWindow:ActiveAuctionWindow;postedEarliestAt:null;postedLatestAt:null};
+export type SourceLead = SourceDateBasis & {
     locationPrecision?:'COUNTY_ILLUSTRATION';
     contactRouting?:ContactRouting;
     media?: LeadPhoto[];
@@ -20,8 +24,6 @@ export type SourceLead = {
     publicAddress: string;
     latitude: number;
     longitude: number;
-    postedEarliestAt: string;
-    postedLatestAt: string;
     checkedAt: string;
     stockStatus: 'UNKNOWN';
     qualifiedSupply: false;
@@ -47,7 +49,7 @@ export type SourceLead = {
 const obj = (v: unknown): Record<string, any> => { if (!v || typeof v !== 'object' || Array.isArray(v))
     throw new Error('線索格式錯誤'); return v as Record<string, any>; };
 export function sourceLeadCutoff(now = Date.now()) { const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now).split('-').map(Number); const first = new Date(Date.UTC(y, m - 3, 1)), end = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, end)) - 8 * 3600000; }
-export function parseLead(v: unknown): SourceLead { const r = obj(v); const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','contactRouting','locationPrecision']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&r.county==='臺北市'&&r.district==='行政區未明示')) || ['title', 'summary', 'publicPlaceName', 'publicAddress', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240 || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude))
+export function parseLead(v: unknown): SourceLead { const r = obj(v); const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','contactRouting','locationPrecision','sourceType','dateBasis','originalPublishedAt','priceType','activeAuctionWindow']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&r.county==='臺北市'&&r.district==='行政區未明示')) || ['title', 'summary', 'publicPlaceName', 'publicAddress', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240 || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude))
     throw new Error('線索格式錯誤'); if(r.locationPrecision!==undefined&&(r.locationPrecision!=='COUNTY_ILLUSTRATION'||r.publicPlaceName!==r.county+'概略示意位置'||r.publicAddress!==r.county+'（概略位置，非取貨點）'||r.coordinateAttribution!==null))throw new Error('概略位置格式錯誤'); const u = new URL(r.canonicalUrl); if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search)
     throw new Error('來源連結錯誤'); if (r.publicFacts !== null) {
     const f = obj(r.publicFacts);
@@ -65,8 +67,8 @@ export function parseLead(v: unknown): SourceLead { const r = obj(v); const keys
   const image = new URL(m.imageUrl), thumbnail = new URL(m.thumbnailUrl);
   if (image.protocol !== 'https:' || image.username || image.password || image.port || image.search || image.hash || thumbnail.origin !== image.origin || thumbnail.search || thumbnail.hash || thumbnail.username || thumbnail.password || image.pathname !== '/api/source-leads/'+r.id+'/media/'+m.id+'/image' || thumbnail.pathname !== '/api/source-leads/'+r.id+'/media/'+m.id+'/thumbnail') throw new Error('來源圖片路由錯誤');
  }
-} if(r.contactRouting!==undefined)parseContactRouting(r.contactRouting); const times = [r.postedEarliestAt, r.postedLatestAt, r.checkedAt].map(Date.parse); if (times.some(v => !Number.isFinite(v)) || times[0] < sourceLeadCutoff() || times[0] > times[1] || times[1] > Date.now() || times[2] > Date.now() || Date.now() - times[2] > 48 * 3600000)
-    throw new Error('線索日期失效'); return r as SourceLead; }
+} if(r.contactRouting!==undefined)parseContactRouting(r.contactRouting); if(r.sourceType==='OFFICIAL_AUCTION'&&(!r.publicFacts||typeof r.publicFacts.priceText!=='string'||!r.publicFacts.priceText.startsWith('起標價')||typeof r.publicFacts.originalDateLabel!=='string'||!r.publicFacts.originalDateLabel.includes('原刊日未知')))throw new Error('拍賣日期與價格說明缺漏');
+    if (!sourceLeadFresh(r as SourceLead)) throw new Error('線索日期失效'); return r as SourceLead; }
 export function parseLeadPage(v: unknown) { const r = obj(v); if (typeof r.enabled !== 'boolean' || !Array.isArray(r.items) || r.items.length > 25 || !(r.nextCursor === null || uuid(r.nextCursor)) || (!r.enabled && (r.items.length || r.nextCursor !== null)))
     throw new Error('線索分頁錯誤'); const items = r.items.map(parseLead); if (new Set(items.map((r: SourceLead) => r.id)).size !== items.length)
     throw new Error('線索重複'); return { items: items as SourceLead[], nextCursor: r.nextCursor as string | null, enabled: r.enabled as boolean }; }
@@ -100,4 +102,24 @@ export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = 
         throw new Error('回執格式錯誤');
 } return r as LeadRoom; }
 
-export const sourceLocationLabel=(r:Pick<SourceLead,'locationPrecision'>)=>r.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':'公共面交點';
+export const sourceLocationLabel=(r:Pick<SourceLead,'locationPrecision'|'sourceType'>)=>r.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':lead.sourceType==='OFFICIAL_AUCTION'?'官方公開取貨點':'公共面交點';
+
+export function sourceLeadFresh(r:Pick<SourceLead,'canonicalUrl'|'postedEarliestAt'|'postedLatestAt'|'checkedAt'|'sourceType'|'dateBasis'|'originalPublishedAt'|'priceType'|'activeAuctionWindow'>,now=Date.now()){
+ const checked=Date.parse(r.checkedAt);if(!Number.isFinite(checked)||checked>now||now-checked>48*3600000)return false;
+ if(r.sourceType!==undefined){
+  const w=r.activeAuctionWindow;let u:URL;try{u=new URL(r.canonicalUrl);}catch{return false;}
+  if(r.sourceType!=='OFFICIAL_AUCTION'||r.dateBasis!=='ACTIVE_AUCTION_WINDOW'||r.originalPublishedAt!==null||r.priceType!=='STARTING_BID'||r.postedEarliestAt!==null||r.postedLatestAt!==null||
+   u.protocol!=='https:'||u.username!==''||u.password!==''||u.search!==''||u.hash!==''||u.port!==''||u.hostname!=='recycledstuff.ntpc.gov.tw'||!/^\/Product\/Detail\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(u.pathname)||
+   !w||Object.keys(w).some(k=>!['startsAt','endsAt','timeZone'].includes(k))||w.timeZone!=='Asia/Taipei')return false;
+  if(typeof w.startsAt!=='string'||typeof w.endsAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(w.startsAt)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(w.endsAt))return false;
+  const start=Date.parse(w.startsAt),end=Date.parse(w.endsAt);return Number.isFinite(start)&&Number.isFinite(end)&&start<=now&&now<end&&start<end;
+ }
+ if(r.dateBasis!==undefined||r.originalPublishedAt!==undefined||r.priceType!==undefined||r.activeAuctionWindow!==undefined||typeof r.postedEarliestAt!=='string'||typeof r.postedLatestAt!=='string')return false;
+ const lower=Date.parse(r.postedEarliestAt),upper=Date.parse(r.postedLatestAt);
+ return Number.isFinite(lower)&&Number.isFinite(upper)&&lower>=sourceLeadCutoff(now)&&lower<=upper&&upper<=now;
+}
+export function sourceDateLabel(r:SourceLead){
+ return r.sourceType==='OFFICIAL_AUCTION'
+  ? '原刊日未知；有效拍賣期間：'+new Date(r.activeAuctionWindow!.startsAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})+'～'+new Date(r.activeAuctionWindow!.endsAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})+'（台灣時間）。起標價非成交價。'
+  : '原始發布日期區間：'+new Date(r.postedEarliestAt!).toLocaleDateString('zh-TW')+'～'+new Date(r.postedLatestAt!).toLocaleDateString('zh-TW');
+}

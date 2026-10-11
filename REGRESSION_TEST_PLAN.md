@@ -1,3 +1,7 @@
+## Visible marketing-image disclosure — 2.0.729
+
+Verify known AI_MARKETING cover and mixed detail media in Traditional Chinese and English, preserving ID-bound image URLs and order. Verify the caption remains visible while loading/failing and clears for original-photo replacement. Unknown metadata is not inferred as AI. Read-only controlled HTTP metadata in a local fixture is presentation evidence, not a real provider-quality claim. Run meaningful caption regressions, full CI, actual browser, fresh actual729 icon/H review and exact deployment asset readback. Original32 native/provider/permission/account/failure/recovery requirements and human-only steps remain.
+
 ## 商品分享照片真實性 — 2.0.726
 
 - 無照片的公開商品保留真實名稱、付費／贈送／未知價格與目前版本連結；不輸出網站通用圖或商品照片的替代描述，文字卡不宣稱大圖。

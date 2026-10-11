@@ -5,6 +5,16 @@ let originalLocale:string|null;
 beforeEach(()=>{originalLocale=localStorage.getItem('user-locale');localStorage.setItem('user-locale','zh-TW')});
 afterEach(()=>{cleanup();if(originalLocale===null)localStorage.removeItem('user-locale');else localStorage.setItem('user-locale',originalLocale)});
 describe('shared listing photo presentation',()=>{
+ it('keeps the marketing disclosure visible through loading and failure, then removes it for a real-photo replacement',()=>{
+  const v=render(<ListingPhoto src="https://example.invalid/ai.jpg" alt="行銷圖" marketing/>);
+  expect(screen.getByText('AI 行銷示意圖')).toBeVisible();fireEvent.error(screen.getByRole('img'));
+  expect(screen.getByText('AI 行銷示意圖')).toBeVisible();expect(screen.getByRole('status')).toHaveTextContent('暫時無法載入');
+  localStorage.setItem('user-locale','en-US');v.rerender(<ListingPhoto src="https://example.invalid/ai.jpg" alt="行銷圖" marketing/>);
+  expect(screen.getByText('AI marketing illustration')).toBeVisible();
+  v.rerender(<ListingPhoto src="https://example.invalid/original.jpg" alt="原圖"/>);
+  expect(screen.queryByText('AI marketing illustration')).toBeNull();fireEvent.load(screen.getByRole('img'));
+  expect(screen.queryByRole('status')).toBeNull();
+ });
  it('reports missing imported media without inventing a permission decision',()=>{render(<ListingPhoto alt="鍋具"/>);expect(screen.queryByRole('img')).toBeNull();expect(screen.getByRole('status').textContent).toContain('沒有可顯示');});
  it('shows loading and network failure, resets for the next item and keeps square cover thumbnails',()=>{const v=render(<ListingPhoto src="https://example.invalid/a.jpg" alt="a"/>);expect(screen.getByRole('status').textContent).toContain('載入中');fireEvent.error(screen.getByRole('img'));expect(screen.queryByRole('img')).toBeNull();expect(screen.getByRole('status').textContent).toContain('暫時無法載入');v.rerender(<ListingPhoto src="https://example.invalid/b.jpg" alt="b"/>);const img=screen.getByRole('img');expect(img.className).toContain('object-cover');fireEvent.load(img);expect(screen.queryByRole('status')).toBeNull();});
  it('preserves original sequence and fits the original detail image without crop',()=>{const photos=[{id:'a',imageUrl:'https://example.invalid/a.jpg',thumbnailUrl:'https://example.invalid/at.jpg',alt:'第一張'},{id:'b',imageUrl:'https://example.invalid/b.jpg',thumbnailUrl:'https://example.invalid/bt.jpg',alt:'第二張'}];render(<ListingPhotoGallery photos={photos} title="鍋具"/>);expect(screen.getAllByRole('img')[0].className).toContain('object-contain');fireEvent.click(screen.getByRole('button',{name:'查看第2張來源照片'}));expect(screen.getAllByRole('img')[0].getAttribute('src')).toBe(photos[1].imageUrl);expect(screen.getByText('第2張，共2張已收錄圖片')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'下一張來源照片'}));expect(screen.getAllByRole('img')[0].getAttribute('src')).toBe(photos[0].imageUrl);fireEvent.click(screen.getByRole('button',{name:'上一張來源照片'}));expect(screen.getAllByRole('img')[0].getAttribute('src')).toBe(photos[1].imageUrl);});

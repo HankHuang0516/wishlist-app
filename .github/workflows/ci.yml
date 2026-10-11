@@ -141,6 +141,22 @@ jobs:
         if-no-files-found: error
         retention-days: 14
 
+    - name: Preserve actual Web build icons for release review
+      uses: actions/upload-artifact@v4
+      with:
+        name: explore-web-icons-${{ github.sha }}
+        path: |
+          client/dist/logo.png
+          client/dist/pwa-icon-512.png
+          client/dist/pwa-icon-192.png
+          client/dist/apple-touch-icon.png
+          client/icon-source/original-no-H.png
+          client/icon-source/general-H.png
+          client/icon-source/recipe.json
+          client/icon-source/README.md
+        if-no-files-found: error
+        retention-days: 14
+
   mobile-checks:
     name: Native App Typecheck and Unit Tests
     runs-on: ubuntu-latest

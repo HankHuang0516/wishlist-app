@@ -1,3 +1,7 @@
+## Explore query evidence — 2.0.733
+
+Existing Explore reads retain only same-query conditions, HTTP status, pages, public IDs, terminal status, filtering and cap evidence. Read-only Query evidence and JSON export add no requests. Disabled,404 fallback, skipped, failed, cancelled and incomplete reads never establish a complete successful zero. Source refresh cycles and non-atomic pagination are disclosed. Qualified stock remains unknown. No tokens, headers, response text, account data, new endpoint or permission changes. Preserve concurrent My reports restoration PR165; native and icon artwork remain unchanged.
+
 ## Visible marketing-image disclosure — 2.0.729
 
 Public item pages and Explore seller previews/details show a bilingual caption below AI_MARKETING media. Known metadata determines the caption; original photos are not labelled AI. Image URLs, sequence, item fields, permissions, native source and payment behavior remain unchanged. This display improvement does not certify provider image quality or all32 parity.

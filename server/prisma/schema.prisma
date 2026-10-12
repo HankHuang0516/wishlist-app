@@ -1074,3 +1074,11 @@ model SourceManagerSession {
  @@index([scope, revokedAt])
  @@index([expiresAt])
 }
+
+// Ephemeral shared login/operation budgets; no raw credentials or IPs.
+model SourceManagerRateBucket {
+ keyHash String @id
+ hits Int @default(0)
+ windowStartedAt DateTime @default(now())
+ @@index([windowStartedAt])
+}

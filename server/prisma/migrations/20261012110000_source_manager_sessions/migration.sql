@@ -11,3 +11,6 @@ CREATE TABLE "SourceManagerSession" (
 CREATE UNIQUE INDEX "SourceManagerSession_tokenHash_key" ON "SourceManagerSession"("tokenHash");
 CREATE INDEX "SourceManagerSession_scope_revokedAt_idx" ON "SourceManagerSession"("scope","revokedAt");
 CREATE INDEX "SourceManagerSession_expiresAt_idx" ON "SourceManagerSession"("expiresAt");
+
+CREATE TABLE "SourceManagerRateBucket" ("keyHash" TEXT NOT NULL, "hits" INTEGER NOT NULL DEFAULT 0, "windowStartedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "SourceManagerRateBucket_pkey" PRIMARY KEY ("keyHash"), CONSTRAINT "SourceManagerRateBucket_hash" CHECK ("keyHash" ~ '^[a-f0-9]{64}$'), CONSTRAINT "SourceManagerRateBucket_hits" CHECK ("hits" >= 0));
+CREATE INDEX "SourceManagerRateBucket_windowStartedAt_idx" ON "SourceManagerRateBucket"("windowStartedAt");

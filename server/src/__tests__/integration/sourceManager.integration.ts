@@ -16,7 +16,7 @@ describe('restricted browser source management (isolated DB only)',()=>{
  const session=async()=>{const r=await login();expect(r.status).toBe(200);return {cookie:r.headers['set-cookie'][0].split(';')[0],csrf:r.body.csrfToken};};
  beforeAll(()=>{require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated DB required');process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';});
  beforeEach(()=>{key=fixture;app=express();app.use('/api/source-manager',createSourceManagerRoutes(()=>key,()=>ORIGIN));app.use(express.json());app.use('/admin',createSourceLeadAdmin(()=>fixture));app.use('/public',createSourceLeadRoutes());});
- afterEach(async()=>{const ids=(await prisma.externalSourceLead.findMany({where:{archiveItemId:{startsWith:prefix}},select:{id:true}})).map(r=>r.id);await prisma.sourceLeadRecordEvent.deleteMany({where:{leadId:{in:ids}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:ids}}});await prisma.sourceManagerSession.deleteMany({});});
+ afterEach(async()=>{const ids=(await prisma.externalSourceLead.findMany({where:{archiveItemId:{startsWith:prefix}},select:{id:true}})).map(r=>r.id);await prisma.sourceLeadRecordEvent.deleteMany({where:{leadId:{in:ids}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:ids}}});await prisma.sourceManagerSession.deleteMany({});await prisma.sourceManagerRateBucket.deleteMany({});});
  afterAll(async()=>{if(oldFlag===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=oldFlag;await prisma.$disconnect();});
  test('anonymous/header/user credentials cannot become browser management authority',async()=>{
   expect((await request(app).get('/api/source-manager/records')).status).toBe(401);
@@ -69,5 +69,7 @@ describe('restricted browser source management (isolated DB only)',()=>{
   try{let waiting=false;for(let i=0;i<200;i++){const rows=await prisma.$queryRaw<Array<{waiting:number}>>`SELECT COUNT(*)::int AS waiting FROM pg_locks WHERE locktype='advisory' AND NOT granted`;if(rows[0].waiting>0){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}expect(waiting).toBe(true);expect((await post('logout',s,{})).status).toBe(204);}finally{unlock();await blocker;}
   const r=await pending;expect(r.status).toBe(409);expect(r.body.errorCode).toBe('MANAGER_SESSION_REVOKED');expect(await prisma.externalSourceLead.count({where:{archiveItemId}})).toBe(0);
  });
+
+ test('login rate budget is shared by separate service instances',async()=>{const second=express();second.use('/api/source-manager',createSourceManagerRoutes(()=>key,()=>ORIGIN));for(let i=0;i<5;i++)expect((await request(i%2?second:app).post('/api/source-manager/session').set('Origin',ORIGIN).send({managementPassword:fixture})).status).toBe(200);expect((await request(second).post('/api/source-manager/session').set('Origin',ORIGIN).send({managementPassword:fixture})).status).toBe(429);});
 
 });

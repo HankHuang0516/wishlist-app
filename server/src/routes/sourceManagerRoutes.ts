@@ -1,3 +1,4 @@
+import {SourceManagerRateStore} from '../lib/sourceManagerRateStore';
 import {Router,Request,Response,NextFunction} from 'express';
 import express from 'express';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
@@ -26,7 +27,7 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
  });
  router.use(express.json({limit:'32kb'}));
  router.use((err:any,_q:Request,r:Response,_n:NextFunction)=>r.status(400).json({errorCode:err?.type==='entity.too.large'?'MANAGER_BODY_TOO_LARGE':'MANAGER_BODY_INVALID'}));
- router.post('/session',rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false}),async(q,r)=>{
+ router.post('/session',rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false,store:new SourceManagerRateStore('LOGIN',15*60*1000,getKey)}),async(q,r)=>{
   try{const key=getKey();if(!q.is('application/json')||!q.body||Object.keys(q.body).join(',')!=='managementPassword')return r.status(400).json({errorCode:'MANAGER_LOGIN_INVALID'});
    const admission=adminHeaderAdmission(key,q.body.managementPassword);
    // Discard the credential immediately; neither response nor stored row contains it.
@@ -51,10 +52,11 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
    r.locals.manager={id:s.id,expiresAt:s.expiresAt,csrfToken:mac(key,'csrf',nonce)};n();
   }catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
  });
- router.use(rateLimit({windowMs:60000,limit:30,standardHeaders:true,legacyHeaders:false}));
+ router.use(rateLimit({windowMs:60000,limit:30,standardHeaders:true,legacyHeaders:false,keyGenerator:(_q,r)=>r.locals.manager.id,store:new SourceManagerRateStore('OPERATIONS',60000,getKey)}));
  router.get('/session',(_q,r)=>r.json({...r.locals.manager,scope,publishAllowed:false}));
  router.post('/logout',async(_q,r)=>{try{await prisma.sourceManagerSession.update({where:{id:r.locals.manager.id},data:{revokedAt:new Date()}});r.clearCookie(NAME,options);return r.sendStatus(204);}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}});
  router.post('/revoke-all',async(_q,r)=>{try{await prisma.sourceManagerSession.updateMany({where:{scope,revokedAt:null},data:{revokedAt:new Date()}});r.clearCookie(NAME,options);return r.sendStatus(204);}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}});
  router.use('/records',createSourceLeadRecordRoutes({draftOnly:true}));
+ router.use((_e:any,_q:Request,r:Response,_n:NextFunction)=>r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'}));
  return router;
 }

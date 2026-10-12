@@ -51,7 +51,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     const fetch=vi.fn(async(url:string)=>responseOk(url.includes('/source-leads/')?item:url.includes('/source-leads?')?{enabled:true,items:[item],nextCursor:null}:url.includes('/external-listings?')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}));
     vi.stubGlobal('fetch',fetch);render(view());fireEvent.click(screen.getByRole('button',{name:'Item list'}));
     const card=await screen.findByRole('button',{name:`View item details: ${item.title}`});
-    expect(screen.getByText('1 source leads; these are not confirmed available items.')).toBeTruthy();expect(screen.getByRole('button',{name:`View on the map: ${item.title}`})).toBeTruthy();
+    expect(screen.getByText(/At least 1 external references loaded/)).toBeTruthy();expect(screen.getByText('External sources are references. Stock and transactions are unconfirmed; these are not verified available goods.')).toBeTruthy();expect(screen.getByRole('button',{name:`View on the map: ${item.title}`})).toBeTruthy();
     fireEvent.click(card);const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText(item.summary)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.priceText)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.originalDateLabel)).toBeTruthy();
     expect(within(dialog).getByText(/nothing has been forwarded/)).toBeTruthy();expect(within(dialog).getByText('All source item images have been imported (Source: 2; imported: 2)')).toBeTruthy();

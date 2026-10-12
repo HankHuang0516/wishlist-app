@@ -5,6 +5,26 @@ import request from 'supertest';
 import {createServer} from 'http';
 import fs from 'fs';
 import path from 'path';
+
+function makeSourceLead(number = 1): any {
+  const id = '11111111-1111-4111-8111-' + String(number).padStart(12, '0');
+  const date = new Date().toISOString(), canonicalUrl = 'https://example.invalid/source/' + number;
+  return {
+    id, kind:'SOURCE_LEAD', title:'來源 '+number, summary:'來源原文 {name} describe('actual Explore', canonicalUrl,
+    county:'臺南市', district:'永康區', publicPlaceName:'公開地點', publicAddress:'公共地址', latitude:23, longitude:120.2,
+    postedEarliestAt:date, postedLatestAt:date, checkedAt:date, stockStatus:'UNKNOWN', qualifiedSupply:false, checkoutEnabled:false,
+    notice:'來源待確認', coordinateSourceUrl:'https://www.openstreetmap.org/node/1', coordinateAttribution:null,
+    publicFacts:{priceText:'原帖標價：250元',priceUnitStatus:'原文',currencyStatus:'原文',sourceAccessNotice:'原來源使用說明 {source} describe('actual Explore',originalDateLabel:'原帖日期文字',locationRelation:'原地點關係',coordinateQualityNotes:[]},
+    contactRouting:{status:'UNVERIFIED',reason:'原貼文與作者身份不等於可收訊路由；尚未核實原賣家可用的聯絡入口，未外送。',checkedAt:null},
+    media:[1,2].map(index=>{
+      const mid='22222222-2222-4222-8222-'+String(number*10+index).padStart(12,'0');
+      const path='https://example.invalid/api/source-leads/'+id+'/media/'+mid+'/';
+      return {id:mid,sourceUrl:canonicalUrl,imageUrl:path+'image',thumbnailUrl:path+'thumbnail',alt:'原照片 '+index+' {title} describe('actual Explore'};
+    }),
+    photoCompleteness:{status:'IMPORTED_COMPLETE',sourceCount:2,physicalSourceCount:1,importedCount:2,limit:32},
+  };
+}
+
 describe('actual Explore query evidence display and download',()=>{
  const origin='https://wishlist-query-qa.invalid',root=path.resolve(__dirname,'../../../../client/dist');
  let server:any,browser:any,db:any,buyer:number;let mode='empty';let downloadRoot:string;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
@@ -42,7 +62,8 @@ describe('actual Explore query evidence display and download',()=>{
   page.on('request',async(req:any)=>{try{
    const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}
    if(u.pathname.startsWith('/api/')){
-    if(u.pathname==='/api/external-listings'&&mode!=='empty'){const status=mode==='fallback404'?404:mode==='failure'?503:200;traffic.push({method:req.method(),path:u.pathname,status});await req.respond({status,contentType:'application/json',body:JSON.stringify(status===200?{items:[],nextCursor:null,enabled:false}:{errorCode:'SYNTHETIC_READ_FAILURE'})});return;}
+    if(u.pathname==='/api/source-leads'&&['references-disabled','references-throttled'].includes(mode)){traffic.push({method:req.method(),path:u.pathname,status:200});await req.respond({status:200,contentType:'application/json',body:JSON.stringify({items:[1,2,3].map(makeSourceLead),nextCursor:null,enabled:true})});return;}
+    if(u.pathname==='/api/external-listings'&&mode!=='empty'){const status=mode==='fallback404'?404:mode==='failure'?503:mode==='references-throttled'?429:200;traffic.push({method:req.method(),path:u.pathname,status});await req.respond({status,headers:status===429?{'Retry-After':'4'}:{},contentType:'application/json',body:JSON.stringify(status===200?{items:[],nextCursor:null,enabled:false}:{errorCode:status===429?'EXTERNAL_INDEX_RATE_LIMIT':'SYNTHETIC_READ_FAILURE'})});return;}
     let actual=(request(server)as any)[req.method().toLowerCase()](u.pathname+u.search);const headers=req.headers();if(headers.authorization)actual=actual.set('Authorization',headers.authorization);if(headers['content-type'])actual=actual.set('Content-Type',headers['content-type']);if(req.postData())actual=actual.send(req.postData());const result=await actual;traffic.push({method:req.method(),path:u.pathname,status:result.status});
     await req.respond({status:result.status,contentType:result.headers['content-type']||'application/json',body:Buffer.isBuffer(result.body)?result.body:result.text});return;
    }
@@ -53,15 +74,16 @@ describe('actual Explore query evidence display and download',()=>{
   await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});await page.waitForSelector('#identifier');
   await page.type('#identifier','synthetic-query-ui');await page.type('#password','synthetic-query-ui-pass');await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
   const reports:any[]=[];
-  for(const width of [1280,390])for(const scenario of ['empty','disabled','fallback404','failure']){
+  for(const width of [1280,390])for(const scenario of ['empty','disabled','fallback404','failure','references-disabled','references-throttled']){
    mode=scenario;const before=traffic.length;await page.setViewport({width,height:900});
    await page.goto(origin+'/explore?view=list&bbox=117,20,123.8,26.6',{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>{const el=document.querySelector('[data-testid="explore-query-evidence"] pre');if(!el?.textContent)return false;const r=JSON.parse(el.textContent);return Object.values(r.layers).every((l:any)=>l.phase!=='pending');});
    await page.click('[data-testid="explore-query-evidence"] summary');await page.evaluate(()=>document.fonts.ready);
    const receipt=await page.$eval('[data-testid="explore-query-evidence"] pre',(el:Element)=>JSON.parse(el.textContent||'null'));
-   expect(receipt.query.bbox).toEqual([117,20,123.8,26.6]);expect(receipt.layers.external.phase).toBe(scenario==='empty'?'complete':scenario==='failure'?'error':scenario);
+   expect(receipt.query.bbox).toEqual([117,20,123.8,26.6]);expect(receipt.layers.external.phase).toBe(scenario==='empty'?'complete':['failure','references-throttled'].includes(scenario)?'error':scenario==='references-disabled'?'disabled':scenario);
    expect(receipt.comparable).toBe(scenario==='empty');
-   const body=await page.evaluate(()=>document.body.textContent||'');if(scenario==='empty'){expect(body).toContain('目前範圍已載入');expect(body).toContain('目前地圖範圍沒有符合條件');}else{expect(body).toContain('本次查詢尚未建立完整基準');expect(body).not.toContain('0 件外部來源');expect(body).not.toContain('目前地圖範圍沒有符合條件');}expect(receipt.qualifiedSupplyCount).toBeNull();expect(receipt.layers.seller.terminal).toBe(true);expect(receipt.layers.source.terminal).toBe(true);
+   const body=await page.evaluate(()=>document.body.textContent||'');if(scenario==='empty'){expect(body).toContain('目前範圍已載入');expect(body).toContain('目前地圖範圍沒有符合條件');}else{expect(body).toContain('本次查詢尚未建立完整基準');expect(body).not.toContain('0 件外部來源');expect(body).not.toContain('目前地圖範圍沒有符合條件');}if(scenario.startsWith('references-')){expect(body).toContain('至少 3 筆外部來源');expect(body).toContain('庫存与交易'.replace('与','與'));const rows=await page.$eval('[data-source-type="SOURCE_REFERENCE"]',(els:Element[])=>els.map(el=>({id:el.getAttribute('data-original-id'),stock:el.getAttribute('data-stock-status')})));expect(rows).toHaveLength(3);expect(new Set(rows.map((x:any)=>x.id)).size).toBe(3);expect(rows.every((x:any)=>x.stock==='UNKNOWN')).toBe(true);if(scenario==='references-throttled'){expect(body).toContain('等待');await new Promise(resolve=>setTimeout(resolve,4500));expect(traffic.slice(before).filter(x=>x.path==='/api/external-listings')).toHaveLength(1);}}
+   expect(receipt.qualifiedSupplyCount).toBeNull();expect(receipt.layers.seller.terminal).toBe(true);expect(receipt.layers.source.terminal).toBe(true);
    const counts=traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path));expect(counts).toHaveLength(3);
    const downloadName='explore-query-'+receipt.query.serial+'.json',downloadFile=path.join(downloadRoot,downloadName);
    if(fs.existsSync(downloadFile))fs.unlinkSync(downloadFile);

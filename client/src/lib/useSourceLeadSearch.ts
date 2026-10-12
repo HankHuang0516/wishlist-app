@@ -24,8 +24,8 @@ export function useSourceLeadSearch(token: string, query: ExploreQuery | null, e
         do {
           const path = '/source-leads?presentation=1&photos=2&approximate=1&bbox=' + query!.bounds.join(',') + '&q=' + encodeURIComponent(query!.filters.q) + (cursor ? '&cursor=' + cursor : '');
           const startedAt=new Date().toISOString();let status:number|null=null;let raw:unknown;
-          try{raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});evidence?.page('source',startedAt,status,raw);}
-          catch(e){evidence?.transportError('source',startedAt,status);throw e;}
+          try{raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(active)evidence?.page('source',startedAt,status,raw);}
+          catch(e){if(active)evidence?.transportError('source',startedAt,status);throw e;}
           const page = parseLeadPage(raw);lastEnabled=(raw as {enabled?:boolean})?.enabled!==false;
           rows.push(...page.items); cursor = page.nextCursor;
           if (cursor && seen.has(cursor)) throw Error();

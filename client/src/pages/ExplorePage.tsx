@@ -1,3 +1,5 @@
+import {ExploreEvidence} from '../lib/exploreEvidence';
+import {ExploreEvidencePanel} from '../components/ExploreEvidencePanel';
 import {useSourceLeadSearch} from '../lib/useSourceLeadSearch';
 import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 import {sourceLeadText as sourceText,sourceLeadRoutingReason} from '../lib/sourceLeadCopy';
@@ -9,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LocateFixed, MapPin, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiFailure } from '../lib/marketplaceApi';
+import { api, apiObserved, ApiFailure } from '../lib/marketplaceApi';
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import { listingCategories } from '../lib/listingBatch';
 import { clipBounds, emptySearchFilters, listingPrice, parsePublicListing, TAIWAN_BOUNDS,
@@ -69,7 +71,8 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const [wishId, setWishId] = useState<number | null>(null), [wishes, setWishes] = useState<MatchWish[]>([]), [wishError, setWishError] = useState('');
   const [wishBusy, setWishBusy] = useState(false), [retryUntil, setRetryUntil] = useState(0);
   const [seller, setSeller] = useState<SellerState>(blankSeller), [external, setExternal] = useState<ExternalState>(blankExternal);
-  const source=useSourceLeadSearch(token,query);
+  const evidence=useMemo(()=>query?new ExploreEvidence(query):null,[query]);
+  const source=useSourceLeadSearch(token,query,evidence);
   const sourceFrameCycle=useRef(0);
   const [sellerSerial,setSellerSerial]=useState(0),[externalSerial,setExternalSerial]=useState(0);
   const [listMode, setListMode] = useState(new URLSearchParams(search).get('view') === 'list'), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
@@ -166,22 +169,30 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   }, [token, origin, search]);
   useEffect(() => {
     if (!query) return;
+    evidence?.activate();
     const controller = new AbortController(); request.current = controller; let valid = true;
     gate.current = { seller: true, external: true };setSellerSerial(0);setExternalSerial(0);
     seenCursors.current = { seller: new Set<string>(), external: new Set<string>() };
     setSeller({ ...blankSeller }); setExternal({ ...blankExternal }); setSelection(null); setCluster(null); setDetail(initialSource.current&&query.serial===1?{kind:'source',id:initialSource.current.id,source:initialSource.current,loading:false,error:''}:null); detailRequest.current?.abort();
-    const read = (path: string) => api<unknown>(token, path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+    const read = async (path:string)=>{
+      const kind=path.startsWith('/external-listings')?'external' as const:'seller' as const;
+      const start=new Date().toISOString();let status:number|null=null;
+      try{const raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(valid)evidence?.page(kind,start,status,raw);return raw;}
+      catch(e){if(valid)evidence?.transportError(kind,start,status);throw e;}
+    };
     const sellers = readExploreSeller(query, read, origin, import.meta.env.DEV).then(page => {
       if (valid && page.nextCursor) seenCursors.current.seller.add(page.nextCursor);
+      if (valid) evidence?.finish('seller',page.items.map(i=>i.id),page.nextCursor);
       if (valid) setSeller({ items: page.items, matches: page.matches, cursor: page.nextCursor, busy: false, error: '', notice: page.notice }); return page.items;
-    }).catch(error => { if (valid) setSeller({ ...blankSeller, busy: false, error: noteFailure(error) }); return []; }).finally(() => { if (valid) {gate.current.seller = false;setSellerSerial(query.serial);} });
+    }).catch(error => { if(valid)evidence?.fail('seller',error instanceof ApiFailure?error.status:null);if (valid) setSeller({ ...blankSeller, busy: false, error: noteFailure(error) }); return []; }).finally(() => { if (valid) {gate.current.seller = false;setSellerSerial(query.serial);} });
     const externals = readExploreExternal(query, read).then(page => {
       if (valid && page.nextCursor) seenCursors.current.external.add(page.nextCursor);
+      if (valid) evidence?.finish('external',page.items.map(i=>i.id),page.nextCursor,page.enabled,page.diagnosticReason);
       if (valid) setExternal({ ...page, cursor: page.nextCursor, busy: false, error: '' }); return page.items;
-    }).catch(error => { if (valid) setExternal({ ...blankExternal, busy: false, error: noteFailure(error) }); return []; }).finally(() => { if (valid) {gate.current.external = false;setExternalSerial(query.serial);} });
+    }).catch(error => { if(valid)evidence?.fail('external',error instanceof ApiFailure?error.status:null);if (valid) setExternal({ ...blankExternal, busy: false, error: noteFailure(error) }); return []; }).finally(() => { if (valid) {gate.current.external = false;setExternalSerial(query.serial);} });
     void Promise.all([sellers,externals]);
-    return () => { valid = false; controller.abort(); };
-  }, [query, token, origin]);
+    return () => { valid = false; controller.abort();evidence?.cancel(); };
+  }, [query, token, origin,evidence]);
   const liveItems = useMemo(() => seller.items.filter(item => Date.parse(item.expiresAt) > clock && !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > clock), [seller.items, clock]);
   const liveExternal = useMemo(() => external.items.filter(item => Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= 48 * 3_600_000), [external.items, clock]);
   const selectedSeller = selection?.kind === 'seller' ? liveItems.find(item => item.id === selection.id) : undefined;
@@ -194,18 +205,23 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   async function loadMore(kind: 'seller' | 'external') {
     const scope = currentQuery.current, snapshot = kind === 'seller' ? currentSeller.current : currentExternal.current;
     if (waiting() || !scope || !snapshot.cursor || gate.current[kind] || snapshot.items.length >= MAX_LOADED) return;
-    clearElapsedWait();
+    clearElapsedWait();evidence?.begin(kind);
     gate.current[kind] = true; const cursor = snapshot.cursor;
     const controller = request.current!;
     const valid = () => active.current && currentQuery.current === scope && !controller.signal.aborted;
-    const read = (path: string) => api<unknown>(token, path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
-    if (kind === 'seller') setSeller(old => ({ ...old, busy: true, error: '' })); else setExternal(old => ({ ...old, busy: true, error: '' }));
+    const read = async (path:string)=>{
+      const kind=path.startsWith('/external-listings')?'external' as const:'seller' as const;
+      const start=new Date().toISOString();let status:number|null=null;
+      try{const raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(valid)evidence?.page(kind,start,status,raw);return raw;}
+      catch(e){if(valid)evidence?.transportError(kind,start,status);throw e;}
+    };    if (kind === 'seller') setSeller(old => ({ ...old, busy: true, error: '' })); else setExternal(old => ({ ...old, busy: true, error: '' }));
     try {
       if (kind === 'seller') {
         const page = await readExploreSeller(scope, read, origin, import.meta.env.DEV, cursor);
         if (!valid()) return;
         if (page.nextCursor && seenCursors.current.seller.has(page.nextCursor) || page.items.some(item => currentSeller.current.items.some(old => old.id === item.id))) throw new Error('商品分頁重複或未前進，請重新搜尋。');
         if (page.nextCursor) seenCursors.current.seller.add(page.nextCursor);
+        evidence?.finish('seller',[...currentSeller.current.items,...page.items].map(i=>i.id),page.nextCursor);
         setSeller(old => { const items = [...old.items, ...page.items].slice(0, MAX_LOADED); return { ...old, items,
           matches: [...old.matches, ...page.matches].filter(match => items.some(item => item.id === match.listing.id)),
           cursor: old.items.length + page.items.length > MAX_LOADED ? cursor : page.nextCursor, notice: page.notice }; });
@@ -214,6 +230,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
         if (!valid()) return;
         if (page.nextCursor && seenCursors.current.external.has(page.nextCursor) || page.items.some(item => currentExternal.current.items.some(old => old.id === item.id))) throw new Error('外部商品分頁重複或未前進，請重新搜尋。');
         if (page.nextCursor) seenCursors.current.external.add(page.nextCursor);
+        evidence?.finish('external',[...currentExternal.current.items,...page.items].map(i=>i.id),page.nextCursor,page.enabled,page.diagnosticReason);
         setExternal(old => ({ ...old, items: [...old.items, ...page.items].slice(0, MAX_LOADED), cursor: old.items.length + page.items.length > MAX_LOADED ? cursor : page.nextCursor }));
       }
     } catch (error) {
@@ -317,6 +334,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       {resultsFrame.current && <button type="button" onClick={() => { const saved = resultsFrame.current!; viewport.current = saved.bounds; showFrame(saved.camera); switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("返回目前結果")}</button>}
     </div>{locationMessage && <p role="status" className="text-sm text-gray-600">{exploreMessage(locationMessage)}</p>}
     {query && <MapFallbackBoundary fallback={<p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">{text('互動地圖暫時無法使用，請切換「商品列表」繼續搜尋與閱覽。')}</p>}><ExploreMapWeb items={liveItems} external={liveExternal} sourceLeads={source.items} frame={frame} visible={!listMode} onViewport={bounds => { viewport.current = bounds; }} onSelect={item => { setSelection(item); setCluster(null); }} onCluster={(kind, ids) => { setCluster({ kind, ids }); switchList(true); }} /></MapFallbackBoundary>}
+    {evidence&&<ExploreEvidencePanel evidence={evidence} visible={{seller:liveItems.map(i=>i.id),external:liveExternal.map(i=>i.id),source:source.items.map(i=>i.id)}}/>}
     <div aria-live="polite" className="space-y-2 text-sm text-gray-600">{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && <p>{text('目前範圍已載入：{count} 件站內商品{own}、{external} 件外部來源。這不是全站商品總數。', { count: liveItems.length, own: query.wishId ? text('（含 {count} 件自有預覽）', { count: liveItems.filter(item => item.owner.id === userId).length }) : '', external: liveExternal.length })}</p>}
       <p>{sourceText('{count} 筆來源線索；不是已確認在售商品。',{count:source.items.length})}</p>{source.error&&<p role="alert" className="text-red-700">{text(source.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}{source.hidden&&<p>{sourceText('目前篩選條件不能由來源線索驗證，來源層未列入。')}</p>}{external.skipped && <p>{text("目前條件無法由外部來源驗證，外部商品未列入。")}</p>}{!external.enabled && !external.skipped && !external.busy && !external.error && <p>{text("外部來源目前未開放，顯示站內商品。")}</p>}
       {seller.error && <p role="alert" className="text-red-700">{text('站內商品查詢未完成：')}{exploreMessage(seller.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}

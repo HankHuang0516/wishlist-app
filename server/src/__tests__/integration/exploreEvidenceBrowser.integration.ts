@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 describe('official auction real Web date disclosure',()=>{
  const origin='https://wishlist-query-qa.invalid',root=path.resolve(__dirname,'../../../../client/dist');
- let server:any,browser:any,db:any,buyer:number;let mode='empty';const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
+ let server:any,browser:any,db:any,buyer:number;let mode='empty';let downloadRoot:string;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
  const saved={api:process.env.API_URL,enabled:process.env.SOURCE_LEADS_PUBLIC_ENABLED,secret:process.env.JWT_SECRET,external:process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED};
  beforeAll(async()=>{
   require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -26,7 +26,7 @@ describe('official auction real Web date disclosure',()=>{
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run','--disable-background-networking']});
  },30000);
  afterAll(async()=>{
-  if(browser)await browser.close();if(server?.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
+  if(browser)await browser.close();if(downloadRoot)fs.rmSync(downloadRoot,{recursive:true,force:true});if(server?.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
   if(db){if(buyer)await db.user.deleteMany({where:{id:buyer}});await db.$disconnect();}
   if(saved.secret===undefined)delete process.env.JWT_SECRET;else process.env.JWT_SECRET=saved.secret;
   if(saved.external===undefined)delete process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;else process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED=saved.external;
@@ -35,6 +35,8 @@ describe('official auction real Web date disclosure',()=>{
  });
  test('actual built Explore evidence distinguishes empty, disabled,404 and failure without extra reads',async()=>{
   const page=await browser.newPage();await page.setRequestInterception(true);
+  downloadRoot=fs.mkdtempSync(path.join(require('os').tmpdir(),'wishlist-query-downloads-'));
+  const cdp=await page.target().createCDPSession();await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:downloadRoot,eventsEnabled:true});
   page.on('pageerror',(e:Error)=>errors.push(e.message));
   await page.evaluateOnNewDocument((host:string)=>{if(window===window.top&&location.origin===host)localStorage.setItem('user-locale','zh-TW');},origin);
   page.on('request',async(req:any)=>{try{
@@ -61,14 +63,31 @@ describe('official auction real Web date disclosure',()=>{
    expect(receipt.comparable).toBe(scenario==='empty');
    const body=await page.evaluate(()=>document.body.textContent||'');if(scenario==='empty'){expect(body).toContain('目前範圍已載入');expect(body).toContain('目前地圖範圍沒有符合條件');}else{expect(body).toContain('本次查詢尚未建立完整基準');expect(body).not.toContain('0 件外部來源');expect(body).not.toContain('目前地圖範圍沒有符合條件');}expect(receipt.qualifiedSupplyCount).toBeNull();expect(receipt.layers.seller.terminal).toBe(true);expect(receipt.layers.source.terminal).toBe(true);
    const counts=traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path));expect(counts).toHaveLength(3);
-   await page.evaluate(()=>{(window as any).__export='';const create=URL.createObjectURL;URL.createObjectURL=(blob:Blob)=>{void blob.text().then(text=>{(window as any).__export=text;});return create(blob);};});
+   const downloadName='explore-query-'+receipt.query.serial+'.json',downloadFile=path.join(downloadRoot,downloadName);
+   if(fs.existsSync(downloadFile))fs.unlinkSync(downloadFile);
    await page.click('[data-testid="explore-query-evidence"] button');
-   await page.waitForFunction(()=>!!(window as any).__export);
-   const exported=await page.evaluate(()=>JSON.parse((window as any).__export));expect(exported.query).toEqual(receipt.query);expect(exported.layers).toEqual(receipt.layers);expect(traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path))).toHaveLength(3);
+   await new Promise<void>((resolve,reject)=>{const deadline=Date.now()+10000;const check=()=>{if(fs.existsSync(downloadFile)){try{JSON.parse(fs.readFileSync(downloadFile,'utf8'));resolve();return;}catch{}}if(Date.now()>deadline){reject(Error('Normal browser download did not complete'));return;}setTimeout(check,50);};check();});
+   const downloadedBytes=fs.readFileSync(downloadFile),exported=JSON.parse(downloadedBytes.toString('utf8'));
+   expect(exported.query).toEqual(receipt.query);expect(exported.layers).toEqual(receipt.layers);
+   expect(traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path))).toHaveLength(3);
    expect(JSON.stringify(exported)).not.toMatch(/Bearer|synthetic-query-ui-pass|phoneNumber|authorization/i);
-   const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(bounds.scroll).toBeLessThanOrEqual(width);
-   await (await page.$('[data-testid="explore-query-evidence"]')).screenshot({path:webQaEvidence('query-evidence-'+scenario+'-'+width+'.png')});
-   reports.push({width,scenario,receipt:exported,requests:counts});
+   const actualDownloadPath=webQaEvidence('query-evidence-download-'+scenario+'-'+width+'.png').replace(/\\.png$/,'.json');
+   fs.copyFileSync(downloadFile,actualDownloadPath);
+   // Element screenshots auto-scroll to the sticky navbar's covered top edge.
+   // Use ordinary document scrolling plus viewport screenshots, never hide the navbar.
+   await page.evaluate(()=>{const panel=document.querySelector('[data-testid="explore-query-evidence"]')as HTMLElement;const header=document.querySelector('header');const cover=header?.getBoundingClientRect().height??0;window.scrollTo(0,window.scrollY+panel.getBoundingClientRect().top-cover-12);});
+   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+   const layout=await page.evaluate(()=>{
+    const panel=document.querySelector('[data-testid="explore-query-evidence"]')as HTMLDetailsElement,summary=panel.querySelector('summary')!,identity=summary.nextElementSibling!;
+    const visible=(el:Element)=>{const r=el.getBoundingClientRect(),x=r.left+Math.min(r.width/2,80),y=r.top+r.height/2,hit=document.elementFromPoint(x,y);return r.top>=0&&r.bottom<=innerHeight&&!!hit&&(el===hit||el.contains(hit));};
+    return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,expanded:panel.open,titleVisible:visible(summary),identityVisible:visible(identity),titleTop:summary.getBoundingClientRect().top,navBottom:document.querySelector('header')?.getBoundingClientRect().bottom};
+   });
+   expect(layout.expanded).toBe(true);expect(layout.titleVisible).toBe(true);expect(layout.identityVisible).toBe(true);expect(layout.scrollWidth).toBeLessThanOrEqual(width);
+   await page.screenshot({path:webQaEvidence('query-evidence-'+scenario+'-'+width+'.png')});
+   await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:webQaEvidence('query-evidence-full-'+scenario+'-'+width+'.png'),fullPage:true});
+   await page.evaluate(()=>{const panel=document.querySelector('[data-testid="explore-query-evidence"]')!;panel.nextElementSibling?.scrollIntoView({block:'end'});});
+   await page.screenshot({path:webQaEvidence('query-classifiers-'+scenario+'-'+width+'.png')});
+   reports.push({width,scenario,receipt:exported,requests:counts,layout,download:{actualChromeDownload:true,originalName:downloadName,artifactName:path.basename(actualDownloadPath),bytes:downloadedBytes.length,sha256:require('crypto').createHash('sha256').update(downloadedBytes).digest('hex')}});
   }
   expect(errors).toEqual([]);
   // Built assets must retain the existing public icon bytes; no redesign or H editing.

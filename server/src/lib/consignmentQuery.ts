@@ -16,8 +16,8 @@ export function consignmentEligible(row:any):boolean {
  try {
   const l=row.lead;if(!l||row.leadId!==l.id||!isListingId(row.id)||!isListingId(l.id)||row.leadContentHash!==l.contentHash)return false;
   const evidence={...l.evidence};delete evidence.withdrawalRef;
-  const input={...Object.fromEntries(['archiveItemId','libraryFileId','archiveVersion','archiveSha256','title','summary','canonicalUrl','county','district','publicPlaceName','publicAddress','latitude','longitude'].map(k=>[k,l[k]])),evidence,postedEarliestAt:l.postedEarliestAt.toISOString(),postedLatestAt:l.postedLatestAt.toISOString(),checkedAt:l.checkedAt.toISOString()};
-  if(parseLead(input,l.checkedAt).contentHash!==l.contentHash)return false;
+  const input={...Object.fromEntries(['archiveItemId','libraryFileId','archiveVersion','archiveSha256','title','summary','canonicalUrl','county','district','publicPlaceName','publicAddress','latitude','longitude'].map(k=>[k,l[k]])),evidence,postedEarliestAt:l.postedEarliestAt?.toISOString()??null,postedLatestAt:l.postedLatestAt?.toISOString()??null,checkedAt:l.checkedAt?.toISOString()??null};
+  if(!l.checkedAt||parseLead(input,l.checkedAt,l.recordOrigin==='DB_MASTER').contentHash!==l.contentHash)return false;
   if(!Array.isArray(row.events)||row.events.length>201||(row.events.length===201&&row.events[200]?.action!=='CANCEL')||!row.events.some((e:any)=>e.action==='ASK'&&typeof e.text==='string'&&e.text.trim()))return false;
   if(row.events.some((e:any)=>!isListingId(e.requestId)||!['ASK','CONSENT','CANCEL','SELLER_REPLY'].includes(e.action)||!Number.isFinite(Date.parse(e.at))))return false;
   // Consent binds a specific question snapshot; cancellation may clear the

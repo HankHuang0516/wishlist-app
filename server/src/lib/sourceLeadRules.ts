@@ -15,13 +15,14 @@ export function exact(v: Record<string, any>, keys: string[]) { if (Object.keys(
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && !!v.trim() && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
 export function date(v: unknown) { if (typeof v !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(v) || !Number.isFinite(Date.parse(v)))
     throw new LeadError('ORIGINAL_DATE_REQUIRED'); return new Date(v); }
-export function parseLead(input: unknown, now = new Date()) {
+export function parseLead(input: unknown, now = new Date(), databaseMaster = false) {
     const b = object(input);
     exact(b, ['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'evidence']);
     const e = object(b.evidence);
-    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media', 'photoInventory', 'countyIllustration']);
-    if (!text(b.archiveItemId, 160) || !/^libfile_[a-f0-9]{32}$/.test(b.libraryFileId) || !Number.isSafeInteger(b.archiveVersion) || b.archiveVersion < 0 || !/^[a-f0-9]{64}$/.test(b.archiveSha256))
+    exact(e, ['sourceUrl', 'sourcePublic', 'publicSourceRef', 'dateRef', 'locationRef', 'coordinateRef', 'locationSourceUrl', 'coordinateSourceUrl', 'publicPlace', 'locationType', 'sourceMeetingPointConfirmed', 'independentlyReviewed', 'selfWrittenSummary', 'noCopiedTextOrImages', 'noPrivateData', 'reviewRef', 'publicFacts', 'coordinateNodeVersion', 'media', 'photoInventory', 'countyIllustration', 'sourceCheckRef']);
+    if (!text(b.archiveItemId, 160) || (!databaseMaster && (!/^libfile_[a-f0-9]{32}$/.test(b.libraryFileId) || !Number.isSafeInteger(b.archiveVersion) || b.archiveVersion < 0 || !/^[a-f0-9]{64}$/.test(b.archiveSha256))))
         throw new LeadError('ARCHIVE_IDENTITY_REQUIRED');
+    if(databaseMaster && !ref(e.sourceCheckRef))throw new LeadError('BOUND_SOURCE_CHECK_REQUIRED');
     const canonicalUrl = publicUrl(b.canonicalUrl);
     if (!text(b.title, 100) || !text(b.summary, 240) || forbiddenListingField({ title: b.title, description: b.summary }) || privateContactField({ title: b.title, description: b.summary }) || /https?:\/\/|@|(?:電話|手機|LINE|微信|帳號)\s*[:：]/i.test(b.title + ' ' + b.summary))
         throw new LeadError('SAFE_SELF_WRITTEN_FACTS_REQUIRED');
@@ -57,10 +58,10 @@ export function parseLead(input: unknown, now = new Date()) {
     return { ...facts, archiveItemId: b.archiveItemId, libraryFileId: b.libraryFileId, archiveVersion: b.archiveVersion, archiveSha256: b.archiveSha256, checkedAt, evidence: e, contentHash: digest({ facts, e }) };
 }
 export function leadCurrent(row: ExternalSourceLead, now = new Date()) {
-    if (row.status !== 'PUBLISHED')
+    if (row.status !== 'PUBLISHED'||row.recordOrigin==='DB_MASTER'&&row.sourceClaimState!=='UNKNOWN')
         return false;
     try {
-        const parsed = parseLead({ ...Object.fromEntries(['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'evidence'].map(k => [k, (row as any)[k]])), postedEarliestAt: row.postedEarliestAt.toISOString(), postedLatestAt: row.postedLatestAt.toISOString(), checkedAt: row.checkedAt.toISOString() }, now);
+        const parsed = parseLead({ ...Object.fromEntries(['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'evidence'].map(k => [k, (row as any)[k]])), postedEarliestAt: row.postedEarliestAt?.toISOString()??null, postedLatestAt: row.postedLatestAt?.toISOString()??null, checkedAt: row.checkedAt?.toISOString()??null }, now, row.recordOrigin==='DB_MASTER');
         return parsed.contentHash === row.contentHash;
     }
     catch {

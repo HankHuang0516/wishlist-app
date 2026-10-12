@@ -162,6 +162,22 @@ jobs:
       env:
         QUERY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
 
+    - name: Expose bounded synthetic build images for visual review
+      if: always()
+      run: |
+        node - <<'NODE'
+        const fs=require('fs'),path=require('path'),crypto=require('crypto'),root=process.env.GITHUB_WORKSPACE+'/qa-query-artifacts';
+        const meta=JSON.parse(fs.readFileSync(path.join(root,'query-build-icons.json'),'utf8'));
+        if(meta.head!==process.env.QUERY_HEAD||!meta.actualBuildBytes||Object.values(meta.outputs).some(x=>!x.matchesRecipe))throw Error('Current fixed build evidence required');
+        const names=['query-built-logo.png','query-built-pwa-icon-512.png','query-built-pwa-icon-192.png','query-built-apple-touch-icon.png'];
+        const reportPath=path.join(root,'query-evidence-report.json');
+        if(fs.existsSync(reportPath)){const r=JSON.parse(fs.readFileSync(reportPath));if(r.head!==process.env.QUERY_HEAD||r.syntheticOnly!==true||r.productionWrites!==0)throw Error('Isolated current Web evidence required');for(const mode of ['references-disabled','references-throttled'])for(const width of [1280,390])names.push('query-evidence-full-'+mode+'-'+width+'.png');}
+        for(const width of [1366,390]){const p=path.join(root,'query-source-manager-metrics-'+width+'.json');if(fs.existsSync(p)){const m=JSON.parse(fs.readFileSync(p));if(m.isolated!==true||m.productionWrite!==false||m.keyVisible!==false)throw Error('Isolated manager evidence required');names.push('query-source-manager-form-'+width+'.png');}}
+        for(const name of names){const bytes=fs.readFileSync(path.join(root,name));if(bytes.length>2000000)throw Error('Review image exceeds bound');console.log('VISUAL_QA_INLINE_JSON='+JSON.stringify({name,head:meta.head,version:meta.version,bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),base64:bytes.toString('base64')}));}
+        NODE
+      env:
+        QUERY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
     - name: Preserve isolated Explore query evidence
       if: always()
       uses: actions/upload-artifact@v4

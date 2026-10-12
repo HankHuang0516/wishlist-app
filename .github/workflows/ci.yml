@@ -162,20 +162,6 @@ jobs:
       env:
         QUERY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
 
-    - name: Expose bounded actual build images for current visual acceptance
-      if: always()
-      run: |
-        node - <<'NODE'
-        const fs=require('fs'),path=require('path'),crypto=require('crypto'),root=process.env.GITHUB_WORKSPACE+'/qa-query-artifacts';
-        const m=JSON.parse(fs.readFileSync(path.join(root,'query-build-icons.json'),'utf8'));
-        if(m.head!==process.env.QA_HEAD||!m.actualBuildBytes||Object.values(m.outputs).some(x=>!x.matchesRecipe))throw Error('Current fixed build evidence required');
-        const names=['query-built-logo.png','query-built-pwa-icon-512.png','query-built-pwa-icon-192.png','query-built-apple-touch-icon.png'],p=path.join(root,'query-source-registry-browser-report.json');
-        if(fs.existsSync(p)){const r=JSON.parse(fs.readFileSync(p));if(r.head!==m.head||r.syntheticOnly!==true||r.productionWrites!==0||r.originalProductImagesDownloaded!==false)throw Error('Current isolated registry evidence required');for(const w of [1366,390])for(const mode of ['registered','held'])names.push('query-source-registry-'+mode+'-'+w+'.png','query-source-registry-save-'+mode+'-'+w+'.png');}
-        for(const name of names){const bytes=fs.readFileSync(path.join(root,name));if(bytes.length>2000000)throw Error('Bounded review images only');console.log('VISUAL_QA_INLINE_JSON='+JSON.stringify({name,head:m.head,version:m.version,bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),base64:bytes.toString('base64')}));}
-        NODE
-      env:
-        QA_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-
     - name: Preserve isolated Explore query evidence
       if: always()
       uses: actions/upload-artifact@v4

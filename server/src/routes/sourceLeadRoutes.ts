@@ -1,3 +1,4 @@
+import {createSourceReferenceEvidenceRoutes} from './sourceReferenceEvidenceRoutes';
 import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
 import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound} from '../lib/sourceInquiryRounds';
 import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
@@ -26,6 +27,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
     router.use((_q, r, n) => { r.set('Cache-Control', 'private, no-store'); n(); });
     router.use(rateLimit({ windowMs: 60000, limit: 30 }));
     router.use('/records',createSourceLeadRecordRoutes());
+    router.use('/reference-evidence',createSourceReferenceEvidenceRoutes());
     router.use('/pending-imports', createSemiAutoImportRoutes(getCredential));
     router.post('/import', async (req, res) => {
         try {

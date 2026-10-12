@@ -48,7 +48,7 @@ export function parseExternalListing(value: unknown, now = Date.now()): External
   const price = typeof row.priceTwd === 'string' && /^\d{1,8}(?:\.\d{1,2})?$/.test(row.priceTwd) ? Number(row.priceTwd) : NaN;
   const observedAt = Date.parse(row.observedAt), expiresAt = Date.parse(row.expiresAt);
   if (!Number.isFinite(price) || price < 1 || price > 10_000_000 || !Number.isFinite(observedAt) ||
-      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 || now - observedAt > 48 * 3_600_000 ||
+      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 || now - observedAt > 24 * 3_600_000 ||
       expiresAt <= now || expiresAt > observedAt + 30 * 86_400_000)
     throw new ListingSearchError('外部商品已失效或資料不正確');
   const canonicalUrl = externalUrl(row.canonicalUrl, source.host);
@@ -108,7 +108,7 @@ export function externalWishSearchPath(wishItemId: number, filters: SearchFilter
 export function externalGeoJSON(items: ExternalListing[]): FeatureCollection<Point> {
   return { type: 'FeatureCollection', features: items.map(item => ({ type: 'Feature', id: item.id,
     geometry: { type: 'Point', coordinates: [item.location.longitude, item.location.latitude] },
-    properties: { externalId: item.id, icon: 'external-' + item.id, title: item.title } })) };
+    properties: { externalId: item.id, originalId:item.id,sourceType:'EXTERNAL_INDEX',stockStatus:'UNKNOWN', icon: 'external-' + item.id, title: item.title } })) };
 }
 
 export const externalPrice = (item: ExternalListing) =>

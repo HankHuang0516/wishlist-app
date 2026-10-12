@@ -40,7 +40,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT pg_advisory_xact_lock(73009260930::bigint)`;
                 for (const row of rows) {
                     const old = await tx.externalSourceLead.findUnique({ where: { archiveItemId: row.archiveItemId } });
-                    if(old&&(old.recordOrigin==='DB_MASTER'||old.pendingFacts!==null))throw new LeadError('DB_RECORD_USE_RECORDS_ROUTE');
+                    if(old&&(old.recordOrigin==='DB_MASTER'||old.pendingFacts!=null))throw new LeadError('DB_RECORD_USE_RECORDS_ROUTE');
                     const newMedia=(row.evidence as any).media;
                     const oldMedia=(old?.evidence as any)?.media;
                     if(((Array.isArray(newMedia)&&newMedia.length)||(Array.isArray(oldMedia)&&oldMedia.length))&&(!old||digest(newMedia??[])!==digest(oldMedia??[]))&&photoCompleteness(row,sourceLeadMedia(row)).status!=='IMPORTED_COMPLETE')

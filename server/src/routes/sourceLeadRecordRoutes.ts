@@ -46,7 +46,8 @@ export function createSourceLeadRecordRoutes(){
     const pendingHash=digest(input.facts),nextRevision=(old?.recordRevision??0)+1;
     const withdrawal=['SOLD','WITHDRAWN'].includes(input.facts.sourceClaimState),status=old?.status==='WITHDRAWN'||withdrawal?'WITHDRAWN':'PRIVATE_PENDING';
     const data={pendingFacts:json(input.facts),pendingHash,recordRevision:nextRevision,status,sourceClaimState:input.facts.sourceClaimState};
-    const saved=old?await tx.externalSourceLead.update({where:{id:old.id},data}):await tx.externalSourceLead.create({data:{...data,archiveItemId:input.archiveItemId,canonicalUrl:input.facts.canonicalUrl,title:input.facts.title,summary:'',evidence:{},contentHash:digest({privateRecord:input.archiveItemId}),recordOrigin:'DB_MASTER'}});
+    if(old){const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status},data});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');}
+    const saved=old?await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}}):await tx.externalSourceLead.create({data:{...data,archiveItemId:input.archiveItemId,canonicalUrl:input.facts.canonicalUrl,title:input.facts.title,summary:'',evidence:{},contentHash:digest({privateRecord:input.archiveItemId}),recordOrigin:'DB_MASTER'}});
     const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),pendingHash,status:saved.status};
     await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'SAVE',requestHash,appliedRevision:saved.recordRevision,sourceCheckRef:input.facts.evidence.sourceCheckRef??null,sourceCheckedAt:input.facts.checkedAt?new Date(input.facts.checkedAt):null,sourceUrl:input.facts.canonicalUrl,beforeSnapshot:old?json(recordSnapshot(old)):Prisma.DbNull,afterSnapshot:json({record:recordSnapshot(saved),result:receipt})}});
     results.push(receipt);
@@ -68,7 +69,8 @@ export function createSourceLeadRecordRoutes(){
     const old=await tx.externalSourceLead.findUnique({where:{id:input.id}});
     if(!old||old.recordRevision!==input.expectedRevision||recordStateHash(old)!==input.expectedStateHash||old.pendingHash!==input.pendingHash)throw new LeadError('RECORD_STATE_CONFLICT');
     const parsed=parseRecordPublication(old,input.reviewRef),nextRevision=old.recordRevision+1;
-    const saved=await tx.externalSourceLead.update({where:{id:old.id},data:{...parsed,recordOrigin:'DB_MASTER',recordRevision:nextRevision,status:'PUBLISHED',sourceClaimState:'UNKNOWN',pendingFacts:Prisma.DbNull,pendingHash:null,...(parsed.contentHash!==old.contentHash?{sellerRoute:Prisma.DbNull}:{})}});
+    const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status,pendingHash:old.pendingHash},data:{...parsed,recordOrigin:'DB_MASTER',recordRevision:nextRevision,status:'PUBLISHED',sourceClaimState:'UNKNOWN',pendingFacts:Prisma.DbNull,pendingHash:null,...(parsed.contentHash!==old.contentHash?{sellerRoute:Prisma.DbNull}:{})}});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');
+    const saved=await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}});
     const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),contentHash:saved.contentHash,status:saved.status};
     await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'PUBLISH',requestHash,appliedRevision:nextRevision,beforeSnapshot:json(recordSnapshot(old)),afterSnapshot:json({record:recordSnapshot(saved),result:receipt})}});
     results.push(receipt);

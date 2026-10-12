@@ -24,7 +24,7 @@ export function parseRecordFacts(value:unknown,now=new Date()){
  if(e.countyIllustration!==undefined)throw new LeadError('CONCRETE_PUBLIC_POINT_REQUIRED');
  if(out.publicAddress!==null&&(e.publicPlace!==true||e.noPrivateData!==true))throw new LeadError('PUBLIC_ADDRESS_ONLY');
  if(e.publicFacts!==undefined){const f=object(e.publicFacts);exact(f,factKeys);for(const k of factKeys){if(f[k]===undefined)continue;if(k==='coordinateQualityNotes'){if(!Array.isArray(f[k])||f[k].length>5||f[k].some((v:unknown)=>!safeText(v,500)))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}else if(!safeText(f[k],300))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}}
- out.sourceClaimState=b.sourceClaimState??'UNKNOWN';if(!['UNKNOWN','RESERVED','SOLD','WITHDRAWN'].includes(out.sourceClaimState))throw new LeadError('NO_CONFIRMED_STOCK_PROMOTION');out.stateEvidenceRef=b.stateEvidenceRef??null;if(out.sourceClaimState!=='UNKNOWN'&&(!ref(out.stateEvidenceRef)||out.checkedAt===null))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');
+ out.sourceClaimState=b.sourceClaimState??'UNKNOWN';if(!['UNKNOWN','RESERVED','SOLD','WITHDRAWN'].includes(out.sourceClaimState))throw new LeadError('NO_CONFIRMED_STOCK_PROMOTION');out.stateEvidenceRef=b.stateEvidenceRef??null;if(out.stateEvidenceRef!==null&&!ref(out.stateEvidenceRef))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');if(e.sourceCheckRef!==undefined&&out.checkedAt===null)throw new LeadError('SOURCE_CHECK_TIME_REQUIRED');if(out.sourceClaimState!=='UNKNOWN'&&(!ref(out.stateEvidenceRef)||out.checkedAt===null))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');
  out.evidence=e;return out;
 }
 export function recordSnapshot(r:ExternalSourceLead){

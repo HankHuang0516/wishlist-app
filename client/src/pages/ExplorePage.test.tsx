@@ -301,3 +301,42 @@ describe('APP-equivalent map and list exploration', () => {
     expect(within(dialog).queryByRole('button', { name: /聯絡賣家/ })).not.toBeInTheDocument();
   });
 });
+
+it('shows the site-wide publication total before an empty viewport, without fetching a global item list', async () => {
+  const counts={schemaVersion:1,scope:'GLOBAL_PUBLICATION_STATE',stockVerified:false,asOf:'2026-10-11T03:00:00Z',
+    published:{sellerListings:3,sourceReferences:82,partnerListings:0,total:85},
+    explorable:{sellerListings:0,sourceReferences:0,partnerListings:0,total:0}};
+  const fetch=vi.fn(async (url:string)=>responseOk(url.endsWith('/explore-counts')?counts:
+    url.includes('source-leads')||url.includes('external-listings')?{enabled:true,items:[],nextCursor:null}:{items:[],nextCursor:null}));
+  vi.stubGlobal('fetch',fetch);render(view());
+  const total=await screen.findByText('全站已上架 85 件');
+  const map=screen.getByTestId('map-frame');
+  expect(total.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await screen.findByText(/目前地圖範圍沒有符合/);
+  fireEvent.click(screen.getByRole('button',{name:'模擬移動地圖'}));
+  expect(screen.getByText('全站已上架 85 件')).toBeInTheDocument();
+  expect(fetch.mock.calls.filter(([url])=>url.endsWith('/explore-counts'))).toHaveLength(1);
+});
+it('shows counts unavailable rather than zero after a failed count read', async () => {
+  const fetch=vi.fn(async(url:string)=>{if(url.endsWith('/explore-counts'))throw Error('offline');
+    return responseOk(url.includes('source-leads')||url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null});});
+  vi.stubGlobal('fetch',fetch);render(view());
+  await screen.findByText('全站已上架數量未取得');
+  expect(screen.queryByText('全站已上架 0 件')).not.toBeInTheDocument();
+});
+
+it('keeps a pending source count unknown until a successful empty response', async()=>{
+ let finish!:(v:unknown)=>void;
+ vi.stubGlobal('fetch',vi.fn((url:string)=>url.includes('/source-leads?')?new Promise(resolve=>{finish=resolve;}):Promise.resolve(responseOk(url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}))));
+ render(view());await screen.findByText('來源線索數量讀取中…');
+ expect(screen.queryByText('0 筆來源線索；不是已確認在售商品。')).not.toBeInTheDocument();
+ await waitFor(()=>expect(finish).toBeDefined());
+ await act(async()=>finish(responseOk({enabled:true,items:[],nextCursor:null})));
+ await screen.findByText('0 筆來源線索；不是已確認在售商品。');
+});
+it('does not present a failed source read as zero',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url.includes('/source-leads?'))throw Error('source unavailable');
+ return responseOk(url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null});}));
+ render(view());await screen.findByText('來源線索數量未取得；不代表沒有資料。');
+ expect(screen.queryByText('0 筆來源線索；不是已確認在售商品。')).not.toBeInTheDocument();
+});

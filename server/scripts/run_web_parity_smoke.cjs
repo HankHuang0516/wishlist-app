@@ -154,6 +154,7 @@ app.use('/api/users', socialRoutes);
 app.get('/api/users/:id', authenticateToken, getUserProfile);
 app.get('/api/marketing/availability', authenticateToken, marketingAvailability);
 app.use('/api/marketing', require('../dist/routes/marketingRoutes').default);
+require('./web-explore-routes.cjs')(app);
 app.get('/api/listings', searchListings);
 app.post('/api/listings', authenticateToken, createListing);
 app.get('/api/listings/mine', authenticateToken, myListings);

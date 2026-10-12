@@ -1,3 +1,4 @@
+import { parseExploreCounts, isExploreViewportEmpty, type ExploreCounts } from './exploreCounts';
 import { ListingPhoto, listingPresentation } from './ListingPhoto';
 import { useSourceLeads, type SourceChatContext } from './SourceLeadExplorer';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,6 +43,16 @@ function ExternalDetailPhoto({ imageUrl, thumbnailUrl }: { imageUrl: string; thu
 
 export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceChat, wishItemId, onClearWish, initialSourceId,onInitialSourceHandled, initialListing, onInitialListingHandled }: Props) {
   const insets = useSafeAreaInsets();
+  const [counts, setCounts] = useState<ExploreCounts | null>(null);
+  const [countsBusy, setCountsBusy] = useState(true);
+  const [countsRead, setCountsRead] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setCounts(null); setCountsBusy(true);
+    void api<unknown>('/explore-counts').then(parseExploreCounts).then(value => { if (current) setCounts(value); })
+      .catch(() => { if (current) setCounts(null); }).finally(() => { if (current) setCountsBusy(false); });
+    return () => { current = false; };
+  }, [api, countsRead]);
   const { fontScale, width } = useWindowDimensions();
   const compactControls = fontScale >= 1.3;
   const narrowMapCard = width <= 360 && fontScale < 1.3;
@@ -340,6 +351,12 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
   return <View style={s.screen}>
+    <View style={s.notice}>
+          <Text accessibilityLiveRegion="polite" style={s.cardTitle}>{counts ? `全站已上架 ${counts.published.total} 件` : countsBusy ? '全站已上架數量讀取中…' : '全站已上架數量未取得'}</Text>
+          {counts && <Text style={s.small}>自刊 {counts.published.sellerListings} · 來源參考 {counts.published.sourceReferences} · 合作商品 {counts.published.partnerListings}；全站可探索展示 {counts.explorable.total} 件。來源參考非確認在售。</Text>}
+          <Pressable accessibilityRole="button" disabled={countsBusy} onPress={() => setCountsRead(value => value + 1)}><Text style={s.small}>重新讀取全站數量</Text></Pressable>
+          {counts && <Text style={s.small}>數量查核：{new Date(counts.asOf).toLocaleString('zh-TW', {timeZone:'Asia/Taipei'})}（台灣時間）</Text>}
+    </View>
     {wishItemId && <View style={s.wishBanner}>
       <View style={s.wishBannerRow}>
         <Text style={s.wishBannerTitle}>符合所選願望</Text>
@@ -358,6 +375,8 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     <View style={s.toolbar}><Pressable accessibilityRole="button" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => setFiltering(true)}><Text style={s.text}>篩選</Text></Pressable><Pressable accessibilityRole="button" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => { setClusterPreview(null); setListMode(old => !old); }}><Text style={s.text}>{listMode ? '切換地圖' : '切換清單'}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="我的檢舉" style={[s.chip, compactControls && s.compactToolbarChip]} onPress={() => openReport(null)}><Text style={s.text}>{compactControls ? '檢舉' : '我的檢舉'}</Text></Pressable>
       {(busy || externalBusy) && <ActivityIndicator accessibilityLabel="搜尋商品中" />}</View>
     {!!error && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{error}</Text><Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void load()}><Text style={s.text}>重新載入</Text></Pressable></View>}
+    {leads.hidden && <Text style={s.notice}>目前條件無法由來源線索驗證，來源層未列入。</Text>}
+    {!!leads.error && <Text accessibilityRole="alert" style={s.error}>{leads.error}</Text>}
     {!!externalError && <View style={s.notice}><Text accessibilityRole="alert" style={s.error}>{externalError}</Text><Pressable accessibilityRole="button" disabled={externalBusy} style={s.chip} onPress={() => void loadExternal()}><Text style={s.text}>重載外部商品</Text></Pressable></View>}
     {bounds && !externalPath && <Text style={s.notice}>目前篩選包含外部來源無法驗證的欄位{wishItemId && radiusApplied ? '（含距離）' : ''}，因此只顯示站內刊登。</Text>}
     <Text style={s.small}>商品地區示意，不顯示使用者即時位置。站內商品須由賣家手動同意顯示，一小時後停止；來源圖釘是公開地區示意。</Text>
@@ -375,7 +394,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
             : showOnMap('external', item.item.id, item.item.location.longitude, item.item.location.latitude)} style={s.mapLink}>
           <Text style={s.mapLinkText}>在地圖上查看</Text>
         </Pressable></View>}
-      contentContainerStyle={s.list} ListEmptyComponent={!busy && !externalBusy && bounds && !error && !externalError ? <Text style={s.text}>目前地圖範圍 0 件，不代表全站沒有商品。可擴大範圍或減少篩選。</Text> : null}
+      contentContainerStyle={s.list} ListEmptyComponent={isExploreViewportEmpty({loading:busy || externalBusy || leads.busy, errors:[error,externalError,leads.error], sourceReady:leads.ready, sourceCount:leads.count, listingCount:loadedCount, hasBounds:!!bounds}) ? <Text style={s.text}>目前地圖範圍 0 件，不代表全站沒有商品。可擴大範圍或減少篩選。</Text> : null}
       ListFooterComponent={clusterPreview ? null : <View style={s.wrap}>{cursor && <Pressable accessibilityRole="button" disabled={busy || items.length >= MAX_LOADED} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>{items.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多站內商品'}</Text></Pressable>}
         {externalCursor && <Pressable accessibilityRole="button" disabled={externalBusy || externalItems.length >= MAX_LOADED} style={s.chip} onPress={() => void loadExternal(externalCursor)}><Text style={s.text}>{externalItems.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多外部商品'}</Text></Pressable>}</View>} /> : <View style={s.flex}>
       <NativeMap style={s.flex} mapStyle={libertyZhHantStyle} attribution onRegionDidChange={event => viewport(event.nativeEvent.bounds)} onDidFailLoadingMap={() => setMapError(true)} onDidFinishLoadingStyle={() => { setMapError(false); setMapReady(true); }} onDidFinishLoadingMap={() => { setMapError(false); setMapReady(true); }}>
@@ -397,13 +416,14 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
       </NativeMap>
       <View pointerEvents="box-none" style={s.mapTopActions}>
         <View pointerEvents="box-none" style={s.mapMetaRow}>
+
           <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://www.openstreetmap.org/copyright')}><Text style={s.small}>© OpenStreetMap contributors · 線索座標 ODbL</Text></Pressable>
-          <Text style={s.small}>來源線索 {leads.count} 筆 · 待確認，非在售件數</Text>
+          <Text style={s.small}>{leads.hidden?'來源線索未列入目前篩選。':leads.error?'來源線索數量未取得；不代表沒有資料。':leads.busy||!leads.ready?'來源線索數量讀取中…':`來源線索 ${leads.count} 筆 · 待確認，非在售件數`}</Text>
           <Text accessibilityLabel={resultSummary} accessibilityLiveRegion="polite" numberOfLines={1} style={s.mapCount}>已載入 {loadedCount} 件{externalEnabled ? ` · 外部 ${externalVisible.length}` : ''}</Text>
           {!!resultFrame && <Pressable accessibilityRole="button" accessibilityLabel="回到搜尋結果" style={s.mapAction} onPress={returnToResults}><Text style={s.scopeText}>回到結果</Text></Pressable>}
         </View>
         {canExpand && <Pressable accessibilityRole="button" style={s.mapAction} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
-        {(mapError || (!busy && !externalBusy && !visible.length && !externalVisible.length && bounds && !error && !externalError) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
+        {(mapError || (isExploreViewportEmpty({ loading:busy || externalBusy || leads.busy, errors:[error,externalError,leads.error], sourceReady:leads.ready, sourceCount:leads.count, listingCount:loadedCount, hasBounds:!!bounds })) || cursor || externalCursor) && <View style={s.mapNotice}><Text style={s.small}>{mapError ? '底圖暫時無法載入；仍可切換清單瀏覽。' : cursor || externalCursor ? '此範圍還有更多商品；切換清單載入下一頁。地圖與件數只計算已載入商品。' : '目前地圖範圍 0 件，不代表全站沒有商品；可擴大範圍或調整條件。'}</Text></View>}
       </View>
       {chosen && card(chosen, true)}
       {chosenExternal && externalCard(chosenExternal, true)}

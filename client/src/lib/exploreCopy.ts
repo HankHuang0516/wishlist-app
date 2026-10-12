@@ -4,6 +4,16 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  '來源線索未列入目前篩選。':'Source references excluded by the current filters.',
+  '來源線索數量未取得；不代表沒有資料。':'Source reference count unavailable; this does not mean there are no records.',
+  '來源線索數量讀取中…':'Reading source reference count…',
+  "全站已上架 {count} 件": "Published site-wide: {count} items",
+  "全站已上架數量讀取中…": "Reading site-wide publication counts…",
+  "全站已上架數量未取得": "Site-wide publication counts unavailable",
+  "自刊 {seller} 件 · 來源參考 {source} 件 · 合作商品 {partner} 件": "Seller listings: {seller} · Source references: {source} · Partner items: {partner}",
+  "目前全站可探索展示 {count} 件；來源參考不是已確認在售或取得賣家授權的商品。": "Currently explorable site-wide: {count}. Source references are not confirmed available or seller-authorized items.",
+  "數量查核：{time}（台灣時間）": "Counts checked: {time} (Taiwan time)",
+  "重新讀取全站數量": "Read site-wide counts again",
   "概略位置，非取貨點": "Approximate location, not a pickup point",
   "公共面交點": "Public meeting point",
   "不是商品或賣家所在地。": "Not the item or seller location.",

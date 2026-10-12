@@ -148,9 +148,9 @@ async function main() {
     console.log(`│ Duration: ${duration}s                         │`);
     console.log(`└─────────────────────────────────────────┘`);
 
-    if (failed > 0) {
-        console.log(`\n${colors.red}${colors.bold}❌ REGRESSION TEST FAILED${colors.reset}`);
-        console.log(`${colors.red}Do NOT deploy until all tests pass.${colors.reset}`);
+    if (failed > 0 || !allPassed || skipped > 0 || quickMode || skipBuild) {
+        console.log(`\n${colors.red}${colors.bold}❌ REGRESSION CHECK FAILED OR INCOMPLETE${colors.reset}`);
+        console.log(`${colors.red}HOLD: Do NOT deploy with failed, skipped or partial checks. Run the complete validate-before-push workflow and Explore screen acceptance.${colors.reset}`);
 
         console.log(`\n${colors.bold}Failed Steps:${colors.reset}`);
         results.steps.filter(s => s.status === 'failed').forEach(s => {
@@ -160,7 +160,7 @@ async function main() {
         process.exit(1);
     } else {
         console.log(`\n${colors.green}${colors.bold}✅ REGRESSION TEST PASSED${colors.reset}`);
-        console.log(`${colors.green}Ready to deploy!${colors.reset}`);
+        console.log(`${colors.green}This limited runner is not release approval; complete validation and Explore screen acceptance remain required.${colors.reset}`);
         process.exit(0);
     }
 }

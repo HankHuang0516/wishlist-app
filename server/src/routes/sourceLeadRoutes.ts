@@ -1,3 +1,4 @@
+import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
 import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound} from '../lib/sourceInquiryRounds';
 import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
@@ -24,6 +25,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
     router.use(marketplaceAdmin(getCredential));
     router.use((_q, r, n) => { r.set('Cache-Control', 'private, no-store'); n(); });
     router.use(rateLimit({ windowMs: 60000, limit: 30 }));
+    router.use('/records',createSourceLeadRecordRoutes());
     router.use('/pending-imports', createSemiAutoImportRoutes(getCredential));
     router.post('/import', async (req, res) => {
         try {
@@ -38,11 +40,12 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT pg_advisory_xact_lock(73009260930::bigint)`;
                 for (const row of rows) {
                     const old = await tx.externalSourceLead.findUnique({ where: { archiveItemId: row.archiveItemId } });
+                    if(old&&(old.recordOrigin==='DB_MASTER'||old.pendingFacts!=null))throw new LeadError('DB_RECORD_USE_RECORDS_ROUTE');
                     const newMedia=(row.evidence as any).media;
                     const oldMedia=(old?.evidence as any)?.media;
                     if(((Array.isArray(newMedia)&&newMedia.length)||(Array.isArray(oldMedia)&&oldMedia.length))&&(!old||digest(newMedia??[])!==digest(oldMedia??[]))&&photoCompleteness(row,sourceLeadMedia(row)).status!=='IMPORTED_COMPLETE')
                         throw new LeadError('SOURCE_PHOTO_COMPLETENESS_REQUIRED');
-                    if (old && (old.libraryFileId !== row.libraryFileId || old.canonicalUrl !== row.canonicalUrl || old.archiveVersion > row.archiveVersion || old.status === 'WITHDRAWN' || (old.archiveVersion === row.archiveVersion && (old.archiveSha256 !== row.archiveSha256 || old.contentHash !== row.contentHash))))
+                    if (old && (old.libraryFileId !== row.libraryFileId || old.canonicalUrl !== row.canonicalUrl || (old.archiveVersion===null||old.archiveVersion > row.archiveVersion) || old.status === 'WITHDRAWN' || (old.archiveVersion === row.archiveVersion && (old.archiveSha256 !== row.archiveSha256 || old.contentHash !== row.contentHash))))
                         throw new LeadError('STALE_OR_CONFLICTING_LEAD');
                 }
                 const candidates=await tx.externalSourceLead.findMany({select:{archiveItemId:true,canonicalUrl:true,evidence:true}});

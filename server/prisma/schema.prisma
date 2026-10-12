@@ -997,27 +997,33 @@ model PhotoRemovalReceipt {
 model ExternalSourceLead {
   id String @id @default(uuid())
   archiveItemId String @unique
-  libraryFileId String
-  archiveVersion Int
-  archiveSha256 String
+  libraryFileId String?
+  archiveVersion Int?
+  archiveSha256 String?
   contentHash String
   title String
   summary String
   canonicalUrl String
-  county String
-  district String
-  publicPlaceName String
-  publicAddress String
-  latitude Float
-  longitude Float
-  postedEarliestAt DateTime
-  postedLatestAt DateTime
-  checkedAt DateTime
+  county String?
+  district String?
+  publicPlaceName String?
+  publicAddress String?
+  latitude Float?
+  longitude Float?
+  postedEarliestAt DateTime?
+  postedLatestAt DateTime?
+  checkedAt DateTime?
   status String @default("PUBLISHED")
   evidence Json
   sellerRoute Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  sourceClaimState String @default("UNKNOWN")
+  recordOrigin String @default("ARCHIVE")
+  recordRevision Int @default(1)
+  pendingFacts Json?
+  pendingHash String?
+  recordEvents SourceLeadRecordEvent[]
   inquiries SourceLeadInquiry[]
   @@index([status, id])
 }
@@ -1035,4 +1041,23 @@ model SourceLeadInquiry {
   lead ExternalSourceLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
   buyer User @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
   @@unique([leadId, buyerUserId])
+}
+
+model SourceLeadRecordEvent {
+  id String @id @default(uuid())
+  leadId String
+  operationId String
+  action String
+  requestHash String
+  appliedRevision Int
+  sourceCheckRef String?
+  sourceCheckedAt DateTime?
+  sourceUrl String?
+  beforeSnapshot Json?
+  afterSnapshot Json
+  createdAt DateTime @default(now())
+  lead ExternalSourceLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  @@unique([operationId, leadId])
+  @@index([leadId, createdAt, id])
+  @@index([sourceCheckRef])
 }

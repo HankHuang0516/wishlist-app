@@ -4,18 +4,11 @@ import {randomUUID} from 'node:crypto';
 import prisma from '../../lib/prisma';
 import {createSourceManagerRoutes} from '../../routes/sourceManagerRoutes';
 import {createSourceLeadAdmin,createSourceLeadRoutes} from '../../routes/sourceLeadRoutes';
-import {rawSha} from '../../lib/sourceReferenceAutoDisplay';
+import {sourceReferenceFixture} from './sourceReferenceFixture';
 const origin='https://qa.example.invalid',key='isolated-auto-reference-fixture',prefix='SYNTHETIC-AUTO-';
 describe('bounded auto reference display with trusted evidence (isolated DB)',()=>{
  let app:any;const old=process.env.SOURCE_LEADS_PUBLIC_ENABLED;
- const fixture=(archiveItemId:string)=>{
-  const checkedAt=new Date().toISOString(),posted=new Date(Date.now()-86400000).toISOString(),url='https://public.example.invalid/source/'+archiveItemId;
-  const summary='合成來源實證，不是真實商品。',name='合成熱水瓶';
-  const raw=JSON.stringify({actualCheckedAt:checkedAt,source:{canonicalUrl:url,originalPostedDisplay:'2026年10月11日 上午3:42',exactOriginalPostedAtUtc:posted},publicMeetingPoint:{publicLocation:true,publicAddress:'臺南市永康區合成路123號',county:'臺南市',district:'永康區',officialAddressEvidence:{url:'https://public.example.invalid/official/qa',observedDuringThisRun:true}},items:[{sourceKey:archiveItemId,name,summary,sourceMarkedPrice:{amount:750,currency:'TWD'},inventory:'unknown'}]});
-  const facts={canonicalUrl:url,title:'來源參考：'+name,summary,county:'臺南市',district:'永康區',publicPlaceName:'合成公共地標',publicAddress:'臺南市永康區合成路123號',latitude:23,longitude:120.236,postedEarliestAt:posted,postedLatestAt:posted,checkedAt,sourceClaimState:'UNKNOWN',evidence:{sourceUrl:url,sourcePublic:true,publicSourceRef:'source:synthetic-public',dateRef:'source:synthetic-date',locationRef:'source:synthetic-location',coordinateRef:'source:synthetic-point',locationSourceUrl:'https://public.example.invalid/official/qa',coordinateSourceUrl:'https://www.openstreetmap.org/node/1',coordinateNodeVersion:2,publicPlace:true,locationType:'PUBLIC_MEETING_POINT',sourceMeetingPointConfirmed:true,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,reviewRef:'review:synthetic-independent-source',sourceCheckRef:'source:'+rawSha(raw),publicFacts:{priceText:'來源標價750元，現貨與交易待確認。',priceUnitStatus:'單位未核實',currencyStatus:'來源明示NT，TWD',sourceAccessNotice:'合成測試來源',originalDateLabel:'2026年10月11日 上午3:42',locationRelation:'公共面交點，並非實物庫存所在地',coordinateQualityNotes:[]}}};
-  const evidence={archiveItemId,facts,sourceReceiptJson:raw,coordinateEvidence:{sourceUrl:'https://www.openstreetmap.org/node/1',nodeXml:'<osm><node id="1" lat="23" lon="120.236" version="2" visible="true"/></osm>',readReceiptRef:'source:synthetic-node-material'}};
-  return {facts,evidence};
- };
+ const fixture=sourceReferenceFixture;
  const login=async()=>{const r=await request(app).post('/manager/session').set('Origin',origin).send({managementPassword:key});expect(r.body.autoReferenceDisplayAllowed).toBe(true);return {cookie:r.headers['set-cookie'][0].split(';')[0],csrf:r.body.csrfToken};};
  const save=(s:any,archiveItemId:string,facts:any,receiptRef:any=null,old:any=null,op=randomUUID())=>request(app).post('/manager/records/save').set('Origin',origin).set('Cookie',s.cookie).set('x-csrf-token',s.csrf).send({operationId:op,items:[{archiveItemId,expectedRevision:old?.recordRevision??0,expectedStateHash:old?.stateHash??null,facts,sourceEvidenceRef:receiptRef}]});
  const get=(s:any,id:string)=>request(app).get('/manager/records/'+id).set('Cookie',s.cookie);

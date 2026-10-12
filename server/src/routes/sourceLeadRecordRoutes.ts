@@ -1,4 +1,4 @@
-import {AUTO_REFERENCE_SCOPE,AUTO_REFERENCE_RULE,validateAutoReference} from '../lib/sourceReferenceAutoDisplay';
+import {AUTO_REFERENCE_SCOPE,REFERENCE_VERIFIER_SCOPE,canAutoReference,AUTO_REFERENCE_RULE,validateAutoReference} from '../lib/sourceReferenceAutoDisplay';
 import {Router,Response} from 'express';
 import {Prisma} from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -43,8 +43,8 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     if(!sessionId)throw new LeadError('MANAGER_SESSION_REVOKED');
     await tx.$executeRaw`SELECT id FROM "SourceManagerSession" WHERE id=${sessionId} FOR UPDATE`;
     const live=await tx.sourceManagerSession.findUnique({where:{id:sessionId}});
-    if(!live||live.revokedAt||live.expiresAt<=new Date()||!['SOURCE_DRAFT_EDITOR',AUTO_REFERENCE_SCOPE].includes(live.scope))throw new LeadError('MANAGER_SESSION_REVOKED');
-    autoAllowed=live.scope===AUTO_REFERENCE_SCOPE;
+    if(!live||live.revokedAt||live.expiresAt<=new Date()||!['SOURCE_DRAFT_EDITOR',AUTO_REFERENCE_SCOPE,REFERENCE_VERIFIER_SCOPE].includes(live.scope))throw new LeadError('MANAGER_SESSION_REVOKED');
+    autoAllowed=canAutoReference(live.scope);
    }
    const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;
    const results=[];

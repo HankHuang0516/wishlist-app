@@ -2,6 +2,8 @@ import {createHash} from 'node:crypto';
 import {LeadError,digest,object,publicUrl,ref,exact} from './sourceLeadRules';
 import {parseRecordFacts} from './sourceLeadRecords';
 export const AUTO_REFERENCE_SCOPE='SOURCE_REFERENCE_AUTO_DISPLAY';
+export const REFERENCE_VERIFIER_SCOPE='SOURCE_REFERENCE_EVIDENCE_VERIFIER';
+export const canAutoReference=(scope:unknown)=>scope===AUTO_REFERENCE_SCOPE||scope===REFERENCE_VERIFIER_SCOPE;
 export const AUTO_REFERENCE_RULE='REFERENCE_EVIDENCE_V1';
 export const rawSha=(value:string)=>createHash('sha256').update(value,'utf8').digest('hex');
 const clean=(v:unknown)=>typeof v==='string'?v.normalize('NFKC').replace(/\s+/g,''):'';
@@ -9,7 +11,7 @@ const priceMatches=(text:unknown,amount:unknown)=>typeof text==='string'&&typeof
 export function parseSourceEvidence(input:unknown){
  const b=object(input);exact(b,['archiveItemId','facts','sourceReceiptJson','coordinateEvidence']);
  if(typeof b.archiveItemId!=='string'||!/^[A-Za-z0-9._:-]{1,160}$/.test(b.archiveItemId)||typeof b.sourceReceiptJson!=='string'||b.sourceReceiptJson.length>50000)throw new LeadError('SOURCE_EVIDENCE_INPUT_INVALID');
- if(/"(?:password|token|secret|authorization|cookie)"\s*:/i.test(b.sourceReceiptJson))throw new LeadError('SOURCE_EVIDENCE_SENSITIVE_INPUT');
+ if(/"(?:password|token|secret|authorization|cookie|api[_-]?key|botSecret|access_token|refresh_token)"\s*:/i.test(b.sourceReceiptJson))throw new LeadError('SOURCE_EVIDENCE_SENSITIVE_INPUT');
  const facts=parseRecordFacts(b.facts),materialSha=rawSha(b.sourceReceiptJson),material=object(JSON.parse(b.sourceReceiptJson));
  const source=object(material.source??{}),url=source.canonicalUrl??material.source_url,time=material.actualCheckedAt??material.checked_at_utc;
  const entries=material.items??material.observations;
@@ -29,7 +31,7 @@ export function parseSourceEvidence(input:unknown){
  if(exactDate?(facts.postedEarliestAt!==exactDate||facts.postedLatestAt!==exactDate):(!baseline||facts.postedEarliestAt!==baseline.existingPostedEarliestAt||facts.postedLatestAt!==baseline.existingPostedLatestAt))issues.push('ORIGINAL_DATE_BOUNDS_EVIDENCE_REQUIRED');
  const point=material.publicMeetingPoint;
  if(!point||point.publicLocation!==true||point.publicAddress!==facts.publicAddress||point.county!==facts.county||point.district!==facts.district||!point.officialAddressEvidence?.url||point.officialAddressEvidence.observedDuringThisRun!==true)issues.push('PUBLIC_POINT_ADDRESS_EVIDENCE_REQUIRED');
- let coordinateSha:string|null=null;
+ let coordinateSha:string|null=null,coordinateReadUrl:string|null=null,coordinateReadReceiptRef:string|null=null;
  if(b.coordinateEvidence===undefined||b.coordinateEvidence===null)issues.push('PUBLIC_COORDINATE_MATERIAL_REQUIRED');
  else{
   const c=object(b.coordinateEvidence);exact(c,['sourceUrl','nodeXml','readReceiptRef']);
@@ -37,19 +39,29 @@ export function parseSourceEvidence(input:unknown){
   const matches=c.nodeXml.match(/<node\b[^>]*>/g)??[],tag=matches.length===1?matches[0]:'';
   const attr=(key:string)=>tag.match(new RegExp("\\b"+key+"=[\"']([^\"']+)[\"']"))?.[1];
   const nodeId=attr('id');if(attr('visible')==='false')issues.push('PUBLIC_COORDINATE_MATERIAL_WITHDRAWN');
-  if(!nodeId||publicUrl(c.sourceUrl)!=='https://www.openstreetmap.org/node/'+nodeId||c.sourceUrl!==facts.evidence.coordinateSourceUrl||Number(attr('version'))!==facts.evidence.coordinateNodeVersion||Number(attr('lat'))!==facts.latitude||Number(attr('lon'))!==facts.longitude)issues.push('PUBLIC_COORDINATE_MATERIAL_MISMATCH');
+  coordinateReadUrl=publicUrl(c.sourceUrl);coordinateReadReceiptRef=c.readReceiptRef;
+  const human='https://www.openstreetmap.org/node/'+nodeId;
+  const officialReads=[human,'https://api.openstreetmap.org/api/0.6/node/'+nodeId,'https://www.openstreetmap.org/api/0.6/node/'+nodeId];
+  if(!nodeId||!officialReads.includes(coordinateReadUrl)||facts.evidence.coordinateSourceUrl!==human||Number(attr('version'))!==facts.evidence.coordinateNodeVersion||Number(attr('lat'))!==facts.latitude||Number(attr('lon'))!==facts.longitude)issues.push('PUBLIC_COORDINATE_MATERIAL_MISMATCH');
+  const xmlText=(value:string)=>value.replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+  const tags=new Map<string,string>();
+  for(const t of c.nodeXml.match(/<tag\b[^>]*>/g)??[]){const a=(key:string)=>t.match(new RegExp("\\b"+key+"=[\"']([^\"']+)[\"']"))?.[1];if(a('k')&&a('v'))tags.set(xmlText(a('k')!),xmlText(a('v')!));}
+  const normal=(value:unknown)=>clean(value).replace(/台/g,'臺');
+  if(tags.has('addr:district')&&normal(tags.get('addr:district'))!==normal(facts.district))issues.push('PUBLIC_COORDINATE_ADMINISTRATIVE_CONFLICT');
+  if(tags.has('addr:city')&&normal(tags.get('addr:city'))!==normal(facts.county))issues.push('PUBLIC_COORDINATE_CITY_CONFLICT');
+  if(tags.has('addr:country')&&tags.get('addr:country')!=='TW')issues.push('PUBLIC_COORDINATE_COUNTRY_CONFLICT');
   coordinateSha=rawSha(c.nodeXml);
  }
  if(facts.sourceClaimState!=='UNKNOWN'||item.soldEvidence||item.reservedEvidence||item.withdrawnEvidence)issues.push('SOURCE_UNAVAILABLE_OR_STATE_EVIDENCE');
  if(![facts.evidence.sourcePublic,facts.evidence.publicPlace,facts.evidence.sourceMeetingPointConfirmed,facts.evidence.noPrivateData,facts.evidence.noCopiedTextOrImages,facts.evidence.selfWrittenSummary,facts.evidence.independentlyReviewed].every(v=>v===true)||!ref(facts.evidence.reviewRef))issues.push('INDEPENDENT_SOURCE_PROVENANCE_REQUIRED');
  const factsHash=digest({archiveItemId:b.archiveItemId,facts});
- const receiptRef='source:evidence/'+digest({archiveItemId:b.archiveItemId,factsHash,materialSha,coordinateSha});
- return {archiveItemId:b.archiveItemId,canonicalUrl:facts.canonicalUrl,checkedAt:new Date(facts.checkedAt),sourceCheckRef:facts.evidence.sourceCheckRef,factsHash,facts,materialSha,coordinateSha,receiptRef,issues,verified:issues.length===0};
+ const receiptRef='source:evidence/'+digest({archiveItemId:b.archiveItemId,factsHash,materialSha,coordinateSha,coordinateReadUrl,coordinateReadReceiptRef});
+ return {archiveItemId:b.archiveItemId,canonicalUrl:facts.canonicalUrl,checkedAt:new Date(facts.checkedAt),sourceCheckRef:facts.evidence.sourceCheckRef,factsHash,facts,materialSha,coordinateSha,coordinateReadUrl,coordinateReadReceiptRef,receiptRef,issues,verified:issues.length===0};
 }
 export async function validateAutoReference(tx:any,row:any,receiptRef:unknown){
  if(typeof receiptRef!=='string'||!/^source:evidence\/[a-f0-9]{64}$/.test(receiptRef))return {ok:false,reason:'TRUSTED_SOURCE_EVIDENCE_REQUIRED'};
  const evidence=await tx.sourceReferenceEvidence.findUnique({where:{receiptRef}});
- if(!evidence||evidence.issuer!=='EXISTING_SOURCE_ADMIN'||!evidence.verified)return {ok:false,reason:'TRUSTED_SOURCE_EVIDENCE_INCOMPLETE'};
+ if(!evidence||!['EXISTING_SOURCE_ADMIN','SOURCE_SESSION_VERIFIER'].includes(evidence.issuer)||!evidence.verified)return {ok:false,reason:'TRUSTED_SOURCE_EVIDENCE_INCOMPLETE'};
  const facts=parseRecordFacts(row.pendingFacts);
  if(evidence.archiveItemId!==row.archiveItemId||evidence.canonicalUrl!==row.canonicalUrl||evidence.factsHash!==digest({archiveItemId:row.archiveItemId,facts})||+evidence.checkedAt!==Date.parse(facts.checkedAt))return {ok:false,reason:'SOURCE_EVIDENCE_FACTS_OR_TIME_MISMATCH'};
  if(Date.now()-+evidence.checkedAt>48*3600000||+evidence.checkedAt>Date.now())return {ok:false,reason:'SOURCE_EVIDENCE_EXPIRED'};

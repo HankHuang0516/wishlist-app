@@ -184,15 +184,6 @@ jobs:
         node-version: '24'
         cache: 'npm'
         cache-dependency-path: mobile/package-lock.json
-    - name: Prepare bounded Expo compatibility lock update for review
-      run: |
-        cp package-lock.json /tmp/wishlist-native-lock-before.json
-        npm install --package-lock-only --ignore-scripts expo@~57.0.28 expo-crypto@~57.0.4 expo-location@~57.0.21
-        node - <<'NODE'
-        const fs=require('fs'),before=JSON.parse(fs.readFileSync('/tmp/wishlist-native-lock-before.json')),after=JSON.parse(fs.readFileSync('package-lock.json'));
-        const changed={};for(const [key,value]of Object.entries(after.packages)){if(JSON.stringify(value)!==JSON.stringify(before.packages[key]))changed[key]=value;}
-        const removed=Object.keys(before.packages).filter(key=>!after.packages[key]);console.log('EXPO_LOCK_DELTA='+JSON.stringify({changed,removed}));
-        NODE
     - run: npm ci
     - run: npm run typecheck
     - run: npm test

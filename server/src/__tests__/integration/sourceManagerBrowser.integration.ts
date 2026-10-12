@@ -32,6 +32,7 @@ describe('actual compiled source manager browser QA (isolated only)',()=>{
   const out=process.env.WEB_QA_ARTIFACT_DIR??path.resolve('/tmp/wishlist-source-manager-qa');await fs.mkdir(out,{recursive:true});const page=await browser.newPage(),traffic:{method:string;path:string}[]=[];
   page.on('request',(q:any)=>{const u=new URL(q.url());if(u.pathname.startsWith('/api/'))traffic.push({method:q.method(),path:u.pathname});});
   const metrics:any[]=[];
+  const capture=async(name:string)=>{await page.evaluate(()=>window.scrollTo(0,0));await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await page.screenshot({path:path.join(out,name),fullPage:true});};
   const clickText=async(text:string)=>{await page.waitForFunction((t:string)=>Array.from(document.querySelectorAll('button,a')).some(e=>e.textContent===t&&!(e as HTMLButtonElement).disabled),{},text);await page.evaluate((t:string)=>{const el=Array.from(document.querySelectorAll('button,a')).find(e=>e.textContent===t) as HTMLElement;el.click();},text);};
   for(const width of [1366,390]){
    await page.setViewport({width,height:844});await page.goto(origin+'/manage/login',{waitUntil:'networkidle0'});await page.waitForSelector('input[type=password]');await page.type('input[type=password]','synthetic-only-browser-manager');await page.evaluate(()=>document.querySelector<HTMLFormElement>('form')!.requestSubmit());await page.waitForFunction(()=>document.body.innerText.includes('管理登入期限'));
@@ -47,7 +48,7 @@ describe('actual compiled source manager browser QA (isolated only)',()=>{
     expect(traffic.filter(t=>t.method==='POST'&&t.path==='/api/source-manager/reference-evidence').length-before).toBe(1);expect(traffic.some(t=>t.path.includes('/source-lead-admin'))).toBe(false);
     const layout=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,passwordInputs:document.querySelectorAll('input[type=password]').length,images:document.querySelectorAll('img').length,linkHeight:(Array.from(document.querySelectorAll('a')).find(e=>e.textContent==='開啟同來源待審表單') as HTMLElement).getBoundingClientRect().height}));
     expect(layout.scrollWidth).toBeLessThanOrEqual(width);expect(layout.passwordInputs).toBe(0);expect(layout.images).toBe(0);expect(layout.linkHeight).toBeGreaterThanOrEqual(44);
-    await page.screenshot({path:path.join(out,'query-source-registry-'+mode+'-'+width+'.png'),fullPage:true});
+    await capture('query-source-registry-'+mode+'-'+width+'.png');
     await clickText('開啟同來源待審表單');await page.waitForFunction(()=>document.body.innerText.includes('新增私人草稿'));
     await clickText('讀取此件已登記實證');await clickText('帶入這份實證與原事實');await clickText('保存並完整核驗來源參考');
     await page.waitForFunction(()=>document.body.innerText.includes('已自動展示來源參考')||document.body.innerText.includes('已保存私人待處理'));
@@ -55,7 +56,7 @@ describe('actual compiled source manager browser QA (isolated only)',()=>{
     const pub=await request(server).get('/api/source-leads/'+id);expect(pub.status).toBe(mode==='registered'?200:404);if(pub.status===200){expect(pub.body.id).toBe(id);expect(pub.body.stockStatus).toBe('UNKNOWN');expect(pub.body.qualifiedSupply).toBe(false);}
     const audit=await prisma.sourceReferenceRegistration.findUniqueOrThrow({where:{operationId:op}});expect(audit.actorScope).toBe('SOURCE_REFERENCE_EVIDENCE_VERIFIER');
     expect(await prisma.listing.count({where:{title:f.facts.title}})).toBe(0);
-    await page.screenshot({path:path.join(out,'query-source-registry-save-'+mode+'-'+width+'.png'),fullPage:true});
+    await capture('query-source-registry-save-'+mode+'-'+width+'.png');
     metrics.push({width,mode,layout,operationId:op,id,sameArchiveId:true,sourceStatus:row.status,publicStatus:pub.status,stock:'UNKNOWN',qualifiedSupply:false});
    }
    await clickText('登出此登入');await page.waitForSelector('input[type=password]');

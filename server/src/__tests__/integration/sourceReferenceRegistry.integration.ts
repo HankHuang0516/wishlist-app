@@ -8,13 +8,13 @@ import {sourceReferenceFixture} from './sourceReferenceFixture';
 import {REFERENCE_VERIFIER_SCOPE,rawSha} from '../../lib/sourceReferenceAutoDisplay';
 const origin='https://registry.example.invalid',key='synthetic-registry-only',prefix='SYNTHETIC-REGISTRY-';
 describe('explicit browser verifier authority and private registration',()=>{
- let app:any;const operations:string[]=[],saved=process.env.SOURCE_LEADS_PUBLIC_ENABLED;
+ let app:any,currentKey=key;const operations:string[]=[],saved=process.env.SOURCE_LEADS_PUBLIC_ENABLED;
  const login=async()=>{const r=await request(app).post('/manager/session').set('Origin',origin).send({managementPassword:key});expect(r.status).toBe(200);expect(r.body.scope).toBe(REFERENCE_VERIFIER_SCOPE);expect(r.body.evidenceRegistrationAllowed).toBe(true);return {cookie:r.headers['set-cookie'][0].split(';')[0],csrf:r.body.csrfToken};};
  const fixture=()=>sourceReferenceFixture(prefix+randomUUID());
  const register=(s:any,entries:any[],operationId=randomUUID())=>{operations.push(operationId);return request(app).post('/manager/reference-evidence').set('Origin',origin).set('Cookie',s.cookie).set('x-csrf-token',s.csrf).send({operationId,entries});};
  const save=(s:any,e:any,ref:string)=>request(app).post('/manager/records/save').set('Origin',origin).set('Cookie',s.cookie).set('x-csrf-token',s.csrf).send({operationId:randomUUID(),items:[{archiveItemId:e.archiveItemId,expectedRevision:0,expectedStateHash:null,facts:e.facts,sourceEvidenceRef:ref}]});
  beforeAll(()=>{require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated only');process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';});
- beforeEach(()=>{app=express();app.use('/manager',createSourceManagerRoutes(()=>key,()=>origin));app.use('/public',createSourceLeadRoutes());});
+ beforeEach(()=>{currentKey=key;app=express();app.use('/manager',createSourceManagerRoutes(()=>currentKey,()=>origin));app.use('/public',createSourceLeadRoutes());});
  afterEach(async()=>{const ids=(await prisma.externalSourceLead.findMany({where:{archiveItemId:{startsWith:prefix}},select:{id:true}})).map(v=>v.id);await prisma.sourceLeadRecordEvent.deleteMany({where:{leadId:{in:ids}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:ids}}});await prisma.sourceReferenceEvidence.deleteMany({where:{archiveItemId:{startsWith:prefix}}});await prisma.sourceReferenceRegistration.deleteMany({where:{operationId:{in:operations}}});operations.length=0;await prisma.sourceManagerSession.deleteMany({});await prisma.sourceManagerRateBucket.deleteMany({});});
  afterAll(async()=>{if(saved===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=saved;await prisma.$disconnect();});
  test('registers private evidence, preserves original bytes and audit, replay is one operation, explicit same-ID SAVE alone displays UNKNOWN reference',async()=>{
@@ -68,4 +68,10 @@ describe('explicit browser verifier authority and private registration',()=>{
   expect((await request(app).post('/manager/logout').set('Origin',origin).set('Cookie',s.cookie).set('x-csrf-token',s.csrf).send({})).status).toBe(204);unlock();await lock;expect((await pending).status).toBe(401);
   expect(await prisma.sourceReferenceEvidence.count({where:{archiveItemId:f.evidence.archiveItemId}})).toBe(0);expect(await prisma.sourceReferenceRegistration.count({where:{operationId:{in:operations}}})).toBe(0);
  });
+ test('key rotation while queued fails closed even when the session row itself is not revoked',async()=>{
+  const s=await login(),f=fixture();let unlock!:()=>void,entered!:()=>void;const waiting=new Promise<void>(r=>entered=r),release=new Promise<void>(r=>unlock=r);
+  const lock=prisma.$transaction(async tx=>{await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(73009260930::bigint)');entered();await release;},{timeout:10000});await waiting;
+  const pending=register(s,[f.evidence]).then(r=>r);await new Promise(r=>setTimeout(r,50));currentKey=key+'-rotated';unlock();await lock;expect((await pending).status).toBe(401);expect(await prisma.sourceReferenceEvidence.count({where:{archiveItemId:f.evidence.archiveItemId}})).toBe(0);
+ });
+
 });

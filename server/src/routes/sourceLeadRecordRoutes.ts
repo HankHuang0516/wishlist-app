@@ -43,7 +43,7 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     if(!sessionId)throw new LeadError('MANAGER_SESSION_REVOKED');
     await tx.$executeRaw`SELECT id FROM "SourceManagerSession" WHERE id=${sessionId} FOR UPDATE`;
     const live=await tx.sourceManagerSession.findUnique({where:{id:sessionId}});
-    if(!live||live.revokedAt||live.expiresAt<=new Date()||!['SOURCE_DRAFT_EDITOR',AUTO_REFERENCE_SCOPE,REFERENCE_VERIFIER_SCOPE].includes(live.scope))throw new LeadError('MANAGER_SESSION_REVOKED');
+    if(!live||live.revokedAt||live.expiresAt<=new Date()||!['SOURCE_DRAFT_EDITOR',AUTO_REFERENCE_SCOPE,REFERENCE_VERIFIER_SCOPE].includes(live.scope)||res.locals.managerAuthorityCurrent?.()!==true)throw new LeadError('MANAGER_SESSION_REVOKED');
     autoAllowed=canAutoReference(live.scope);
    }
    const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;

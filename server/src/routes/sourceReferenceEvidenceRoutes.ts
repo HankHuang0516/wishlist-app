@@ -32,7 +32,7 @@ export function createSourceReferenceRegistryRoutes(){
     const sessionId=r.locals.manager.id;
     await tx.$executeRaw`SELECT id FROM "SourceManagerSession" WHERE id=${sessionId} FOR UPDATE`;
     const live=await tx.sourceManagerSession.findUnique({where:{id:sessionId}});
-    if(!live||live.revokedAt||live.expiresAt<=new Date()||live.scope!==REFERENCE_VERIFIER_SCOPE)throw new LeadError('MANAGER_SESSION_REVOKED');
+    if(!live||live.revokedAt||live.expiresAt<=new Date()||live.scope!==REFERENCE_VERIFIER_SCOPE||r.locals.managerAuthorityCurrent?.()!==true)throw new LeadError('MANAGER_SESSION_REVOKED');
     const prior=await tx.sourceReferenceRegistration.findUnique({where:{operationId:op}});
     if(prior){if(prior.requestHash!==requestHash)throw new LeadError('OPERATION_BODY_CONFLICT');return {operationId:op,state:'RECORDED',replayed:true,records:prior.results,publicationActions:0};}
     const records=[];for(const d of parsed)records.push(await storeEvidence(tx,d,'SOURCE_SESSION_VERIFIER'));

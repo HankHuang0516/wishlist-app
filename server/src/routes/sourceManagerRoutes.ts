@@ -53,6 +53,7 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
    const s=await prisma.sourceManagerSession.findUnique({where:{tokenHash:hash(value)}});
    if(!s||s.revokedAt||s.expiresAt<=new Date()||!allowedScopes.includes(s.scope))return r.status(401).json({errorCode:'MANAGER_SESSION_INVALID'});
    if(!['GET','HEAD'].includes(q.method)&&(!q.is('application/json')||!equal(q.headers['x-csrf-token'],mac(key,'csrf',nonce))))return r.status(403).json({errorCode:'MANAGER_CSRF_DENIED'});
+   r.locals.managerAuthorityCurrent=()=>{try{const current=getKey();return typeof current==='string'&&!!current&&equal(proof,mac(current,'cookie',nonce));}catch{return false;}};
    r.locals.manager={id:s.id,scope:s.scope,expiresAt:s.expiresAt,autoReferenceDisplayAllowed:canAutoReference(s.scope),evidenceRegistrationAllowed:s.scope===REFERENCE_VERIFIER_SCOPE,csrfToken:mac(key,'csrf',nonce)};n();
   }catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
  });

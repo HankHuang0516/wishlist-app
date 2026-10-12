@@ -1023,6 +1023,7 @@ model ExternalSourceLead {
   recordRevision Int @default(1)
   pendingFacts Json?
   pendingHash String?
+  pendingEvidenceRef String?
   recordEvents SourceLeadRecordEvent[]
   inquiries SourceLeadInquiry[]
   @@index([status, id])
@@ -1081,4 +1082,26 @@ model SourceManagerRateBucket {
  hits Int @default(0)
  windowStartedAt DateTime @default(now())
  @@index([windowStartedAt])
+}
+
+
+// Verified source facts are registered by the pre-existing trusted verifier.
+// Limited browser authority can only consume them; no raw captures or secrets.
+model SourceReferenceEvidence {
+ id String @id @default(uuid())
+ receiptRef String @unique
+ archiveItemId String
+ canonicalUrl String
+ checkedAt DateTime
+ sourceCheckRef String
+ factsHash String
+ facts Json
+ materialSha String
+ coordinateSha String?
+ verified Boolean
+ issues Json
+ issuer String
+ createdAt DateTime @default(now())
+ @@index([archiveItemId, createdAt])
+ @@index([sourceCheckRef])
 }

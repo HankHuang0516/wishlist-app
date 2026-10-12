@@ -5,7 +5,7 @@ import request from 'supertest';
 import {createServer} from 'http';
 import fs from 'fs';
 import path from 'path';
-describe('official auction real Web date disclosure',()=>{
+describe('actual Explore query evidence display and download',()=>{
  const origin='https://wishlist-query-qa.invalid',root=path.resolve(__dirname,'../../../../client/dist');
  let server:any,browser:any,db:any,buyer:number;let mode='empty';let downloadRoot:string;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
  const saved={api:process.env.API_URL,enabled:process.env.SOURCE_LEADS_PUBLIC_ENABLED,secret:process.env.JWT_SECRET,external:process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED};
@@ -71,7 +71,7 @@ describe('official auction real Web date disclosure',()=>{
    expect(exported.query).toEqual(receipt.query);expect(exported.layers).toEqual(receipt.layers);
    expect(traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path))).toHaveLength(3);
    expect(JSON.stringify(exported)).not.toMatch(/Bearer|synthetic-query-ui-pass|phoneNumber|authorization/i);
-   const actualDownloadPath=webQaEvidence('query-evidence-download-'+scenario+'-'+width+'.png').replace(/\\.png$/,'.json');
+   const actualDownloadPath=webQaEvidence('query-evidence-download-'+scenario+'-'+width+'.png').replace(/\.png$/,'.json');
    fs.copyFileSync(downloadFile,actualDownloadPath);
    // Element screenshots auto-scroll to the sticky navbar's covered top edge.
    // Use ordinary document scrolling plus viewport screenshots, never hide the navbar.

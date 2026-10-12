@@ -7,6 +7,7 @@ import SourceManagerPage from './SourceManagerPage';
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);});afterEach(()=>vi.unstubAllGlobals());
 const ok=(body:unknown,status=200)=>({ok:status<400,status,json:async()=>body});
 describe('restricted management UI',()=>{
+ it('returns to management login after a remotely revoked cookie is refused',async()=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(ok({expiresAt:'2027-01-10T00:00:00Z',csrfToken:'synthetic-csrf',publishAllowed:false})).mockResolvedValueOnce(ok({errorCode:'MANAGER_SESSION_INVALID'},401)));render(<MemoryRouter initialEntries={['/manage/source-items/new']}><SourceManagerPage/></MemoryRouter>);fireEvent.click(await screen.findByRole('button',{name:'登出此登入'}));expect(await screen.findByLabelText('管理登入密碼')).toHaveAttribute('type','password');expect(screen.queryByText(/管理狀態：已登入/)).toBeNull();});
  it('shows absolute date and Taipei timezone without ambiguous month/day',()=>{expect(formatManagerExpiry('2027-01-10T00:00:00Z')).toBe('2027-01-10 08:00:00（Asia/Taipei，UTC+8）');});
  it('renders masked dedicated login, clears input and never stores the key',async()=>{
   const storage=vi.spyOn(Storage.prototype,'setItem');const fetch=vi.fn().mockResolvedValueOnce(ok({},401)).mockResolvedValueOnce(ok({expiresAt:'2027-01-10T00:00:00Z',csrfToken:'synthetic-csrf',publishAllowed:false})).mockResolvedValue(ok({items:[],nextCursor:null}));vi.stubGlobal('fetch',fetch);

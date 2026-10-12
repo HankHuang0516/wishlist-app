@@ -84,3 +84,10 @@ it('account read saturation retains fallback and does not pause public reads or 
   await expect(api('synthetic', '/users/me', {method:'PUT',body:'{}'})).resolves.toEqual({ok:true});
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
+
+it('honors the external-index Retry-After without any automatic replay',async()=>{
+ fetchMock.mockResolvedValueOnce(rejected('4','{"errorCode":"EXTERNAL_INDEX_RATE_LIMIT"}')).mockImplementation(async()=>success());
+ await expect(api('synthetic','/external-listings?bbox=117,20,123,26')).rejects.toMatchObject({retryAfterMs:4000});
+ await expect(api('synthetic','/external-listings')).rejects.toMatchObject({code:'RATE_LIMIT_COOLDOWN'});
+ expect(fetchMock).toHaveBeenCalledTimes(1);await vi.advanceTimersByTimeAsync(4000);expect(fetchMock).toHaveBeenCalledTimes(1);await api('synthetic','/external-listings');expect(fetchMock).toHaveBeenCalledTimes(2);
+});

@@ -4,6 +4,16 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+"外部來源 · 庫存未知 · 非站內賣家 · 行政區中心":"External source · stock unknown · external seller · district centre",
+"外部來源 · 庫存未知 · 非站內賣家":"External source · stock unknown · external seller",
+"至少 {count} 筆外部來源（結果未完整）":"At least {count} external references loaded (incomplete results)",
+"外部來源未核實／未完整量測":"External references unverified or not fully measured",
+"{count} 筆外部來源（資料參考）":"{count} external references",
+"外部來源是資料參考，庫存與交易待確認；不計已確認在售商品。":"External sources are references. Stock and transactions are unconfirmed; these are not verified available goods.",
+"部分外部來源未完成讀取，已暫停更新；請明確重新搜尋。":"Some external sources could not be read. Updates are paused; search again explicitly.",
+"部分外部來源不能驗證目前條件，未列入結果。":"Some external sources cannot verify the current filters and are excluded.",
+"部分外部來源查詢未完成：":"Some external-source reads did not complete: ",
+"部分外部索引目前未開放；已載入的其他外部來源參考仍保留。":"Some external indexes are disabled; other loaded external references remain visible.",
   '目前範圍已載入：{sellerResult}、{externalResult}。這不是全站商品總數。':'Loaded in this area: {sellerResult}, {externalResult}. This is not the site-wide total.',
   '{count} 件站內商品{own}':'{count} in-app items{own}',
   '{count} 件外部來源':'{count} external items',

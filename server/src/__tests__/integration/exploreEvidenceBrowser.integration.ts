@@ -59,7 +59,7 @@ describe('official auction real Web date disclosure',()=>{
    const receipt=await page.$eval('[data-testid="explore-query-evidence"] pre',(el:Element)=>JSON.parse(el.textContent||'null'));
    expect(receipt.query.bbox).toEqual([117,20,123.8,26.6]);expect(receipt.layers.external.phase).toBe(scenario==='empty'?'complete':scenario==='failure'?'error':scenario);
    expect(receipt.comparable).toBe(scenario==='empty');
-   const body=await page.evaluate(()=>document.body.textContent||'');if(scenario==='empty'){expect(body).toContain('目前範圍已載入');expect(body).toContain('目前地圖範圍沒有符合條件');}else{expect(body).toContain('本次查詢尚未建立完整基準');expect(body).not.toContain('目前範圍已載入：0');expect(body).not.toContain('目前地圖範圍沒有符合條件');}expect(receipt.qualifiedSupplyCount).toBeNull();expect(receipt.layers.seller.terminal).toBe(true);expect(receipt.layers.source.terminal).toBe(true);
+   const body=await page.evaluate(()=>document.body.textContent||'');if(scenario==='empty'){expect(body).toContain('目前範圍已載入');expect(body).toContain('目前地圖範圍沒有符合條件');}else{expect(body).toContain('本次查詢尚未建立完整基準');expect(body).not.toContain('0 件外部來源');expect(body).not.toContain('目前地圖範圍沒有符合條件');}expect(receipt.qualifiedSupplyCount).toBeNull();expect(receipt.layers.seller.terminal).toBe(true);expect(receipt.layers.source.terminal).toBe(true);
    const counts=traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path));expect(counts).toHaveLength(3);
    await page.evaluate(()=>{(window as any).__export='';const create=URL.createObjectURL;URL.createObjectURL=(blob:Blob)=>{void blob.text().then(text=>{(window as any).__export=text;});return create(blob);};});
    await page.click('[data-testid="explore-query-evidence"] button');

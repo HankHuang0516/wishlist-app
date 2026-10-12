@@ -283,12 +283,12 @@ describe('APP-equivalent map and list exploration', () => {
     stubFetch(vi.fn((url: string, init: RequestInit) => url.includes('/listings?') && (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
       ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null }))));
     const mounted = render(view()); await waitFor(() => expect(resolve).toBeDefined()); mounted.rerender(view('/explore', { ...auth, token: 'next', user: { id: 20, phoneNumber: 'next' } }));
-    await screen.findByText(/目前地圖範圍沒有符合/); await act(async () => resolve(responseOk({ items: [item], nextCursor: null })));
+    await screen.findByText(/外部來源未量測/); await act(async () => resolve(responseOk({ items: [item], nextCursor: null })));
     expect(screen.queryByRole('button', { name: `查看${item.title}商品詳情` })).not.toBeInTheDocument();
   });
   it('rejects invalid price bounds before sending a new search', async () => {
     const fetch = vi.fn(async (url: string) => responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null })); stubFetch(fetch);
-    render(view()); await screen.findByText(/目前地圖範圍沒有符合/); fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
+    render(view()); await screen.findByText(/外部來源未量測/); fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
     fireEvent.change(screen.getByLabelText('最低售價（NT$）'), { target: { value: '500' } }); fireEvent.change(screen.getByLabelText('最高售價（NT$）'), { target: { value: '100' } });
     const before = fetch.mock.calls.length; fireEvent.click(screen.getByRole('button', { name: '套用條件' })); expect(await screen.findByRole('alert')).toHaveTextContent('最高價不可小於最低價'); expect(fetch.mock.calls.length).toBe(before);
   });

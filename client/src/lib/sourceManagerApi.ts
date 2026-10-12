@@ -1,4 +1,4 @@
-export class ManagerFailure extends Error {constructor(readonly status:number,readonly code:string){super(code);}}
+export class ManagerFailure extends Error {readonly status:number;readonly code:string;constructor(status:number,code:string){super(code);this.status=status;this.code=code;}}
 export type ManagerSession={expiresAt:string;csrfToken:string;publishAllowed:false};
 export async function managerRequest<T>(path:string,csrf?:string,body?:unknown):Promise<T>{
  const response=await fetch('/api/source-manager'+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(csrf?{'X-CSRF-Token':csrf}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)});

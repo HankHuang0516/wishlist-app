@@ -4,6 +4,7 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  '本次查詢尚未建立完整基準；請查看查詢證據。':'This query has not established a complete baseline. See Query evidence.',
   "概略位置，非取貨點": "Approximate location, not a pickup point",
   "公共面交點": "Public meeting point",
   "不是商品或賣家所在地。": "Not the item or seller location.",

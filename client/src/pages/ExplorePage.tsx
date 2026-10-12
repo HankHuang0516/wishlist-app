@@ -212,8 +212,8 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     const read = async (path:string)=>{
       const kind=path.startsWith('/external-listings')?'external' as const:'seller' as const;
       const start=new Date().toISOString();let status:number|null=null;
-      try{const raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(valid)evidence?.page(kind,start,status,raw);return raw;}
-      catch(e){if(valid)evidence?.transportError(kind,start,status);throw e;}
+      try{const raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(valid())evidence?.page(kind,start,status,raw);return raw;}
+      catch(e){if(valid())evidence?.transportError(kind,start,status);throw e;}
     };    if (kind === 'seller') setSeller(old => ({ ...old, busy: true, error: '' })); else setExternal(old => ({ ...old, busy: true, error: '' }));
     try {
       if (kind === 'seller') {

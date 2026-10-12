@@ -10,7 +10,7 @@ describe('actual compiled source manager browser QA (isolated only)',()=>{
  afterAll(async()=>{await browser?.close();await new Promise<void>(r=>server?.close(r));await prisma.sourceManagerSession.deleteMany({});await prisma.$disconnect();});
  test('normal login and new-source form render at desktop/390px without production credentials or writes',async()=>{
   const out=process.env.WEB_QA_ARTIFACT_DIR??path.resolve('/tmp/wishlist-source-manager-qa');await fs.mkdir(out,{recursive:true});
-  const page=await browser.newPage();const mutations:string[]=[];page.on('request',q=>{if(q.method()==='POST'&&q.url().includes('/records/'))mutations.push(q.url());});
+  const page=await browser.newPage();const mutations:string[]=[];page.on('request',(q:any)=>{if(q.method()==='POST'&&q.url().includes('/records/'))mutations.push(q.url());});
   for(const width of [1366,390]){
    await page.setViewport({width,height:844});await page.goto(origin+'/manage/login',{waitUntil:'networkidle0'});await page.waitForSelector('input[type=password]');await page.screenshot({path:path.join(out,'query-source-manager-login-'+width+'.png'),fullPage:true});
    await page.type('input[type=password]','synthetic-only-browser-manager');await page.evaluate(()=>document.querySelector<HTMLFormElement>('form')!.requestSubmit());await page.waitForFunction(()=>document.body.innerText.includes('管理登入期限'));

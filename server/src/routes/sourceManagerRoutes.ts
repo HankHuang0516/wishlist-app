@@ -11,7 +11,7 @@ export const MANAGER_LIFETIME_MS=90*24*60*60*1000;
 const scope='SOURCE_DRAFT_EDITOR';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
 const mac=(key:string,purpose:string,nonce:string)=>createHmac('sha256',key).update('wishlist/source-manager/v1/'+purpose+'/'+nonce).digest('base64url');
-const equal=(a:unknown,b:string)=>typeof a==='string'&&a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
+const equal=(a:unknown,b:string)=>typeof a==='string'&&a.length===b.length&&timingSafeEqual(createHash('sha256').update(a).digest(),createHash('sha256').update(b).digest());
 function cookie(req:Request){const parts=(req.headers.cookie??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith(NAME+'='));return parts.length===1?parts[0].slice(NAME.length+1):null;}
 const options={httpOnly:true,secure:true,sameSite:'strict' as const,path:'/'};
 export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADMIN_API_KEY,getOrigin:()=>string=()=>new URL(getClientUrl()).origin){
@@ -19,7 +19,7 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
  router.use((_q,r,n)=>{r.set('Cache-Control','private, no-store');r.set('Pragma','no-cache');n();});
  // Mounted before global CORS/body parsing. Exact origin is mandatory for writes,
  // including login; no supplied header or query can choose the trusted origin.
- router.use((q,r,n)=>{let origin:string;try{origin=getOrigin();if(!/^https?:\/\//.test(origin))throw Error();}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
+ router.use((q,r,n)=>{let origin:string;try{origin=getOrigin();const u=new URL(origin);if(u.origin!==origin||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(u.hostname))))throw Error();}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
   if(Object.keys(q.query).some(k=>/key|password|credential|token/i.test(k)))return r.status(400).json({errorCode:'MANAGER_URL_CREDENTIAL_REJECTED'});
   if(q.headers['sec-fetch-site']==='cross-site'||q.headers.origin!==undefined&&q.headers.origin!==origin||!['GET','HEAD'].includes(q.method)&&q.headers.origin!==origin)return r.status(403).json({errorCode:'MANAGER_ORIGIN_DENIED'});
   if(q.method==='OPTIONS')return r.sendStatus(403);n();

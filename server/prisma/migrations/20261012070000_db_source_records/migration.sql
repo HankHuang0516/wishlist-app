@@ -1,4 +1,6 @@
 -- Structure only. No archive ingestion, record updates, deletion or backfill.
+ALTER TABLE "ExternalSourceLead" DROP CONSTRAINT "SourceLead_status";
+ALTER TABLE "ExternalSourceLead" ADD CONSTRAINT "SourceLead_status" CHECK (status IN ('PRIVATE_PENDING','PUBLISHED','WITHDRAWN'));
 ALTER TABLE "ExternalSourceLead"
   ADD COLUMN "sourceClaimState" TEXT NOT NULL DEFAULT 'UNKNOWN',
   ADD COLUMN "recordOrigin" TEXT NOT NULL DEFAULT 'ARCHIVE',
@@ -22,6 +24,7 @@ ALTER TABLE "ExternalSourceLead" ADD CONSTRAINT "SourceRecord_origin" CHECK ("re
 ALTER TABLE "ExternalSourceLead" ADD CONSTRAINT "SourceRecord_revision" CHECK ("recordRevision" >= 1);
 ALTER TABLE "ExternalSourceLead" ADD CONSTRAINT "SourceRecord_public_shape" CHECK (
  "status" <> 'PUBLISHED' OR (
+ "sourceClaimState" = 'UNKNOWN' AND
  "county" IS NOT NULL AND "district" IS NOT NULL AND "publicPlaceName" IS NOT NULL AND "publicAddress" IS NOT NULL AND "latitude" IS NOT NULL AND "longitude" IS NOT NULL AND "postedEarliestAt" IS NOT NULL AND "postedLatestAt" IS NOT NULL AND "checkedAt" IS NOT NULL
  AND ("recordOrigin" = 'DB_MASTER' OR ("libraryFileId" IS NOT NULL AND "archiveVersion" IS NOT NULL AND "archiveSha256" IS NOT NULL))
  ));

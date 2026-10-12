@@ -118,10 +118,51 @@ jobs:
       run: npm ci --prefix ../client
 
     - name: Build actual Web for isolated browser tests
+      id: query_web_build
       run: npm run build --prefix ../client
+
+    - name: Install Traditional Chinese fonts for query evidence review
+      if: always()
+      run: sudo apt-get update -qq && sudo apt-get install -y fonts-noto-cjk
 
     - name: Real marketplace HTTP and database tests
       run: npm test -- --config jest.marketplace.config.js --runInBand
+      env:
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-query-artifacts
+        QUERY_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Test existing built Explore while icon metadata blocks release
+      if: failure() && steps.query_web_build.outcome == 'failure'
+      run: npm test -- --config jest.marketplace.config.js --runInBand exploreEvidenceBrowser.integration
+      env:
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-query-artifacts
+        QUERY_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Preserve actual release icon bytes for review
+      if: always()
+      run: |
+        node - <<'NODE'
+        const fs=require('fs'),path=require('path'),crypto=require('crypto');
+        const out=process.env.GITHUB_WORKSPACE+'/qa-query-artifacts';fs.mkdirSync(out,{recursive:true});
+        const client=path.resolve('../client'),recipe=JSON.parse(fs.readFileSync(path.join(client,'icon-source/recipe.json')));
+        const version=JSON.parse(fs.readFileSync(path.join(client,'package.json'))).version;
+        const outputs={},inputs={},hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+        for(const [name,expected] of Object.entries(recipe.outputs)){const p=path.join(client,'dist',name);if(!fs.existsSync(p))throw Error('Actual built icon missing: '+name);const bytes=fs.readFileSync(p);outputs[name]={sha256:hash(bytes),matchesRecipe:hash(bytes)===expected.sha256};fs.writeFileSync(path.join(out,'query-built-'+name),bytes);}
+        for(const key of ['original','H']){const bytes=fs.readFileSync(path.join(client,'icon-source',recipe[key].path));inputs[key]={sha256:hash(bytes),matchesRecipe:hash(bytes)===recipe[key].sha256};fs.writeFileSync(path.join(out,'query-icon-input-'+key+'.png'),bytes);}
+        fs.writeFileSync(path.join(out,'query-build-icons.json'),JSON.stringify({version,head:process.env.QUERY_HEAD,actualBuildBytes:true,visualReviewClaim:false,outputs,inputs},null,2));
+        if(Object.values(outputs).concat(Object.values(inputs)).some(x=>!x.matchesRecipe))throw Error('Fixed icon bytes differ');
+        NODE
+      env:
+        QUERY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Preserve isolated Explore query evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: query-evidence-${{ github.sha }}
+        path: qa-query-artifacts/query-*
+        if-no-files-found: error
+        retention-days: 14
 
   mobile-checks:
     name: Native App Typecheck and Unit Tests

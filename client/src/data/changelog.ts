@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.733',date:'2026-10-12',title:'探索查詢證據',type:'Frontend',items:[{type:'New',content:'既有探索查詢可唯讀檢視與匯出分頁、公開識別、終頁及去重證據，不新增請求。'},{type:'Fix',content:'未開放、404、失敗或未完成明確區分，不當成功零件；逐件權利與現貨仍待核實。'}]},
  {version:'2.0.729',date:'2026-10-12',title:'行銷示意圖清楚標示',type:'Frontend',items:[{type:'Enhancement',content:'商品分享頁與探索商品預覽在行銷圖下方顯示繁中／英文示意圖標示，保留原照片與圖片順序。'},{type:'Fix',content:'探索商品詳情的圖片說明區分原照與行銷示意圖；圖片載入失敗時仍保留示意圖標示。'}]},
  {version:'2.0.726',date:'2026-10-11',title:'商品分享預覽據實顯示照片',type:'Backend',items:[{type:'Fix',content:'未提供商品照片時，分享預覽保留名稱、價格與連結，移除被誤標為商品照片的網站通用圖。'},{type:'Enhancement',content:'分享預覽優先使用原商品照片；只有已選用的行銷圖時，圖片說明明確標示為行銷示意圖。'}]},
  {version:'2.0.723',date:'2026-10-11',title:'原付款平台訂閱管理說明',type:'Frontend',items:[{type:'Enhancement',content:'尊榮版訂閱區新增 Apple 與 Google Play 官方管理說明，依原付款平台與訂閱帳號查看步驟。'},{type:'Security',content:'說明連結不包含帳號資料；購買仍暫停，開啟說明不會變更訂閱或開通權益。'}]},

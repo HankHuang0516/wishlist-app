@@ -28,7 +28,9 @@ export function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   return request<T>(null, path, { ...init, headers: Object.fromEntries(headers.entries()), credentials: 'omit' });
 }
 
-async function request<T>(token: string | null, path: string, init: RequestInit): Promise<T> {
+export function apiObserved<T>(token:string,path:string,init:RequestInit,observed:(status:number)=>void):Promise<T>{return request<T>(token,path,init,observed);}
+
+async function request<T>(token: string | null, path: string, init: RequestInit, observed?:(status:number)=>void): Promise<T> {
   if (!/^\/[a-zA-Z0-9/_-]+(?:\?[a-zA-Z0-9_=&%+.,-]*)?$/.test(path) || path.startsWith('//') || /%(?![a-fA-F0-9]{2})/.test(path))
     throw new Error('無效的 API 路徑。');
   const group = token && (init.method ?? 'GET').toUpperCase() === 'GET' && /^\/users\/me(?:\/|\?|$)/.test(path) ? 'account' : 'data';
@@ -38,6 +40,7 @@ async function request<T>(token: string | null, path: string, init: RequestInit)
   const response = await fetch(`${API_URL}${path}`, { ...init, cache: 'no-store', headers: {
     ...(token === null ? {} : { Authorization: `Bearer ${token}` }), ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers,
   }, signal: init.signal ?? AbortSignal.timeout(30_000), redirect: 'error' });
+  observed?.(response.status);
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string; errorCode?: string };
     // Product quotas and route-specific busy responses also use 429. They must

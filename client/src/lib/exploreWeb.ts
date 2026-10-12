@@ -70,11 +70,11 @@ export function exploreExternalPath(query: ExploreQuery, cursor?: string) {
 }
 export async function readExploreExternal(query: ExploreQuery, read: MarketplaceRead, cursor?: string) {
   const path = exploreExternalPath(query, cursor);
-  if (!path) return { enabled: false, skipped: true, items: [], nextCursor: null };
-  try { return { ...parseExternalListingPage(await read(path)), skipped: false }; }
+  if (!path) return { enabled: false, skipped: true, diagnosticReason:'skipped' as const, items: [], nextCursor: null };
+  try { return { ...parseExternalListingPage(await read(path)), skipped: false, diagnosticReason:undefined }; }
   catch (error) {
     // Same rollout compatibility as APP: absent optional external route is disabled, not fabricated supply.
-    if (error instanceof ApiFailure && error.status === 404 && !query.wishId) return { enabled: false, skipped: false, items: [], nextCursor: null };
+    if (error instanceof ApiFailure && error.status === 404 && !query.wishId) return { enabled: false, skipped: false, diagnosticReason:'fallback404' as const, items: [], nextCursor: null };
     throw error;
   }
 }

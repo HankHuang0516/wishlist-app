@@ -4,6 +4,15 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+  '目前範圍已載入：{sellerResult}、{externalResult}。這不是全站商品總數。':'Loaded in this area: {sellerResult}, {externalResult}. This is not the site-wide total.',
+  '{count} 件站內商品{own}':'{count} in-app items{own}',
+  '{count} 件外部來源':'{count} external items',
+  '站內商品未核實':'Unverified in-app results',
+  '外部來源未核實':'Unverified external results',
+  '外部來源未量測':'External results not measured',
+  '來源線索未核實':'Unverified source reference results',
+  '來源線索未量測':'Source reference results not measured',
+  '本次查詢尚未建立完整基準；請查看查詢證據。':'This query has not established a complete baseline. See Query evidence.',
   "概略位置，非取貨點": "Approximate location, not a pickup point",
   "公共面交點": "Public meeting point",
   "不是商品或賣家所在地。": "Not the item or seller location.",

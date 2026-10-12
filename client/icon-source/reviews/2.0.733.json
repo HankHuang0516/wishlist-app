@@ -1,0 +1,43 @@
+{
+  "version": "2.0.733",
+  "status": "passed",
+  "actualBuildInspected": true,
+  "inputHashes": {
+    "original": "d825c9cecea10d9b2b70b7c38c6a0b663eba3dead5190052900dc66ce6a33b55",
+    "H": "29bb4c6f54024441b675d9f04233dc0283dcc3dff2b78fbb08cd61581d61b9fa"
+  },
+  "outputHashes": {
+    "logo.png": "65a61ffa303408bda3ae0a85f466077d1b718c935bf5eee48369e63f7a93692b",
+    "pwa-icon-192.png": "5bee6f2b9858c852fb6dcdc69449038ca2f0510b4d9ab6d96faf8757343afe47",
+    "apple-touch-icon.png": "d4c5578b3b13b463059bf5be91835a53db8d5003d5cf2fa0e463609d86b668bd",
+    "pwa-icon-512.png": "97d1f1dca8e7eac1b30a8acbd0d191d34e49494594e6084fd9b216d6e83fd0f1"
+  },
+  "automatedIntegrityIsNotVisualAcceptance": true,
+  "date": "2026-10-12",
+  "reviewedAt": "2026-10-12T04:38:00Z",
+  "reviewer": "Codex fixed existing icon integrity and exact-byte visual inspection",
+  "scope": "Existing H artwork remains unchanged. This task's handoff limits icon work to existing release-asset integrity; no redesign, no new native release. Fresh examination of the byte-identical built outputs at their actual sizes, not a reused729 review.",
+  "languageVariants": "Chinese and English share this text-free artwork.",
+  "realSizesInspected": [
+    180,
+    192,
+    512,
+    1024
+  ],
+  "actualArtifacts": [
+    "client/dist/logo.png",
+    "client/dist/pwa-icon-512.png",
+    "client/dist/pwa-icon-192.png",
+    "client/dist/apple-touch-icon.png"
+  ],
+  "pixelEvidence": "Run38204377997 actual733 build output and original/H bytes all match the fixed recipe. Separately decoded official GitHub image bytes, SHA256 self-tested with abc, then verified all four against the actual-build output contract and rendered those exact matching bytes.",
+  "visualConclusion": "Four fixed output images freshly viewed. H has both legs and crossbar, fits within existing image, has no independent row or footer, and does not replace or move the gift composition. No32/48/64 mask re-generation or native visual claim in this limited integrity scope.",
+  "evidence": [
+    "GitHub Actions run38204377997 artifact11726956895/query-build-icons.json",
+    "GitHub Actions run38204377997 artifact11726956895/query-built-logo.png",
+    "GitHub Actions run38204377997 artifact11726956895/query-built-pwa-icon-512.png",
+    "GitHub Actions run38204377997 artifact11726956895/query-built-pwa-icon-192.png",
+    "GitHub Actions run38204377997 artifact11726956895/query-built-apple-touch-icon.png"
+  ],
+  "unfinishedItems": []
+}

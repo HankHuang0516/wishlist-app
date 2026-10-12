@@ -1099,6 +1099,7 @@ model SourceReferenceEvidence {
  coordinateSha String?
  coordinateReadUrl String?
  coordinateReadReceiptRef String?
+ coordinateFindings Json?
  verified Boolean
  issues Json
  issuer String

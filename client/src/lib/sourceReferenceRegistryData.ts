@@ -61,3 +61,6 @@ const labels:Record<string,string>={
  BOUNDED_NON_SECRET_EVIDENCE_REQUIRED:'材料過大或包含禁止的憑證欄位；未送出。',
 };
 export const registryIssue=(code:string)=>labels[code]??(/^[A-Z0-9_]{1,100}$/.test(code)?'待查核：'+code:'證據格式尚未確認，未送出。');
+
+const canonical=(value:any):any=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+export const registryReceiptsEqual=(a:unknown,b:unknown)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));

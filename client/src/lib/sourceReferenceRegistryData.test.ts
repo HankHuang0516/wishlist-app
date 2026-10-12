@@ -1,6 +1,6 @@
 import {describe,it,expect,beforeEach,afterEach,vi} from 'vitest';
 import {webcrypto} from 'node:crypto';
-import {decodeEvidenceBytes,evidenceSha,parseRegistryManifest,registryEntryFromFiles,registryIssue} from './sourceReferenceRegistryData';
+import {decodeEvidenceBytes,evidenceSha,parseRegistryManifest,registryEntryFromFiles,registryIssue,registryReceiptsEqual} from './sourceReferenceRegistryData';
 beforeEach(()=>vi.stubGlobal('crypto',webcrypto));afterEach(()=>vi.unstubAllGlobals());
 const source=()=>JSON.stringify({actualCheckedAt:'2026-10-12T14:41:39.334Z',source:{canonicalUrl:'https://example.invalid/source/1',originalPostedDisplay:'2026年9月30日 星期三上午3:42',originalPostedTimeZone:'unknown',exactOriginalPostedAtUtc:null},publicMeetingPoint:{county:'臺南市',district:'永康區',publicAddress:'合成公共地址',normalizedPlaceName:'合成公共點'},items:[{sourceKey:'SYNTHETIC-1',name:'合成熱水瓶',summary:'自寫合成摘要',sourceMarkedPrice:{amount:750,currency:'TWD'},adminRecord:{existingPostedEarliestAt:'2026-09-29T02:25:44.000Z',existingPostedLatestAt:'2026-10-02T02:25:44.000Z'}}]})+'\n';
 const doc={id:'11111111-1111-4111-8111-111111111111',archiveItemId:'SYNTHETIC-1',canonicalUrl:'https://example.invalid/source/1',title:'舊合成名稱',summary:'旧摘要',latitude:23,longitude:120.236,sourceClaimState:'UNKNOWN',evidence:{coordinateSourceUrl:'https://www.openstreetmap.org/node/1',coordinateNodeVersion:2}};
@@ -20,6 +20,7 @@ describe('exact non-secret browser evidence input',()=>{
   await expect(parseRegistryManifest(JSON.stringify({entries:[{...entry,verified:true}]}))).rejects.toThrow('UNSUPPORTED_EVIDENCE_FIELDS');
   await expect(parseRegistryManifest(JSON.stringify({entries:Array.from({length:21},()=>entry)}))).rejects.toThrow('ONE_TO_20');
   await expect(parseRegistryManifest('{"entries":[],"apiKey":"never-upload"}')).rejects.toThrow('BOUNDED_NON_SECRET');
+  expect(registryReceiptsEqual([{id:'a',verified:false,issues:['HOLD']}],[{issues:['HOLD'],verified:false,id:'a'}])).toBe(true);expect(registryReceiptsEqual([{id:'a'}],[{id:'b'}])).toBe(false);
   expect(registryIssue('PUBLIC_COORDINATE_ADMINISTRATIVE_CONFLICT')).toContain('衝突');expect(registryIssue('private raw diagnostic fixture')).not.toContain('private');
  });
 });

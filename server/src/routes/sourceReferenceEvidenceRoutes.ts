@@ -8,10 +8,10 @@ async function storeEvidence(tx:any,data:ReturnType<typeof parseSourceEvidence>,
  if(!stored){
   const same=await tx.sourceReferenceEvidence.findFirst({where:{sourceCheckRef:data.sourceCheckRef}});
   if(same&&(same.canonicalUrl!==data.canonicalUrl||+same.checkedAt!==+data.checkedAt))throw new LeadError('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');
-  stored=await tx.sourceReferenceEvidence.create({data:{receiptRef:data.receiptRef,archiveItemId:data.archiveItemId,canonicalUrl:data.canonicalUrl,checkedAt:data.checkedAt,sourceCheckRef:data.sourceCheckRef,factsHash:data.factsHash,facts:data.facts,materialSha:data.materialSha,coordinateSha:data.coordinateSha,coordinateReadUrl:data.coordinateReadUrl,coordinateReadReceiptRef:data.coordinateReadReceiptRef,verified:data.verified,issues:data.issues,issuer}});
+  stored=await tx.sourceReferenceEvidence.create({data:{receiptRef:data.receiptRef,archiveItemId:data.archiveItemId,canonicalUrl:data.canonicalUrl,checkedAt:data.checkedAt,sourceCheckRef:data.sourceCheckRef,factsHash:data.factsHash,facts:data.facts,materialSha:data.materialSha,coordinateSha:data.coordinateSha,coordinateReadUrl:data.coordinateReadUrl,coordinateReadReceiptRef:data.coordinateReadReceiptRef,...(data.coordinateFindings?{coordinateFindings:data.coordinateFindings}:{}),verified:data.verified,issues:data.issues,issuer}});
  }
  const record=await tx.externalSourceLead.findUnique({where:{archiveItemId:data.archiveItemId},select:{id:true}});
- return {receiptRef:stored.receiptRef,archiveItemId:stored.archiveItemId,recordId:record?.id??null,verified:stored.verified,issues:stored.issues,issuer:stored.issuer};
+ return {receiptRef:stored.receiptRef,archiveItemId:stored.archiveItemId,recordId:record?.id??null,verified:stored.verified,issues:stored.issues,issuer:stored.issuer,coordinateFindings:stored.coordinateFindings};
 }
 const entries=(body:any)=>{if(!Array.isArray(body.entries)||!body.entries.length||body.entries.length>20)throw new LeadError('ONE_TO_20_SOURCE_EVIDENCE_REQUIRED');const parsed=body.entries.map(parseSourceEvidence);if(new Set(parsed.map((e:any)=>e.archiveItemId)).size!==parsed.length)throw new LeadError('DUPLICATE_RECORD_ID');return parsed;};
 const failure=(r:any,e:unknown)=>r.status(e instanceof LeadError?(e.message==='MANAGER_SESSION_REVOKED'?401:409):503).json({errorCode:e instanceof LeadError?e.message:'SOURCE_EVIDENCE_UNAVAILABLE'});
@@ -52,6 +52,6 @@ export function createSourceReferenceEvidenceReadRoutes(){
  router.get('/',async(q,r)=>{try{
   if(Object.keys(q.query).some(k=>k!=='archiveItemId')||typeof q.query.archiveItemId!=='string'||!/^[A-Za-z0-9._:-]{1,160}$/.test(q.query.archiveItemId))throw new LeadError('BOUND_SOURCE_RECORD_REQUIRED');
   const rows=await prisma.sourceReferenceEvidence.findMany({where:{archiveItemId:q.query.archiveItemId},orderBy:{createdAt:'desc'},take:20});
-  return r.json({items:rows.map(v=>({receiptRef:v.receiptRef,archiveItemId:v.archiveItemId,checkedAt:v.checkedAt,verified:v.verified,issues:v.issues,issuer:v.issuer,coordinateReadUrl:v.coordinateReadUrl,coordinateReadReceiptRef:v.coordinateReadReceiptRef,facts:v.facts}))});
+  return r.json({items:rows.map(v=>({receiptRef:v.receiptRef,archiveItemId:v.archiveItemId,checkedAt:v.checkedAt,verified:v.verified,issues:v.issues,issuer:v.issuer,coordinateReadUrl:v.coordinateReadUrl,coordinateReadReceiptRef:v.coordinateReadReceiptRef,coordinateFindings:v.coordinateFindings,facts:v.facts}))});
  }catch(e){return failure(r,e);}});return router;
 }

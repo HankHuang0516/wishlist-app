@@ -5,6 +5,7 @@ ALTER TABLE "SourceReferenceEvidence" DROP CONSTRAINT "SourceReferenceEvidence_i
 ALTER TABLE "SourceReferenceEvidence" ADD CONSTRAINT "SourceReferenceEvidence_issuer" CHECK ("issuer" IN ('EXISTING_SOURCE_ADMIN','SOURCE_SESSION_VERIFIER'));
 ALTER TABLE "SourceReferenceEvidence" ADD COLUMN "coordinateReadUrl" TEXT;
 ALTER TABLE "SourceReferenceEvidence" ADD COLUMN "coordinateReadReceiptRef" TEXT;
+ALTER TABLE "SourceReferenceEvidence" ADD COLUMN "coordinateFindings" JSONB;
 CREATE TABLE "SourceReferenceRegistration" (
  "operationId" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "actorSessionId" TEXT NOT NULL, "actorScope" TEXT NOT NULL,
  "results" JSONB NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

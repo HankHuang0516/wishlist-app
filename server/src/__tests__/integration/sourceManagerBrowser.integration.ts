@@ -39,7 +39,7 @@ describe('actual compiled source manager browser QA (isolated only)',()=>{
     const archive=registryPrefix+randomUUID(),f=sourceReferenceFixture(archive);
     if(mode==='held')f.evidence.coordinateEvidence={sourceUrl:'https://api.openstreetmap.org/api/0.6/node/1',nodeXml:'<osm><node id="1" lat="23" lon="120.236" version="2" visible="true"><tag k="addr:city" v="台南市"/><tag k="addr:district" v="東區"/><tag k="addr:full" v="台南市永康區合成路123號"/></node></osm>',readReceiptRef:'source:synthetic-coordinate-observation'};
     await page.goto(origin+'/manage/source-evidence',{waitUntil:'networkidle0'});await page.waitForSelector('textarea');
-    await page.focus('textarea');await page.keyboard.insertText(JSON.stringify({entries:[f.evidence]}));
+    await page.focus('textarea');await page.keyboard.sendCharacter(JSON.stringify({entries:[f.evidence]}));
     await clickText('準備登錄預覽');await page.waitForFunction(()=>document.body.innerText.includes('待登錄1件'));const before=traffic.filter(t=>t.method==='POST'&&t.path==='/api/source-manager/reference-evidence').length;
     await clickText('登錄私人來源證據（不發布）');await page.waitForFunction(()=>document.body.innerText.includes('私人證據登錄已回讀'));
     const op=await page.evaluate(()=>{const s=document.querySelector('section[aria-label="登錄結果"]')!;return s.querySelector('p')!.textContent!.replace('操作編號：','');});registryOps.push(op);

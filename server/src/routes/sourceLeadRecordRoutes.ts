@@ -31,7 +31,7 @@ export function createSourceLeadRecordRoutes(){
  router.post('/save',async(req,res)=>{try{
   const b=object(req.body);exact(b,['operationId','items']);const op=operation(b.operationId);
   if(!Array.isArray(b.items)||!b.items.length||b.items.length>20)throw new LeadError('ONE_TO_20_RECORDS_REQUIRED');
-  const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['archiveItemId','expectedRevision','expectedStateHash','facts']);if(!id(r.archiveItemId)||!revision(r.expectedRevision)||(r.expectedRevision===0?r.expectedStateHash!==null:!hash(r.expectedStateHash)))throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');return {...r,facts:parseRecordFacts(r.facts)};});
+  const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['archiveItemId','expectedRevision','expectedStateHash','facts']);if(!id(r.archiveItemId)||!revision(r.expectedRevision)||(r.expectedRevision===0?r.expectedStateHash!==null:!hash(r.expectedStateHash)))throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');return {archiveItemId:String(r.archiveItemId),expectedRevision:Number(r.expectedRevision),expectedStateHash:r.expectedStateHash as string|null,facts:parseRecordFacts(r.facts)};});
   if(new Set(inputs.map((i:any)=>i.archiveItemId)).size!==inputs.length)throw new LeadError('DUPLICATE_RECORD_ID');
   const requestHash=digest({action:'SAVE',items:inputs});
   const result=await prisma.$transaction(async tx=>{
@@ -42,7 +42,7 @@ export function createSourceLeadRecordRoutes(){
     const old=await tx.externalSourceLead.findUnique({where:{archiveItemId:input.archiveItemId}});
     if(old?(old.recordRevision!==input.expectedRevision||recordStateHash(old)!==input.expectedStateHash||old.canonicalUrl!==input.facts.canonicalUrl):input.expectedRevision!==0)throw new LeadError('RECORD_STATE_CONFLICT');
     const sourceRef=input.facts.evidence.sourceCheckRef;
-    if(sourceRef){const prior=await tx.sourceLeadRecordEvent.findFirst({where:{sourceCheckRef:sourceRef}});if(prior&&(+prior.sourceCheckedAt!==(input.facts.checkedAt?Date.parse(input.facts.checkedAt):0)||prior.sourceUrl!==input.facts.canonicalUrl))throw new LeadError('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');}
+    if(sourceRef){const prior=await tx.sourceLeadRecordEvent.findFirst({where:{sourceCheckRef:sourceRef}});if(prior&&(+(prior.sourceCheckedAt??0)!==(input.facts.checkedAt?Date.parse(input.facts.checkedAt):0)||prior.sourceUrl!==input.facts.canonicalUrl))throw new LeadError('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');}
     const pendingHash=digest(input.facts),nextRevision=(old?.recordRevision??0)+1;
     const withdrawal=['SOLD','WITHDRAWN'].includes(input.facts.sourceClaimState),status=old?.status==='WITHDRAWN'||withdrawal?'WITHDRAWN':'PRIVATE_PENDING';
     const data={pendingFacts:json(input.facts),pendingHash,recordRevision:nextRevision,status,sourceClaimState:input.facts.sourceClaimState};

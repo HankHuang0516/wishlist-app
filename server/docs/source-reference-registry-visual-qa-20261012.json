@@ -1,0 +1,70 @@
+{
+  "version": "2.0.736",
+  "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+  "reviewedAt": "2026-10-12T23:31:42Z",
+  "runId": 38321742234,
+  "jobId": 115051171624,
+  "artifactId": 11779490927,
+  "syntheticOnly": true,
+  "productionWrites": 0,
+  "originalProductImagesDownloaded": false,
+  "views": [
+    {
+      "name": "query-source-registry-registered-1366.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 171546,
+      "sha256": "e375bdb4904c75fd4bb33add2182fec16c9e4956df26d513264cc489ddfef5cb"
+    },
+    {
+      "name": "query-source-registry-save-registered-1366.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 205655,
+      "sha256": "9a35495f50087e75b22214eea6a1c0b15c04c8ef30d09f598344ec01f864be40"
+    },
+    {
+      "name": "query-source-registry-held-1366.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 194267,
+      "sha256": "98b3d79e26af90ae93778678f9a96accf08d3865d90ea12833106b1d3d906048"
+    },
+    {
+      "name": "query-source-registry-save-held-1366.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 219473,
+      "sha256": "b548b25e17284dbaa4eb474073eb700707de17a3cb65d4067292373851385f53"
+    },
+    {
+      "name": "query-source-registry-registered-390.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 166710,
+      "sha256": "b22240d600dcf4d53c1513b5e71cdca9a184b898b15b4289ac686f1aff9e7c41"
+    },
+    {
+      "name": "query-source-registry-save-registered-390.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 202027,
+      "sha256": "754689f70dcfe488224b3c2eb0228ad6d1bc76ddeccd2efb5d5fb330edcaa52e"
+    },
+    {
+      "name": "query-source-registry-held-390.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 191609,
+      "sha256": "f738d91096229746e870c9a22d7a15be5ce883ba999a0a72895ea8c76a74ca67"
+    },
+    {
+      "name": "query-source-registry-save-held-390.png",
+      "head": "bfd93622fe28d4dc724a2714ea833b21123d9c49",
+      "version": "2.0.736",
+      "bytes": 210006,
+      "sha256": "47ff08198f01c7880511186af1cf9e684def2127eed4f50627a8cb628ae66fee"
+    }
+  ],
+  "conclusion": "Actual compiled desktop1366 and390px registered/HOLD plus separate SAVE screens inspected. Header/content visible after ordinary scroll-to-top; no horizontal overflow, clipped controls, password or source image exposure. UNKNOWN and no qualified stock claim remain. Coordinate East/Yongkang discrepancy is explicit and material/time unchanged. Normal registration uses session/CSRF, operation GET confirms receipts semantically, and separate same-archive SAVE/public exact-ID read passed. Real sources remain for parent-owned consumption."
+}

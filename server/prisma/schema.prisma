@@ -1085,8 +1085,7 @@ model SourceManagerRateBucket {
 }
 
 
-// Verified source facts are registered by the pre-existing trusted verifier.
-// Limited browser authority can only consume them; no raw captures or secrets.
+// Evidence from explicitly authorized source verifiers; no raw captures or secrets.
 model SourceReferenceEvidence {
  id String @id @default(uuid())
  receiptRef String @unique
@@ -1098,10 +1097,24 @@ model SourceReferenceEvidence {
  facts Json
  materialSha String
  coordinateSha String?
+ coordinateReadUrl String?
+ coordinateReadReceiptRef String?
+ coordinateFindings Json?
  verified Boolean
  issues Json
  issuer String
  createdAt DateTime @default(now())
  @@index([archiveItemId, createdAt])
  @@index([sourceCheckRef])
+}
+
+// Immutable registration-operation audit; sessions may be revoked without erasing history.
+model SourceReferenceRegistration {
+ operationId String @id
+ requestHash String
+ actorSessionId String
+ actorScope String
+ results Json
+ createdAt DateTime @default(now())
+ @@index([actorSessionId, createdAt])
 }

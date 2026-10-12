@@ -9,6 +9,7 @@ import WebUpdateProvider from './context/WebUpdateContext';
 import WebAppInstallProvider from './context/WebAppInstallContext';
 import { ProductNoticeVisitProvider } from './context/ProductNoticeVisitContext';
 
+const SourceEvidenceRegistryPage = createLazyPage(() => import('./pages/SourceEvidenceRegistryPage'));
 const SourceManagerPage = createLazyPage(() => import('./pages/SourceManagerPage'));
 const SourceLeadMapPage = createLazyPage(() => import('./pages/SourceLeadMapPage'));
 const Home = createLazyPage(() => import('./pages/Home'));
@@ -80,6 +81,7 @@ function App() {
             <Route path="dashboard" element={<WishlistDashboard />} />
             <Route path="wishes" element={<WishesPage />} />
             <Route path="source-leads" element={<SourceLeadMapPage />} />
+            <Route path="manage/source-evidence" element={<SourceEvidenceRegistryPage />} />
             <Route path="manage/login" element={<SourceManagerPage />} />
             <Route path="manage/source-items" element={<SourceManagerPage />} />
             <Route path="manage/source-items/new" element={<SourceManagerPage />} />

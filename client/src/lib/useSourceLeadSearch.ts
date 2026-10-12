@@ -30,7 +30,7 @@ export function useSourceLeadSearch(token: string, query: ExploreQuery | null, e
           rows.push(...page.items); cursor = page.nextCursor;
           if (cursor && seen.has(cursor)) throw Error();
           if (cursor) seen.add(cursor);
-          if (rows.length >= 500 && cursor) throw Error();
+          if (rows.length >= 500 && cursor) {evidence?.limit('source');throw Error();}
         } while (cursor);
         if (active) {evidence?.finish('source',rows.map(r=>r.id),null,lastEnabled);setItems([...new Map(rows.map(row => [row.id, row])).values()]);}
       } catch (failure) {

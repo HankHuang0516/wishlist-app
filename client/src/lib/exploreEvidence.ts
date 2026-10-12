@@ -8,7 +8,7 @@ export class ExploreEvidence {
  readonly startedAt=new Date().toISOString();readonly layers:Record<SourceKind,Layer>={seller:fresh(),external:fresh(),source:fresh()};
  cancelled=false;sourceReadCycles=0;
  constructor(q:ExploreQuery){this.query={serial:q.serial,bbox:[...q.bounds],filters:{...q.filters},wishSearch:q.wishId!==null,radius:q.radius};}
- activate(){if(this.cancelled){this.cancelled=false;for(const k of ['seller','external','source'] as const)this.layers[k]=fresh();}}
+ activate(){if(this.cancelled){this.cancelled=false;this.sourceReadCycles=0;for(const k of ['seller','external','source'] as const)this.layers[k]=fresh();}}
  begin(k:SourceKind,reset=false){if(this.cancelled)return;if(k==='source')this.sourceReadCycles++;if(reset)this.layers[k]=fresh();else this.layers[k].phase='pending';}
  page(k:SourceKind,startedAt:string,status:number|null,raw:unknown){
   if(this.cancelled)return;
@@ -20,6 +20,7 @@ export class ExploreEvidence {
   if(this.cancelled)return;const l=this.layers[k];l.ids=[...new Set(ids)];l.enabled=enabled;l.terminal=cursor===null;l.cap=ids.length>=500&&cursor!==null;
   l.phase=reason??(!enabled?'disabled':l.cap?'partial':l.terminal?'complete':'partial');
  }
+ limit(k:SourceKind){if(!this.cancelled)this.layers[k].cap=true;}
  transportError(k:SourceKind,startedAt:string,status:number|null){if(this.cancelled)return;this.layers[k].pages.push({startedAt,endedAt:new Date().toISOString(),httpStatus:status,outcome:'error',ids:[],nextCursor:undefined,enabled:null});}
  fail(k:SourceKind,status:number|null){if(this.cancelled)return;const l=this.layers[k];l.phase='error';l.terminal=false;l.errorStatus=status;if(l.pages.length)l.pages[l.pages.length-1].outcome='error';}
  cancel(){this.cancelled=true;for(const l of Object.values(this.layers))if(l.phase==='pending'||l.phase==='partial')l.phase='cancelled';}

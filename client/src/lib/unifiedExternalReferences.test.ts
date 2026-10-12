@@ -10,7 +10,7 @@ describe('one external presentation preserves underlying identities',()=>{
   expect(rows).toHaveLength(3);expect(rows.map(r=>r.originalId)).toEqual([first.id,first.id,second.id]);expect(rows.map(r=>r.stockStatus)).toEqual(['UNKNOWN','UNKNOWN','UNKNOWN']);expect(rows[1].canonicalUrl).toBe(rows[2].canonicalUrl);
  });
  it('index expiry is24h while unrelated source rules are not rewritten',()=>{
-  const now=Date.now(),item={...makeExternalListing(),observedAt:new Date(now-24*3600000).toISOString(),expiresAt:new Date(now+3600000).toISOString()};
+  const now=Date.now(),item={...parseExternalListing(makeExternalListing()),observedAt:new Date(now-24*3600000).toISOString(),expiresAt:new Date(now+3600000).toISOString()};
   expect(externalIndexCurrent(item,now)).toBe(true);expect(externalIndexCurrent(item,now+1)).toBe(false);expect(externalIndexCurrent({...item,expiresAt:new Date(now).toISOString()},now)).toBe(false);
  });
 });

@@ -23,7 +23,7 @@ describe('source-only throttling in the original Explore page', () => {
     render(<MemoryRouter initialEntries={['/explore?q=' + encodeURIComponent('原始關鍵字')]}><ExplorePage /></MemoryRouter>);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     const english = locale === 'en-US';
-    const alert = screen.getAllByRole('alert').find(element => element.textContent?.includes(english ? 'Automatic updates are paused' : '已暫停自動更新'))!;
+    const alert = screen.getAllByRole('alert').find(element => element.textContent?.includes(english ? 'Updates are paused' : '已暫停更新'))!;
     const retry = within(alert).getByRole('button', { name: english ? 'Search again' : '重新搜尋' });
     expect(retry).toBeDisabled(); expect(retry).toHaveClass('min-h-11');
     expect(screen.getByLabelText(english ? 'Search wait time' : '搜尋等待時間')).toHaveTextContent(english ? '60 seconds' : '60 秒');
@@ -32,7 +32,7 @@ describe('source-only throttling in the original Explore page', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
     expect(sourceReads).toBe(1); expect(input).toHaveValue('新關鍵字'); expect(retry).toBeEnabled();
     fireEvent.click(retry); await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(sourceReads).toBe(2); expect(screen.queryByText(english ? /Automatic updates are paused/ : /已暫停自動更新/)).toBeNull();
+    expect(sourceReads).toBe(2); expect(screen.queryByText(english ? /Updates are paused/ : /已暫停更新/)).toBeNull();
     const last = fetch.mock.calls.filter(([url]) => new URL(url).pathname.endsWith('/source-leads')).at(-1)!;
     expect(new URL(last[0]).searchParams.get('q')).toBe('新關鍵字');
   });

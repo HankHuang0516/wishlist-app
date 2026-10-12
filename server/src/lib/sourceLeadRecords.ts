@@ -28,7 +28,7 @@ export function parseRecordFacts(value:unknown,now=new Date()){
  out.evidence=e;return out;
 }
 export function recordSnapshot(r:ExternalSourceLead){
- return {...Object.fromEntries(recordFactKeys.map(k=>[k,(r as any)[k]])),id:r.id,archiveItemId:r.archiveItemId,sourceClaimState:r.sourceClaimState,status:r.status,recordOrigin:r.recordOrigin,recordRevision:r.recordRevision,contentHash:r.contentHash,pendingHash:r.pendingHash,pendingFacts:r.pendingFacts,
+ return {...Object.fromEntries(recordFactKeys.map(k=>[k,(r as any)[k]])),id:r.id,archiveItemId:r.archiveItemId,sourceClaimState:r.sourceClaimState,status:r.status,recordOrigin:r.recordOrigin,recordRevision:r.recordRevision,contentHash:r.contentHash,pendingHash:r.pendingHash,pendingFacts:r.pendingFacts,pendingEvidenceRef:r.pendingEvidenceRef,
  legacyArchive:{libraryFileId:r.libraryFileId,version:r.archiveVersion,sha256:r.archiveSha256,historicalOnly:r.recordOrigin==='DB_MASTER'},updatedAt:r.updatedAt};
 }
 export const recordStateHash=(r:ExternalSourceLead)=>digest(recordSnapshot(r));

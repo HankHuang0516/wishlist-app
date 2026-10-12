@@ -79,11 +79,11 @@ export default function ExploreMapWeb(props: Props) {
         for (const kind of ['seller', 'external', 'source'] as const) {
           map.addSource(kind, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, cluster: true, clusterRadius: 48, clusterMaxZoom: 20 });
           map.addLayer({ id: kind + '-clusters', type: 'circle', source: kind, filter: ['has', 'point_count'],
-            paint: { 'circle-color': kind === 'seller' ? '#327458' : kind === 'source' ? '#426f91' : '#a96022', 'circle-radius': 24, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
+            paint: { 'circle-color': kind === 'seller' ? '#327458' : '#a96022', 'circle-radius': 24, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
           map.addLayer({ id: kind + '-counts', type: 'symbol', source: kind, filter: ['has', 'point_count'],
             layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Regular'], 'text-size': 14, 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } });
           if(kind==='source'){
-            map.addLayer({id:'source-points',type:'circle',source:kind,filter:['!', ['has','point_count']],paint:{'circle-color':'#426f91','circle-radius':12,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+            map.addLayer({id:'source-points',type:'circle',source:kind,filter:['!', ['has','point_count']],paint:{'circle-color':'#a96022','circle-radius':12,'circle-stroke-color':'#fff','circle-stroke-width':2}});
             continue;
           }
           map.addLayer({ id: kind + '-photos', type: 'symbol', source: kind, filter: ['!', ['has', 'point_count']],
@@ -131,7 +131,7 @@ export default function ExploreMapWeb(props: Props) {
       ...props.external.map(item => ({ key: 'external-' + item.id, url: item.thumbnailUrl }))];
     const keys = new Set(photos.map(photo => photo.key));
     for (const photo of photos) if (!map.hasImage(photo.key)) map.addImage(photo.key, placeholder());
-    void Promise.all([sellerSource.setData(listingGeoJSON(props.items)), externalSource.setData(externalGeoJSON(props.external)),sourceSource.setData({type:'FeatureCollection',features:(props.sourceLeads??[]).map(lead=>({type:'Feature',geometry:{type:'Point',coordinates:[lead.longitude,lead.latitude]},properties:{sourceId:lead.id}}))})]).then(() => {
+    void Promise.all([sellerSource.setData(listingGeoJSON(props.items)), externalSource.setData(externalGeoJSON(props.external)),sourceSource.setData({type:'FeatureCollection',features:(props.sourceLeads??[]).map(lead=>({type:'Feature',geometry:{type:'Point',coordinates:[lead.longitude,lead.latitude]},properties:{sourceId:lead.id,originalId:lead.id,sourceType:'SOURCE_REFERENCE',stockStatus:'UNKNOWN'}}))})]).then(() => {
       if (!active) return;
       // Remove old images only after workers have replaced the source data.
       for (const key of map.listImages()) if ((key.startsWith('photo-') || key.startsWith('external-')) && !keys.has(key)) { map.removeImage(key); loadedPhotos.current.delete(key); }
@@ -158,16 +158,17 @@ export default function ExploreMapWeb(props: Props) {
   useEffect(() => {
     const map = mapRef.current; if (!ready || !map || !map.getLayer('external-photos')) return;
     let active = true; const markers = new Map<string, Marker>();
-    const items = new Map<string,{id:string;title:string;price:string;thumbnailUrl:string;location:{longitude:number;latitude:number};kind:'external'|'source'}>([...props.external.map(item => [item.id,{id:item.id,title:item.title,price:externalPrice(item),thumbnailUrl:item.thumbnailUrl,location:item.location,kind:'external' as const}] as const),...(props.sourceLeads??[]).filter(item=>item.media?.[0]?.thumbnailUrl).map(item=>[item.id,{id:item.id,title:item.title,price:sourceLeadPrice(item.publicFacts?.priceText),thumbnailUrl:item.media![0].thumbnailUrl,location:{longitude:item.longitude,latitude:item.latitude},kind:'source' as const}] as const)]);
+    const items = new Map<string,{id:string;title:string;price:string;thumbnailUrl:string;location:{longitude:number;latitude:number};kind:'external'|'source'}>([...props.external.map(item => ['external:'+item.id,{id:item.id,title:item.title,price:externalPrice(item),thumbnailUrl:item.thumbnailUrl,location:item.location,kind:'external' as const}] as const),...(props.sourceLeads??[]).filter(item=>item.media?.[0]?.thumbnailUrl).map(item=>['source:'+item.id,{id:item.id,title:item.title,price:sourceLeadPrice(item.publicFacts?.priceText),thumbnailUrl:item.media![0].thumbnailUrl,location:{longitude:item.longitude,latitude:item.latitude},kind:'source' as const}] as const)]);
     function syncMarkers() {
       if (!active) return;
       const visible = new Set<string>();
       for (const feature of map!.queryRenderedFeatures({ layers: ['external-photos','source-points'] })) {
         const id = feature.source==='source'?feature.properties.sourceId:feature.properties.externalId;
-        const item = typeof id === 'string' ? items.get(id) : undefined;
-        if (!item || visible.has(item.id)) continue;
-        visible.add(item.id);
-        if (markers.has(item.id)) continue;
+        const key=(feature.source==='source'?'source:':'external:')+id;
+        const item = typeof id === 'string' ? items.get(key) : undefined;
+        if (!item || visible.has(key)) continue;
+        visible.add(key);
+        if (markers.has(key)) continue;
         const button = document.createElement('button'); button.type = 'button';
         button.className = 'h-14 w-14 overflow-hidden rounded-xl border-2 border-amber-700 bg-white shadow-md';
         button.setAttribute('aria-label', mapText('external', { name: item.title, price: item.price }));
@@ -176,7 +177,7 @@ export default function ExploreMapWeb(props: Props) {
         image.onerror = () => { if (active) { button.textContent = '▧'; setPhotoError(mapText('externalPhotos')); } };
         image.src = item.thumbnailUrl;
         button.append(image); button.onclick = event => { event.stopPropagation(); latest.current.onSelect({ kind: item.kind, id: item.id }); };
-        markers.set(item.id, new Marker({ element: button }).setLngLat([item.location.longitude, item.location.latitude]).addTo(map!));
+        markers.set(key, new Marker({ element: button }).setLngLat([item.location.longitude, item.location.latitude]).addTo(map!));
       }
       for (const [id, marker] of markers) if (!visible.has(id)) { marker.remove(); markers.delete(id); }
     }

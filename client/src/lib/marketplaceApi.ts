@@ -45,7 +45,7 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
     const body = await response.json().catch(() => ({})) as { error?: string; errorCode?: string };
     // Product quotas and route-specific busy responses also use 429. They must
     // retain their own recovery path and cannot pause unrelated account reads.
-    const transportLimited = response.status === 429 && (!body.errorCode || body.errorCode === 'RATE_LIMIT_EXCEEDED' || body.errorCode === 'ACCOUNT_READ_RATE_LIMIT' || body.errorCode === 'ACCOUNT_AUTH_READ_RATE_LIMIT');
+    const transportLimited = response.status === 429 && (!body.errorCode || body.errorCode === 'RATE_LIMIT_EXCEEDED' || body.errorCode === 'EXTERNAL_INDEX_RATE_LIMIT' || body.errorCode === 'ACCOUNT_READ_RATE_LIMIT' || body.errorCode === 'ACCOUNT_AUTH_READ_RATE_LIMIT');
     const now = Date.now(), delay = transportLimited ? retryDelay(response.headers.get('Retry-After'), now) : 0;
     if (delay) deadlines[group] = Math.max(deadlines[group], now + delay);
     throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status, body.errorCode, delay);

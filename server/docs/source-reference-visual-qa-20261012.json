@@ -1,0 +1,56 @@
+{
+  "head": "432935987e88fc102bf776a26272970b9c2f9726",
+  "version": "2.0.735",
+  "runId": 38277208582,
+  "jobId": 114905493579,
+  "artifactId": 11758754796,
+  "reviewedAt": "2026-10-12T16:31:19Z",
+  "syntheticOnly": true,
+  "productionWrites": 0,
+  "basemapAcceptance": false,
+  "views": [
+    {
+      "name": "query-evidence-full-references-disabled-1280.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 218605,
+      "sha256": "a957152c6c7478cde3da3f98d500ccf9d79696889399bfce4ec7db69e5cbdbfd"
+    },
+    {
+      "name": "query-evidence-full-references-disabled-390.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 224556,
+      "sha256": "4eb64666d82fb9961592ca886625539d2a07823653bfc2dc9bd624d9374178b3"
+    },
+    {
+      "name": "query-evidence-full-references-throttled-1280.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 232690,
+      "sha256": "031a774b257bdcf1535d2b9b567a1ca3c88454ec79d2a9da0cfc9190378f9277"
+    },
+    {
+      "name": "query-evidence-full-references-throttled-390.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 240591,
+      "sha256": "4b222e464bd114df24fe02a05d6a0ddb3600db2f8d209e052d543a29575aca7d"
+    },
+    {
+      "name": "query-source-manager-form-1366.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 138019,
+      "sha256": "f600572ededd52a0adc2c82ced4902b541bfbd847371905e52bc09b6f1fa738b"
+    },
+    {
+      "name": "query-source-manager-form-390.png",
+      "head": "432935987e88fc102bf776a26272970b9c2f9726",
+      "version": "2.0.735",
+      "bytes": 136158,
+      "sha256": "17476a80aee954831e01dfc7c95c84934ee1570dbff8ce4afd5eec6462a953ec"
+    }
+  ],
+  "conclusion": "Actual compiled desktop1280/1366 and390px screens inspected. Disabled/throttled indexes retain three SOURCE_REFERENCE rows, show UNKNOWN and incomplete counts, preserve explicit manual retry without automatically sending again. No horizontal overflow, clipped controls or missing manager form save button. Management expiry states Asia/Taipei; no management key remains visible. Synthetic images intentionally unavailable; this does not verify actual merchant image rights, live stock or real publication."
+}

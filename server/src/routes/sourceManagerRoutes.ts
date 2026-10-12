@@ -1,3 +1,5 @@
+import {AUTO_REFERENCE_SCOPE} from '../lib/sourceReferenceAutoDisplay';
+import {createSourceReferenceEvidenceReadRoutes} from './sourceReferenceEvidenceRoutes';
 import {SourceManagerRateStore} from '../lib/sourceManagerRateStore';
 import {Router,Request,Response,NextFunction} from 'express';
 import express from 'express';
@@ -10,6 +12,7 @@ import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
 const NAME='__Host-wl-source-manager';
 export const MANAGER_LIFETIME_MS=90*24*60*60*1000;
 const scope='SOURCE_DRAFT_EDITOR';
+const allowedScopes=[scope,AUTO_REFERENCE_SCOPE];
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
 const mac=(key:string,purpose:string,nonce:string)=>createHmac('sha256',key).update('wishlist/source-manager/v1/'+purpose+'/'+nonce).digest('base64url');
 const equal=(a:unknown,b:string)=>typeof a==='string'&&a.length===b.length&&timingSafeEqual(createHash('sha256').update(a).digest(),createHash('sha256').update(b).digest());
@@ -34,9 +37,9 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
    delete q.body.managementPassword;
    if(admission!=='AUTHORIZED')return r.status(admission==='DISABLED'?503:401).json({errorCode:'MANAGER_LOGIN_DENIED'});
    const nonce=randomBytes(32).toString('base64url'),value=nonce+'.'+mac(key as string,'cookie',nonce),expiresAt=new Date(Date.now()+MANAGER_LIFETIME_MS);
-   await prisma.sourceManagerSession.create({data:{tokenHash:hash(value),scope,expiresAt}});
+   await prisma.sourceManagerSession.create({data:{tokenHash:hash(value),scope:AUTO_REFERENCE_SCOPE,expiresAt}});
    r.cookie(NAME,value,{...options,maxAge:MANAGER_LIFETIME_MS});
-   return r.json({scope,expiresAt,csrfToken:mac(key as string,'csrf',nonce),publishAllowed:false});
+   return r.json({scope:AUTO_REFERENCE_SCOPE,expiresAt,csrfToken:mac(key as string,'csrf',nonce),publishAllowed:false,autoReferenceDisplayAllowed:true});
   }catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
  });
  router.use(async(q,r,n)=>{
@@ -47,15 +50,16 @@ export function createSourceManagerRoutes(getKey:()=>unknown=()=>process.env.ADM
    // invalidates old cookies; no key/fingerprint is stored in the session table.
    if(!equal(proof,mac(key,'cookie',nonce)))return r.status(401).json({errorCode:'MANAGER_SESSION_INVALID'});
    const s=await prisma.sourceManagerSession.findUnique({where:{tokenHash:hash(value)}});
-   if(!s||s.revokedAt||s.expiresAt<=new Date()||s.scope!==scope)return r.status(401).json({errorCode:'MANAGER_SESSION_INVALID'});
+   if(!s||s.revokedAt||s.expiresAt<=new Date()||!allowedScopes.includes(s.scope))return r.status(401).json({errorCode:'MANAGER_SESSION_INVALID'});
    if(!['GET','HEAD'].includes(q.method)&&(!q.is('application/json')||!equal(q.headers['x-csrf-token'],mac(key,'csrf',nonce))))return r.status(403).json({errorCode:'MANAGER_CSRF_DENIED'});
-   r.locals.manager={id:s.id,expiresAt:s.expiresAt,csrfToken:mac(key,'csrf',nonce)};n();
+   r.locals.manager={id:s.id,scope:s.scope,expiresAt:s.expiresAt,autoReferenceDisplayAllowed:s.scope===AUTO_REFERENCE_SCOPE,csrfToken:mac(key,'csrf',nonce)};n();
   }catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}
  });
  router.use(rateLimit({windowMs:60000,limit:30,standardHeaders:true,legacyHeaders:false,keyGenerator:(_q,r)=>r.locals.manager.id,store:new SourceManagerRateStore('OPERATIONS',60000,getKey)}));
- router.get('/session',(_q,r)=>r.json({...r.locals.manager,scope,publishAllowed:false}));
+ router.get('/session',(_q,r)=>r.json({...r.locals.manager,publishAllowed:false}));
  router.post('/logout',async(_q,r)=>{try{await prisma.sourceManagerSession.update({where:{id:r.locals.manager.id},data:{revokedAt:new Date()}});r.clearCookie(NAME,options);return r.sendStatus(204);}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}});
- router.post('/revoke-all',async(_q,r)=>{try{await prisma.sourceManagerSession.updateMany({where:{scope,revokedAt:null},data:{revokedAt:new Date()}});r.clearCookie(NAME,options);return r.sendStatus(204);}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}});
+ router.post('/revoke-all',async(_q,r)=>{try{await prisma.sourceManagerSession.updateMany({where:{scope:{in:allowedScopes},revokedAt:null},data:{revokedAt:new Date()}});r.clearCookie(NAME,options);return r.sendStatus(204);}catch{return r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'});}});
+ router.use('/reference-evidence',createSourceReferenceEvidenceReadRoutes());
  router.use('/records',createSourceLeadRecordRoutes({draftOnly:true}));
  router.use((_e:any,_q:Request,r:Response,_n:NextFunction)=>r.status(503).json({errorCode:'MANAGER_UNAVAILABLE'}));
  return router;

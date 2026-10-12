@@ -1,3 +1,4 @@
+import {AUTO_REFERENCE_SCOPE,AUTO_REFERENCE_RULE,validateAutoReference} from '../lib/sourceReferenceAutoDisplay';
 import {Router,Response} from 'express';
 import {Prisma} from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -31,17 +32,19 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
  router.post('/save',async(req,res)=>{try{
   const b=object(req.body);exact(b,['operationId','items']);const op=operation(b.operationId);
   if(!Array.isArray(b.items)||!b.items.length||b.items.length>20)throw new LeadError('ONE_TO_20_RECORDS_REQUIRED');
-  const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['archiveItemId','expectedRevision','expectedStateHash','facts']);if(!id(r.archiveItemId)||!revision(r.expectedRevision)||(r.expectedRevision===0?r.expectedStateHash!==null:!hash(r.expectedStateHash)))throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');return {archiveItemId:String(r.archiveItemId),expectedRevision:Number(r.expectedRevision),expectedStateHash:r.expectedStateHash as string|null,facts:parseRecordFacts(r.facts)};});
+  const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['archiveItemId','expectedRevision','expectedStateHash','facts','sourceEvidenceRef']);if(r.sourceEvidenceRef!==undefined&&r.sourceEvidenceRef!==null&&(typeof r.sourceEvidenceRef!=='string'||!/^source:evidence\/[a-f0-9]{64}$/.test(r.sourceEvidenceRef)))throw new LeadError('SOURCE_EVIDENCE_REFERENCE_INVALID');if(!id(r.archiveItemId)||!revision(r.expectedRevision)||(r.expectedRevision===0?r.expectedStateHash!==null:!hash(r.expectedStateHash)))throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');return {archiveItemId:String(r.archiveItemId),expectedRevision:Number(r.expectedRevision),expectedStateHash:r.expectedStateHash as string|null,facts:parseRecordFacts(r.facts),sourceEvidenceRef:r.sourceEvidenceRef??null};});
   if(new Set(inputs.map((i:any)=>i.archiveItemId)).size!==inputs.length)throw new LeadError('DUPLICATE_RECORD_ID');
   const requestHash=digest({action:'SAVE',items:inputs});
   const result=await prisma.$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73009260930::bigint)`;
+   let autoAllowed=false;
    if(options.draftOnly){
     const sessionId=res.locals.manager?.id;
     if(!sessionId)throw new LeadError('MANAGER_SESSION_REVOKED');
     await tx.$executeRaw`SELECT id FROM "SourceManagerSession" WHERE id=${sessionId} FOR UPDATE`;
     const live=await tx.sourceManagerSession.findUnique({where:{id:sessionId}});
-    if(!live||live.revokedAt||live.expiresAt<=new Date()||live.scope!=='SOURCE_DRAFT_EDITOR')throw new LeadError('MANAGER_SESSION_REVOKED');
+    if(!live||live.revokedAt||live.expiresAt<=new Date()||!['SOURCE_DRAFT_EDITOR',AUTO_REFERENCE_SCOPE].includes(live.scope))throw new LeadError('MANAGER_SESSION_REVOKED');
+    autoAllowed=live.scope===AUTO_REFERENCE_SCOPE;
    }
    const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;
    const results=[];
@@ -53,11 +56,22 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     const pendingHash=digest(input.facts),nextRevision=(old?.recordRevision??0)+1;
     const withdrawal=['SOLD','WITHDRAWN'].includes(input.facts.sourceClaimState),unavailable=input.facts.sourceClaimState!=='UNKNOWN';
     const status=old?.status==='WITHDRAWN'||withdrawal?'WITHDRAWN':unavailable?'PRIVATE_PENDING':old?.status==='PUBLISHED'?'PUBLISHED':'PRIVATE_PENDING';
-    const data={pendingFacts:json(input.facts),pendingHash,recordRevision:nextRevision,status,sourceClaimState:unavailable?input.facts.sourceClaimState:old?.sourceClaimState??'UNKNOWN'};
+    const data={pendingFacts:json(input.facts),pendingHash,pendingEvidenceRef:input.sourceEvidenceRef,recordRevision:nextRevision,status,sourceClaimState:unavailable?input.facts.sourceClaimState:old?.sourceClaimState??'UNKNOWN'};
     if(old){const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status},data});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');}
-    const saved=old?await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}}):await tx.externalSourceLead.create({data:{...data,archiveItemId:input.archiveItemId,canonicalUrl:input.facts.canonicalUrl,title:input.facts.title,summary:'',evidence:{},contentHash:digest({privateRecord:input.archiveItemId}),recordOrigin:'DB_MASTER'}});
-    const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),pendingHash,status:saved.status};
-    await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'SAVE',requestHash,appliedRevision:saved.recordRevision,sourceCheckRef:input.facts.evidence.sourceCheckRef??null,sourceCheckedAt:input.facts.checkedAt?new Date(input.facts.checkedAt):null,sourceUrl:input.facts.canonicalUrl,beforeSnapshot:old?json(recordSnapshot(old)):Prisma.DbNull,afterSnapshot:json({record:recordSnapshot(saved),result:receipt,...(options.draftOnly?{actor:{sessionRef:res.locals.manager.id,scope:'SOURCE_DRAFT_EDITOR'}}:{})})}});
+    let saved=old?await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}}):await tx.externalSourceLead.create({data:{...data,archiveItemId:input.archiveItemId,canonicalUrl:input.facts.canonicalUrl,title:input.facts.title,summary:'',evidence:{},contentHash:digest({privateRecord:input.archiveItemId}),recordOrigin:'DB_MASTER'}});
+    let autoDisplay:{state:string;reason:string|null;ruleVersion:string;receiptRef:string|null}={state:options.draftOnly?'DRAFT_ONLY':'NOT_REQUESTED',reason:null,ruleVersion:AUTO_REFERENCE_RULE,receiptRef:input.sourceEvidenceRef};
+    if(autoAllowed){
+     const checked=await validateAutoReference(tx,saved,input.sourceEvidenceRef);
+     autoDisplay={state:'HELD',reason:checked.reason,ruleVersion:AUTO_REFERENCE_RULE,receiptRef:input.sourceEvidenceRef};
+     if(checked.ok){try{
+      const parsed=parseRecordPublication(saved,(checked.evidence.facts as any).evidence.reviewRef);
+      saved=await tx.externalSourceLead.update({where:{id:saved.id},data:{...parsed,recordOrigin:'DB_MASTER',status:'PUBLISHED',sourceClaimState:'UNKNOWN',pendingFacts:Prisma.DbNull,pendingHash:null,pendingEvidenceRef:null,...(parsed.contentHash!==saved.contentHash?{sellerRoute:Prisma.DbNull}:{})}});
+      autoDisplay.state='DISPLAYED';autoDisplay.reason=null;
+     }catch(e){if(!(e instanceof LeadError))throw e;autoDisplay.reason=e.message;}}
+    }
+    const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),pendingHash:saved.pendingHash,status:saved.status,autoDisplay};
+
+    await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:autoAllowed?'AUTO_REFERENCE_SAVE':'SAVE',requestHash,appliedRevision:saved.recordRevision,sourceCheckRef:(!options.draftOnly||autoDisplay.state==='DISPLAYED')?input.facts.evidence.sourceCheckRef??null:null,sourceCheckedAt:(!options.draftOnly||autoDisplay.state==='DISPLAYED')&&input.facts.checkedAt?new Date(input.facts.checkedAt):null,sourceUrl:input.facts.canonicalUrl,beforeSnapshot:old?json(recordSnapshot(old)):Prisma.DbNull,afterSnapshot:json({record:recordSnapshot(saved),result:receipt,...(options.draftOnly?{actor:{sessionRef:res.locals.manager.id,scope:res.locals.manager.scope}}:{})})}});
     results.push(receipt);
    }
    return {operationId:op,replayed:false,results,qualifiedSupplyAdded:0};
@@ -77,7 +91,7 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     const old=await tx.externalSourceLead.findUnique({where:{id:input.id}});
     if(!old||old.recordRevision!==input.expectedRevision||recordStateHash(old)!==input.expectedStateHash||old.pendingHash!==input.pendingHash)throw new LeadError('RECORD_STATE_CONFLICT');
     const parsed=parseRecordPublication(old,input.reviewRef),nextRevision=old.recordRevision+1;
-    const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status,pendingHash:old.pendingHash},data:{...parsed,recordOrigin:'DB_MASTER',recordRevision:nextRevision,status:'PUBLISHED',sourceClaimState:'UNKNOWN',pendingFacts:Prisma.DbNull,pendingHash:null,...(parsed.contentHash!==old.contentHash?{sellerRoute:Prisma.DbNull}:{})}});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');
+    const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status,pendingHash:old.pendingHash},data:{...parsed,recordOrigin:'DB_MASTER',recordRevision:nextRevision,status:'PUBLISHED',sourceClaimState:'UNKNOWN',pendingFacts:Prisma.DbNull,pendingHash:null,pendingEvidenceRef:null,...(parsed.contentHash!==old.contentHash?{sellerRoute:Prisma.DbNull}:{})}});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');
     const saved=await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}});
     const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),contentHash:saved.contentHash,status:saved.status};
     await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'PUBLISH',requestHash,appliedRevision:nextRevision,beforeSnapshot:json(recordSnapshot(old)),afterSnapshot:json({record:recordSnapshot(saved),result:receipt})}});
@@ -97,7 +111,8 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
   const row=await prisma.externalSourceLead.findUnique({where:{id:String(req.params.id)}});if(!row)return res.sendStatus(404);
   let ready=false,issue:string|null=null;
   try{const pending=object(row.pendingFacts);parseRecordPublication(row,object(pending.evidence).reviewRef);ready=true;}catch(e){issue=e instanceof LeadError?e.message:'PENDING_REVIEW_EVIDENCE_REQUIRED';}
-  return res.json({id:row.id,stateHash:recordStateHash(row),pendingHash:row.pendingHash,publicSnapshotCurrentlyValid:leadCurrent(row),dataReady:ready,issue,reviewApproved:false,publishAllowed:false,qualifiedSupply:false});
+  const autoCheck=row.pendingFacts?await validateAutoReference(prisma,row,row.pendingEvidenceRef):{ok:false,reason:'NO_PENDING_FACTS'};
+  return res.json({id:row.id,stateHash:recordStateHash(row),pendingHash:row.pendingHash,publicSnapshotCurrentlyValid:leadCurrent(row),dataReady:ready,issue,autoReferenceReady:ready&&autoCheck.ok,autoReferenceIssue:autoCheck.reason,reviewApproved:false,publishAllowed:false,qualifiedSupply:false});
  }catch(e){return fail(res,e);}});
  router.get('/:id',async(req,res)=>{try{
   if(!isListingId(req.params.id)||Object.keys(req.query).length)throw new LeadError('INVALID_RECORD_QUERY');

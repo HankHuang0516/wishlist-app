@@ -138,6 +138,13 @@ jobs:
         WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-query-artifacts
         QUERY_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
+    - name: Test actual source manager while release icon inspection is pending
+      if: failure() && steps.query_web_build.outcome == 'failure'
+      run: npm test -- --config jest.marketplace.config.js --runInBand sourceManager
+      env:
+        WEB_QA_ARTIFACT_DIR: ${{ github.workspace }}/qa-query-artifacts
+        QUERY_QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
     - name: Preserve actual release icon bytes for review
       if: always()
       run: |

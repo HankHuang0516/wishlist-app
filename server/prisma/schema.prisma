@@ -1061,3 +1061,24 @@ model SourceLeadRecordEvent {
   @@index([leadId, createdAt, id])
   @@index([sourceCheckRef])
 }
+
+
+// Restricted browser authority; never store the admin key or raw cookie.
+model SourceManagerSession {
+ id String @id @default(uuid())
+ tokenHash String @unique
+ scope String @default("SOURCE_DRAFT_EDITOR")
+ createdAt DateTime @default(now())
+ expiresAt DateTime
+ revokedAt DateTime?
+ @@index([scope, revokedAt])
+ @@index([expiresAt])
+}
+
+// Ephemeral shared login/operation budgets; no raw credentials or IPs.
+model SourceManagerRateBucket {
+ keyHash String @id
+ hits Int @default(0)
+ windowStartedAt DateTime @default(now())
+ @@index([windowStartedAt])
+}

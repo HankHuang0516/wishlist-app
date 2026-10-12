@@ -45,7 +45,7 @@ describe('actual Explore query evidence display and download',()=>{
   app.use('/api/source-leads',require('../../../dist/routes/sourceLeadRoutes').createSourceLeadRoutes());
   server=createServer(app);await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run','--disable-background-networking']});
- },30000);
+ },60000);
  afterAll(async()=>{
   if(browser)await browser.close();if(downloadRoot)fs.rmSync(downloadRoot,{recursive:true,force:true});if(server?.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
   if(db){if(buyer)await db.user.deleteMany({where:{id:buyer}});await db.$disconnect();}

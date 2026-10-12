@@ -17,15 +17,15 @@ export class ExploreEvidence {
   this.layers[k].pages.push({startedAt,endedAt:new Date().toISOString(),httpStatus:status,outcome:'accepted',ids,nextCursor:typeof r?.nextCursor==='string'||r?.nextCursor===null?r.nextCursor:undefined,enabled:typeof r?.enabled==='boolean'?r.enabled:null});
  }
  finish(k:SourceKind,ids:string[],cursor:string|null,enabled=true,reason?:'fallback404'|'skipped'){
-  if(this.cancelled)return;const l=this.layers[k];l.ids=[...new Set(ids)];l.enabled=enabled;l.terminal=cursor===null;l.cap=ids.length>=500&&cursor!==null;
+  if(this.cancelled)return;const l=this.layers[k];l.ids=[...new Set(ids)];l.enabled=enabled;l.terminal=cursor===null;l.cap=ids.length>500||(ids.length>=500&&cursor!==null);
   l.phase=reason??(!enabled?'disabled':l.cap?'partial':l.terminal?'complete':'partial');
  }
  limit(k:SourceKind){if(!this.cancelled)this.layers[k].cap=true;}
  transportError(k:SourceKind,startedAt:string,status:number|null){if(this.cancelled)return;this.layers[k].pages.push({startedAt,endedAt:new Date().toISOString(),httpStatus:status,outcome:'error',ids:[],nextCursor:undefined,enabled:null});}
  fail(k:SourceKind,status:number|null){if(this.cancelled)return;const l=this.layers[k];l.phase='error';l.terminal=false;l.errorStatus=status;if(l.pages.length)l.pages[l.pages.length-1].outcome='error';}
  cancel(){this.cancelled=true;for(const l of Object.values(this.layers))if(l.phase==='pending'||l.phase==='partial')l.phase='cancelled';}
- snapshot(visible:Record<SourceKind,string[]>){
-  const layers=Object.fromEntries(Object.entries(this.layers).map(([k,l])=>[k,{...l,visibleIds:[...new Set(visible[k as SourceKind])],filteredCount:l.ids.filter(id=>!visible[k as SourceKind].includes(id)).length}]));
+ snapshot(visible:Record<SourceKind,string[]>,loaded:Record<SourceKind,string[]>=visible){
+  const layers=Object.fromEntries(Object.entries(this.layers).map(([k,l])=>[k,{...l,visibleIds:[...new Set(visible[k as SourceKind])],filteredCount:l.ids.filter(id=>!visible[k as SourceKind].includes(id)).length,timeFilteredCount:loaded[k as SourceKind].filter(id=>!visible[k as SourceKind].includes(id)).length,capDiscardedCount:l.cap?l.ids.filter(id=>!loaded[k as SourceKind].includes(id)).length:0}]));
   const comparable=this.sourceReadCycles<=1&&!this.cancelled&&Object.values(this.layers).every(l=>l.phase==='complete'&&l.terminal&&!l.cap);
   return {schemaVersion:1,query:this.query,startedAt:this.startedAt,capturedAt:new Date().toISOString(),cancelled:this.cancelled,atomicSnapshot:false,sourceReadCycles:this.sourceReadCycles,comparable,qualifiedSupplyCount:null,qualifiedSupplyReason:'Item rights and current stock not verified by search.',layers};
  }

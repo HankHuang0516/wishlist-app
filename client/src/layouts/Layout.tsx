@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { Gift, LogOut, CircleHelp, Crown } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import FeedbackModal from "../components/FeedbackModal";
@@ -10,6 +10,7 @@ import { useAuth } from "../context/AuthContext";
 import { webShellText } from '../lib/webShellCopy';
 
 export default function Layout() {
+    const managerPage=useLocation().pathname.startsWith('/manage/');
     const { isAuthenticated, logout, user } = useAuth();
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     // Cast user to any to access isPremium until context is updated
@@ -43,7 +44,7 @@ export default function Layout() {
                     {isAuthenticated && <div className="order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation /></div>}
                     <div className="flex items-center gap-1">
                         {isAuthenticated ? <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('logout')} title={webShellText('logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
-                            : <Link to="/login" className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm hover:bg-gray-100">{webShellText('login')}</Link>}
+                            : <Link to="/login" className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm hover:bg-gray-100">{managerPage?'一般會員登入':webShellText('login')}</Link>}
                         <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('help')} onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
                     </div>
                 </div>

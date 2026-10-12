@@ -61,4 +61,13 @@ describe('restricted browser source management (isolated DB only)',()=>{
   await prisma.externalSourceLead.update({where:{id},data:{checkedAt:new Date(Date.now()-49*3600000)}});expect((await request(app).get('/public/'+id)).status).toBe(404);
   const row=(await get('records/'+id,s)).body;expect((await post('records/save',s,{operationId:randomUUID(),items:[{archiveItemId,expectedRevision:row.recordRevision,expectedStateHash:row.stateHash,facts:{...f,sourceClaimState:'RESERVED',stateEvidenceRef:'source:synthetic-reserved'}}]})).status).toBe(200);expect((await request(app).get('/public/'+id)).status).toBe(404);
  });
+ test('revocation during an admitted SAVE wait prevents a later write',async()=>{
+  const s=await session(),archiveItemId=prefix+randomUUID();let unlock!:()=>void,ready!:()=>void;
+  const held=new Promise<void>(r=>ready=r),release=new Promise<void>(r=>unlock=r);
+  const blocker=prisma.$transaction(async tx=>{await tx.$executeRaw`SELECT pg_advisory_xact_lock(73009260930::bigint)`;ready();await release;},{timeout:15000});
+  await held;const pending=post('records/save',s,{operationId:randomUUID(),items:[{archiveItemId,expectedRevision:0,expectedStateHash:null,facts:facts(archiveItemId)}]}).then(r=>r);
+  try{let waiting=false;for(let i=0;i<200;i++){const rows=await prisma.$queryRaw<Array<{waiting:number}>>`SELECT COUNT(*)::int AS waiting FROM pg_locks WHERE locktype='advisory' AND NOT granted`;if(rows[0].waiting>0){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}expect(waiting).toBe(true);expect((await post('logout',s,{})).status).toBe(204);}finally{unlock();await blocker;}
+  const r=await pending;expect(r.status).toBe(409);expect(r.body.errorCode).toBe('MANAGER_SESSION_REVOKED');expect(await prisma.externalSourceLead.count({where:{archiveItemId}})).toBe(0);
+ });
+
 });

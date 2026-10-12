@@ -36,6 +36,13 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
   const requestHash=digest({action:'SAVE',items:inputs});
   const result=await prisma.$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73009260930::bigint)`;
+   if(options.draftOnly){
+    const sessionId=res.locals.manager?.id;
+    if(!sessionId)throw new LeadError('MANAGER_SESSION_REVOKED');
+    await tx.$executeRaw`SELECT id FROM "SourceManagerSession" WHERE id=${sessionId} FOR UPDATE`;
+    const live=await tx.sourceManagerSession.findUnique({where:{id:sessionId}});
+    if(!live||live.revokedAt||live.expiresAt<=new Date()||live.scope!=='SOURCE_DRAFT_EDITOR')throw new LeadError('MANAGER_SESSION_REVOKED');
+   }
    const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;
    const results=[];
    for(const input of inputs){

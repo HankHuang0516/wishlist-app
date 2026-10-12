@@ -1,3 +1,4 @@
+import {createSourceManagerRoutes} from './routes/sourceManagerRoutes';
 import { authenticateToken } from './middleware/auth';
 import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
 import { pendingImportBodyAdmission } from './routes/semiAutoImportRoutes';
@@ -79,6 +80,7 @@ const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(accountReadBudget(authenticateToken));
 app.use(...websiteRateLimits(clientBuildPath));
 
+app.use('/api/source-manager',createSourceManagerRoutes());
 app.use(cors());
 app.use('/api/source-lead-admin/pending-imports', ...pendingImportBodyAdmission());
 app.use(express.json({ limit: '1mb' }));

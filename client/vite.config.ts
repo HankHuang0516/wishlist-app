@@ -52,7 +52,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         globIgnores: ['**/web-version.json'], // Read current server metadata, never the worker's old version.
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],  // Don't serve index.html for /api/* routes
+        navigateFallbackDenylist: [/^\/api\//, /^\/manage(?:\/|$)/],  // Don't serve index.html for /api/* routes
         runtimeCaching: [
           {
             // Cache only bundled public artwork, never product/owner photos.

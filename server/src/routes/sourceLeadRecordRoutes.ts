@@ -1,7 +1,7 @@
 import {Router,Response} from 'express';
 import {Prisma} from '@prisma/client';
 import prisma from '../lib/prisma';
-import {LeadError,digest,exact,object,ref} from '../lib/sourceLeadRules';
+import {LeadError,digest,exact,object,ref,leadCurrent} from '../lib/sourceLeadRules';
 import {isListingId} from '../lib/listingRules';
 import {parseRecordFacts,parseRecordPublication,recordSnapshot,recordStateHash,exportCsv} from '../lib/sourceLeadRecords';
 const json=(v:unknown)=>JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -17,7 +17,7 @@ const replay=async(tx:any,operationId:string,requestHash:string)=>{
  if(events.some((e:any)=>e.requestHash!==requestHash))throw new LeadError('OPERATION_BODY_CONFLICT');
  return {operationId,replayed:true,results:events.map((e:any)=>(e.afterSnapshot as any).result),qualifiedSupplyAdded:0};
 };
-export function createSourceLeadRecordRoutes(){
+export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
  const router=Router(); // Mounted beneath existing marketplaceAdmin/no-store/rate limit.
  router.get('/',async(req,res)=>{try{
   if(Object.keys(req.query).some(k=>!['cursor','limit','archiveItemId','status'].includes(k)))throw new LeadError('INVALID_RECORD_QUERY');
@@ -44,8 +44,9 @@ export function createSourceLeadRecordRoutes(){
     const sourceRef=input.facts.evidence.sourceCheckRef;
     if(sourceRef){const prior=await tx.sourceLeadRecordEvent.findFirst({where:{sourceCheckRef:sourceRef}});if(prior&&(+(prior.sourceCheckedAt??0)!==(input.facts.checkedAt?Date.parse(input.facts.checkedAt):0)||prior.sourceUrl!==input.facts.canonicalUrl))throw new LeadError('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');}
     const pendingHash=digest(input.facts),nextRevision=(old?.recordRevision??0)+1;
-    const withdrawal=['SOLD','WITHDRAWN'].includes(input.facts.sourceClaimState),status=old?.status==='WITHDRAWN'||withdrawal?'WITHDRAWN':'PRIVATE_PENDING';
-    const data={pendingFacts:json(input.facts),pendingHash,recordRevision:nextRevision,status,sourceClaimState:input.facts.sourceClaimState};
+    const withdrawal=['SOLD','WITHDRAWN'].includes(input.facts.sourceClaimState),unavailable=input.facts.sourceClaimState!=='UNKNOWN';
+    const status=old?.status==='WITHDRAWN'||withdrawal?'WITHDRAWN':unavailable?'PRIVATE_PENDING':old?.status==='PUBLISHED'?'PUBLISHED':'PRIVATE_PENDING';
+    const data={pendingFacts:json(input.facts),pendingHash,recordRevision:nextRevision,status,sourceClaimState:unavailable?input.facts.sourceClaimState:old?.sourceClaimState??'UNKNOWN'};
     if(old){const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status},data});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');}
     const saved=old?await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}}):await tx.externalSourceLead.create({data:{...data,archiveItemId:input.archiveItemId,canonicalUrl:input.facts.canonicalUrl,title:input.facts.title,summary:'',evidence:{},contentHash:digest({privateRecord:input.archiveItemId}),recordOrigin:'DB_MASTER'}});
     const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),pendingHash,status:saved.status};
@@ -55,7 +56,7 @@ export function createSourceLeadRecordRoutes(){
    return {operationId:op,replayed:false,results,qualifiedSupplyAdded:0};
   });return res.json(result);
  }catch(e){return fail(res,e);}});
- router.post('/publish',async(req,res)=>{try{
+ router.post('/publish',async(req,res)=>{if(options.draftOnly)return res.status(403).json({errorCode:'MANAGER_PUBLISH_NOT_ALLOWED'});try{
   const b=object(req.body);exact(b,['operationId','items','confirmSourceReference']);const op=operation(b.operationId);
   if(b.confirmSourceReference!==true||!Array.isArray(b.items)||!b.items.length||b.items.length>20)throw new LeadError('ONE_TO_20_REVIEWED_REFERENCES_REQUIRED');
   const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['id','expectedRevision','expectedStateHash','pendingHash','reviewRef']);if(!isListingId(r.id)||!revision(r.expectedRevision)||!hash(r.expectedStateHash)||!hash(r.pendingHash)||!ref(r.reviewRef))throw new LeadError('BOUND_RECORD_REVIEW_REQUIRED');return r;});
@@ -78,6 +79,19 @@ export function createSourceLeadRecordRoutes(){
    return {operationId:op,replayed:false,results,sourceReferencesPublished:results.length,qualifiedSupplyAdded:0};
   });return res.json(result);
  }catch(e){return fail(res,e);}});
+ router.get('/operations/:operationId',async(req,res)=>{try{
+  if(!isListingId(req.params.operationId)||Object.keys(req.query).length)throw new LeadError('INVALID_OPERATION_QUERY');
+  const events=await prisma.sourceLeadRecordEvent.findMany({where:{operationId:String(req.params.operationId)},orderBy:{leadId:'asc'},take:21});
+  if(!events.length)return res.status(404).json({state:'UNKNOWN',automaticRetry:false});
+  return res.json({state:'RECORDED',action:events[0].action,results:events.map(e=>(e.afterSnapshot as any).result),automaticRetry:false});
+ }catch(e){return fail(res,e);}});
+ router.get('/:id/validation',async(req,res)=>{try{
+  if(!isListingId(req.params.id)||Object.keys(req.query).length)throw new LeadError('INVALID_RECORD_QUERY');
+  const row=await prisma.externalSourceLead.findUnique({where:{id:String(req.params.id)}});if(!row)return res.sendStatus(404);
+  let ready=false,issue:string|null=null;
+  try{const pending=object(row.pendingFacts);parseRecordPublication(row,object(pending.evidence).reviewRef);ready=true;}catch(e){issue=e instanceof LeadError?e.message:'PENDING_REVIEW_EVIDENCE_REQUIRED';}
+  return res.json({id:row.id,stateHash:recordStateHash(row),pendingHash:row.pendingHash,publicSnapshotCurrentlyValid:leadCurrent(row),dataReady:ready,issue,reviewApproved:false,publishAllowed:false,qualifiedSupply:false});
+ }catch(e){return fail(res,e);}});
  router.get('/:id',async(req,res)=>{try{
   if(!isListingId(req.params.id)||Object.keys(req.query).length)throw new LeadError('INVALID_RECORD_QUERY');
   const row=await prisma.externalSourceLead.findUnique({where:{id:String(req.params.id)}});return row?res.json(view(row)):res.sendStatus(404);
@@ -90,7 +104,7 @@ export function createSourceLeadRecordRoutes(){
   const rows=await prisma.sourceLeadRecordEvent.findMany({where:{leadId:String(req.params.id)},orderBy:[{createdAt:'asc'},{id:'asc'}],take:limit+1,...(cursor?{cursor:{id:cursor},skip:1}:{})});
   return res.json({items:rows.slice(0,limit),nextCursor:rows.length>limit?rows[limit-1].id:null});
  }catch(e){return fail(res,e);}});
- router.get('/:id/export',async(req,res)=>{try{
+ router.get('/:id/export',async(req,res)=>{if(options.draftOnly)return res.status(403).json({errorCode:'MANAGER_EXPORT_NOT_ALLOWED'});try{
   if(!isListingId(req.params.id)||Object.keys(req.query).some(k=>k!=='format')||req.query.format&&!['json','csv'].includes(String(req.query.format)))throw new LeadError('INVALID_EXPORT_QUERY');
   const row=await prisma.externalSourceLead.findUnique({where:{id:String(req.params.id)}});if(!row)return res.sendStatus(404);
   const value=view(row),format=req.query.format??'json';res.set('Content-Disposition','attachment; filename="source-record-'+row.id+'.'+format+'"');

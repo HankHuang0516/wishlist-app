@@ -11,3 +11,10 @@ describe('county illustration never becomes a verified pickup or qualified listi
 
 const cityOnly=()=>{const b=make(),county='臺北市',point=countyIllustration(county)!;return {...b,county,district:'行政區未明示',publicPlaceName:county+'概略示意位置',publicAddress:county+'（概略位置，非取貨點）',latitude:point.latitude,longitude:point.longitude,evidence:{...b.evidence,countyIllustration:{...b.evidence.countyIllustration,county,representativeKey:point.key,districtStatus:'UNKNOWN'}}};};
 test('Taipei city-only retains unknown district with explicit evidence and never infers pickup',()=>{const b=cityOnly();expect(parseLead(b,now).district).toBe('行政區未明示');for(const patch of [{district:'未明示'},{district:'亂填區'},{county:'新北市'},{evidence:{...b.evidence,countyIllustration:{...b.evidence.countyIllustration,districtStatus:undefined}}},{district:'中正區'},{publicAddress:'臺北市中正區合成路12號'}])expect(()=>parseLead({...b,...patch},now)).toThrow();});
+
+test('every county has one bound representative; any county may keep an explicitly unknown district',()=>{
+ const counties=['臺北市','新北市','桃園市','基隆市','新竹市','新竹縣','苗栗縣','臺中市','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣','臺南市','高雄市','屏東縣','宜蘭縣','花蓮縣','臺東縣','澎湖縣','金門縣','連江縣'];
+ const keys=new Set(counties.map(c=>countyIllustration(c)!.key));expect(keys.size).toBe(counties.length);
+ for(const county of ['臺中市','彰化縣']){const b=cityOnly(),point=countyIllustration(county)!,row={...b,county,publicPlaceName:county+'概略示意位置',publicAddress:county+'（概略位置，非取貨點）',latitude:point.latitude,longitude:point.longitude,evidence:{...b.evidence,countyIllustration:{...b.evidence.countyIllustration,county,representativeKey:point.key}}};
+  expect(parseLead(row,now).district).toBe('行政區未明示');expect(()=>parseLead({...row,latitude:countyIllustration('臺北市')!.latitude},now)).toThrow();}
+});

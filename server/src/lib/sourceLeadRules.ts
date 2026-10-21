@@ -35,7 +35,7 @@ export function parseLead(input: unknown, now = new Date(), databaseMaster = fal
     if(approximate) {
         const c=object(e.countyIllustration),point=countyIllustration(b.county);
         exact(c,['county','sourceUrl','sourceCountyRef','representativeKey','approvalRef','districtStatus']);
-        const districtUnknown=b.county==='臺北市'&&b.district===UNKNOWN_SOURCE_DISTRICT;
+        const districtUnknown=b.district===UNKNOWN_SOURCE_DISTRICT;
         if(!point||(!TAIWAN_DISTRICTS[b.county]?.has(b.district)&&!districtUnknown)||(districtUnknown?c.districtStatus!=='UNKNOWN':c.districtStatus!==undefined)||c.county!==b.county||c.sourceUrl!==canonicalUrl||!ref(c.sourceCountyRef)||!ref(c.approvalRef)||c.representativeKey!==point.key||b.latitude!==point.latitude||b.longitude!==point.longitude||b.publicPlaceName!==b.county+'概略示意位置'||b.publicAddress!==b.county+'（'+COUNTY_ILLUSTRATION_LABEL+'）'||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.locationSourceUrl!==canonicalUrl||e.coordinateSourceUrl!==COUNTY_ILLUSTRATION_SOURCE||e.coordinateNodeVersion!==undefined)
             throw new LeadError('BOUND_COUNTY_ILLUSTRATION_REQUIRED');
     } else if(e.countyIllustration!==undefined) throw new LeadError('INVALID_LOCATION_PRECISION');

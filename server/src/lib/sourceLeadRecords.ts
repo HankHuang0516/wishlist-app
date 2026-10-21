@@ -1,6 +1,7 @@
 import type {ExternalSourceLead} from '@prisma/client';
 import {LeadError,digest,exact,object,publicUrl,ref,parseLead} from './sourceLeadRules';
 import {privateContactField,forbiddenListingField} from './listingPolicy';
+import {isCountyIllustration} from './sourceCountyIllustration';
 export const recordFactKeys=['canonicalUrl','title','summary','county','district','publicPlaceName','publicAddress','latitude','longitude','postedEarliestAt','postedLatestAt','checkedAt','evidence','sourceClaimState','stateEvidenceRef'] as const;
 const evidenceKeys=['sourceUrl','sourcePublic','publicSourceRef','dateRef','locationRef','coordinateRef','locationSourceUrl','coordinateSourceUrl','publicPlace','locationType','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData','reviewRef','publicFacts','coordinateNodeVersion','countyIllustration','sourceCheckRef'];
 const boolKeys=['sourcePublic','publicPlace','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData'];
@@ -19,10 +20,12 @@ export function parseRecordFacts(value:unknown,now=new Date()){
  for(const k of ['publicSourceRef','dateRef','locationRef','coordinateRef','reviewRef','sourceCheckRef'])if(e[k]!==undefined&&!ref(e[k]))throw new LeadError('INVALID_EVIDENCE_REFERENCE');
  for(const k of ['sourceUrl','locationSourceUrl','coordinateSourceUrl'])if(e[k]!==undefined)publicUrl(e[k]);
  if(e.sourceUrl!==undefined&&e.sourceUrl!==out.canonicalUrl)throw new LeadError('BOUND_SOURCE_REQUIRED');
- if(e.locationType!==undefined&&e.locationType!=='PUBLIC_MEETING_POINT')throw new LeadError('PUBLIC_MEETING_POINT_REQUIRED');
+ // County illustration: seller named no meeting point; the public label says approximate, not a pickup point.
+ const approximate=isCountyIllustration(e);
+ if(e.locationType!==undefined&&e.locationType!=='PUBLIC_MEETING_POINT'&&!approximate)throw new LeadError('PUBLIC_MEETING_POINT_REQUIRED');
  if(e.coordinateNodeVersion!==undefined&&(!Number.isSafeInteger(e.coordinateNodeVersion)||e.coordinateNodeVersion<1))throw new LeadError('OSM_PROVENANCE_REQUIRED');
- if(e.countyIllustration!==undefined)throw new LeadError('CONCRETE_PUBLIC_POINT_REQUIRED');
- if(out.publicAddress!==null&&(e.publicPlace!==true||e.noPrivateData!==true))throw new LeadError('PUBLIC_ADDRESS_ONLY');
+ if(e.countyIllustration!==undefined&&!approximate)throw new LeadError('CONCRETE_PUBLIC_POINT_REQUIRED');
+ if(out.publicAddress!==null&&(e.publicPlace!==(approximate?false:true)||e.noPrivateData!==true))throw new LeadError('PUBLIC_ADDRESS_ONLY');
  if(e.publicFacts!==undefined){const f=object(e.publicFacts);exact(f,factKeys);for(const k of factKeys){if(f[k]===undefined)continue;if(k==='coordinateQualityNotes'){if(!Array.isArray(f[k])||f[k].length>5||f[k].some((v:unknown)=>!safeText(v,500)))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}else if(!safeText(f[k],300))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}}
  out.sourceClaimState=b.sourceClaimState??'UNKNOWN';if(!['UNKNOWN','RESERVED','SOLD','WITHDRAWN'].includes(out.sourceClaimState))throw new LeadError('NO_CONFIRMED_STOCK_PROMOTION');out.stateEvidenceRef=b.stateEvidenceRef??null;if(out.stateEvidenceRef!==null&&!ref(out.stateEvidenceRef))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');if(e.sourceCheckRef!==undefined&&out.checkedAt===null)throw new LeadError('SOURCE_CHECK_TIME_REQUIRED');if(out.sourceClaimState!=='UNKNOWN'&&(!ref(out.stateEvidenceRef)||out.checkedAt===null))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');
  out.evidence=e;return out;

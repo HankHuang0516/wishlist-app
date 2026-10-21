@@ -79,3 +79,22 @@ Meta Groups API及相關權限自2024-04-22全版本移除，不能因舊版、�
 - https://developers.facebook.com/docs/marketplace/partnerships/itemAPI/
 
 因此此版先用人工提供事實／賣家允許的CSV/JSON。Muse或Custom Connector仍未核台灣範圍、社團搜尋、再利用授權與既有連線，未實接。沒有繞過403、登入、風控或安全阻擋。
+
+## 每日整理 CSV → 資料庫私人待審（records-bridge）
+
+把每日整理 CSV（`daily-capture-TEMPLATE.csv` 的 11 欄中文欄名）送進既有的 `/api/source-lead-admin/records/save`。每列都存成 `DB_MASTER` 的 `PRIVATE_PENDING` 私人待審紀錄，不會公開；公開仍要另外走審核後的 `/records/publish`。
+
+- 欄位檢查沿用 `parseInput`／`normalize`。原始 ID 必填且不能重複；SOLD／RESERVED／WITHDRAWN 的列略過，因為狀態主張需要另外綁定證據。
+- 價格寫進 `evidence.publicFacts.priceText`。面交點和座標留空。可選的備註 CSV（原始ID、FB顯示的時間、原發日期推算精度、備註）會依精度把原發日期展開成上下界，上界不超過查核時間。
+- 每批 20 筆，operationId 由計畫 SHA 決定。結果不明時用同一份收據重跑，會原樣重送；伺服器依 operationId 重播已存結果，不會重複寫入。從沒送出過的列，如果資料庫已有同一原始 ID，就在寫入前停下（RECORD_ALREADY_EXISTS），不覆寫既有紀錄。
+- 收據只寫進明確指定的 0700 私人資料夾。ORIGIN 只接受正式站網址或 `http://127.0.0.1:PORT`。管理憑證從環境變數 `ADMIN_API_KEY` 讀取，不寫進檔案或輸出。管理端每分鐘限 30 次，所以每次請求間隔 2.2 秒。
+
+```
+npm run build
+node scripts/records-bridge.cjs plan DAILY.csv NOTES.csv
+node scripts/records-bridge.cjs dry-run DAILY.csv NOTES.csv PRIVATE_DIR ORIGIN
+node scripts/records-bridge.cjs apply   DAILY.csv NOTES.csv PRIVATE_DIR ORIGIN
+node scripts/records-bridge.cjs verify  DAILY.csv NOTES.csv PRIVATE_DIR ORIGIN
+```
+
+`verify` 逐筆讀回，確認每列在資料庫只有一筆，而且仍是私人待審、名稱／網址／縣市／行政區／價格和計畫一致。私人待審紀錄不會出現在網站公開搜尋。

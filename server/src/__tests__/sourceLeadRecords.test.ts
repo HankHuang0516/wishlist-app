@@ -15,3 +15,13 @@ describe('DB authoritative record contract',()=>{
  test('known sold/withdrawn signals cannot publish or resurrect',()=>{const r=pending();r.status='WITHDRAWN';expect(()=>parseRecordPublication(r,'review:synthetic-review',now)).toThrow('WITHDRAWN_RECORD_NOT_REPUBLISHED');const f={...facts(),sourceClaimState:'SOLD',stateEvidenceRef:'source:synthetic-sold'};const p=pending(f as any);expect(()=>parseRecordPublication(p,'review:synthetic-review',now)).toThrow('SOURCE_NOT_AVAILABLE');});
  test('state hash detects source time and revision changes; backup cells cannot execute formulas',()=>{const r={...pending(),title:'合成',summary:'',canonicalUrl:facts().canonicalUrl,checkedAt:now,contentHash:'a'.repeat(64),updatedAt:now};expect(recordStateHash(r)).not.toBe(recordStateHash({...r,checkedAt:new Date(+now-1)}));expect(recordStateHash(r)).not.toBe(recordStateHash({...r,recordRevision:2}));expect(exportCsv([['=HYPERLINK("x")','@SUM(A1)','safe']])).toContain("'=HYPERLINK");});
 });
+
+test('DB drafts may carry a bound county illustration but never a public-place claim with it',()=>{
+ const {parseRecordFacts}=require('../lib/sourceLeadRecords');const {countyIllustration,COUNTY_ILLUSTRATION_SOURCE}=require('../lib/sourceCountyIllustration');
+ const url='https://www.facebook.com/groups/1/posts/2',p=countyIllustration('臺中市');
+ const facts={canonicalUrl:url,title:'合成概略位置商品',summary:'合成測試，賣家未指定面交點。',county:'臺中市',district:'行政區未明示',publicPlaceName:'臺中市概略示意位置',publicAddress:'臺中市（概略位置，非取貨點）',latitude:p.latitude,longitude:p.longitude,postedEarliestAt:null,postedLatestAt:null,checkedAt:null,sourceClaimState:'UNKNOWN',stateEvidenceRef:null,
+  evidence:{sourceUrl:url,locationType:'COUNTY_ILLUSTRATION',publicPlace:false,sourceMeetingPointConfirmed:false,noPrivateData:true,coordinateSourceUrl:COUNTY_ILLUSTRATION_SOURCE,countyIllustration:{county:'臺中市',sourceUrl:url,sourceCountyRef:'source:synthetic-county',representativeKey:p.key,approvalRef:'review:synthetic-approval',districtStatus:'UNKNOWN'}}};
+ expect(parseRecordFacts(facts).publicAddress).toBe('臺中市（概略位置，非取貨點）');
+ expect(()=>parseRecordFacts({...facts,evidence:{...facts.evidence,publicPlace:true}})).toThrow('PUBLIC_ADDRESS_ONLY');
+ expect(()=>parseRecordFacts({...facts,evidence:{...facts.evidence,locationType:'PUBLIC_MEETING_POINT'}})).toThrow('CONCRETE_PUBLIC_POINT_REQUIRED');
+});

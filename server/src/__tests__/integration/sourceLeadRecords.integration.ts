@@ -32,5 +32,16 @@ describe('same DB record save -> review -> publication (isolated only)',()=>{
   const before=(await get(uuid)).body;expect((await save(id,f,before)).status).toBe(200);const pending=(await get(uuid)).body;expect((await publish(pending)).status).toBe(200);const live=(await get(uuid)).body;expect(live.legacyArchive.version).toBe(16);expect(live.legacyArchive.historicalOnly).toBe(true);expect((await request(app).get('/leads/'+uuid)).status).toBe(200);
   const sold={...f,sourceClaimState:'SOLD',stateEvidenceRef:'source:synthetic-sold'};expect((await save(id,sold,live)).status).toBe(200);const hidden=(await get(uuid)).body;expect(hidden.status).toBe('WITHDRAWN');expect((await request(app).get('/leads/'+uuid)).status).toBe(404);expect((await publish(hidden)).status).toBe(409);
  });
+ test('a DB draft without a seller meeting point publishes only as a labelled county illustration',async()=>{
+  const {countyIllustration,COUNTY_ILLUSTRATION_SOURCE}=require('../../lib/sourceCountyIllustration');
+  const id=prefix+randomUUID(),url='https://www.facebook.com/groups/123456789/posts/'+id,p=countyIllustration('臺中市'),at=new Date(Date.now()-3600000).toISOString();
+  const f={canonicalUrl:url,title:'合成概略位置商品',summary:'合成測試，賣家未指定面交點，請私訊賣家洽詢自取。',county:'臺中市',district:'行政區未明示',publicPlaceName:'臺中市概略示意位置',publicAddress:'臺中市（概略位置，非取貨點）',latitude:p.latitude,longitude:p.longitude,postedEarliestAt:at,postedLatestAt:at,checkedAt:new Date().toISOString(),
+   evidence:{sourceUrl:url,sourcePublic:true,publicSourceRef:'source:synthetic-public',dateRef:'source:synthetic-date',locationRef:'source:synthetic-county',coordinateRef:'source:post-dataset-25489',locationSourceUrl:url,coordinateSourceUrl:COUNTY_ILLUSTRATION_SOURCE,publicPlace:false,locationType:'COUNTY_ILLUSTRATION',sourceMeetingPointConfirmed:false,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,sourceCheckRef:'source:synthetic-check-'+id,
+    countyIllustration:{county:'臺中市',sourceUrl:url,sourceCountyRef:'source:synthetic-county-'+id,representativeKey:p.key,approvalRef:'review:synthetic-approval',districtStatus:'UNKNOWN'}}};
+  const s=await save(id,f);expect(s.status).toBe(200);const r=(await get(s.body.results[0].id)).body;
+  expect((await publish(r)).status).toBe(200);
+  expect((await request(app).get('/leads/'+r.id)).status).toBe(404);
+  const pub=await request(app).get('/leads/'+r.id+'?approximate=1');expect(pub.status).toBe(200);expect(pub.body.locationPrecision).toBe('COUNTY_ILLUSTRATION');expect(pub.body.district).toBe('行政區未明示');expect(pub.body.notice).toContain('非取貨點');
+ });
  test('first-batch cap is20 and a bad batch is atomic',async()=>{const rows=Array.from({length:21},()=>{const id=prefix+randomUUID();return {archiveItemId:id,expectedRevision:0,expectedStateHash:null,facts:facts(id)};});expect((await post('save',{operationId:randomUUID(),items:rows})).body.errorCode).toBe('ONE_TO_20_RECORDS_REQUIRED');const bad=[rows[0],{...rows[1],facts:{...rows[1].facts,summary:'private@example.com'}}];expect((await post('save',{operationId:randomUUID(),items:bad})).status).toBe(409);expect(await prisma.externalSourceLead.count({where:{archiveItemId:{startsWith:prefix}}})).toBe(0);});
 });

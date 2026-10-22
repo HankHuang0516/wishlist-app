@@ -62,3 +62,14 @@ test('DB records stay listed until a re-check withdraws them; archive leads stil
   expect(() => parseLead({ ...facts, libraryFileId: 'libfile_' + 'a'.repeat(32), archiveVersion: 1, archiveSha256: 'b'.repeat(64) }, new Date(now))).toThrow('SOURCE_DATE_OR_LOCATION_EXPIRED');
   expect(() => parseLead({ ...facts, checkedAt: '2026-10-23T06:00:00Z' }, new Date(now), true)).toThrow('SOURCE_DATE_OR_LOCATION_EXPIRED');
 });
+
+test('attaching photos or a new source check keeps contentHash (consent survives); a substantive change does not', () => {
+  const facts = { archiveItemId: 'FB123-456-02', libraryFileId: null, archiveVersion: null, archiveSha256: null, canonicalUrl: url, title: '合成來源測試用品', summary: '合成測試來源；库存與交易待確認。', county: '臺南市', district: '永康區', publicPlaceName: '合成公共面交點', publicAddress: '臺南市永康區合成路123號', latitude: 23, longitude: 120.236,
+    postedEarliestAt: '2026-10-01T01:00:00Z', postedLatestAt: '2026-10-01T02:00:00Z', checkedAt: '2026-10-21T06:00:00Z',
+    evidence: { sourceUrl: url, sourcePublic: true, publicSourceRef: 'source:synthetic-public', dateRef: 'source:synthetic-date', locationRef: 'source:synthetic-place', coordinateRef: 'source:synthetic-coordinate', locationSourceUrl: 'https://public.example.invalid/place/qa', coordinateSourceUrl: 'https://public.example.invalid/map/qa', publicPlace: true, locationType: 'PUBLIC_MEETING_POINT', sourceMeetingPointConfirmed: true, independentlyReviewed: true, selfWrittenSummary: true, noCopiedTextOrImages: true, noPrivateData: true, sourceCheckRef: 'source:synthetic-check-1', reviewRef: 'review:synthetic-review' } };
+  const base = parseLead(facts, new Date(now), true).contentHash;
+  const { media, photoInventory } = recordPhotoEvidence(row, assignment(), [receipt('901', 1), receipt('902', 2)], now);
+  expect(parseLead({ ...facts, evidence: { ...facts.evidence, media, photoInventory, sourceCheckRef: 'source:synthetic-check-2' }, checkedAt: '2026-10-22T05:00:00Z' }, new Date(now), true).contentHash).toBe(base);
+  expect(parseLead({ ...facts, title: '合成來源測試用品（改名）' }, new Date(now), true).contentHash).not.toBe(base);
+  expect(parseLead({ ...facts, evidence: { ...facts.evidence, publicFacts: { priceText: '999', priceUnitStatus: 'SOURCE_STATED', currencyStatus: 'TWD', sourceAccessNotice: '待確認', originalDateLabel: '約 2026/10/01', locationRelation: '公共面交點', coordinateQualityNotes: [] } } }, new Date(now), true).contentHash).not.toBe(base);
+});

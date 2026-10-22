@@ -16,6 +16,9 @@ export function exact(v: Record<string, any>, keys: string[]) { if (Object.keys(
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && !!v.trim() && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
 export function date(v: unknown) { if (typeof v !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(v) || !Number.isFinite(Date.parse(v)))
     throw new LeadError('ORIGINAL_DATE_REQUIRED'); return new Date(v); }
+// Photos, re-check references and review refs change without the offer changing (Hank 2026-10-22):
+// buyer consent, seller routes and leadCurrent stay bound to the substance only.
+export function leadSubstance(e: any) { const { media, photoInventory, sourceCheckRef, reviewRef, ...rest } = e ?? {}; return rest; }
 export function parseLead(input: unknown, now = new Date(), databaseMaster = false) {
     const b = object(input);
     exact(b, ['archiveItemId', 'libraryFileId', 'archiveVersion', 'archiveSha256', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'evidence']);
@@ -57,7 +60,7 @@ export function parseLead(input: unknown, now = new Date(), databaseMaster = fal
         throw new LeadError('SOURCE_DATE_OR_LOCATION_EXPIRED');
     if(e.photoInventory !== undefined) { try {parsePhotoInventory(e.photoInventory,{archiveItemId:b.archiveItemId,canonicalUrl},now.getTime());} catch {throw new LeadError('INVALID_PHOTO_INVENTORY');} }
     const facts = { title: b.title, summary: b.summary, canonicalUrl, county: b.county, district: b.district, publicPlaceName: b.publicPlaceName, publicAddress: b.publicAddress, latitude: b.latitude, longitude: b.longitude, postedEarliestAt, postedLatestAt };
-    return { ...facts, archiveItemId: b.archiveItemId, libraryFileId: b.libraryFileId, archiveVersion: b.archiveVersion, archiveSha256: b.archiveSha256, checkedAt, evidence: e, contentHash: digest({ facts, e }) };
+    return { ...facts, archiveItemId: b.archiveItemId, libraryFileId: b.libraryFileId, archiveVersion: b.archiveVersion, archiveSha256: b.archiveSha256, checkedAt, evidence: e, contentHash: digest({ facts, e: leadSubstance(e) }) };
 }
 export function leadCurrent(row: ExternalSourceLead, now = new Date()) {
     if (row.status !== 'PUBLISHED'||row.recordOrigin==='DB_MASTER'&&row.sourceClaimState!=='UNKNOWN')

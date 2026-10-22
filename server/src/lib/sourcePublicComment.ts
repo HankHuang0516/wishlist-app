@@ -6,5 +6,5 @@ export function publicCommentRoute(route: any, sourceUrl: string): boolean {
 }
 export function publicCommentPayload(route: any, sourceUrl: string) {
  if (!publicCommentRoute(route,sourceUrl)) throw new Error('BOUND_PUBLIC_COMMENT_ROUTE_REQUIRED');
- return {actingPageId:WISHLIST_PAGE_ID,postUrl:sourceUrl,text:'您好，請問這件商品目前仍在售嗎？售價及取貨方式為何？謝謝，Wishlist.AI。',buyerTextIncluded:false,requiresNormalUiAndReadback:true};
+ return {actingPageId:WISHLIST_PAGE_ID,postUrl:sourceUrl,text:'您好，請問這件商品目前仍在售嗎？售價及取貨方式為何？謝謝。',buyerTextIncluded:false,requiresNormalUiAndReadback:true};
 }

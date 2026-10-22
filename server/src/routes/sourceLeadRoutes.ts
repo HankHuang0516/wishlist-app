@@ -145,14 +145,14 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 if (prior?.reservation) {
                     if (prior.reservation?.id !== b.requestId || r.state !== 'TRANSFER_RESERVED')
                         throw new LeadError('TRANSFER_ALREADY_RESERVED_OR_CLOSED');
-                    return { reservation: prior.reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
+                    return { reservation: prior.reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl,r.lead.title)}:{}), outboundSent: false };
                 }
                 if (r.state !== 'WAITING_ROUTE' || r.consentHash !== payloadHash || r.leadContentHash !== r.lead.contentHash || !leadCurrent(r.lead) || !routeCurrent(r.lead))
                     throw new LeadError('CURRENT_CONSENT_AND_ROUTE_REQUIRED');
                 if(deliveryHistory(prior).some(r=>r.reservation.id===b.requestId))throw new LeadError('OLD_ROUND_RESERVATION');
                 const reservation = { questionIds:outboundQuestions.map((q:any)=>q.requestId), roundNumber:deliveryHistory(prior).length+1, id: b.requestId, leadId: r.leadId, sourceUrl: r.lead.canonicalUrl, payloadHash, routeHash: digest(r.lead.sellerRoute), channel: object(r.lead.sellerRoute).channel, sellerBindingHash:sellerBindingHash(r.lead.sellerRoute), preparedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 120000).toISOString() };
                 await tx.sourceLeadInquiry.update({ where: { id: r.id }, data: { state: 'TRANSFER_RESERVED', delivery: { ...(prior??{}), reservation } } });
-                return { reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), outboundSent: false };
+                return { reservation, snapshot, outboundQuestions, route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl,r.lead.title)}:{}), outboundSent: false };
             });
             return res.json(result);
         }
@@ -167,7 +167,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             const r = await prisma.sourceLeadInquiry.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: { lead: true } }), saved = r.delivery ? object(r.delivery) : {}, v = saved.reservation;
             if (r.state !== 'TRANSFER_RESERVED' || !v || Date.parse(v.expiresAt) <= Date.now() || !leadCurrent(r.lead) || !routeCurrent(r.lead) || r.consentHash !== v.payloadHash || r.consentHash !== digest(transferSnapshot(r.lead, r.events as unknown as LeadEvent[])) || v.routeHash !== digest(r.lead.sellerRoute))
                 throw new LeadError('TRANSFER_STOP_REQUIRED');
-            return res.json({ reservation: v, snapshot: transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), outboundQuestions:pendingRoundQuestions(transferSnapshot(r.lead,r.events as unknown as LeadEvent[]),r.delivery), route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl)}:{}), preflightAt: new Date().toISOString(), outboundSent: false, notice: 'Immediately recheck before the normal UI send; cancellation and external UI cannot be atomic. If uncertain stop, never retry send.' });
+            return res.json({ reservation: v, snapshot: transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), outboundQuestions:pendingRoundQuestions(transferSnapshot(r.lead,r.events as unknown as LeadEvent[]),r.delivery), route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl,r.lead.title)}:{}), preflightAt: new Date().toISOString(), outboundSent: false, notice: 'Immediately recheck before the normal UI send; cancellation and external UI cannot be atomic. If uncertain stop, never retry send.' });
         }
         catch (e) {
             return fail(res, e);

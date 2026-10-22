@@ -1,4 +1,4 @@
-import { sourceLocationLabel, parseLeadPage, type SourceLead } from '../lib/sourceLeadData';
+import { sourceLocationLabel, parseLeadPage, isLocatedLead, type SourceLead, type LocatedSourceLead } from '../lib/sourceLeadData';
 import { sourceLeadText as text, sourceLeadRoutingReason } from '../lib/sourceLeadCopy';
 import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 import { ApiFailure, publicApi } from '../lib/marketplaceApi';
@@ -22,7 +22,7 @@ export function currentLead(lead: Pick<SourceLead, 'postedEarliestAt' | 'postedL
 export default function SourceLeadMapPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [items, setItems] = useState<SourceLead[]>([]);
+  const [items, setItems] = useState<LocatedSourceLead[]>([]);
   const [failed, setFailed] = useState(false), [loaded, setLoaded] = useState(false), [busy, setBusy] = useState(true);
   const [retry, setRetry] = useState(0), [retryUntil, setRetryUntil] = useState(0), [clock, setClock] = useState(Date.now);
   const selected = items.find(item => item.id === params.get('id')) ?? items[0];
@@ -60,7 +60,7 @@ export default function SourceLeadMapPage() {
         if (stopped) return;
         if (signal.aborted) throw signal.reason;
         {
-          setItems(all.filter(lead => currentLead(lead)));
+          setItems(all.filter(lead => currentLead(lead)).filter(isLocatedLead));
           setLoaded(true);
           setFailed(false);
           setRetryUntil(0);

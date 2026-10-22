@@ -1,5 +1,6 @@
 import {parsePhotoInventory, photoCompleteness} from './sourcePhotoInventory';
 import {countyIllustration, isCountyIllustration, COUNTY_ILLUSTRATION_SOURCE, COUNTY_ILLUSTRATION_LABEL, UNKNOWN_SOURCE_DISTRICT} from './sourceCountyIllustration';
+import {isContactLocation, CONTACT_LOCATION_NOTICE} from './sourceContactLocation';
 import {publicCommentRoute} from './sourcePublicComment';
 import { sourceLeadMediaDTO } from './sourceLeadMedia';
 import type { ExternalSourceLead } from '@prisma/client';
@@ -26,8 +27,10 @@ export function parseLead(input: unknown, now = new Date(), databaseMaster = fal
     const canonicalUrl = publicUrl(b.canonicalUrl);
     if (!text(b.title, 100) || !text(b.summary, 240) || forbiddenListingField({ title: b.title, description: b.summary }) || privateContactField({ title: b.title, description: b.summary }) || /https?:\/\/|@|(?:電話|手機|LINE|微信|帳號)\s*[:：]/i.test(b.title + ' ' + b.summary))
         throw new LeadError('SAFE_SELF_WRITTEN_FACTS_REQUIRED');
-    const approximate=isCountyIllustration(e);
-    if (!approximate && (!TAIWAN_DISTRICTS[b.county]?.has(b.district) || !text(b.publicPlaceName, 100) || !text(b.publicAddress, 200) || !b.publicAddress.replace(/^台/, '臺').startsWith(b.county + b.district) || b.publicAddress.slice((b.county + b.district).length).trim().length < 3))
+    const approximate=isCountyIllustration(e),contact=isContactLocation(e);
+    if(contact&&(!databaseMaster||[b.county,b.district,b.publicPlaceName,b.publicAddress,b.latitude,b.longitude].some(v=>v!==null)||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.countyIllustration!==undefined||e.coordinateNodeVersion!==undefined||e.locationSourceUrl!==undefined||e.coordinateSourceUrl!==undefined))
+        throw new LeadError('BOUND_CONTACT_LOCATION_REQUIRED');
+    if (!approximate && !contact && (!TAIWAN_DISTRICTS[b.county]?.has(b.district) || !text(b.publicPlaceName, 100) || !text(b.publicAddress, 200) || !b.publicAddress.replace(/^台/, '臺').startsWith(b.county + b.district) || b.publicAddress.slice((b.county + b.district).length).trim().length < 3))
         throw new LeadError('CONCRETE_PUBLIC_PLACE_REQUIRED');
     if ([b.publicPlaceName, b.publicAddress].some(v => privateContactField({ title: v }) || forbiddenListingField({ title: v })))
         throw new LeadError('SAFE_PUBLIC_PLACE_REQUIRED');
@@ -39,10 +42,9 @@ export function parseLead(input: unknown, now = new Date(), databaseMaster = fal
         if(!point||(!TAIWAN_DISTRICTS[b.county]?.has(b.district)&&!districtUnknown)||(districtUnknown?c.districtStatus!=='UNKNOWN':c.districtStatus!==undefined)||c.county!==b.county||c.sourceUrl!==canonicalUrl||!ref(c.sourceCountyRef)||!ref(c.approvalRef)||c.representativeKey!==point.key||b.latitude!==point.latitude||b.longitude!==point.longitude||b.publicPlaceName!==b.county+'概略示意位置'||b.publicAddress!==b.county+'（'+COUNTY_ILLUSTRATION_LABEL+'）'||e.publicPlace!==false||e.sourceMeetingPointConfirmed!==false||e.locationSourceUrl!==canonicalUrl||e.coordinateSourceUrl!==COUNTY_ILLUSTRATION_SOURCE||e.coordinateNodeVersion!==undefined)
             throw new LeadError('BOUND_COUNTY_ILLUSTRATION_REQUIRED');
     } else if(e.countyIllustration!==undefined) throw new LeadError('INVALID_LOCATION_PRECISION');
-    if (e.sourceUrl !== canonicalUrl || [e.sourcePublic, e.independentlyReviewed, e.selfWrittenSummary, e.noCopiedTextOrImages, e.noPrivateData].some(v => v !== true) || (!approximate&&([e.publicPlace,e.sourceMeetingPointConfirmed].some(v=>v!==true)||e.locationType!=='PUBLIC_MEETING_POINT')) || ![e.publicSourceRef, e.dateRef, e.locationRef, e.coordinateRef, e.reviewRef].every(ref))
+    if (e.sourceUrl !== canonicalUrl || [e.sourcePublic, e.independentlyReviewed, e.selfWrittenSummary, e.noCopiedTextOrImages, e.noPrivateData].some(v => v !== true) || (!approximate&&!contact&&([e.publicPlace,e.sourceMeetingPointConfirmed].some(v=>v!==true)||e.locationType!=='PUBLIC_MEETING_POINT')) || ![e.publicSourceRef, e.dateRef, ...(contact?[]:[e.locationRef, e.coordinateRef]), e.reviewRef].every(ref))
         throw new LeadError('BOUND_PUBLIC_EVIDENCE_REQUIRED');
-    publicUrl(e.locationSourceUrl);
-    publicUrl(e.coordinateSourceUrl);
+    if(!contact){publicUrl(e.locationSourceUrl);publicUrl(e.coordinateSourceUrl);}
     if (e.publicFacts !== undefined) {
         const f = object(e.publicFacts);
         exact(f, ['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation', 'coordinateQualityNotes']);
@@ -51,7 +53,7 @@ export function parseLead(input: unknown, now = new Date(), databaseMaster = fal
     }
     if (e.coordinateNodeVersion !== undefined && (!Number.isSafeInteger(e.coordinateNodeVersion) || e.coordinateNodeVersion < 1 || !/^https:\/\/www\.openstreetmap\.org\/node\/\d+$/.test(e.coordinateSourceUrl)))
         throw new LeadError('OSM_PROVENANCE_REQUIRED');
-    if (!archiveGate({ originalPostedAt: null, originalPostedEarliestAt: postedEarliestAt, originalPostedLatestAt: postedLatestAt, verifiedAddress: b.publicAddress, addressEvidenceRef: e.locationRef, verifiedLatitude: b.latitude, verifiedLongitude: b.longitude }, now) || checkedAt > now || now.getTime() - checkedAt.getTime() > 48 * 3600000)
+    if (!archiveGate({ originalPostedAt: null, originalPostedEarliestAt: postedEarliestAt, originalPostedLatestAt: postedLatestAt, ...(contact?{verifiedAddress:'seller-contact-required',addressEvidenceRef:'seller-contact-required',verifiedLatitude:23,verifiedLongitude:120}:{verifiedAddress: b.publicAddress, addressEvidenceRef: e.locationRef, verifiedLatitude: b.latitude, verifiedLongitude: b.longitude}) }, now) || checkedAt > now || now.getTime() - checkedAt.getTime() > 48 * 3600000)
         throw new LeadError('SOURCE_DATE_OR_LOCATION_EXPIRED');
     if(e.photoInventory !== undefined) { try {parsePhotoInventory(e.photoInventory,{archiveItemId:b.archiveItemId,canonicalUrl},now.getTime());} catch {throw new LeadError('INVALID_PHOTO_INVENTORY');} }
     const facts = { title: b.title, summary: b.summary, canonicalUrl, county: b.county, district: b.district, publicPlaceName: b.publicPlaceName, publicAddress: b.publicAddress, latitude: b.latitude, longitude: b.longitude, postedEarliestAt, postedLatestAt };
@@ -74,7 +76,7 @@ export function contactRoutingDTO(lead:ExternalSourceLead,now=new Date()) {
     if(r&&['UNAVAILABLE','UNVERIFIED'].includes(r.status)&&r.leadId===lead.id&&r.sourceUrl===lead.canonicalUrl&&r.contentHash===lead.contentHash&&ref(r.identityEvidenceRef)&&ref(r.routeEvidenceRef)&&typeof r.reason==='string'&&r.reason.length<=240&&!privateContactField({title:r.reason})&&Number.isFinite(Date.parse(r.checkedAt))&&Date.parse(r.checkedAt)<=now.getTime()&&now.getTime()-Date.parse(r.checkedAt)<48*3600000)return {status:r.status,reason:r.reason,checkedAt:r.checkedAt};
     return {status:'UNVERIFIED',reason:'原貼文與作者身份不等於可收訊路由；尚未核實原賣家可用的聯絡入口，未外送。',checkedAt:null};
 }
-export function leadDTO(r: ExternalSourceLead, presentation = false, photosV2 = false) { return { ...(presentation ? {media: photosV2?sourceLeadMediaDTO(r):sourceLeadMediaDTO(r).slice(0,8),...(photosV2?{photoCompleteness:photoCompleteness(r,sourceLeadMediaDTO(r))}:{}),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', ...(isCountyIllustration(r.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:{}), title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: (presentation&&!photosV2&&sourceLeadMediaDTO(r).length>8?'此舊版最多顯示8張；完整商品圖片請使用最新版網頁。':'')+(isCountyIllustration(r.evidence)?'概略位置，非取貨點；縣市示意座標不代表商品、賣家或可面交位置，庫存與交易待確認。':'來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。') }; }
+export function leadDTO(r: ExternalSourceLead, presentation = false, photosV2 = false) { return { ...(presentation ? {media: photosV2?sourceLeadMediaDTO(r):sourceLeadMediaDTO(r).slice(0,8),...(photosV2?{photoCompleteness:photoCompleteness(r,sourceLeadMediaDTO(r))}:{}),contactRouting:contactRoutingDTO(r)} : {}), id: r.id, kind: 'SOURCE_LEAD', ...(isCountyIllustration(r.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:isContactLocation(r.evidence)?{locationPrecision:'CONTACT_FOR_LOCATION'}:{}), title: r.title, summary: r.summary, canonicalUrl: r.canonicalUrl, county: r.county, district: r.district, publicPlaceName: r.publicPlaceName, publicAddress: r.publicAddress, latitude: r.latitude, longitude: r.longitude, postedEarliestAt: r.postedEarliestAt, postedLatestAt: r.postedLatestAt, checkedAt: r.checkedAt, stockStatus: 'UNKNOWN', qualifiedSupply: false, checkoutEnabled: false, publicFacts: object(r.evidence).publicFacts ?? null, coordinateSourceUrl: object(r.evidence).coordinateSourceUrl ?? null, coordinateAttribution: object(r.evidence).coordinateNodeVersion ? { text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', license: 'ODbL-1.0', licenseUrl: 'https://opendatacommons.org/licenses/odbl/1-0/' } : null, notice: (presentation&&!photosV2&&sourceLeadMediaDTO(r).length>8?'此舊版最多顯示8張；完整商品圖片請使用最新版網頁。':'')+(isCountyIllustration(r.evidence)?'概略位置，非取貨點；縣市示意座標不代表商品、賣家或可面交位置，庫存與交易待確認。':isContactLocation(r.evidence)?CONTACT_LOCATION_NOTICE:'來源線索，庫存與交易待確認；公共面交點不是賣家或商品所在位置。') }; }
 export type LeadEvent = {
     requestId: string;
     action: string;

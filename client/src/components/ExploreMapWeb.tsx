@@ -8,7 +8,7 @@ import { externalGeoJSON, externalPrice, type ExternalListing } from '../lib/ext
 import { clusterLeafIds, type ResultCamera } from '../lib/exploreMapView';
 import { mapText } from '../lib/mapText';
 import './ExploreMapWeb.css';
-import type {SourceLead} from '../lib/sourceLeadData';
+import type {LocatedSourceLead} from '../lib/sourceLeadData';
 import { sourceLeadPrice } from '../lib/sourceLeadPrice';
 
 // MapLibre v6 requires Vite to bundle the worker with its shared imports.
@@ -17,7 +17,7 @@ setWorkerUrl(workerUrl);
 export type MapSelection = { kind: 'seller' | 'external' | 'source'; id: string };
 export type MapFrame = { serial: number; camera: ResultCamera };
 type Props = {
-  items: PublicListing[]; external: ExternalListing[]; sourceLeads?: SourceLead[]; frame: MapFrame | null; visible: boolean;
+  items: PublicListing[]; external: ExternalListing[]; sourceLeads?: LocatedSourceLead[]; frame: MapFrame | null; visible: boolean;
   preview?: boolean;
   previewNotice?: string;
   onViewport: (bounds: Bounds) => void; onSelect: (item: MapSelection) => void;

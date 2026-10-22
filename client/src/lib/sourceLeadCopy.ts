@@ -48,6 +48,7 @@ const english = {
   '查看 {title}': 'View {title}',
   '選擇線索': 'Select a source lead',
   '概略位置，非取貨點': 'Approximate location, not a pickup point',
+  '未提供地區，面交地點需聯絡賣家；寄送不受影響': 'No area provided; contact the seller for the meeting point. Shipping is unaffected',
   '公共面交點': 'Public meetup point',
   '，非現貨所在地': ', not the stock location',
   '商品說明': 'Item description',

@@ -1,5 +1,6 @@
 import { getDisplayLocale } from '../utils/localization';
 const copy = {
+ contactLocation: ['未提供地區；面交地點需聯絡賣家後才知道，寄送不受影響。','No area was provided. Contact the seller to learn the meeting point; shipping is unaffected.'],
  approximateLocation: ['概略位置，非取貨點；實際所在地與取貨方式仍待原賣家確認。','Approximate location, not a pickup point. Confirm the actual location and pickup options with the original seller.'],
  title: ['Wishlist AI 聊聊','Wishlist AI chat'], back: ['返回商品','Back to item'], update: ['更新','Refresh'], price: ['售價待詢問','Ask about price'], item: ['商品ID：','Item ID: '], external: ['外部來源','External source'], original: ['查看原始來源','View original source'],
  route: ['原賣家收訊路由待核實；貼文連結不能直接當作私訊收件人。','The original seller contact route needs verification. A post link is not a private-message recipient.'],

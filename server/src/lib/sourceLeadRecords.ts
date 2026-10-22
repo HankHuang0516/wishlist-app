@@ -2,6 +2,7 @@ import type {ExternalSourceLead} from '@prisma/client';
 import {LeadError,digest,exact,object,publicUrl,ref,parseLead} from './sourceLeadRules';
 import {privateContactField,forbiddenListingField} from './listingPolicy';
 import {isCountyIllustration} from './sourceCountyIllustration';
+import {isContactLocation} from './sourceContactLocation';
 export const recordFactKeys=['canonicalUrl','title','summary','county','district','publicPlaceName','publicAddress','latitude','longitude','postedEarliestAt','postedLatestAt','checkedAt','evidence','sourceClaimState','stateEvidenceRef'] as const;
 const evidenceKeys=['sourceUrl','sourcePublic','publicSourceRef','dateRef','locationRef','coordinateRef','locationSourceUrl','coordinateSourceUrl','publicPlace','locationType','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData','reviewRef','publicFacts','coordinateNodeVersion','countyIllustration','sourceCheckRef'];
 const boolKeys=['sourcePublic','publicPlace','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData'];
@@ -21,8 +22,9 @@ export function parseRecordFacts(value:unknown,now=new Date()){
  for(const k of ['sourceUrl','locationSourceUrl','coordinateSourceUrl'])if(e[k]!==undefined)publicUrl(e[k]);
  if(e.sourceUrl!==undefined&&e.sourceUrl!==out.canonicalUrl)throw new LeadError('BOUND_SOURCE_REQUIRED');
  // County illustration: seller named no meeting point; the public label says approximate, not a pickup point.
- const approximate=isCountyIllustration(e);
- if(e.locationType!==undefined&&e.locationType!=='PUBLIC_MEETING_POINT'&&!approximate)throw new LeadError('PUBLIC_MEETING_POINT_REQUIRED');
+ const approximate=isCountyIllustration(e),contact=isContactLocation(e);
+ if(contact&&[out.county,out.district,out.publicPlaceName,out.publicAddress,out.latitude,out.longitude].some(v=>v!==null))throw new LeadError('BOUND_CONTACT_LOCATION_REQUIRED');
+ if(e.locationType!==undefined&&e.locationType!=='PUBLIC_MEETING_POINT'&&!approximate&&!contact)throw new LeadError('PUBLIC_MEETING_POINT_REQUIRED');
  if(e.coordinateNodeVersion!==undefined&&(!Number.isSafeInteger(e.coordinateNodeVersion)||e.coordinateNodeVersion<1))throw new LeadError('OSM_PROVENANCE_REQUIRED');
  if(e.countyIllustration!==undefined&&!approximate)throw new LeadError('CONCRETE_PUBLIC_POINT_REQUIRED');
  if(out.publicAddress!==null&&(e.publicPlace!==(approximate?false:true)||e.noPrivateData!==true))throw new LeadError('PUBLIC_ADDRESS_ONLY');

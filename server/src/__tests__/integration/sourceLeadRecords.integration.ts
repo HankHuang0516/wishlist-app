@@ -43,5 +43,19 @@ describe('same DB record save -> review -> publication (isolated only)',()=>{
   expect((await request(app).get('/leads/'+r.id)).status).toBe(404);
   const pub=await request(app).get('/leads/'+r.id+'?approximate=1');expect(pub.status).toBe(200);expect(pub.body.locationPrecision).toBe('COUNTY_ILLUSTRATION');expect(pub.body.district).toBe('行政區未明示');expect(pub.body.notice).toContain('非取貨點');
  });
+ test('a DB record without any area publishes off-map and only for opt-in clients',async()=>{
+  const id=prefix+randomUUID(),url='https://www.facebook.com/groups/123456789/posts/'+id,at=new Date(Date.now()-3600000).toISOString();
+  const f={canonicalUrl:url,title:'合成無地區商品',summary:'合成測試，賣家未提供地區，面交地點需聯絡賣家。',county:null,district:null,publicPlaceName:null,publicAddress:null,latitude:null,longitude:null,postedEarliestAt:at,postedLatestAt:at,checkedAt:new Date().toISOString(),
+   evidence:{sourceUrl:url,sourcePublic:true,publicSourceRef:'source:synthetic-public',dateRef:'source:synthetic-date',publicPlace:false,locationType:'SELLER_CONTACT_REQUIRED',sourceMeetingPointConfirmed:false,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,sourceCheckRef:'source:synthetic-check-'+id}};
+  expect((await save(id,{...f,county:'臺南市'})).body.errorCode).toBe('BOUND_CONTACT_LOCATION_REQUIRED');
+  const s=await save(id,f);expect(s.status).toBe(200);const r=(await get(s.body.results[0].id)).body;
+  expect((await publish(r)).status).toBe(200);
+  expect((await request(app).get('/leads/'+r.id+'?approximate=1')).status).toBe(404);
+  const one=await request(app).get('/leads/'+r.id+'?approximate=1&unlocated=1');expect(one.status).toBe(200);expect(one.body.locationPrecision).toBe('CONTACT_FOR_LOCATION');expect(one.body.latitude).toBeNull();expect(one.body.notice).toContain('需聯絡賣家');
+  const ids=async(qs:string)=>(await request(app).get('/leads?'+qs)).body.items.map((i:any)=>i.id);
+  expect(await ids('bbox=117,20,123.8,26.6&q=合成無地區')).not.toContain(r.id);
+  expect(await ids('bbox=120,22,120.1,22.1&q=合成無地區&unlocated=1')).toContain(r.id);
+  expect((await request(app).get('/leads?unlocated=yes')).status).toBe(409);
+ });
  test('first-batch cap is20 and a bad batch is atomic',async()=>{const rows=Array.from({length:21},()=>{const id=prefix+randomUUID();return {archiveItemId:id,expectedRevision:0,expectedStateHash:null,facts:facts(id)};});expect((await post('save',{operationId:randomUUID(),items:rows})).body.errorCode).toBe('ONE_TO_20_RECORDS_REQUIRED');const bad=[rows[0],{...rows[1],facts:{...rows[1].facts,summary:'private@example.com'}}];expect((await post('save',{operationId:randomUUID(),items:bad})).status).toBe(409);expect(await prisma.externalSourceLead.count({where:{archiveItemId:{startsWith:prefix}}})).toBe(0);});
 });

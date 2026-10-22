@@ -4,6 +4,7 @@ import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDelivered
 import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
+import {isContactLocation} from '../lib/sourceContactLocation';
 import {publicCommentRoute,publicCommentPayload} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
@@ -238,11 +239,13 @@ export function createSourceLeadRoutes() {
         try {
             if (!enabled())
                 return res.json({ items: [], nextCursor: null, enabled: false });
-            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'photos', 'approximate'].includes(k)))
+            if (Object.keys(req.query).some(k => !['q', 'bbox', 'cursor', 'presentation', 'photos', 'approximate', 'unlocated'].includes(k)))
                 throw new LeadError('INVALID_QUERY');
             if (req.query.presentation !== undefined && req.query.presentation !== '1') throw new LeadError('INVALID_PRESENTATION');
             if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
             if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
+            // Opt-in: records without any region bypass the map box; older clients never receive them.
+            const unlocated=req.query.unlocated==='1';if(req.query.unlocated!==undefined&&!unlocated)throw new LeadError('INVALID_UNLOCATED_MODE');
             const q = String(req.query.q ?? '');
             if (q.length > 80)
                 throw new LeadError('INVALID_QUERY');
@@ -260,14 +263,14 @@ export function createSourceLeadRoutes() {
             const items = [];
             let next = cursor, exhausted = false;
             for (let scan = 0; scan < 20 && items.length < 25; scan++) {
-                const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED', ...(q ? { OR: [{ title: { contains: q, mode: 'insensitive' as const } }, { summary: { contains: q, mode: 'insensitive' as const } }] } : {}), ...(box ? { longitude: { gte: box[0], lte: box[2] }, latitude: { gte: box[1], lte: box[3] } } : {}) }, orderBy: { id: 'asc' }, take: 50, ...(next ? { cursor: { id: next }, skip: 1 } : {}) });
+                const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED', AND: [...(q ? [{ OR: [{ title: { contains: q, mode: 'insensitive' as const } }, { summary: { contains: q, mode: 'insensitive' as const } }] }] : []), ...(box ? [{ OR: [{ longitude: { gte: box[0], lte: box[2] }, latitude: { gte: box[1], lte: box[3] } }, ...(unlocated ? [{ latitude: null, recordOrigin: 'DB_MASTER' }] : [])] }] : [])] }, orderBy: { id: 'asc' }, take: 50, ...(next ? { cursor: { id: next }, skip: 1 } : {}) });
                 if (!rows.length) {
                     exhausted = true;
                     break;
                 }
                 for (const r of rows) {
                     next = r.id;
-                    if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1'))
+                    if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1') && (!isContactLocation(r.evidence)||unlocated))
                         items.push(leadDTO(r, req.query.presentation === '1',req.query.photos==='2'));
                     if (items.length === 25)
                         break;
@@ -304,7 +307,7 @@ export function createSourceLeadRoutes() {
     router.get('/inquiries/mine', authenticateToken, async (req: AuthRequest, res) => { try {
         if (!req.user || Object.keys(req.query).some(k=>k!=='cursor') || (req.query.cursor&&!isListingId(req.query.cursor))) return res.sendStatus(404);
         const rows=await prisma.sourceLeadInquiry.findMany({where:{buyerUserId:req.user.id},include:{lead:true},orderBy:{id:'asc'},take:26,...(req.query.cursor?{cursor:{id:String(req.query.cursor)},skip:1}:{})});
-        return res.json({items:rows.slice(0,25).map(r=>({id:r.id,leadId:r.leadId,state:r.state,context:{id:r.leadId,title:r.lead.title,canonicalUrl:r.lead.canonicalUrl,county:r.lead.county,district:r.lead.district,...(isCountyIllustration(r.lead.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:{}),contactRouting:contactRoutingDTO(r.lead),publicFacts:{priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問'},media:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead):[],priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問',thumbnailUrl:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead)[0]?.thumbnailUrl:undefined}})),nextCursor:rows.length>25?rows[24].id:null});
+        return res.json({items:rows.slice(0,25).map(r=>({id:r.id,leadId:r.leadId,state:r.state,context:{id:r.leadId,title:r.lead.title,canonicalUrl:r.lead.canonicalUrl,county:r.lead.county,district:r.lead.district,...(isCountyIllustration(r.lead.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:isContactLocation(r.lead.evidence)?{locationPrecision:'CONTACT_FOR_LOCATION'}:{}),contactRouting:contactRoutingDTO(r.lead),publicFacts:{priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問'},media:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead):[],priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問',thumbnailUrl:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead)[0]?.thumbnailUrl:undefined}})),nextCursor:rows.length>25?rows[24].id:null});
     } catch(e){return fail(res,e);} });
     router.get('/:id/media/:mediaId/:variant', async (req, res) => { try {
         if (!enabled() || !isListingId(req.params.id) || !isListingId(req.params.mediaId) || !['image','thumbnail'].includes(String(req.params.variant))) return res.sendStatus(404);
@@ -320,10 +323,10 @@ export function createSourceLeadRoutes() {
         if (!enabled() || !isListingId(req.params.id))
             return res.sendStatus(404);
         const l = await prisma.externalSourceLead.findUnique({ where: { id: String(req.params.id) } });
-        if (Object.keys(req.query).some(k => !['presentation','photos','approximate'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
+        if (Object.keys(req.query).some(k => !['presentation','photos','approximate','unlocated'].includes(k)) || (req.query.presentation !== undefined && req.query.presentation !== '1')) throw new LeadError('INVALID_PRESENTATION');
         if(req.query.photos!==undefined&&(req.query.photos!=='2'||req.query.presentation!=='1'))throw new LeadError('INVALID_PHOTOS_VERSION');
             if(req.query.approximate!==undefined&&req.query.approximate!=='1')throw new LeadError('INVALID_APPROXIMATE_MODE');
-        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') ? res.json(leadDTO(l, req.query.presentation === '1',req.query.photos==='2')) : res.sendStatus(404);
+        return l && leadCurrent(l) && (!isCountyIllustration(l.evidence)||req.query.approximate==='1') && (!isContactLocation(l.evidence)||req.query.unlocated==='1') ? res.json(leadDTO(l, req.query.presentation === '1',req.query.photos==='2')) : res.sendStatus(404);
     }
     catch (e) {
         return fail(res, e);

@@ -51,3 +51,16 @@ describe('source search explicit recovery', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('source search rows without an area', () => {
+  it('opts in, keeps no-area rows off the map list and returns them separately', async () => {
+    const contact = { ...lead(), id: '5d4f1c8e-2a3b-4c5d-8e9f-0a1b2c3d4e5f', locationPrecision: 'CONTACT_FOR_LOCATION', county: null, district: null, publicPlaceName: null, publicAddress: null, latitude: null, longitude: null, coordinateSourceUrl: null, coordinateAttribution: null };
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ enabled: true, items: [lead(), contact], nextCursor: null })));
+    const request = query();
+    const { result } = renderHook(() => useSourceLeadSearch('synthetic', request));
+    await settle();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('unlocated=1');
+    expect(result.current.items.map(i => i.id)).toEqual([lead().id]);
+    expect(result.current.contactItems.map(i => i.id)).toEqual([contact.id]);
+  });
+});

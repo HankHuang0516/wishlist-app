@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiObserved, ApiFailure } from './marketplaceApi';
-import { parseLeadPage, parseLead, type SourceLead } from './sourceLeadData';
+import { parseLeadPage, parseLead, isLocatedLead, type SourceLead } from './sourceLeadData';
 import type {ExploreEvidence} from './exploreEvidence';
 import type { ExploreQuery } from './exploreWeb';
 const sourceSearchError = '來源線索未完成讀取，已暫停自動更新；不代表沒有資料，請明確重新搜尋。' as const;
@@ -22,7 +22,7 @@ export function useSourceLeadSearch(token: string, query: ExploreQuery | null, e
         const rows: SourceLead[] = [], seen = new Set<string>();
         let cursor: string | null = null;let lastEnabled=true;
         do {
-          const path = '/source-leads?presentation=1&photos=2&approximate=1&bbox=' + query!.bounds.join(',') + '&q=' + encodeURIComponent(query!.filters.q) + (cursor ? '&cursor=' + cursor : '');
+          const path = '/source-leads?presentation=1&photos=2&approximate=1&unlocated=1&bbox=' + query!.bounds.join(',') + '&q=' + encodeURIComponent(query!.filters.q) + (cursor ? '&cursor=' + cursor : '');
           const startedAt=new Date().toISOString();let status:number|null=null;let raw:unknown;
           try{raw=await apiObserved<unknown>(token,path,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30_000)])},s=>{status=s;});if(active)evidence?.page('source',startedAt,status,raw);}
           catch(e){if(active)evidence?.transportError('source',startedAt,status);throw e;}
@@ -50,9 +50,12 @@ export function useSourceLeadSearch(token: string, query: ExploreQuery | null, e
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 30_000);
     return () => { active = false; controller.abort(); window.clearInterval(timer); };
   }, [token, query, hidden, evidence]);
+  const current = (completedSerial === query?.serial ? items : []).filter(row => { try { parseLead(row); return true; } catch { return false; } });
   return {
     completedSerial, retryUntil,
-    items: (completedSerial === query?.serial ? items : []).filter(row => { try { parseLead(row); return true; } catch { return false; } }),
+    // Map-capable rows only; rows without any region are listed separately and never plotted.
+    items: current.filter(isLocatedLead),
+    contactItems: current.filter(row => !isLocatedLead(row)),
     busy: busy || !!query && completedSerial !== query.serial, error, hidden,
   };
 }

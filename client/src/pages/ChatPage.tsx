@@ -25,13 +25,13 @@ function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
 function storedSourceContext(value:unknown):SourceProductContext {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('來源對話資料不正確。');
   const row=value as SourceProductContext;
-  const countyIllustration=row.locationPrecision==='COUNTY_ILLUSTRATION';
-  if(row.locationPrecision!==undefined&&!countyIllustration)throw new Error('來源對話位置格式不正確。');
-  if(!isUuid(row.id)||typeof row.title!=='string'||!row.title.trim()||row.title.length>100||!row.county||!row.district||(!TAIWAN_DISTRICTS[row.county]?.has(row.district)&&!(countyIllustration&&row.county==='臺北市'&&row.district==='行政區未明示')))throw new Error('來源對話資料不正確。');
+  const countyIllustration=row.locationPrecision==='COUNTY_ILLUSTRATION',contact=row.locationPrecision==='CONTACT_FOR_LOCATION';
+  if(row.locationPrecision!==undefined&&!countyIllustration&&!contact)throw new Error('來源對話位置格式不正確。');
+  if(!isUuid(row.id)||typeof row.title!=='string'||!row.title.trim()||row.title.length>100||(contact?row.county!=null||row.district!=null:!row.county||!row.district||(!TAIWAN_DISTRICTS[row.county]?.has(row.district)&&!(countyIllustration&&!!TAIWAN_DISTRICTS[row.county]&&row.district==='行政區未明示'))))throw new Error('來源對話資料不正確。');
   const url=new URL(row.canonicalUrl);if(url.protocol!=='https:'||url.username||url.password||url.port||url.search||url.hash)throw new Error('來源對話連結不正確。');
   if(row.publicFacts!=null&&(typeof row.publicFacts.priceText!=='string'||row.publicFacts.priceText.length>300))throw new Error('來源對話售價不正確。');
   // Saved history remains readable after expiry, but stale media never gains display permission.
-  return {id:row.id,title:row.title,canonicalUrl:row.canonicalUrl,county:row.county,district:row.district,...(countyIllustration?{locationPrecision:'COUNTY_ILLUSTRATION' as const}:{}),publicFacts:row.publicFacts??undefined,contactRouting:row.contactRouting?parseContactRouting(row.contactRouting):undefined,media:[]};
+  return {id:row.id,title:row.title,canonicalUrl:row.canonicalUrl,...(contact?{locationPrecision:'CONTACT_FOR_LOCATION' as const}:{county:row.county,district:row.district,...(countyIllustration?{locationPrecision:'COUNTY_ILLUSTRATION' as const}:{})}),publicFacts:row.publicFacts??undefined,contactRouting:row.contactRouting?parseContactRouting(row.contactRouting):undefined,media:[]};
 }
 export default function ChatPage() {
   const { user, token } = useAuth(), location = useLocation();
@@ -66,10 +66,10 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
         if(sourceId){
           const old=all.find(thread=>thread.context.id===sourceId);
           try {
-            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1&photos=2&approximate=1',{signal:controller.signal}));
+            const current=parseLead(await api<unknown>(token,'/source-leads/'+sourceId+'?presentation=1&photos=2&approximate=1&unlocated=1',{signal:controller.signal}));
             if(controller.signal.aborted)throw Error();
             if(current.id!==sourceId)throw Error();
-            if(valid&&!controller.signal.aborted)setSource({...current,publicFacts:current.publicFacts??undefined});
+            if(valid&&!controller.signal.aborted)setSource({...current,county:current.county??undefined,district:current.district??undefined,publicFacts:current.publicFacts??undefined});
           }catch(failure){
             if(controller.signal.aborted||!old)throw failure;
             if(valid)setSource(old.context);

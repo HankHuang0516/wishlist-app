@@ -34,7 +34,8 @@ describe('source inquiry inbox language and explicit read recovery', () => {
   it.each([
     { county: '臺北市', district: '行政區未明示' },
     { county: '臺北市', district: '行政區未明示', locationPrecision: 'PRECISE' },
-    { county: '臺南市', district: '行政區未明示', locationPrecision: 'COUNTY_ILLUSTRATION' },
+    { county: '不是縣市', district: '行政區未明示', locationPrecision: 'COUNTY_ILLUSTRATION' },
+    { county: '臺南市', district: '行政區未明示', locationPrecision: 'CONTACT_FOR_LOCATION' },
     { county: '臺北市', district: '不是真實行政區', locationPrecision: 'COUNTY_ILLUSTRATION' },
   ])('retains strict rejection of unsupported saved location $county $district $locationPrecision', async location => {
     api.mockImplementation(async (_: string, path: string) => path.startsWith('/source-leads/inquiries/mine') ? { items: [{ ...threads[0], context: { ...context, ...location } }], nextCursor: null } : { items: [], nextCursor: null });

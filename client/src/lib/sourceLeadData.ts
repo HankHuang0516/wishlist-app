@@ -8,7 +8,7 @@ export function parseContactRouting(value:unknown):ContactRouting {
 export type PhotoCompleteness={status:'UNVERIFIED'|'INCOMPLETE'|'IMPORTED_COMPLETE'|'STALE'|'OVER_LIMIT';sourceCount:number|null;physicalSourceCount:number|null;importedCount:number;limit:number};
 export type SourceLead = {
     photoCompleteness?:PhotoCompleteness;
-    locationPrecision?:'COUNTY_ILLUSTRATION';
+    locationPrecision?:'COUNTY_ILLUSTRATION'|'CONTACT_FOR_LOCATION';
     contactRouting?:ContactRouting;
     media?: LeadPhoto[];
     id: string;
@@ -16,12 +16,13 @@ export type SourceLead = {
     title: string;
     summary: string;
     canonicalUrl: string;
-    county: string;
-    district: string;
-    publicPlaceName: string;
-    publicAddress: string;
-    latitude: number;
-    longitude: number;
+    // All null only for CONTACT_FOR_LOCATION: no region, never on the map.
+    county: string | null;
+    district: string | null;
+    publicPlaceName: string | null;
+    publicAddress: string | null;
+    latitude: number | null;
+    longitude: number | null;
     postedEarliestAt: string;
     postedLatestAt: string;
     checkedAt: string;
@@ -38,7 +39,7 @@ export type SourceLead = {
         locationRelation: string;
         coordinateQualityNotes: string[];
     } | null;
-    coordinateSourceUrl: string;
+    coordinateSourceUrl: string | null;
     coordinateAttribution: {
         text: string;
         url: string;
@@ -49,13 +50,13 @@ export type SourceLead = {
 const obj = (v: unknown): Record<string, any> => { if (!v || typeof v !== 'object' || Array.isArray(v))
     throw new Error('線索格式錯誤'); return v as Record<string, any>; };
 export function sourceLeadCutoff(now = Date.now()) { const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now).split('-').map(Number); const first = new Date(Date.UTC(y, m - 3, 1)), end = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, end)) - 8 * 3600000; }
-export function parseLead(v: unknown): SourceLead { const r = obj(v); const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','photoCompleteness','contactRouting','locationPrecision']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&r.county==='臺北市'&&r.district==='行政區未明示')) || ['title', 'summary', 'publicPlaceName', 'publicAddress', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240 || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude))
-    throw new Error('線索格式錯誤'); if(r.locationPrecision!==undefined&&(r.locationPrecision!=='COUNTY_ILLUSTRATION'||r.publicPlaceName!==r.county+'概略示意位置'||r.publicAddress!==r.county+'（概略位置，非取貨點）'||r.coordinateAttribution!==null))throw new Error('概略位置格式錯誤'); const u = new URL(r.canonicalUrl); if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search)
+export function parseLead(v: unknown): SourceLead { const r = obj(v); const contact = r.locationPrecision === 'CONTACT_FOR_LOCATION'; const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','photoCompleteness','contactRouting','locationPrecision']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (contact?['county','district','publicPlaceName','publicAddress','latitude','longitude','coordinateSourceUrl','coordinateAttribution'].some(k=>r[k]!==null):(!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&!!TAIWAN_DISTRICTS[r.county]&&r.district==='行政區未明示')) || ['publicPlaceName', 'publicAddress'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) || ['title', 'summary', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240)
+    throw new Error('線索格式錯誤'); if(r.locationPrecision!==undefined&&!contact&&(r.locationPrecision!=='COUNTY_ILLUSTRATION'||r.publicPlaceName!==r.county+'概略示意位置'||r.publicAddress!==r.county+'（概略位置，非取貨點）'||r.coordinateAttribution!==null))throw new Error('概略位置格式錯誤'); const u = new URL(r.canonicalUrl); if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search)
     throw new Error('來源連結錯誤'); if (r.publicFacts !== null) {
     const f = obj(r.publicFacts);
     if (Object.keys(f).some(k => !['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation', 'coordinateQualityNotes'].includes(k)) || ['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation'].some(k => typeof f[k] !== 'string' || !f[k] || f[k].length > 300) || !Array.isArray(f.coordinateQualityNotes) || f.coordinateQualityNotes.some((v: unknown) => typeof v !== 'string' || v.length > 500))
         throw new Error('公開事實格式錯誤');
-} const cu = new URL(r.coordinateSourceUrl); if (cu.protocol !== 'https:' || cu.username || cu.password || cu.search || cu.hash)
+} const cu = contact ? null : new URL(r.coordinateSourceUrl); if (cu && (cu.protocol !== 'https:' || cu.username || cu.password || cu.search || cu.hash))
     throw new Error('座標來源錯誤'); if (r.coordinateAttribution !== null) {
     const a = obj(r.coordinateAttribution);
     if (a.text !== '© OpenStreetMap contributors' || a.url !== 'https://www.openstreetmap.org/copyright' || a.license !== 'ODbL-1.0' || a.licenseUrl !== 'https://opendatacommons.org/licenses/odbl/1-0/')
@@ -103,4 +104,6 @@ export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = 
         throw new Error('回執格式錯誤');
 } return r as LeadRoom; }
 
-export const sourceLocationLabel=(lead:Pick<SourceLead,'locationPrecision'>)=>lead.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':'公共面交點';
+export const sourceLocationLabel=(lead:Pick<SourceLead,'locationPrecision'>)=>lead.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':lead.locationPrecision==='CONTACT_FOR_LOCATION'?'未提供地區，面交地點需聯絡賣家；寄送不受影響':'公共面交點';
+export type LocatedSourceLead = SourceLead & { county: string; district: string; publicPlaceName: string; publicAddress: string; latitude: number; longitude: number; coordinateSourceUrl: string };
+export const isLocatedLead = (lead: SourceLead): lead is LocatedSourceLead => lead.locationPrecision !== 'CONTACT_FOR_LOCATION';

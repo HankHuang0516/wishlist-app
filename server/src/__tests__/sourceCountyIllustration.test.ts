@@ -18,3 +18,12 @@ test('every county has one bound representative; any county may keep an explicit
  for(const county of ['臺中市','彰化縣']){const b=cityOnly(),point=countyIllustration(county)!,row={...b,county,publicPlaceName:county+'概略示意位置',publicAddress:county+'（概略位置，非取貨點）',latitude:point.latitude,longitude:point.longitude,evidence:{...b.evidence,countyIllustration:{...b.evidence.countyIllustration,county,representativeKey:point.key}}};
   expect(parseLead(row,now).district).toBe('行政區未明示');expect(()=>parseLead({...row,latitude:countyIllustration('臺北市')!.latitude},now)).toThrow();}
 });
+
+test('a no-area record is DB-only and must keep every location field empty',()=>{
+ const b=make(),contact={...b,county:null,district:null,publicPlaceName:null,publicAddress:null,latitude:null,longitude:null,libraryFileId:null,archiveVersion:null,archiveSha256:null,evidence:{sourceUrl:b.canonicalUrl,sourcePublic:true,publicSourceRef:'review:synthetic-public',dateRef:'review:synthetic-date',publicPlace:false,locationType:'SELLER_CONTACT_REQUIRED',sourceMeetingPointConfirmed:false,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,reviewRef:'review:synthetic',sourceCheckRef:'source:synthetic-check'}};
+ expect(parseLead(contact,now,true).latitude).toBeNull();
+ expect(()=>parseLead(contact,now,false)).toThrow();
+ for(const patch of [{latitude:23},{county:'臺南市'},{publicAddress:'臺南市某地'}])expect(()=>parseLead({...contact,...patch},now,true)).toThrow();
+ expect(()=>parseLead({...contact,evidence:{...contact.evidence,publicPlace:true}},now,true)).toThrow();
+ const dto=leadDTO({...parseLead(contact,now,true),id:'11111111-1111-4111-8111-111111111111',status:'PUBLISHED'} as any);expect(dto.locationPrecision).toBe('CONTACT_FOR_LOCATION');expect(dto.notice).toContain('寄送不受影響');
+});

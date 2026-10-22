@@ -1,8 +1,12 @@
 import {AUTO_REFERENCE_SCOPE,REFERENCE_VERIFIER_SCOPE,canAutoReference,AUTO_REFERENCE_RULE,validateAutoReference} from '../lib/sourceReferenceAutoDisplay';
-import {Router,Response} from 'express';
+import express,{Router,Response} from 'express';
+import {randomUUID} from 'crypto';
 import {Prisma} from '@prisma/client';
 import prisma from '../lib/prisma';
-import {LeadError,digest,exact,object,ref,leadCurrent} from '../lib/sourceLeadRules';
+import {LeadError,digest,exact,object,ref,leadCurrent,parseLead} from '../lib/sourceLeadRules';
+import {ListingFlickrStorage} from '../lib/listingFlickrStorage';
+import {SOURCE_PHOTO_LIMIT} from '../lib/sourcePhotoInventory';
+import {recordPhotoEvidence,signPhotoReceipt,verifyPhotoReceipt} from '../lib/sourceRecordPhotos';
 import {isListingId} from '../lib/listingRules';
 import {parseRecordFacts,parseRecordPublication,recordSnapshot,recordStateHash,exportCsv} from '../lib/sourceLeadRecords';
 const json=(v:unknown)=>JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -98,6 +102,42 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     results.push(receipt);
    }
    return {operationId:op,replayed:false,results,sourceReferencesPublished:results.length,qualifiedSupplyAdded:0};
+  });return res.json(result);
+ }catch(e){return fail(res,e);}});
+ // Back up one FB post photo to Flickr; the signed receipt is bound to this record and only used by /photos.
+ router.post('/:id/photo-uploads',express.raw({type:['image/jpeg','image/png','image/webp'],limit:'8mb'}),async(req,res)=>{if(options.draftOnly)return res.status(403).json({errorCode:'MANAGER_PHOTOS_NOT_ALLOWED'});try{
+  const key=process.env.ADMIN_API_KEY;if(!key)throw new Error('ADMIN_KEY_MISSING');
+  const sourcePhotoId=String(req.query.sourcePhotoId??'');
+  if(!isListingId(req.params.id)||Object.keys(req.query).some(k=>k!=='sourcePhotoId')||!/^[A-Za-z0-9_-]{1,100}$/.test(sourcePhotoId)||!Buffer.isBuffer(req.body)||!req.body.length)throw new LeadError('PHOTO_UPLOAD_INVALID');
+  const row=await prisma.externalSourceLead.findUnique({where:{id:String(req.params.id)}});
+  if(!row||row.recordOrigin!=='DB_MASTER'||row.status==='WITHDRAWN')throw new LeadError('DB_RECORD_REQUIRED');
+  const mediaId=randomUUID(),up=await new ListingFlickrStorage().upload(mediaId,req.body);
+  return res.json(signPhotoReceipt({recordId:row.id,sourcePhotoId,mediaId,photoId:up.photoId,imageSource:up.imageSource,thumbnailSource:up.thumbnailSource,uploadedAt:new Date().toISOString()},key));
+ }catch(e){return fail(res,e);}});
+ // Bind the reviewed photo assignment (and its Flickr receipts) to the record's evidence.
+ router.post('/:id/photos',async(req,res)=>{if(options.draftOnly)return res.status(403).json({errorCode:'MANAGER_PHOTOS_NOT_ALLOWED'});try{
+  const key=process.env.ADMIN_API_KEY;if(!key)throw new Error('ADMIN_KEY_MISSING');
+  const b=object(req.body);exact(b,['operationId','expectedRevision','expectedStateHash','assignment','uploads']);const op=operation(b.operationId);
+  if(!isListingId(req.params.id)||!revision(b.expectedRevision)||!hash(b.expectedStateHash)||!Array.isArray(b.uploads)||b.uploads.length>SOURCE_PHOTO_LIMIT)throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');
+  const id=String(req.params.id),receipts=b.uploads.map((u:any)=>verifyPhotoReceipt(u,id,key));
+  const requestHash=digest({action:'PHOTOS',id,expectedRevision:b.expectedRevision,expectedStateHash:b.expectedStateHash,assignment:b.assignment,uploads:b.uploads});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73009260930::bigint)`;
+   const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;
+   const old=await tx.externalSourceLead.findUnique({where:{id}});
+   if(!old||old.recordOrigin!=='DB_MASTER'||old.status==='WITHDRAWN'||old.recordRevision!==b.expectedRevision||recordStateHash(old)!==b.expectedStateHash)throw new LeadError('RECORD_STATE_CONFLICT');
+   const title=String((old.pendingFacts as any)?.title??old.title);
+   const evidence={...object(old.evidence),...recordPhotoEvidence({...old,title},b.assignment,receipts)};
+   let data:any={evidence:json(evidence),recordRevision:old.recordRevision+1};
+   if(old.status==='PUBLISHED'){
+    const parsed=parseLead({...Object.fromEntries(['archiveItemId','libraryFileId','archiveVersion','archiveSha256','title','summary','canonicalUrl','county','district','publicPlaceName','publicAddress','latitude','longitude'].map(k=>[k,(old as any)[k]])),evidence,postedEarliestAt:old.postedEarliestAt?.toISOString()??null,postedLatestAt:old.postedLatestAt?.toISOString()??null,checkedAt:old.checkedAt?.toISOString()??null},new Date(),true);
+    data={...data,evidence:json(parsed.evidence),contentHash:parsed.contentHash,...(parsed.contentHash!==old.contentHash?{sellerRoute:Prisma.DbNull}:{})};
+   }
+   const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:old.status},data});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');
+   const saved=await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}});
+   const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),status:saved.status,photos:(evidence as any).media.length};
+   await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'PHOTOS',requestHash,appliedRevision:saved.recordRevision,beforeSnapshot:json(recordSnapshot(old)),afterSnapshot:json({record:recordSnapshot(saved),result:receipt})}});
+   return {operationId:op,replayed:false,results:[receipt],qualifiedSupplyAdded:0};
   });return res.json(result);
  }catch(e){return fail(res,e);}});
  router.get('/operations/:operationId',async(req,res)=>{try{

@@ -12,7 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
- {version:'2.0.737',date:'2026-10-22',title:'未提供地區的外部來源可搜尋',type:'Fullstack',items:[{type:'New',content:'探索搜尋新增「未提供地區的商品」清單：沒有地區的外部來源不放上地圖，但搜得到，並註明面交地點需聯絡賣家後才知道，寄送不受影響。'},{type:'Fix',content:'只知道縣市的外部來源，各縣市都能以概略位置顯示，不再限於臺北市。'}]},
+ {version:'2.0.737',date:'2026-10-22',title:'未提供地區的外部來源可搜尋',type:'Fullstack',items:[{type:'New',content:'探索搜尋新增「未提供地區的商品」清單：沒有地區的外部來源不放上地圖，但搜得到，並註明面交地點需聯絡賣家後才知道，寄送不受影響。'},{type:'Fix',content:'只知道縣市的外部來源，各縣市都能以概略位置顯示，不再限於臺北市。'},{type:'New',content:'資料庫來源商品可顯示原貼文照片：照片備份到 Flickr 後依商品逐張對應，詳情頁顯示照片與數量核對。'},{type:'Enhancement',content:'資料庫來源商品不再因 48 小時或發文超過兩個月而自動下架，只在重查發現已售出或已刪文時撤下。'}]},
  {version:'2.0.733',date:'2026-10-12',title:'探索查詢證據',type:'Frontend',items:[{type:'New',content:'既有探索查詢可唯讀檢視與匯出分頁、公開識別、終頁及去重證據，不新增請求。'},{type:'Fix',content:'未開放、404、失敗或未完成明確區分，不當成功零件；逐件權利與現貨仍待核實。'}]},
  {version:'2.0.729',date:'2026-10-12',title:'行銷示意圖清楚標示',type:'Frontend',items:[{type:'Enhancement',content:'商品分享頁與探索商品預覽在行銷圖下方顯示繁中／英文示意圖標示，保留原照片與圖片順序。'},{type:'Fix',content:'探索商品詳情的圖片說明區分原照與行銷示意圖；圖片載入失敗時仍保留示意圖標示。'}]},
  {version:'2.0.726',date:'2026-10-11',title:'商品分享預覽據實顯示照片',type:'Backend',items:[{type:'Fix',content:'未提供商品照片時，分享預覽保留名稱、價格與連結，移除被誤標為商品照片的網站通用圖。'},{type:'Enhancement',content:'分享預覽優先使用原商品照片；只有已選用的行銷圖時，圖片說明明確標示為行銷示意圖。'}]},

@@ -23,7 +23,7 @@ export function photoBindingHash(inventory:Omit<SourcePhotoInventory,'bindingHas
  const canonical=(v:any):any=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
  return createHash('sha256').update(JSON.stringify(canonical({source,media}))).digest('hex');
 }
-export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;evidence:any},visibleMedia:{id:string}[],now=Date.now()):PhotoCompleteness {
+export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;evidence:any;recordOrigin?:string|null},visibleMedia:{id:string}[],now=Date.now()):PhotoCompleteness {
  const result:PhotoCompleteness={status:'UNVERIFIED',sourceCount:null,physicalSourceCount:null,importedCount:visibleMedia.length,limit:SOURCE_PHOTO_LIMIT};
  const e=row.evidence;
  if(!e?.photoInventory)return result;
@@ -32,7 +32,7 @@ export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;
  result.sourceCount=expected.length;
  result.physicalSourceCount=inventory.photos.filter(p=>p.classification==='SAME_ITEM').length;
  if(expected.length>SOURCE_PHOTO_LIMIT)return {...result,status:'OVER_LIMIT'};
- if(now-Date.parse(inventory.checkedAt)>48*3600000||inventory.bindingHash!==photoBindingHash(inventory,Array.isArray(e.media)?e.media:[]))return {...result,status:'STALE'};
+ if((row.recordOrigin!=='DB_MASTER'&&now-Date.parse(inventory.checkedAt)>48*3600000)||inventory.bindingHash!==photoBindingHash(inventory,Array.isArray(e.media)?e.media:[]))return {...result,status:'STALE'};
  if(inventory.coverage!=='FULL_POST'||inventory.ambiguities?.length||inventory.photos.some(p=>p.classification==='UNKNOWN'))return result;
  const media=Array.isArray(e.media)?e.media:[];
  const assigned=media.map((m:any)=>m.sourcePhotoId);

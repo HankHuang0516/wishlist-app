@@ -25,7 +25,7 @@ describe('same DB record save -> review -> publication (isolated only)',()=>{
   const exported=await request(app).get('/admin/records/'+r.id+'/export?format=json').set('x-admin-key',admin);expect(exported.body.backupOnly).toBe(true);expect(exported.body.record.id).toBe(r.id);expect(exported.body.authoritativeStore).toBe('DATABASE');
   expect((await request(app).post('/admin/import').set('x-admin-key',admin).send({items:[{...f,archiveItemId:id,libraryFileId:'libfile_'+'a'.repeat(32),archiveVersion:1,archiveSha256:'a'.repeat(64)}],dryRun:false})).body.errorCode).toBe('DB_RECORD_USE_RECORDS_ROUTE');
  });
- test('current DB state conflict,stale source time and source-reference retiming reject without publication',async()=>{const id=prefix+randomUUID(),f=facts(id),s=await save(id,f),r=(await get(s.body.results[0].id)).body;expect((await save(id,f,{...r,recordRevision:99})).body.errorCode).toBe('RECORD_STATE_CONFLICT');expect((await save(id,{...f,checkedAt:new Date(Date.now()-7*86400000).toISOString()},r)).body.errorCode).toBe('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');const stale={...f,checkedAt:new Date(Date.now()-7*86400000).toISOString(),evidence:{...f.evidence,sourceCheckRef:'source:synthetic-new-stale'}};const ss=await save(id,stale,r);expect(ss.status).toBe(200);const rr=(await get(r.id)).body;expect((await publish(rr)).status).toBe(409);expect((await request(app).get('/leads/'+r.id)).status).toBe(404);});
+ test('current DB state conflict and source-reference retiming reject; an older source check still publishes (no passive expiry)',async()=>{const id=prefix+randomUUID(),f=facts(id),s=await save(id,f),r=(await get(s.body.results[0].id)).body;expect((await save(id,f,{...r,recordRevision:99})).body.errorCode).toBe('RECORD_STATE_CONFLICT');expect((await save(id,{...f,checkedAt:new Date(Date.now()-7*86400000).toISOString()},r)).body.errorCode).toBe('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');const stale={...f,checkedAt:new Date(Date.now()-7*86400000).toISOString(),evidence:{...f.evidence,sourceCheckRef:'source:synthetic-new-stale'}};const ss=await save(id,stale,r);expect(ss.status).toBe(200);const rr=(await get(r.id)).body;expect((await publish(rr)).status).toBe(200);expect((await request(app).get('/leads/'+r.id)).status).toBe(200);});
  test('existing expired published UUID and historical archive preserved; sold signal cannot resurrect',async()=>{
   const id=prefix+randomUUID(),f=facts(id);const {sourceCheckRef,...legacyEvidence}=f.evidence;
   const imp=await request(app).post('/admin/import').set('x-admin-key',admin).send({items:[{...f,evidence:legacyEvidence,archiveItemId:id,libraryFileId:'libfile_'+'a'.repeat(32),archiveVersion:16,archiveSha256:'a'.repeat(64)}],dryRun:false});expect(imp.status).toBe(200);const uuid=imp.body.ids[0];await prisma.externalSourceLead.update({where:{id:uuid},data:{checkedAt:new Date(Date.now()-7*86400000)}});expect((await request(app).get('/leads/'+uuid)).status).toBe(404);
@@ -56,6 +56,34 @@ describe('same DB record save -> review -> publication (isolated only)',()=>{
   expect(await ids('bbox=117,20,123.8,26.6&q=合成無地區')).not.toContain(r.id);
   expect(await ids('bbox=120,22,120.1,22.1&q=合成無地區&unlocated=1')).toContain(r.id);
   expect((await request(app).get('/leads?unlocated=yes')).status).toBe(409);
+ });
+ test('DB record photos: Flickr upload receipt -> per-item assignment -> public gallery, replay-safe',async()=>{
+  const sharp=require('sharp'),jpeg=await sharp({create:{width:8,height:8,channels:3,background:'#c33'}}).jpeg().toBuffer();
+  const env={...process.env};Object.assign(process.env,{ADMIN_API_KEY:'synthetic-receipt-key',FLICKR_API_KEY:'k',FLICKR_API_SECRET:'s',FLICKR_OAUTH_TOKEN:'t',FLICKR_OAUTH_TOKEN_SECRET:'ts'});
+  let next=777000;const real=global.fetch;
+  const fake=jest.spyOn(global,'fetch').mockImplementation(async(input:any,init?:any)=>{const u=String(input);
+   if(u.startsWith('https://up.flickr.com/'))return new Response('<rsp stat="ok"><photoid>'+(++next)+'</photoid></rsp>');
+   if(u.startsWith('https://www.flickr.com/services/rest/')){const id=new URL(u).searchParams.get('photo_id');return Response.json({stat:'ok',sizes:{size:[{label:'Large 1600',source:'https://live.staticflickr.com/65535/'+id+'_abcd1234_h.jpg'},{label:'Small 320',source:'https://live.staticflickr.com/65535/'+id+'_abcd1234_n.jpg'}]}});}
+   if(u.startsWith('https://live.staticflickr.com/'))return new Response(jpeg,{headers:{'content-type':'image/jpeg','content-length':String(jpeg.length)}});
+   return real(input,init);});
+  try{
+   const id=prefix+randomUUID(),f=facts(id),s=await save(id,f),r=(await get(s.body.results[0].id)).body;expect((await publish(r)).status).toBe(200);
+   const upload=(photo:string)=>request(app).post('/admin/records/'+r.id+'/photo-uploads?sourcePhotoId='+photo).set('x-admin-key',admin).set('Content-Type','image/jpeg').send(jpeg);
+   const a=await upload('901');expect(a.status).toBe(200);expect(a.body.imageSource).toMatch(/^https:\/\/live\.staticflickr\.com\//);
+   expect((await request(app).post('/admin/records/'+r.id+'/photo-uploads?sourcePhotoId=902').set('Content-Type','image/jpeg').send(jpeg)).status).toBe(401);
+   const live=(await get(r.id)).body,op=randomUUID();
+   const assignment={checkedAt:f.checkedAt,sourceRevision:'synthetic-photo-viewer',reviewRef:'review:synthetic-photo-assignment',rightsEvidenceRef:'consent:synthetic-hank-photo-backup',coverage:'FULL_POST',photos:[{sourcePhotoId:'900',classification:'OTHER_VARIANT'},{sourcePhotoId:'901',classification:'SAME_ITEM',archiveItemId:id}]};
+   const body={operationId:op,expectedRevision:live.recordRevision,expectedStateHash:live.stateHash,assignment,uploads:[a.body]};
+   expect((await post(r.id+'/photos',{...body,uploads:[{...a.body,photoId:'1'}]})).body.errorCode).toBe('PHOTO_RECEIPT_INVALID');
+   const bound=await post(r.id+'/photos',body);expect(bound.status).toBe(200);expect(bound.body.results[0].photos).toBe(1);expect((await post(r.id+'/photos',body)).body.replayed).toBe(true);
+   expect((await post(r.id+'/photos',{...body,operationId:randomUUID()})).body.errorCode).toBe('RECORD_STATE_CONFLICT');
+   const pub=await request(app).get('/leads/'+r.id+'?presentation=1&photos=2');expect(pub.status).toBe(200);expect(pub.body.media).toHaveLength(1);expect(pub.body.photoCompleteness).toMatchObject({status:'IMPORTED_COMPLETE',sourceCount:1,importedCount:1});
+   const img=await request(app).get('/leads/'+r.id+'/media/'+pub.body.media[0].id+'/image');expect(img.status).toBe(200);expect(img.headers['content-type']).toBe('image/jpeg');
+   // A later re-check republish keeps the photos without re-uploading.
+   const again=(await get(r.id)).body,checked=new Date(Date.now()-60000).toISOString(),f2={...f,checkedAt:checked,evidence:{...f.evidence,sourceCheckRef:'source:synthetic-photo-recheck'}};
+   const s2=await save(id,f2,again);expect(s2.status).toBe(200);expect((await publish((await get(r.id)).body)).status).toBe(200);
+   expect((await request(app).get('/leads/'+r.id+'?presentation=1&photos=2')).body.media).toHaveLength(1);
+  }finally{fake.mockRestore();process.env=env;}
  });
  test('first-batch cap is20 and a bad batch is atomic',async()=>{const rows=Array.from({length:21},()=>{const id=prefix+randomUUID();return {archiveItemId:id,expectedRevision:0,expectedStateHash:null,facts:facts(id)};});expect((await post('save',{operationId:randomUUID(),items:rows})).body.errorCode).toBe('ONE_TO_20_RECORDS_REQUIRED');const bad=[rows[0],{...rows[1],facts:{...rows[1].facts,summary:'private@example.com'}}];expect((await post('save',{operationId:randomUUID(),items:bad})).status).toBe(409);expect(await prisma.externalSourceLead.count({where:{archiveItemId:{startsWith:prefix}}})).toBe(0);});
 });

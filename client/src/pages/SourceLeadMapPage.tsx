@@ -10,13 +10,10 @@ export const mapPoint = (latitude: number, longitude: number) => ({
   x: ((longitude + 180) / 360 * 128 - 106) * 256,
   y: ((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 128 - 53) * 256,
 });
+// The server decides freshness (archive leads keep 48h; DB records stay until a recheck withdraws them).
 export function currentLead(lead: Pick<SourceLead, 'postedEarliestAt' | 'postedLatestAt' | 'checkedAt'>, now = Date.now()) {
-  const [year, month, day] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now)).split('-').map(Number);
-  const first = new Date(Date.UTC(year, month - 3, 1));
-  const end = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  const cutoff = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, end)) - 8 * 3600000;
   const lower = Date.parse(lead.postedEarliestAt), upper = Date.parse(lead.postedLatestAt), checked = Date.parse(lead.checkedAt);
-  return Number.isFinite(lower) && Number.isFinite(upper) && Number.isFinite(checked) && lower >= cutoff && lower <= upper && upper <= now && checked <= now && now - checked <= 48 * 3600000;
+  return Number.isFinite(lower) && Number.isFinite(upper) && Number.isFinite(checked) && lower <= upper && upper <= now && checked <= now;
 }
 
 export default function SourceLeadMapPage() {

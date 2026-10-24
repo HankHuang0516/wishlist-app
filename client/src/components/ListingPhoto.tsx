@@ -20,7 +20,7 @@ export function ListingPhotoGallery({photos,title,completeness}:{completeness?:P
  const imageKey=(p:typeof photos[number])=>p.id+'|'+p.imageUrl;
  const loaded=photos.filter(p=>results[imageKey(p)]==='ready').length;
  const failed=photos.filter(p=>results[imageKey(p)]==='error').length;
- const messages={UNVERIFIED:'來源商品圖片總數尚待核對',INCOMPLETE:'已知來源圖片尚未完整匯入',IMPORTED_COMPLETE:'來源商品圖片已完整收錄',STALE:'圖片完整性需重新核對',OVER_LIMIT:'來源圖片超過目前支援張數，待處理'} as const;
+ const messages={UNVERIFIED:'來源商品圖片總數尚待核對',INCOMPLETE:'已知來源圖片尚未完整匯入',IMPORTED_COMPLETE:'來源商品圖片已完整收錄',STALE:'圖片完整性需重新核對',OVER_LIMIT:'來源圖片超過支援張數，已收錄前 32 張'} as const;
  const current=photos.find(p=>p.id===selected)??photos[0];
  const index=current?photos.findIndex(p=>p.id===current.id):0;
  const move=(offset:number)=>setSelected(photos[(index+offset+photos.length)%photos.length].id);

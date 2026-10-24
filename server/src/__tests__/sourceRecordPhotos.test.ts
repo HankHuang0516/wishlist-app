@@ -73,3 +73,27 @@ test('attaching photos or a new source check keeps contentHash (consent survives
   expect(parseLead({ ...facts, title: '合成來源測試用品（改名）' }, new Date(now), true).contentHash).not.toBe(base);
   expect(parseLead({ ...facts, evidence: { ...facts.evidence, publicFacts: { priceText: '999', priceUnitStatus: 'SOURCE_STATED', currencyStatus: 'TWD', sourceAccessNotice: '待確認', originalDateLabel: '約 2026/10/01', locationRelation: '公共面交點', coordinateQualityNotes: [] } } }, new Date(now), true).contentHash).not.toBe(base);
 });
+
+describe('posts with more item photos than the source limit bind the first 32 (Hank 2026-10-24)', () => {
+  const ids = Array.from({ length: 38 }, (_, i) => String(1000 + i));
+  const big = (n: number): PhotoUploadReceipt => ({ recordId, sourcePhotoId: ids[n], mediaId: `44444444-4444-4444-8444-${String(n).padStart(12, '0')}`, photoId: `66${100 + n}`,
+    imageSource: `https://live.staticflickr.com/65535/66${100 + n}_abc_b.jpg`, thumbnailSource: `https://live.staticflickr.com/65535/66${100 + n}_abc_n.jpg`, uploadedAt: '2026-10-22T05:00:00Z' });
+  const all = () => assignment(ids.map(sourcePhotoId => ({ sourcePhotoId, classification: 'SAME_ITEM', archiveItemId: row.archiveItemId })));
+  test('first 32 in source order are bound and reported OVER_LIMIT, never complete', () => {
+    const { media, photoInventory } = recordPhotoEvidence(row, all(), Array.from({ length: 32 }, (_, n) => big(n)), now);
+    expect(media.map((m: any) => m.sourcePhotoId)).toEqual(ids.slice(0, 32));
+    expect(photoInventory.photos).toHaveLength(38);
+    const probe = { ...row, recordOrigin: 'DB_MASTER', evidence: { media, photoInventory } };
+    expect(photoCompleteness(probe, sourceLeadMedia(probe, now), now)).toMatchObject({ status: 'OVER_LIMIT', sourceCount: 38, importedCount: 32 });
+  });
+  test('a receipt for a photo past the limit is refused, and missing ones still block', () => {
+    expect(() => recordPhotoEvidence(row, all(), [...Array.from({ length: 31 }, (_, n) => big(n)), big(32)], now)).toThrow('PHOTO_RECEIPT_UNUSED');
+    expect(() => recordPhotoEvidence(row, all(), Array.from({ length: 31 }, (_, n) => big(n)), now)).toThrow('PHOTO_RECEIPT_REQUIRED');
+  });
+  test('archive (non DB master) rows over the limit stay OVER_LIMIT without media', () => {
+    const { media, photoInventory } = recordPhotoEvidence(row, all(), Array.from({ length: 32 }, (_, n) => big(n)), now);
+    expect(photoCompleteness({ ...row, evidence: { media: [], photoInventory } }, [], now)).toMatchObject({ status: 'OVER_LIMIT', importedCount: 0 });
+    const probe = { ...row, recordOrigin: 'DB_MASTER', evidence: { media: media.slice(0, 31), photoInventory } };
+    expect(photoCompleteness(probe, sourceLeadMedia(probe, now), now).status).not.toBe('OVER_LIMIT');
+  });
+});

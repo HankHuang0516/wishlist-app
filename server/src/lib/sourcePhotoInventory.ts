@@ -31,12 +31,14 @@ export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;
  const expected=inventory.photos.filter(p=>['SAME_ITEM','ITEM_SPECIFICATION','ITEM_PACKAGING'].includes(p.classification)).map(p=>p.sourcePhotoId);
  result.sourceCount=expected.length;
  result.physicalSourceCount=inventory.photos.filter(p=>p.classification==='SAME_ITEM').length;
- if(expected.length>SOURCE_PHOTO_LIMIT)return {...result,status:'OVER_LIMIT'};
+ if(expected.length>SOURCE_PHOTO_LIMIT&&row.recordOrigin!=='DB_MASTER')return {...result,status:'OVER_LIMIT'};
  if((row.recordOrigin!=='DB_MASTER'&&now-Date.parse(inventory.checkedAt)>48*3600000)||inventory.bindingHash!==photoBindingHash(inventory,Array.isArray(e.media)?e.media:[]))return {...result,status:'STALE'};
  if(inventory.coverage!=='FULL_POST'||inventory.ambiguities?.length||inventory.photos.some(p=>p.classification==='UNKNOWN'))return result;
  const media=Array.isArray(e.media)?e.media:[];
  const assigned=media.map((m:any)=>m.sourcePhotoId);
  const visible=new Set(visibleMedia.map(m=>m.id));
- const complete=expected.length>0&&expected.length===media.length&&new Set(assigned).size===assigned.length&&expected.every((id,i)=>assigned[i]===id&&media[i].sequence===i&&visible.has(media[i].id));
- return {...result,status:complete?'IMPORTED_COMPLETE':'INCOMPLETE'};
+ // DB master records bind the first SOURCE_PHOTO_LIMIT item photos of a larger post (Hank 2026-10-24) ; that bound state reports OVER_LIMIT, never IMPORTED_COMPLETE.
+ const over=expected.length>SOURCE_PHOTO_LIMIT,want=expected.slice(0,SOURCE_PHOTO_LIMIT);
+ const complete=want.length>0&&want.length===media.length&&new Set(assigned).size===assigned.length&&want.every((id,i)=>assigned[i]===id&&media[i].sequence===i&&visible.has(media[i].id));
+ return {...result,status:!complete?'INCOMPLETE':over?'OVER_LIMIT':'IMPORTED_COMPLETE'};
 }

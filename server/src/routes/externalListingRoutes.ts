@@ -222,3 +222,4 @@ router.get('/:id', async (req, res) => {
 });
 
 export default router;
+export { select as externalCandidateSelect, publicCandidate };

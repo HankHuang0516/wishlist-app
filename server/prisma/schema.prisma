@@ -63,6 +63,8 @@ model User {
   purchases       Purchase[]
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
+  productWishLinks ProductWishLink[]
+  productWishReceipts ProductWishReceipt[]
   legacyWishCreateReceipts LegacyWishCreateReceipt[]
   wishPhotoRemovalReceipts WishPhotoRemovalReceipt[]
   profileUpdateReceipts ProfileUpdateReceipt[]
@@ -912,6 +914,37 @@ model Item {
   watchedBy      ItemWatch[]
   wishMedia      ListingMedia?
   proxy_end_user_id String?
+  productWishLinks ProductWishLink[]
+  productWishReceipts ProductWishReceipt[]
+}
+
+// Adding a discovered product creates a real legacy-compatible Item. The link
+// prevents double-clicks from creating duplicates; receipts survive Item deletion.
+model ProductWishLink {
+  id Int @id @default(autoincrement())
+  userId Int
+  productKey String @db.VarChar(80)
+  itemId Int?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  @@unique([userId, productKey])
+  @@index([itemId])
+}
+
+model ProductWishReceipt {
+  id Int @id @default(autoincrement())
+  userId Int
+  clientRequestId String @db.Uuid
+  requestHash String @db.VarChar(64)
+  itemId Int?
+  wishlistId Int
+  productKey String @db.VarChar(80)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  @@unique([userId, clientRequestId])
+  @@index([itemId])
 }
 
 model Merchant {

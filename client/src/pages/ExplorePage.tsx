@@ -1,4 +1,5 @@
 import PublicSourceCount from '../components/PublicSourceCount';
+import ProductWishButton, { ProductWishProvider } from '../components/ProductWishButton';
 import {unifiedExternalReferences,externalIndexCurrent} from '../lib/unifiedExternalReferences';
 import {ExploreEvidence} from '../lib/exploreEvidence';
 import {ExploreEvidencePanel} from '../components/ExploreEvidencePanel';
@@ -39,7 +40,8 @@ const blankExternal: ExternalState = { items: [], cursor: null, busy: true, erro
 const errorText = exploreFailureKey;
 
 function SellerCard({ item, match, own, onMap, onDetail, readBlocked }: { item: PublicListing; match?: WishMatch; own: boolean; onMap: () => void; onDetail: () => void; readBlocked: boolean }) {
-  return <article data-source-type="ON_SITE" data-original-id={item.id} className="min-w-0 rounded-2xl border bg-white p-4 shadow-sm">
+  return <article data-source-type="ON_SITE" data-original-id={item.id} className="relative min-w-0 rounded-2xl border bg-white p-4 pr-14 shadow-sm">
+    <ProductWishButton product={{ kind: 'listing', id: item.id, title: item.title }} />
     <button type="button" disabled={readBlocked} onClick={onDetail} aria-label={text('查看{title}商品詳情', { title: item.title })} className="flex w-full items-start gap-3 text-left disabled:opacity-60">
       <ListingPhoto src={item.media[0].thumbnailUrl} alt={item.media[0].capturePurpose === 'AI_MARKETING' ? publicListingPhotoLabel(item.title,1,true) : item.title} marketing={item.media[0].capturePurpose === 'AI_MARKETING'} />
       <span className="min-w-0"><span className="block break-words font-semibold">{item.title}</span><span className="mt-1 block font-semibold text-green-800">{listingPrice(item)}</span>
@@ -52,7 +54,8 @@ function SellerCard({ item, match, own, onMap, onDetail, readBlocked }: { item: 
   </article>;
 }
 function ExternalCard({ item, onMap, onDetail, readBlocked }: { item: ExternalListing; onMap: () => void; onDetail: () => void; readBlocked: boolean }) {
-  return <article data-source-type="EXTERNAL_INDEX" data-original-id={item.id} data-stock-status="UNKNOWN" className="min-w-0 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
+  return <article data-source-type="EXTERNAL_INDEX" data-original-id={item.id} data-stock-status="UNKNOWN" className="relative min-w-0 rounded-2xl border border-amber-100 bg-white p-4 pr-14 shadow-sm">
+    <ProductWishButton product={{ kind: 'external', id: item.id, title: item.title }} />
     <p className="mb-2 text-xs text-amber-800">{text("外部來源 · 庫存未知 · 非站內賣家 · 行政區中心")}</p>
     <button type="button" disabled={readBlocked} onClick={onDetail} aria-label={text('查看{title}來源詳情', { title: item.title })} className="flex w-full items-start gap-3 text-left disabled:opacity-60">
       <img src={item.thumbnailUrl} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-24 flex-none rounded-xl bg-gray-100 object-cover" />
@@ -65,7 +68,7 @@ function ExternalCard({ item, onMap, onDetail, readBlocked }: { item: ExternalLi
 export default function ExplorePage() {
   const { token, user } = useAuth(), location = useLocation();
   if (!token || !user) return <section className="space-y-4"><PublicSourceCount /><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p>{text("登入後可搜尋商品與交叉比對自己的願望。")}</p><Link to="/login?next=%2Fexplore" className="text-green-800 underline">{text("登入")}</Link></section>;
-  return <ExploreSession key={`${user.id}:${token}:${location.search}`} token={token} userId={user.id} search={location.search} />;
+  return <ProductWishProvider><ExploreSession key={`${user.id}:${token}:${location.search}`} token={token} userId={user.id} search={location.search} /></ProductWishProvider>;
 }
 function ExploreSession({ token, userId, search }: { token: string; userId: number; search: string }) {
   const [query, setQuery] = useState<ExploreQuery | null>(null), [initError, setInitError] = useState('');
@@ -313,7 +316,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   }
   const renderSeller = (item: PublicListing) => <SellerCard key={item.id} item={item} match={byMatch.get(item.id)} own={item.owner.id === userId} readBlocked={readBlocked} onMap={() => focus('seller', item.id)} onDetail={() => void showDetail('seller', item.id)} />;
   const renderExternal = (item: ExternalListing) => <ExternalCard key={item.id} item={item} readBlocked={readBlocked} onMap={() => focus('external', item.id)} onDetail={() => void showDetail('external', item.id)} />;
-  const renderSource=(lead:SourceLead)=><article key={'source:'+lead.id} data-source-type="SOURCE_REFERENCE" data-original-id={lead.id} data-stock-status="UNKNOWN" className="min-w-0 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm"><ProductCardWeb title={lead.title} price={sourceLeadPrice(lead.publicFacts?.priceText)} location={isLocatedLead(lead)?lead.county+' · '+lead.district+' · '+text(sourceLocationLabel(lead)):text(sourceLocationLabel(lead))} badge={text('外部來源 · 庫存未知 · 非站內賣家')} photo={lead.media?.[0]?.thumbnailUrl} onDetail={()=>void showDetail('source',lead.id)}/><p className="mt-2 break-all text-xs text-gray-500">{new URL(lead.canonicalUrl).hostname}</p>{isLocatedLead(lead)&&<button className="mt-3 min-h-11 rounded-xl border px-3 text-sm" onClick={()=>focus('source',lead.id)}>{text('在地圖查看{title}',{title:lead.title})}</button>}</article>;
+  const renderSource=(lead:SourceLead)=><article key={'source:'+lead.id} data-source-type="SOURCE_REFERENCE" data-original-id={lead.id} data-stock-status="UNKNOWN" className="relative min-w-0 rounded-2xl border border-amber-100 bg-white p-4 pr-14 shadow-sm"><ProductWishButton product={{ kind: 'source', id: lead.id, title: lead.title }} /><ProductCardWeb title={lead.title} price={sourceLeadPrice(lead.publicFacts?.priceText)} location={isLocatedLead(lead)?lead.county+' · '+lead.district+' · '+text(sourceLocationLabel(lead)):text(sourceLocationLabel(lead))} badge={text('外部來源 · 庫存未知 · 非站內賣家')} photo={lead.media?.[0]?.thumbnailUrl} onDetail={()=>void showDetail('source',lead.id)}/><p className="mt-2 break-all text-xs text-gray-500">{new URL(lead.canonicalUrl).hostname}</p>{isLocatedLead(lead)&&<button className="mt-3 min-h-11 rounded-xl border px-3 text-sm" onClick={()=>focus('source',lead.id)}>{text('在地圖查看{title}',{title:lead.title})}</button>}</article>;
   const visibleSource=cluster?cluster.kind==='source'?source.items.filter(r=>cluster.ids.includes(r.id)):[]:source.items;
   const chosenWish = wishes.find(item => item.id === query?.wishId);
   const waitNotice = retryUntil > 0 && <p role="status" aria-label={text('搜尋等待時間')} className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{readBlocked

@@ -1,5 +1,6 @@
 import {createSourceManagerRoutes} from './routes/sourceManagerRoutes';
 import { authenticateToken } from './middleware/auth';
+import { createProductWishRoutes } from './routes/productWishRoutes';
 import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
 import { pendingImportBodyAdmission } from './routes/semiAutoImportRoutes';
 import express, { Express, Request, Response } from 'express';
@@ -87,6 +88,7 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/wishlists', wishlistRoutes);
+app.use('/api/product-wishes', createProductWishRoutes());
 app.use('/api/items', itemRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', socialRoutes);

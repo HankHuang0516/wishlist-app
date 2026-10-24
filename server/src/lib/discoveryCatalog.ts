@@ -46,14 +46,14 @@ const rules: Rule[] = [
   ['collectibles','music',/吉他|小提琴|鋼琴|烏克麗麗|樂器|電子琴/i],
   ['kids','toys',/洗澡玩具|教具|啟蒙|兒童玩具/i],
   ['other','vehicle',/車用|安全帽|機車.*配件|汽車.*配件|車載/i],
-  ['electronics','monitors',/螢幕|顯示器|monitor|液晶顯示/i],
   ['electronics','audio',/耳機|喇叭|音響|等化器|擴大機|airpods|headphone|speaker/i],
   ['electronics','cameras',/相機|攝影機|鏡頭|拍立得|camera|polaroid/i],
   ['electronics','tablets',/ipad|平板|tablet/i],
   ['electronics','laptops',/macbook|筆記型電腦|筆電|laptop|notebook/i],
   ['electronics','desktops',/imac|桌上型電腦|桌機|迷你電腦|電腦主機/i],
   ['electronics','gaming',/遊戲主機|遊戲手把|ps5|playstation|xbox|nintendo|switch主機/i],
-  ['electronics','phones',/iphone|galaxy|智慧型手機|智能手機|pixel\s*\d|sony.*xperia/i],
+  ['electronics','phones',/iphone|galaxy\s*(?:s\d|a\d|note|z\s*(?:fold|flip)|fold|flip)|智慧型手機|智能手機|pixel\s*\d|sony.*xperia/i],
+  ['electronics','monitors',/螢幕|顯示器|monitor|液晶顯示/i],
   ['appliances','kitchen',/料理鍋|電子鍋|電鍋|快煮壺|熱水壺|烤箱|冰箱|咖啡機|氣炸|微波爐|果汁機|調理機|廚餘機/i],
   ['appliances','cleaning',/吸塵器|清洗機|掃地機|蒸氣拖把/i],
   ['appliances','climate',/除濕機|空氣清淨|冷氣|電暖器|電風扇|立扇|抽風機/i],
@@ -83,9 +83,13 @@ const rules: Rule[] = [
 ];
 const fallback: Record<string, [string,string]> = { electronics:['electronics','unclassified'],home:['home','unclassified'],fashion:['fashion','unclassified'],sports:['outdoors','unclassified'],books:['books','general'],toys:['kids','unclassified'] };
 export function classifyDiscovery(title: string, legacyCategory?: string | null) {
-  const text = title.normalize('NFKC'); const found = rules.find(([, , pattern]) => pattern.test(text));
+  const text = title.normalize('NFKC');
+  // Seller condition notes and included accessories must not replace the actual
+  // product subject (e.g. an iPhone with a damaged screen is still a phone).
+  const subject = text.split(/[（(，,；;]/u)[0].split(/(?:\s|[＋+、])(?:附(?:贈|送)?|含|搭配)/u)[0].trim();
+  const found = rules.find(([, , pattern]) => pattern.test(subject)) ?? rules.find(([, , pattern]) => pattern.test(text));
   const [mainId, subId] = found ? found : fallback[legacyCategory ?? ''] ?? ['other','misc'];
-  return { mainId, subId, method: found ? 'TITLE_RULE' : legacyCategory && fallback[legacyCategory] ? 'LEGACY_CATEGORY' : 'UNCLASSIFIED', version: 1 };
+  return { mainId, subId, method: found ? 'TITLE_RULE' : legacyCategory && fallback[legacyCategory] ? 'LEGACY_CATEGORY' : 'UNCLASSIFIED', version: 2 };
 }
 export function sourcePrice(facts: unknown): { price: number | null; text: string; currency: 'TWD' | null; unitVerified: boolean } {
   const f = facts && typeof facts === 'object' ? facts as Record<string,unknown> : {};

@@ -43,3 +43,18 @@ test('searches an explicitly stated brand even when it is absent from the produc
  expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:'BenQ'})],discoveryQuery({q:'benq'})).total).toBe(1);
  expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:null})],discoveryQuery({q:'benq'})).total).toBe(0);
 });
+
+test.each([
+ ['Samsung Galaxy S22+（螢幕有三條線，白／綠兩支，單價）','phones'],
+ ['iPhone 15 Pro 512G 藍色（副廠電池、副廠螢幕，無盒）','phones'],
+ ['iPhone 15 Pro 副廠螢幕','phones'],
+ ['iPhone 15 Pro 附充電器與保護殼','phones'],
+ ['iPhone 16 Pro Max 保護殼','accessories'],
+ ['iPhone 16 保護殼（附保護貼）','accessories'],
+ ['Acer Aspire 5741ZG 筆電（零件機）＋24吋電視螢幕打包','laptops'],
+ ['Samsung Galaxy Tab S9 平板','tablets'],
+ ['BenQ GW2270-T 22 吋液晶螢幕（21.5 吋 Full HD VA 面板）','monitors'],
+ ['Samsung 43 吋 FollowMe Pro 4K 移動式智慧聯網螢幕組 S43FM703UC（全新）','monitors']
+])('classifies the actual product subject rather than its condition or included parts: %s',(title,subId)=>{
+ expect(classifyDiscovery(title)).toMatchObject({mainId:'electronics',subId,version:2});
+});

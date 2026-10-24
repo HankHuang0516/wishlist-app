@@ -37,7 +37,7 @@ export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;
  const media=Array.isArray(e.media)?e.media:[];
  const assigned=media.map((m:any)=>m.sourcePhotoId);
  const visible=new Set(visibleMedia.map(m=>m.id));
- // DB master records bind the first SOURCE_PHOTO_LIMIT item photos of a larger post (Hank 2026-10-24) ; that bound state reports OVER_LIMIT, never IMPORTED_COMPLETE.
+ // DB master records bind the first SOURCE_PHOTO_LIMIT item photos of a larger post (Hank 2026-10-24); that bound state reports OVER_LIMIT, never IMPORTED_COMPLETE.
  const over=expected.length>SOURCE_PHOTO_LIMIT,want=expected.slice(0,SOURCE_PHOTO_LIMIT);
  const complete=want.length>0&&want.length===media.length&&new Set(assigned).size===assigned.length&&want.every((id,i)=>assigned[i]===id&&media[i].sequence===i&&visible.has(media[i].id));
  return {...result,status:!complete?'INCOMPLETE':over?'OVER_LIMIT':'IMPORTED_COMPLETE'};

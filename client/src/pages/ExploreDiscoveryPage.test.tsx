@@ -3,6 +3,7 @@ import {MemoryRouter,useLocation} from 'react-router-dom';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {AuthContext} from '../context/AuthContext';
 import ExploreDiscoveryPage from './ExploreDiscoveryPage';
+import {isLegacyExplore,readDiscovery} from '../lib/discovery';
 import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 const {publicApi,api}=vi.hoisted(()=>({publicApi:vi.fn(),api:vi.fn()}));
 vi.mock('../lib/marketplaceApi',async original=>({...await original<typeof import('../lib/marketplaceApi')>(),publicApi,api}));
@@ -62,4 +63,10 @@ it('does not change the submenu when the pointer only crosses another parent on 
  expect(screen.getByText('電腦螢幕')).toBeInTheDocument();expect(screen.queryByText('收納整理')).not.toBeInTheDocument();
  fireEvent.mouseEnter(parent);act(()=>vi.advanceTimersByTime(250));expect(screen.getByText('收納整理')).toBeInTheDocument();
  vi.useRealTimers();
+});
+
+it('preserves legacy filter deep links and restores the new feed sort explicitly',()=>{
+ for(const search of ['?brand=Sony','?category=electronics','?minPrice=10','?delivery=SHIPPING','?view=map','?source=11111111-1111-4111-8111-111111111111'])expect(isLegacyExplore(search)).toBe(true);
+ expect(isLegacyExplore('?main=electronics&sub=monitors&source=source')).toBe(false);
+ expect(readDiscovery('?feed=for-you').sort).toBe('recommended');expect(readDiscovery('?feed=cp').sort).toBe('cp');expect(readDiscovery('?feed=for-you&sort=price-asc').sort).toBe('price-asc');
 });

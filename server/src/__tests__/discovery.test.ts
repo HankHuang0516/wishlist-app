@@ -39,3 +39,7 @@ test('sorts source post dates with site publication dates; unknown prices stay l
  expect(discoveryPage(all,discoveryQuery({max:'300'})).total).toBe(2);
  expect(discoveryPage(all,discoveryQuery({condition:'USED'})).total).toBe(0);
 });
+test('searches an explicitly stated brand even when it is absent from the product title',()=>{
+ expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:'BenQ'})],discoveryQuery({q:'benq'})).total).toBe(1);
+ expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:null})],discoveryQuery({q:'benq'})).total).toBe(0);
+});

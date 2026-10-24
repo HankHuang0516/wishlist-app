@@ -11,6 +11,7 @@ import { wishKeywords, normalizeWish } from './wishlistMatch';
 export type DiscoveryProduct = {
   kind: 'listing' | 'source' | 'external'; id: string; key: string; title: string; description: string;
   mainId: string; subId: string; classificationMethod: string;
+  brand?: string | null;
   price: number | null; priceText: string; currency: string | null; priceUnitVerified: boolean;
   thumbnailUrl: string | null; photos: { id: string; url: string; thumbnailUrl: string }[];
   county: string | null; district: string | null; condition: string; sourceLabel: string;
@@ -54,7 +55,7 @@ export async function loadDiscovery(now = new Date()) {
     for (const r of listings) {
       const c = classifyDiscovery(r.title,r.category);
       products.push({kind:'listing',id:r.id,key:'listing:'+r.id,title:r.title,description:r.description??'',...c,classificationMethod:c.method,
-        price:r.currency==='TWD'&&r.price!==null?Number(r.price):null,priceText:r.price?.toString()??'',currency:r.currency,priceUnitVerified:true,
+        brand:r.brand,price:r.currency==='TWD'&&r.price!==null?Number(r.price):null,priceText:r.price?.toString()??'',currency:r.currency,priceUnitVerified:true,
         thumbnailUrl:r.media[0]?.thumbnailUrl??null,photos:r.media.map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),
         county:r.location?.county??null,district:r.location?.district??null,condition:r.condition,sourceLabel:'Wishlist',stockStatus:r.status,canonicalUrl:null,detailPath:'/listings/'+r.id,
         date:(r.publishedAt??r.createdAt).toISOString(),dateBasis:r.publishedAt?'PUBLISHED':'COLLECTED',dateEarliest:null});
@@ -102,7 +103,7 @@ export async function recommendDiscovery(products: DiscoveryProduct[], userId: n
 }
 export function filterDiscovery(all: DiscoveryProduct[], query: DiscoveryQuery,category=true) {
   const words=normalizeWish(query.q).split(' ').filter(Boolean);
-  return all.filter(p=>(!category||(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub))&&(query.source==='all'||p.kind===query.source)&&(!query.condition||p.condition===query.condition)&&(!query.county||p.county===query.county)&&words.every(w=>normalizeWish(p.title+' '+p.description).includes(w))&&(query.min===undefined||p.price!==null&&p.price>=query.min)&&(query.max===undefined||p.price!==null&&p.price<=query.max));
+  return all.filter(p=>(!category||(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub))&&(query.source==='all'||p.kind===query.source)&&(!query.condition||p.condition===query.condition)&&(!query.county||p.county===query.county)&&words.every(w=>normalizeWish(p.title+' '+p.description+' '+(p.brand??'')).includes(w))&&(query.min===undefined||p.price!==null&&p.price>=query.min)&&(query.max===undefined||p.price!==null&&p.price<=query.max));
 }
 export function discoveryPage(all: DiscoveryProduct[], query: DiscoveryQuery) {
   const base=filterDiscovery(all,query,false);

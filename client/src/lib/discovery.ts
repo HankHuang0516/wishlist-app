@@ -12,6 +12,7 @@ export type DiscoveryCategory={id:string;label:string;en:string;icon:string;coun
 export type DiscoveryPage={items:DiscoveryProduct[];categories:DiscoveryCategory[];nextCursor:string|null;snapshot:string;total:number;counts:{listing:number;source:number;external:number};counties:string[];complete:true;generatedAt:string;unknownPriceExcluded:boolean;cpStatus?:{evaluated:number;scored:number;pending:number;providerConfigured:boolean;threshold:number;assessments?:{key:string;title:string;score:number|null;reasons:{zh:string;en:string}[];evaluatedAt:string}[]}};
 export type DiscoveryFilters={q:string;main:string;sub:string;source:string;condition:string;county:string;min:string;max:string;sort:string;feed:string;display:string};
 export const defaultDiscovery:DiscoveryFilters={q:'',main:'',sub:'',source:'all',condition:'',county:'',min:'',max:'',sort:'newest',feed:'latest',display:'grid'};
+export function isLegacyExplore(search:string){const p=new URLSearchParams(search);return ['view','scope','bbox','wish','wishItemId','listing','external','brand','category','delivery','minPrice','maxPrice','radius'].some(k=>p.has(k))||p.has('source')&&!['all','listing','source','external'].includes(p.get('source')!);}
 export function readDiscovery(search:string):DiscoveryFilters{
   const p=new URLSearchParams(search), r={...defaultDiscovery};
   for(const k of Object.keys(r) as (keyof DiscoveryFilters)[])if(p.has(k))r[k]=p.get(k)!;

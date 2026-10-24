@@ -8,10 +8,11 @@ import WebUpdateNotice from '../components/WebUpdateNotice';
 
 import { useAuth } from "../context/AuthContext";
 import { webShellText } from '../lib/webShellCopy';
+import {isLegacyExplore} from '../lib/discovery';
 
 export default function Layout() {
     const location=useLocation(), managerPage=location.pathname.startsWith('/manage/');
-    const exploreParams=new URLSearchParams(location.search), discoveryPage=location.pathname==='/explore'&&!['view','scope','bbox','wish','wishItemId','listing','external'].some(k=>exploreParams.has(k))&&(!exploreParams.has('source')||['all','listing','source','external'].includes(exploreParams.get('source')!));
+    const discoveryPage=location.pathname==='/explore'&&!isLegacyExplore(location.search);
     const { isAuthenticated, logout, user } = useAuth();
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     // Cast user to any to access isPremium until context is updated

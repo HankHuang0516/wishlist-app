@@ -32,12 +32,12 @@ describe('approved authenticated homepage actions', () => {
   });
   it('keeps all guest feature cards and the API entry localized without nested interactive controls', () => {
     auth.current = { isAuthenticated: false, token: '', user: { id: 0 } }; localStorage.setItem('user-locale', 'en-US');
-    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({ count: 0, enabled: true }) })); vi.stubGlobal('fetch', fetcher);
     const { container } = render(<MemoryRouter><Home /></MemoryRouter>);
     expect(screen.getByRole('link', { name: 'Get Started' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: /AI integration · Public API/ })).toHaveAttribute('href', '/api-showcase');
     expect(container.querySelector('a button')).toBeNull(); expect(container.querySelectorAll('img')).toHaveLength(4);
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('/api/source-leads/summary'), expect.objectContaining({ credentials: 'omit', cache: 'no-store' }));
   });
   it('still renders holidays and actions when locale storage is blocked', async () => {
     vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw Error('synthetic blocked storage'); });

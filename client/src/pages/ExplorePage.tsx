@@ -1,3 +1,4 @@
+import PublicSourceCount from '../components/PublicSourceCount';
 import {unifiedExternalReferences,externalIndexCurrent} from '../lib/unifiedExternalReferences';
 import {ExploreEvidence} from '../lib/exploreEvidence';
 import {ExploreEvidencePanel} from '../components/ExploreEvidencePanel';
@@ -63,7 +64,7 @@ function ExternalCard({ item, onMap, onDetail, readBlocked }: { item: ExternalLi
 
 export default function ExplorePage() {
   const { token, user } = useAuth(), location = useLocation();
-  if (!token || !user) return <section className="space-y-4"><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p>{text("登入後可搜尋商品與交叉比對自己的願望。")}</p><Link to="/login?next=%2Fexplore" className="text-green-800 underline">{text("登入")}</Link></section>;
+  if (!token || !user) return <section className="space-y-4"><PublicSourceCount /><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p>{text("登入後可搜尋商品與交叉比對自己的願望。")}</p><Link to="/login?next=%2Fexplore" className="text-green-800 underline">{text("登入")}</Link></section>;
   return <ExploreSession key={`${user.id}:${token}:${location.search}`} token={token} userId={user.id} search={location.search} />;
 }
 function ExploreSession({ token, userId, search }: { token: string; userId: number; search: string }) {
@@ -311,6 +312,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     ? text('查詢暫時受限，請等待 {seconds} 秒後再試。等待期間可調整地圖與條件，不會自動搜尋。', { seconds: Math.ceil((retryUntil - clock) / 1000) })
     : text('等待已結束；請明確重試搜尋、載入更多或重新核對商品，不會自動執行。')}</p>;
   return <section className="space-y-5">
+    <PublicSourceCount />
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-bold">{text("探索商品地圖")}</h1><p className="mt-1 text-sm text-gray-500">{text("在附近，找到願望的另一種可能。")}</p></div><Link to="/sell" className="rounded-xl bg-green-800 px-4 py-3 text-white">{text("拍照刊登好物")}</Link></div>
     {initError && <div role="alert" className="rounded-xl bg-red-50 p-4"><p>{exploreMessage(initError)}</p><Link to="/explore" aria-disabled={readBlocked} onClick={event => { if (waiting()) event.preventDefault(); }} className="underline">{text("清除連結條件，重新探索")}</Link></div>}
     {!detail && waitNotice}

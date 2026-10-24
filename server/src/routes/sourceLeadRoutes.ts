@@ -1,6 +1,6 @@
 import {createSourceReferenceEvidenceRoutes} from './sourceReferenceEvidenceRoutes';
 import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
-import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound} from '../lib/sourceInquiryRounds';
+import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound,reopenInquiryDelivery} from '../lib/sourceInquiryRounds';
 import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
@@ -140,7 +140,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${first.leadId} FOR UPDATE`;
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
                 const r = await tx.sourceLeadInquiry.findUniqueOrThrow({ where: { id: first.id }, include: { lead: true } });
-                if (!publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl) && (r.events as unknown as LeadEvent[]).filter(e=>e.action==='ASK').some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
+                if (!publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl) && transferSnapshot(r.lead,r.events as unknown as LeadEvent[]).questions.some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
                 const snapshot = transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), payloadHash = digest(snapshot), prior = r.delivery ? object(r.delivery) : null, outboundQuestions=pendingRoundQuestions(snapshot,r.delivery);
                 if(!outboundQuestions.length)throw new LeadError('NO_NEW_QUESTION_FOR_ROUND');
                 if (prior?.reservation) {
@@ -361,7 +361,7 @@ export function createSourceLeadRoutes() {
             where: { id: String(req.params.roomId), leadId: String(req.params.id), buyerUserId: req.user.id }, include: { lead: true }
         });
         if (!row) return res.sendStatus(404);
-        const event = (row.events as unknown as LeadEvent[]).find(e => e.requestId === req.params.requestId && ['ASK', 'CONSENT', 'CANCEL'].includes(e.action));
+        const event = (row.events as unknown as LeadEvent[]).find(e => e.requestId === req.params.requestId && ['ASK', 'CONSENT', 'CANCEL', 'REVISE', 'REOPEN'].includes(e.action));
         return res.json(event ? {
             leadId: row.leadId, roomId: row.id,
             operation: { requestId: event.requestId, action: event.action, ...(event.text !== undefined ? { text: event.text } : {}), ...(event.consent !== undefined ? { consent: event.consent } : {}), ...(event.payloadHash !== undefined ? { transferHash: event.payloadHash } : {}) },
@@ -385,9 +385,10 @@ export function createSourceLeadRoutes() {
         try {
             const b = object(req.body);
             exact(b, ['requestId', 'action', 'text', 'consent', 'transferHash']);
-            if (!isListingId(b.requestId) || !['ASK', 'CONSENT', 'CANCEL'].includes(b.action) || !isListingId(req.params.id) || !isListingId(req.params.roomId))
+            if (!isListingId(b.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'REVISE', 'REOPEN'].includes(b.action) || !isListingId(req.params.id) || !isListingId(req.params.roomId))
                 throw new LeadError('INVALID_ACTION');
-            if (b.action === 'ASK' ? (typeof b.text !== 'string' || !b.text.trim() || b.text.length > 1500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(b.text) || !((b.consent === undefined && b.transferHash === undefined) || (b.consent === true && typeof b.transferHash === 'string'))) : (b.text !== undefined || (b.action === 'CONSENT' ? (b.consent !== true || typeof b.transferHash !== 'string') : b.consent !== undefined || b.transferHash !== undefined)))
+            const questionAction = ['ASK', 'REVISE', 'REOPEN'].includes(b.action);
+            if (questionAction ? (typeof b.text !== 'string' || !b.text.trim() || b.text.length > 1500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(b.text) || !((b.action === 'ASK' && b.consent === undefined && b.transferHash === undefined) || (b.consent === true && typeof b.transferHash === 'string'))) : (b.text !== undefined || (b.action === 'CONSENT' ? (b.consent !== true || typeof b.transferHash !== 'string') : b.consent !== undefined || b.transferHash !== undefined)))
                 throw new LeadError('EXPLICIT_SCOPED_CONSENT_REQUIRED');
             const r = await prisma.$transaction(async (tx) => {
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${req.params.id} FOR UPDATE`;
@@ -403,21 +404,25 @@ export function createSourceLeadRoutes() {
                 }
                 if (b.action !== 'CANCEL' && (!enabled() || !leadCurrent(room.lead) || room.leadContentHash !== room.lead.contentHash))
                     throw new LeadError('LEAD_UNAVAILABLE');
-                if (['CANCELLED', 'CANCEL_REQUESTED', 'DELIVERY_REQUIRES_REVIEW'].includes(room.state))
+                const reopening = b.action === 'REOPEN', revising = b.action === 'REVISE';
+                if (reopening ? room.state !== 'CANCELLED' : ['CANCELLED', 'CANCEL_REQUESTED', 'DELIVERY_REQUIRES_REVIEW'].includes(room.state))
                     throw new LeadError('INQUIRY_CLOSED');
+                if (revising && (!['INQUIRY', 'WAITING_ROUTE'].includes(room.state) || object(room.delivery ?? {}).reservation))
+                    throw new LeadError('CONSENT_CONTENT_FROZEN');
                 if (events.length >= 199 && b.action !== 'CANCEL')
                     throw new LeadError('INQUIRY_LIMIT');
                 let state = room.state, consentHash = room.consentHash;
                 const followup=b.action==='ASK'&&room.state==='DELIVERED';
                 if(followup&&b.consent!==true)throw new LeadError('EXPLICIT_SCOPED_CONSENT_REQUIRED');
-                const followupDelivery=followup?beginInquiryFollowup(room.delivery,events):null;
+                const followupDelivery=reopening?reopenInquiryDelivery(room.delivery,events):followup?beginInquiryFollowup(room.delivery,events):null;
                 if (b.action === 'ASK' && state !== 'INQUIRY' && !followup)
                     throw new LeadError('CONSENT_CONTENT_FROZEN');
-                if (b.action === 'ASK' && b.consent === true) {
+                if (questionAction && b.consent === true) {
                     if (b.transferHash !== digest(transferSnapshot(room.lead,events))) throw new LeadError('CONSENT_SNAPSHOT_MISMATCH');
-                    if (privateContactField({title:b.text}) || events.filter(e=>e.action==='ASK').some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
-                    const nextQuestions=[...events,{requestId:b.requestId,action:'ASK',text:b.text,at:new Date().toISOString()}];
-                    consentHash=digest(transferSnapshot(room.lead,nextQuestions)); state='WAITING_ROUTE';
+                    const nextQuestions=[...events,{requestId:b.requestId,action:b.action,text:b.text,at:new Date().toISOString()}];
+                    const snapshot=transferSnapshot(room.lead,nextQuestions);
+                    if (snapshot.questions.some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
+                    consentHash=digest(snapshot); state='WAITING_ROUTE';
                 }
                 if (b.action === 'CONSENT') {
                     const snapshot = transferSnapshot(room.lead, events);
@@ -430,7 +435,7 @@ export function createSourceLeadRoutes() {
                     state = room.state === 'TRANSFER_RESERVED' ? 'CANCEL_REQUESTED' : 'CANCELLED';
                     consentHash = null;
                 }
-                const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(b.action === 'ASK' && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: events.filter(e => e.action === 'ASK').map(e => e.requestId), payloadHash: b.transferHash } : {}) };
+                const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(questionAction && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: transferSnapshot(room.lead,events).questions.map(e => e.requestId), payloadHash: b.transferHash } : {}) };
                 const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(followupDelivery?{delivery:followupDelivery}:{}), ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });
                 return dto(saved, room.lead, req.query.presentation === '1');
             });

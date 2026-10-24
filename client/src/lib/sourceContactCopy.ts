@@ -1,5 +1,11 @@
 import { getDisplayLocale } from '../utils/localization';
 const copy = {
+ revise: ['更正詢問','Correct question'], reopen: ['再次發問','Ask again'],
+ revisionDraft: ['修改後送出才會取代尚未轉交的問題；原詢問紀錄會保留。','Only sending the correction replaces questions that have not been forwarded. The original history is retained.'],
+ reopenDraft: ['先前詢問已撤回。請確認或修改問題後重新送出；不會自動重送舊問題。','The previous inquiry was withdrawn. Review or edit the question, then send again. Old questions are not resent automatically.'],
+ sendRevision: ['送出更正並重新委託','Send correction and authorize forwarding'], sendReopen: ['送出新詢問並重新委託','Send new inquiry and authorize forwarding'],
+ cancelEdit: ['取消編輯','Cancel editing'], revisedEvent: ['更正詢問：','Corrected question: '], reopenedEvent: ['再次發問：','New inquiry: '],
+ withdrawalPending: ['撤回仍在確認中，確認完成後可再次發問。','Withdrawal is still being confirmed. You can ask again once it is complete.'],
  contactLocation: ['未提供地區；面交地點需聯絡賣家後才知道，寄送不受影響。','No area was provided. Contact the seller to learn the meeting point; shipping is unaffected.'],
  approximateLocation: ['概略位置，非取貨點；實際所在地與取貨方式仍待原賣家確認。','Approximate location, not a pickup point. Confirm the actual location and pickup options with the original seller.'],
  title: ['Wishlist AI 聊聊','Wishlist AI chat'], back: ['返回商品','Back to item'], update: ['更新','Refresh'], price: ['售價待詢問','Ask about price'], item: ['商品ID：','Item ID: '], external: ['外部來源','External source'], original: ['查看原始來源','View original source'],

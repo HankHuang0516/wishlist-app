@@ -24,8 +24,8 @@ const source=()=>({id,kind:'SOURCE_LEAD',title:'合成測試來源商品',summar
 const emptyRoom=()=>({id:roomId,leadId:id,available:true,state:'INQUIRY',transferHash:'a'.repeat(64),events:[] as any[],routeVerified:false,delivered:false,delivery:null,checkoutEnabled:false,orderCreated:false,notice:'不下訂'});
 beforeEach(()=>{localStorage.setItem('user-locale','zh-TW');vi.stubGlobal('crypto',webcrypto);vi.stubGlobal('IDBKeyRange',IDBKeyRange);vault=createWebPendingStore(crypto.randomUUID(),new IDBFactory(),webcrypto as unknown as Crypto)});
 afterEach(()=>{auth.token='synthetic-token';sessionStorage.clear();cleanup();vi.unstubAllGlobals();vi.restoreAllMocks()});
-function fixture({unknown=false,reject=false,wrong=false,uncommitted=false}: {unknown?:boolean;reject?:boolean;wrong?:boolean;uncommitted?:boolean}={}) {
- let room:any=null;let actions=0;const receipts=new Map<string,any>();let rejectStatus=reject?409:0;let receiptUnavailable=false;
+function fixture({unknown=false,reject=false,wrong=false,uncommitted=false,lostAction}: {unknown?:boolean;reject?:boolean;wrong?:boolean;uncommitted?:boolean;lostAction?:string}={}) {
+ let room:any=null;let actions=0;const receipts=new Map<string,any>();let rejectStatus=reject?409:0;let receiptUnavailable=false;let lost=false;
  const fetch=vi.fn(async(url:string,init:any)=>{
   const path=new URL(url,'https://example.invalid').pathname;
   const ok=(value:any)=>({ok:true,status:200,headers:new Headers(),json:async()=>value});
@@ -33,7 +33,7 @@ function fixture({unknown=false,reject=false,wrong=false,uncommitted=false}: {un
   if(path.endsWith('/source-leads'))return ok({enabled:true,items:[source()],nextCursor:null});
   if(path.endsWith('/inquiry')){if(init?.method==='POST'&&!room)room=emptyRoom();return ok(wrong?{...emptyRoom(),leadId:'aaaabbbb-cccc-4ddd-8eee-123456789012'}:room);}
   if(path.includes('/actions/')){const operation=receipts.get(path.split('/').at(-1)!);return ok(operation&&!receiptUnavailable?{leadId:id,roomId,operation,room}:null);}
-  if(path.endsWith('/actions')){actions++;const b=JSON.parse(init.body);if(rejectStatus&&b.action==='ASK')return{ok:false,status:rejectStatus,headers:new Headers({'Retry-After':'1'}),json:async()=>({errorCode:rejectStatus===429?'SOURCE_BUSY':'SYNTHETIC_FAILURE',error:'private raw error must not be displayed'})};if(uncommitted&&actions===1)throw Error('private unknown before commit');if(!receipts.has(b.requestId)){room={...room,state:b.action==='CANCEL'?'CANCELLED':'WAITING_ROUTE',transferHash:'b'.repeat(64),events:[...room.events,{requestId:b.requestId,action:b.action,...(b.text===undefined?{}:{text:b.text}),at:now()}]};receipts.set(b.requestId,b);}if(unknown&&actions===1)throw Error('private unknown after save');return ok(room);}
+  if(path.endsWith('/actions')){actions++;const b=JSON.parse(init.body);if(rejectStatus&&b.action==='ASK')return{ok:false,status:rejectStatus,headers:new Headers({'Retry-After':'1'}),json:async()=>({errorCode:rejectStatus===429?'SOURCE_BUSY':'SYNTHETIC_FAILURE',error:'private raw error must not be displayed'})};if(uncommitted&&actions===1)throw Error('private unknown before commit');if(!receipts.has(b.requestId)){room={...room,state:b.action==='CANCEL'?'CANCELLED':'WAITING_ROUTE',transferHash:'b'.repeat(64),events:[...room.events,{requestId:b.requestId,action:b.action,...(b.text===undefined?{}:{text:b.text}),at:now()}]};receipts.set(b.requestId,b);}if(unknown&&actions===1||lostAction===b.action&&!lost){lost=true;throw Error('private unknown after save');}return ok(room);}
   if(path.endsWith('/source-leads/'+id))return ok(source());
   if(path.includes('external-listings'))return ok({enabled:false,items:[],nextCursor:null});
   return ok({items:[],nextCursor:null});
@@ -148,3 +148,47 @@ describe('source contact inside the original Explore and Chat',()=>{
 
 });
 async function enterLocked(){render(<MemoryRouter><SourceContactChat source={source()} onBack={()=>{}}/></MemoryRouter>);await waitFor(()=>expect(screen.getByRole('button',{name:'更新'})).not.toBeDisabled());await screen.findByRole('button',{name:'讀取已存詢問'});}
+
+describe('correcting and restarting a withdrawn source inquiry',()=>{
+ const prior=()=>({requestId:crypto.randomUUID(),action:'ASK',text:'3000元賣嗎？',at:now()});
+ it('opens a cancelled existing inquiry read-only and provides an editable ask-again entry',async()=>{
+  const f=fixture();const old=prior();f.setRoom({...emptyRoom(),state:'CANCELLED',events:[old,{requestId:crypto.randomUUID(),action:'CANCEL',at:now()}]});
+  await enterLocked();const button=await screen.findByRole('button',{name:'再次發問'});expect(f.getActions()).toBe(0);
+  fireEvent.click(button);expect(screen.getByRole('textbox')).toHaveValue(old.text);expect(f.getActions()).toBe(0);
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'更正：請問3500元可以嗎？'}});
+  fireEvent.click(screen.getByRole('button',{name:'送出新詢問並重新委託'}));await screen.findByRole('button',{name:'更正詢問'});
+  expect(f.getRoom().events[0]).toEqual(old);expect(f.getRoom().state).toBe('WAITING_ROUTE');expect(f.getActions()).toBe(1);
+  expect(JSON.parse(f.fetch.mock.calls.find(([u,i])=>new URL(u,'https://example.invalid').pathname.endsWith('/actions')&&i?.method==='POST')![1].body)).toMatchObject({action:'REOPEN',text:'更正：請問3500元可以嗎？',consent:true,transferHash:'a'.repeat(64)});
+ });
+ it('corrects a pending question only after sending; cancelling the editor leaves the old question unchanged',async()=>{
+  const f=fixture();await enter();await send('3000元賣嗎？');const old={...f.getRoom().events[0]};
+  fireEvent.click(await screen.findByRole('button',{name:'更正詢問'}));expect(screen.getByRole('textbox')).toHaveValue(old.text);
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'先不要改'}});fireEvent.click(screen.getByRole('button',{name:'取消編輯'}));expect(f.getActions()).toBe(1);expect(f.getRoom().events).toEqual([old]);
+  fireEvent.click(screen.getByRole('button',{name:'更正詢問'}));expect(screen.getByRole('textbox')).toHaveValue(old.text);
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'3500元可面交嗎？'}});fireEvent.click(screen.getByRole('button',{name:'送出更正並重新委託'}));
+  await screen.findByText('更正詢問：3500元可面交嗎？');await screen.findByRole('button',{name:'更正詢問'});
+  expect(f.getRoom().events[0]).toEqual(old);expect(f.getActions()).toBe(2);
+  expect(JSON.parse(f.fetch.mock.calls.filter(([u,i])=>new URL(u,'https://example.invalid').pathname.endsWith('/actions')&&i?.method==='POST').at(-1)![1].body)).toMatchObject({action:'REVISE',text:'3500元可面交嗎？',consent:true,transferHash:'b'.repeat(64)});
+ });
+ it.each(['REVISE','REOPEN'])('recovers a lost %s response by the original receipt without resending',async action=>{
+  const f=fixture({lostAction:action});f.setRoom({...emptyRoom(),state:action==='REOPEN'?'CANCELLED':'WAITING_ROUTE',events:[prior(),...(action==='REOPEN'?[{requestId:crypto.randomUUID(),action:'CANCEL',at:now()}]:[])]});await enterLocked();
+  fireEvent.click(await screen.findByRole('button',{name:action==='REOPEN'?'再次發問':'更正詢問'}));fireEvent.change(screen.getByRole('textbox'),{target:{value:'更正後的問題'}});fireEvent.click(screen.getByRole('button',{name:action==='REOPEN'?'送出新詢問並重新委託':'送出更正並重新委託'}));
+  await screen.findByRole('alert');expect(f.getActions()).toBe(1);const key=await sourceJournalKey(API_URL,1,id);expect(JSON.parse((await vault.get(key))!).payload.action).toBe(action);
+  fireEvent.click(screen.getByRole('button',{name:'更新'}));await waitFor(async()=>expect(await vault.get(key)).toBeNull());expect(f.getActions()).toBe(1);
+ });
+ it('recovers an uncertain withdrawal before enabling ask again',async()=>{
+  const f=fixture({lostAction:'CANCEL'});await enter();await send();fireEvent.click(screen.getByRole('button',{name:'撤回委託'}));await screen.findByRole('alert');expect(screen.queryByRole('button',{name:'再次發問'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'更新'}));await screen.findByRole('button',{name:'再次發問'});expect(f.getActions()).toBe(2);
+ });
+ it.each(['TRANSFER_RESERVED','CANCEL_REQUESTED','DELIVERY_REQUIRES_REVIEW'])('keeps %s from silently reopening or revising an unresolved transfer',async state=>{
+  const f=fixture();f.setRoom({...emptyRoom(),state,events:[prior()]});await enterLocked();expect(screen.queryByRole('button',{name:'再次發問'})).toBeNull();expect(screen.queryByRole('button',{name:'更正詢問'})).toBeNull();expect(screen.queryByRole('textbox')).toBeNull();expect(f.getActions()).toBe(0);
+  if(state==='CANCEL_REQUESTED')expect(screen.getByText('撤回仍在確認中，確認完成後可再次發問。')).toBeTruthy();
+ });
+ it('does not offer a new inquiry on an unavailable item',async()=>{
+  const f=fixture();f.setRoom({...emptyRoom(),available:false,state:'CANCELLED',events:[prior()]});await enterLocked();expect(screen.queryByRole('button',{name:'再次發問'})).toBeNull();expect(f.getActions()).toBe(0);
+ });
+ it('offers the same correction and restart controls in English',async()=>{
+  localStorage.setItem('user-locale','en-US');const f=fixture();f.setRoom({...emptyRoom(),state:'CANCELLED',events:[prior()]});await enterLockedEnglish();fireEvent.click(await screen.findByRole('button',{name:'Ask again'}));expect(screen.getByRole('textbox',{name:'Question'})).toHaveValue('3000元賣嗎？');expect(screen.getByRole('button',{name:'Send new inquiry and authorize forwarding'})).toBeEnabled();expect(f.getActions()).toBe(0);
+ });
+});
+async function enterLockedEnglish(){render(<MemoryRouter><SourceContactChat source={source()} onBack={()=>{}}/></MemoryRouter>);await screen.findByRole('button',{name:'Read saved inquiry'});await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh'})).not.toBeDisabled());}

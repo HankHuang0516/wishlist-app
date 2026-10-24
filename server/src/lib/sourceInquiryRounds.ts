@@ -1,4 +1,4 @@
-import {LeadError,object} from './sourceLeadRules';
+import {LeadError,object,isInquiryQuestion} from './sourceLeadRules';
 export function deliveryHistory(raw:unknown):any[]{
  const saved=raw?object(raw):{};
  if(saved.history===undefined)return [];
@@ -10,8 +10,18 @@ export function beginInquiryFollowup(raw:unknown,events:any[]){
  if(!saved.reservation||!saved.receipt||history.length>=19)throw new LeadError('CONFIRMED_PRIOR_ROUND_REQUIRED');
  const {history:ignored,...prior}=saved;
  const consumed=new Set(history.flatMap(r=>r.reservation.questionIds??[]));
- const questionIds=saved.reservation.questionIds??events.filter(e=>e.action==='ASK'&&!consumed.has(e.requestId)).map(e=>e.requestId);
+ const questionIds=saved.reservation.questionIds??events.filter(e=>isInquiryQuestion(e)&&!consumed.has(e.requestId)).map(e=>e.requestId);
  return {history:[...history,{...prior,reservation:{...prior.reservation,questionIds}}]};
+}
+export function reopenInquiryDelivery(raw:unknown,events:any[]) {
+ if(!raw)return {};
+ const saved=object(raw);
+ // An unresolved external send must finish its review before another round.
+ if(saved.reservation&&!saved.receipt)throw new LeadError('INQUIRY_CLOSED');
+ if(saved.receipt)return beginInquiryFollowup(saved,events);
+ const {cancelRequestedAt:ignored,...remaining}=saved;
+ deliveryHistory(remaining);
+ return remaining;
 }
 export function pendingRoundQuestions(snapshot:any,raw:unknown){
  const consumed=new Set(deliveryHistory(raw).flatMap(r=>r.reservation.questionIds??[]));

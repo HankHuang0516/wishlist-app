@@ -2,7 +2,7 @@ import { isUuid } from './listingBatch';
 import { parseLeadRoom, type LeadRoom } from './sourceLeadData';
 import { pendingRequestKey, PendingStoreError, type PendingStore } from './webPendingStore';
 
-export type SourceAction = 'ASK' | 'CONSENT' | 'CANCEL';
+export type SourceAction = 'ASK' | 'CONSENT' | 'CANCEL' | 'REVISE' | 'REOPEN';
 export type SourcePayload = { requestId: string; action: SourceAction; text?: string; consent?: true; transferHash?: string };
 export type SourcePending = { version: 1; leadId: string; roomId: string; payload: SourcePayload } | { version: 0; leadId: string; requestId: string; action: SourceAction };
 export type SourceJournal = { key: string; body: string; operation: SourcePending };
@@ -14,10 +14,10 @@ const object = (value: unknown): Record<string, unknown> => {
 const exact = (row: Record<string, unknown>, keys: string[]) => { if (Object.keys(row).some(key => !keys.includes(key))) throw new PendingStoreError(); };
 export function parseSourcePayload(value: unknown, legacy = false): SourcePayload {
   const row = object(value); exact(row, ['requestId', 'action', 'text', 'consent', 'transferHash']);
-  if (!isUuid(row.requestId) || !['ASK', 'CONSENT', 'CANCEL'].includes(row.action as string)) throw new PendingStoreError();
+  if (!isUuid(row.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'REVISE', 'REOPEN'].includes(row.action as string)) throw new PendingStoreError();
   if (row.action === 'CANCEL') { if (Object.keys(row).length !== 2) throw new PendingStoreError(); }
   else {
-    if (row.action === 'ASK' ? typeof row.text !== 'string' || !row.text.trim() || row.text.length > 1500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(row.text) : row.text !== undefined) throw new PendingStoreError();
+    if (['ASK', 'REVISE', 'REOPEN'].includes(row.action as string) ? typeof row.text !== 'string' || !row.text.trim() || row.text.length > 1500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(row.text) : row.text !== undefined) throw new PendingStoreError();
     if (!(legacy && row.action === 'ASK' && row.consent === undefined && row.transferHash === undefined) && (row.consent !== true || typeof row.transferHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.transferHash))) throw new PendingStoreError();
   }
   return row as SourcePayload;

@@ -307,4 +307,59 @@ run('independent source lead map -> inquiry (synthetic local DB)', () => {
       const erased={...row,archiveVersion:5,archiveSha256:'c'.repeat(64),evidence:{...row.evidence,media:[]}};expect((await importLead([erased],true)).body.errorCode).toBe('SOURCE_PHOTO_COMPLETENESS_REQUIRED');
     });
 
+    async function correctionFixture(label:string) {
+        const imported=await importLead([body('SYNTHETIC-CORRECTION-'+label)]);expect(imported.status).toBe(200);
+        const id=imported.body.ids[0],endpoint='/leads/'+id+'/inquiry';
+        const opened=await request(server).post(endpoint).set('x-api-key',key).send({});expect(opened.status).toBe(200);
+        const action=(value:any,auth=key)=>request(server).post(endpoint+'/'+opened.body.id+'/actions?presentation=1').set('x-api-key',auth).send(value);
+        const read=()=>request(server).get(endpoint+'?presentation=1').set('x-api-key',key);
+        const ask={requestId:require('crypto').randomUUID(),action:'ASK',text:'合成原問題：3000元可以嗎？',consent:true,transferHash:opened.body.transferHash};
+        const first=await action(ask);expect(first.status).toBe(200);
+        return {id,roomId:opened.body.id,endpoint,action,read,ask,first:first.body};
+    }
+    test('withdrawn inquiry can explicitly reopen without resending cancelled text or accepting a delayed ASK',async()=>{
+        const f=await correctionFixture('REOPEN');const cancel={requestId:require('crypto').randomUUID(),action:'CANCEL'};
+        const stopped=await f.action(cancel);expect(stopped.body.state).toBe('CANCELLED');
+        const before=await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:f.roomId}});
+        await f.read();await f.read();expect((await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:f.roomId}})).events).toEqual(before.events);
+        const resume={requestId:require('crypto').randomUUID(),action:'REOPEN',text:'合成新問題：3500元可面交嗎？',consent:true,transferHash:stopped.body.transferHash};
+        const foreignKey=require('crypto').randomUUID(),foreign=await prisma.user.create({data:{phoneNumber:'synthetic-correction-other',password:'unused',apiKey:foreignKey}});
+        try{expect((await f.action(resume,foreignKey)).status).toBe(409);}finally{await prisma.user.delete({where:{id:foreign.id}});}
+        expect((await f.action({...resume,consent:undefined})).status).toBe(409);
+        const reopened=await f.action(resume);expect(reopened.status).toBe(200);expect(reopened.body.state).toBe('WAITING_ROUTE');
+        expect(reopened.body.events.map((e:any)=>e.action)).toEqual(['ASK','CANCEL','REOPEN']);
+        expect((await f.action(resume)).body.events).toEqual(reopened.body.events);
+        expect((await f.action({...resume,text:'不同問題'})).body.errorCode).toBe('REQUEST_CONFLICT');
+        expect((await f.action({...f.ask,requestId:require('crypto').randomUUID()})).status).toBe(409);
+        const receipt=await request(server).get(f.endpoint+'/'+f.roomId+'/actions/'+resume.requestId).set('x-api-key',key);expect(receipt.body.operation).toEqual(resume);
+        const saved=await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:f.roomId},include:{lead:true}});
+        expect(require('../../lib/sourceLeadRules').transferSnapshot(saved.lead,saved.events).questions).toEqual([{requestId:resume.requestId,text:resume.text}]);
+        expect(require('../../lib/consignmentQuery').consignmentEligible(saved)).toBe(true);
+        expect((await f.action(cancel)).body.state).toBe('WAITING_ROUTE'); // Replay the old withdrawal, not a new withdrawal.
+    });
+    test('a correction replaces the pending transfer snapshot and keeps original receipts and concurrency guards',async()=>{
+        const f=await correctionFixture('REVISE');const revise={requestId:require('crypto').randomUUID(),action:'REVISE',text:'合成更正：請確認3500元與面交方式',consent:true,transferHash:f.first.transferHash};
+        const competing={...revise,requestId:require('crypto').randomUUID(),text:'另一頁不同更正'};
+        const both=await Promise.all([f.action(revise),f.action(competing)]);expect(both.map(r=>r.status).sort()).toEqual([200,409]);
+        const accepted=both[0].status===200?revise:competing;
+        const current=(await f.read()).body;expect(current.events).toHaveLength(2);expect(current.events[0].text).toBe(f.ask.text);
+        expect((await f.action(accepted)).body.events).toEqual(current.events);
+        const original=await request(server).get(f.endpoint+'/'+f.roomId+'/actions/'+f.ask.requestId).set('x-api-key',key);expect(original.body.operation).toEqual(f.ask);
+        const lead=await prisma.externalSourceLead.findUniqueOrThrow({where:{id:f.id}});
+        expect((await request(server).post('/admin/'+f.id+'/seller-route').set('x-admin-key',admin).send({leadId:f.id,sourceUrl:lead.canonicalUrl,contentHash:lead.contentHash,channel:'FACEBOOK_UI',publicRouteUrl:'https://www.facebook.com/synthetic.seller',identityEvidenceRef:'self:synthetic-seller',routeEvidenceRef:'self:synthetic-ui-route',confirmOriginalSeller:true})).status).toBe(200);
+        const reserved=await request(server).post('/admin/inquiries/'+f.roomId+'/prepare-transfer').set('x-admin-key',admin).send({requestId:require('crypto').randomUUID()});expect(reserved.status).toBe(200);
+        expect(reserved.body.outboundQuestions).toEqual([{requestId:accepted.requestId,text:accepted.text}]);
+        expect((await f.action({...revise,requestId:require('crypto').randomUUID(),transferHash:current.transferHash})).status).toBe(409);
+        expect((await f.action({requestId:require('crypto').randomUUID(),action:'CANCEL'})).body.state).toBe('CANCEL_REQUESTED');
+        expect((await f.action({...revise,action:'REOPEN',requestId:require('crypto').randomUUID()})).status).toBe(409);
+        expect((await request(server).get('/admin/inquiries/'+f.roomId+'/transfer-preflight').set('x-admin-key',admin)).status).toBe(409);
+    });
+    test('unavailable source, stale consent and missing consent cannot restart an inquiry',async()=>{
+        const f=await correctionFixture('UNAVAILABLE');const stopped=await f.action({requestId:require('crypto').randomUUID(),action:'CANCEL'});
+        const payload={requestId:require('crypto').randomUUID(),action:'REOPEN',text:'合成新問題',consent:true,transferHash:stopped.body.transferHash};
+        expect((await f.action({...payload,transferHash:f.first.transferHash})).body.errorCode).toBe('CONSENT_SNAPSHOT_MISMATCH');
+        await prisma.externalSourceLead.update({where:{id:f.id},data:{status:'WITHDRAWN'}});
+        expect((await f.action(payload)).body.errorCode).toBe('LEAD_UNAVAILABLE');expect((await f.read()).body.state).toBe('CANCELLED');
+    });
+
 });

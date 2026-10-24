@@ -9,7 +9,7 @@ const english = {
   '已知來源圖片尚未完整匯入': 'Known source images have not all been imported',
   '來源商品圖片已完整收錄': 'All source item images have been imported',
   '圖片完整性需重新核對': 'Image completeness needs to be checked again',
-  '來源圖片超過目前支援張數，待處理': 'The source has more images than currently supported; review is pending',
+  '來源圖片超過支援張數，已收錄前 32 張': 'The source has more images than supported; the first 32 are included',
   '（來源{source}張／已收錄{imported}張）': ' (Source: {source}; imported: {imported})',
   '實物圖{physical}張／專屬規格或包裝圖{other}張': 'Physical-item images: {physical}; item-specific specifications or packaging: {other}',
   '本次已成功查看{loaded}張': 'Images successfully viewed this visit: {loaded}',

@@ -27,13 +27,14 @@ export function recordPhotoEvidence(row: { id: string; archiveItemId: string; ca
   try { parsePhotoInventory({ ...inventory, bindingHash: '0'.repeat(64) }, row, now); } catch { throw new LeadError('PHOTO_ASSIGNMENT_INVALID'); }
   const expected = inventory.photos.filter((p: any) => ITEM_PHOTO.includes(p.classification));
   if (expected.some((p: any) => p.archiveItemId !== row.archiveItemId)) throw new LeadError('PHOTO_ASSIGNMENT_INVALID');
-  if (expected.length > SOURCE_PHOTO_LIMIT) throw new LeadError('SOURCE_PHOTO_LIMIT_EXCEEDED');
+  // A post with more item photos than SOURCE_PHOTO_LIMIT binds its first SOURCE_PHOTO_LIMIT (Hank 2026-10-24); the rest stay listed in the inventory.
+  const kept = expected.slice(0, SOURCE_PHOTO_LIMIT);
   const old = new Map<string, any>((Array.isArray((row.evidence as any)?.media) ? (row.evidence as any).media : []).map((m: any) => [m.sourcePhotoId, m]));
   const fresh = new Map(receipts.map(r => [r.sourcePhotoId, r]));
-  if (fresh.size !== receipts.length || receipts.some(r => !expected.some((p: any) => p.sourcePhotoId === r.sourcePhotoId) || !isListingId(r.mediaId))) throw new LeadError('PHOTO_RECEIPT_UNUSED');
+  if (fresh.size !== receipts.length || receipts.some(r => !kept.some((p: any) => p.sourcePhotoId === r.sourcePhotoId) || !isListingId(r.mediaId))) throw new LeadError('PHOTO_RECEIPT_UNUSED');
   const alt = row.title.replace(/^來源線索：/, '').slice(0, 100);
   // A re-check keeps already uploaded photos; only new source photos need a fresh upload receipt.
-  const media = expected.map((p: any, sequence: number) => {
+  const media = kept.map((p: any, sequence: number) => {
     const r = fresh.get(p.sourcePhotoId), m = old.get(p.sourcePhotoId);
     if (!r && !m) throw new LeadError('PHOTO_RECEIPT_REQUIRED');
     const upload = r ? { id: r.mediaId, flickrPhotoId: r.photoId, imageUrl: r.imageSource, thumbnailUrl: r.thumbnailSource, uploadReceiptRef: 'source:flickr-upload/' + r.mediaId } :
@@ -43,6 +44,6 @@ export function recordPhotoEvidence(row: { id: string; archiveItemId: string; ca
   });
   const photoInventory = { ...inventory, bindingHash: photoBindingHash(inventory, media) };
   const probe = { archiveItemId: row.archiveItemId, canonicalUrl: row.canonicalUrl, recordOrigin: 'DB_MASTER', evidence: { media, photoInventory } };
-  if (photoCompleteness(probe, sourceLeadMedia(probe, now), now).status !== 'IMPORTED_COMPLETE') throw new LeadError('PHOTO_IMPORT_NOT_COMPLETE');
+  if (!['IMPORTED_COMPLETE', 'OVER_LIMIT'].includes(photoCompleteness(probe, sourceLeadMedia(probe, now), now).status)) throw new LeadError('PHOTO_IMPORT_NOT_COMPLETE');
   return { media, photoInventory };
 }

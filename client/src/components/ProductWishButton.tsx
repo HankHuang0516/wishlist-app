@@ -112,7 +112,8 @@ function OwnerWishes({ token, userId, children }: { token: string; userId: numbe
   </Context.Provider>;
 }
 export default function ProductWishButton({ product }: { product: Product }) {
-  const context = useContext(Context); if (!context) return null;
+  const context = useContext(Context);
+  if (!context) return <Link to="/login" className="product-wish-heart absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/95 text-gray-700 shadow-sm" aria-label={say('登入以加入願望：','Sign in to save: ')+product.title}><Heart className="h-5 w-5" aria-hidden="true"/></Link>;
   const saved = context.saved.some(s => s.productKey === product.kind + ':' + product.id);
   return <button type="button" className="product-wish-heart absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/95 text-gray-700 shadow-sm disabled:opacity-50" aria-label={say((saved ? '已加入願望：' : '加入願望清單：') + product.title, (saved ? 'Wish saved: ' : 'Add to wishlist: ') + product.title)} aria-pressed={saved} disabled={context.busy} onClick={event => { event.stopPropagation(); context.add(product); }}>
     <Heart className="h-5 w-5" fill={saved ? 'currentColor' : 'none'} aria-hidden="true" />

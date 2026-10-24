@@ -10,16 +10,17 @@ import { useAuth } from "../context/AuthContext";
 import { webShellText } from '../lib/webShellCopy';
 
 export default function Layout() {
-    const managerPage=useLocation().pathname.startsWith('/manage/');
+    const location=useLocation(), managerPage=location.pathname.startsWith('/manage/');
+    const exploreParams=new URLSearchParams(location.search), discoveryPage=location.pathname==='/explore'&&!['view','scope','bbox','wish','wishItemId','listing','external'].some(k=>exploreParams.has(k))&&(!exploreParams.has('source')||['all','listing','source','external'].includes(exploreParams.get('source')!));
     const { isAuthenticated, logout, user } = useAuth();
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     // Cast user to any to access isPremium until context is updated
     const isPremium = (user as any)?.isPremium;
 
     return (
-        <div className="min-h-screen bg-muji-bg font-sans text-muji-primary flex flex-col">
+        <div className={'min-h-screen font-sans text-muji-primary flex flex-col '+(discoveryPage?'bg-white':'bg-muji-bg')}>
             {/* Navbar */}
-            <header className="sticky top-0 z-50 w-full border-b border-muji-border bg-white/80 backdrop-blur-md">
+            {discoveryPage?<header className="discovery-shell"><Link to="/" className="discovery-shell-brand">Wishlist<span>.ai</span></Link><nav aria-label={webShellText('explore')}><Link to="/explore" aria-current="page">{webShellText('explore')}</Link><Link to="/wishes">{webShellText('wishes')}</Link><Link to="/chat">{webShellText('chat')}</Link></nav><Link className="discovery-shell-account" aria-label={isAuthenticated?webShellText('settings'):webShellText('login')} to={isAuthenticated?'/settings':'/login'}>{isAuthenticated?(user?.name??'W').slice(0,1):'↗'}</Link></header>:<header className="sticky top-0 z-50 w-full border-b border-muji-border bg-white/80 backdrop-blur-md">
                 <div className="container mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-4 px-4 py-1">
                     <div className="flex items-center gap-1">
                         <Link to="/" className="flex min-h-11 min-w-11 items-center space-x-2 font-bold text-base tracking-tight text-muji-primary shrink-0">
@@ -48,13 +49,13 @@ export default function Layout() {
                         <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('help')} onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
                     </div>
                 </div>
-            </header>
+            </header>}
             <WebUpdateNotice />
 
             <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
             {/* Main Content */}
-            <main className="flex-1 container mx-auto px-4 py-6">
+            <main className={'flex-1 container mx-auto px-4 '+(discoveryPage?'py-7':'py-6')}>
                 <Outlet />
             </main>
 

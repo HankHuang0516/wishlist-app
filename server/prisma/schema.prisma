@@ -875,6 +875,20 @@ model Wishlist {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model DiscoveryCpRun {
+  id         String   @id @db.VarChar(64)
+  model      String
+  state      String
+  result     Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  leaseUntil DateTime
+  expiresAt  DateTime
+
+  @@index([state, expiresAt])
+  @@index([createdAt])
+}
+
 model Item {
   id             Int         @id @default(autoincrement())
   name           String

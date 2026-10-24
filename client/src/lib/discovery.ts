@@ -1,3 +1,5 @@
+export type RetailPriceReference={price:number;priceType:'MANUFACTURER_MSRP'|'RETAIL_REGULAR';sourceUrl:string;sourceTitle:string;sourcePeriod:string|null;checkedAt:string};
+export type RetailConversion={originalPrice:number;priceRatio:number;savingsPercent:number;pricePoints:number};
 export type DiscoveryProduct = {
   kind:'listing'|'source'|'external'; id:string; key:string; title:string; description:string;
   mainId:string; subId:string; classificationMethod:string;
@@ -6,10 +8,10 @@ export type DiscoveryProduct = {
   county:string|null; district:string|null; condition:string; sourceLabel:string; stockStatus:string;
   canonicalUrl:string|null; detailPath:string; date:string; dateBasis:'PUBLISHED'|'SOURCE_POST_RANGE'|'COLLECTED'; dateEarliest:string|null;
   match?:{wishItemId:number;reasons:('NAME'|'BUDGET')[];score:number};
-  cp?:{score:number|null;confidence:string;reasons:{zh:string;en:string}[];limitations:{zh:string;en:string}[];basis:{key:string;hash:string}[];model:string;evaluatedAt:string;dimensions:{price:number;specification:number;condition:number;evidence:number}|null};
+  cp?:{retail?:RetailPriceReference;conversion?:RetailConversion;score:number|null;confidence:string;reasons:{zh:string;en:string}[];limitations:{zh:string;en:string}[];basis:{key:string;hash:string}[];model:string;evaluatedAt:string;dimensions:{price:number;specification:number;condition:number;evidence:number}|null};
 };
 export type DiscoveryCategory={id:string;label:string;en:string;icon:string;count:number;children:{id:string;label:string;en:string;count:number;thumbnailUrl:string|null}[]};
-export type DiscoveryPage={items:DiscoveryProduct[];categories:DiscoveryCategory[];nextCursor:string|null;snapshot:string;total:number;counts:{listing:number;source:number;external:number};counties:string[];complete:true;generatedAt:string;unknownPriceExcluded:boolean;cpStatus?:{evaluated:number;scored:number;pending:number;providerConfigured:boolean;threshold:number;assessments?:{key:string;title:string;score:number|null;reasons:{zh:string;en:string}[];evaluatedAt:string}[]}};
+export type DiscoveryPage={items:DiscoveryProduct[];categories:DiscoveryCategory[];nextCursor:string|null;snapshot:string;total:number;counts:{listing:number;source:number;external:number};counties:string[];complete:true;generatedAt:string;unknownPriceExcluded:boolean;cpStatus?:{evaluated:number;scored:number;pending:number;providerConfigured:boolean;threshold:number;assessments?:{retail?:RetailPriceReference;conversion?:RetailConversion;key:string;title:string;score:number|null;reasons:{zh:string;en:string}[];evaluatedAt:string}[]}};
 export type DiscoveryFilters={q:string;main:string;sub:string;source:string;condition:string;county:string;min:string;max:string;sort:string;feed:string;display:string};
 export const defaultDiscovery:DiscoveryFilters={q:'',main:'',sub:'',source:'all',condition:'',county:'',min:'',max:'',sort:'newest',feed:'latest',display:'grid'};
 export function isLegacyExplore(search:string){const p=new URLSearchParams(search);return ['view','scope','bbox','wish','wishItemId','listing','external','brand','category','delivery','minPrice','maxPrice','radius'].some(k=>p.has(k))||p.has('source')&&!['all','listing','source','external'].includes(p.get('source')!);}

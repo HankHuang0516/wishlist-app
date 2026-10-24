@@ -28,7 +28,7 @@ function makeSourceLead(number = 1): any {
 
 describe('actual Explore query evidence display and download',()=>{
  const origin='https://wishlist-query-qa.invalid',root=path.resolve(__dirname,'../../../../client/dist');
- let server:any,browser:any,db:any,buyer:number;let mode='empty';let downloadRoot:string;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
+ let server:any,browser:any,db:any,buyer:number;const retailObservationIds:string[]=[];const retailModel='synthetic-browser-original-'+require('crypto').randomUUID();let mode='empty';let downloadRoot:string;const errors:string[]=[];const traffic:{method:string;path:string;status:number}[]=[];
  const saved={api:process.env.API_URL,enabled:process.env.SOURCE_LEADS_PUBLIC_ENABLED,secret:process.env.JWT_SECRET,external:process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED};
  beforeAll(async()=>{
   require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -49,6 +49,7 @@ describe('actual Explore query evidence display and download',()=>{
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run','--disable-background-networking']});
  },60000);
  afterAll(async()=>{
+  if(db){await db.retailPriceObservation.deleteMany({where:{id:{in:retailObservationIds}}});await db.discoveryCpRun.deleteMany({where:{model:retailModel}});}
   if(browser)await browser.close();if(downloadRoot)fs.rmSync(downloadRoot,{recursive:true,force:true});if(server?.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
   if(db){if(buyer)await db.user.deleteMany({where:{id:buyer}});await db.$disconnect();}
   if(saved.secret===undefined)delete process.env.JWT_SECRET;else process.env.JWT_SECRET=saved.secret;
@@ -180,6 +181,14 @@ describe('actual Explore query evidence display and download',()=>{
   expect(await db.item.count({where:{wishlistId:secondList.id}})).toBe(1);await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.product-wish-heart[aria-pressed="true"]');
   expect(await page.$eval('header',(el:Element)=>el.textContent)).toContain('尊榮會員');
   reports.push({scenario:'multi-list-confirm-add-remove',wishlistId:wishList.id,secondWishlistId:secondList.id,confirmed:true,productionWrites:0});
+  await page.goto(origin+'/explore?feed=for-you',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length>0);expect(await page.$eval('.discovery-results-heading h2',(el:Element)=>el.textContent)).toBe('為你挑選');await page.screenshot({path:webQaEvidence('discovery-real-wish-recommendations.png')});
+  const retailListing=await db.listing.create({data:{ownerUserId:buyer,clientListingId:require('crypto').randomUUID(),requestHash:'synthetic-browser-original',title:'Samsung Galaxy Buds3 全新未拆',description:'Synthetic public product for original-price UI acceptance',category:'electronics',condition:'NEW',currency:'TWD',price:2500,status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000)}});
+  const cpLib=require('../../../dist/lib/discoveryCp'),retailLib=require('../../../dist/lib/retailPrices'),discoveryLib=require('../../../dist/lib/discovery');const retailProduct=(await discoveryLib.loadDiscovery()).find((p:any)=>p.id===retailListing.id);const retailId=require('crypto').randomUUID();retailObservationIds.push(retailId);
+  await db.retailPriceObservation.create({data:retailLib.retailObservation({requestId:retailId,productKey:retailProduct.key,bindingHash:retailLib.retailBinding(retailProduct),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original-price UI evidence',sourceProductTitle:'Samsung Galaxy Buds3',sourcePeriod:'2025-04',evidenceQuote:'Galaxy Buds3 建議售價 NT$4,990',checkedAt:new Date().toISOString()},retailProduct)});
+  const previousCpModel=process.env.DISCOVERY_CP_MODEL;process.env.DISCOVERY_CP_MODEL=retailModel;
+  try{await cpLib.evaluateCp([retailProduct],async(targets:any[])=>targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價，依明示規格比較。',en:'Same-model original-new reference and stated specifications.'}],limitations:[{zh:'庫存、品況仍需確認。',en:'Stock and condition require confirmation.'}]})));}finally{if(previousCpModel===undefined)delete process.env.DISCOVERY_CP_MODEL;else process.env.DISCOVERY_CP_MODEL=previousCpModel;}
+  await page.goto(origin+'/explore?feed=cp',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.body.textContent?.includes('約 5.0 折，比原價低 49.9%'));expect(await page.$eval('.discovery-price',(el:Element)=>el.textContent)).toContain('2,500');expect(await page.$eval('.discovery-retail-price',(el:Element)=>el.textContent)).toContain('4,990');expect(await page.$eval('.discovery-retail-price a',(el:Element)=>el.getAttribute('href'))).toBe('https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf');
+  await page.screenshot({path:webQaEvidence('discovery-original-retail-price.png'),fullPage:true});reports.push({scenario:'same-model-original-new-price',originalPrice:4990,askingPrice:2500,priceRatio:5,savingsPercent:49.9,injectedProvider:true,productionWrites:0});
   expect(errors).toEqual([]);
   // Built assets must retain the existing public icon bytes; no redesign or H editing.
   const crypto=require('crypto'),publicRoot=path.resolve(root,'../public'),icons:any[]=[];

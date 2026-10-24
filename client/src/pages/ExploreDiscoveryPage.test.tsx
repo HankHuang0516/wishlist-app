@@ -93,3 +93,9 @@ it('keeps a 429 inside the page, disables repeated retries, then allows one expl
  const retry=screen.getByRole('button',{name:'重新讀取'});await act(async()=>{fireEvent.click(retry);});
  expect(screen.getByText('1 筆公開來源')).toBeInTheDocument();expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');expect(publicApi).toHaveBeenCalledTimes(2);
 });
+
+it('shows same-model original-new price and deterministic savings with an attributable source',async()=>{
+ const retail={price:4990,priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original price',sourcePeriod:'2025-04',checkedAt:'2026-10-24T00:00:00Z'};
+ publicApi.mockResolvedValue({...page,items:[{...p,title:'Samsung Galaxy Buds3',price:2500,cp:{score:80,confidence:'MEDIUM',reasons:[],limitations:[],basis:[],model:'synthetic',evaluatedAt:'2026-10-24T00:00:00Z',dimensions:null,retail,conversion:{originalPrice:4990,priceRatio:5,savingsPercent:49.9,pricePoints:20}}}],cpStatus:{evaluated:1,scored:1,pending:0,providerConfigured:true,threshold:75}});
+ render(view('/explore?feed=cp'));await screen.findByText(/約 5\.0 折，比原價低 49\.9%/);expect(screen.getByText('NT$ 4,990')).toBeVisible();expect(screen.getByRole('link',{name:'原廠建議售價依據'})).toHaveAttribute('href',retail.sourceUrl);expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+});

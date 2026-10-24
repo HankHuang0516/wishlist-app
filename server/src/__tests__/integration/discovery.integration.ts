@@ -4,13 +4,14 @@ import prisma from '../../lib/prisma';
 import {createDiscoveryRoutes} from '../../routes/discoveryRoutes';
 import {parseLead} from '../../lib/sourceLeadRules';
 import {loadDiscovery} from '../../lib/discovery';
+import {retailBinding,retailObservation} from '../../lib/retailPrices';
 import {evaluateCp,attachCp} from '../../lib/discoveryCp';
 import {createLoopbackRequest} from './loopbackHttp';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated DB required');
 const app=express();app.use(express.json());app.use('/discovery',createDiscoveryRoutes());const http=createLoopbackRequest(app);
 const run=randomUUID(),apiKey=randomUUID(),otherKey=randomUUID();let userId:number,otherId:number,listingId:string;
-const leadIds:string[]=[],oldFlag=process.env.SOURCE_LEADS_PUBLIC_ENABLED,oldModel=process.env.DISCOVERY_CP_MODEL,model='synthetic-cp-'+run;
+const retailIds:string[]=[],leadIds:string[]=[],oldFlag=process.env.SOURCE_LEADS_PUBLIC_ENABLED,oldModel=process.env.DISCOVERY_CP_MODEL,model='synthetic-cp-'+run;
 beforeAll(async()=>{
  process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';
  process.env.DISCOVERY_CP_MODEL=model;
@@ -20,7 +21,7 @@ beforeAll(async()=>{
  await prisma.externalSourceLead.createMany({data:rows});
  await prisma.wishlist.create({data:{userId,title:'合成私人願望',items:{create:{name:'電腦螢幕',maxPrice:800,priceCurrency:'TWD',aiStatus:'SKIPPED'}}}});
 },30_000);
-afterAll(async()=>{if(oldFlag===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=oldFlag;if(oldModel===undefined)delete process.env.DISCOVERY_CP_MODEL;else process.env.DISCOVERY_CP_MODEL=oldModel;await prisma.discoveryCpRun.deleteMany({where:{model}});await prisma.externalSourceLead.deleteMany({where:{id:{in:leadIds}}});await prisma.listing.deleteMany({where:{ownerUserId:userId}});await prisma.user.deleteMany({where:{id:{in:[userId,otherId]}}});await prisma.$disconnect();});
+afterAll(async()=>{if(oldFlag===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=oldFlag;if(oldModel===undefined)delete process.env.DISCOVERY_CP_MODEL;else process.env.DISCOVERY_CP_MODEL=oldModel;await prisma.discoveryCpRun.deleteMany({where:{model}});await prisma.retailPriceObservation.deleteMany({where:{id:{in:retailIds}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:leadIds}}});await prisma.listing.deleteMany({where:{ownerUserId:userId}});await prisma.user.deleteMany({where:{id:{in:[userId,otherId]}}});await prisma.$disconnect();});
 it('reads every published source before applying main/subcategory and budget filters',async()=>{
  const first=await http.get('/discovery?main=electronics&sub=laptops');expect(first.status).toBe(200);expect(first.body.total).toBe(1);expect(first.body.items[0].title).toContain('唯一尾頁');
  const monitors=await http.get('/discovery?main=electronics&sub=monitors&max=1000');expect(monitors.body.counts).toEqual({listing:1,source:502,external:0});expect(monitors.body.complete).toBe(true);expect(monitors.body.items).toHaveLength(24);
@@ -38,14 +39,13 @@ it('removes withdrawn sources and rejects prior-page cursors rather than mixing 
  const disabled=process.env.SOURCE_LEADS_PUBLIC_ENABLED;process.env.SOURCE_LEADS_PUBLIC_ENABLED='0';
  const closed=await http.get('/discovery');expect(closed.body.counts.source).toBe(0);process.env.SOURCE_LEADS_PUBLIC_ENABLED=disabled;
 });
-it('stores bound injected-provider results, excludes stale evidence and never evaluates from a public GET',async()=>{
- expect((await http.post('/discovery/cp-evaluations').send({})).status).toBe(401);
- const all=await loadDiscovery();let calls=0;
- const provider=async(targets:any[])=>{calls++;return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:t.comparables.slice(0,2).map((p:any)=>p.key),dimensions:{price:35,specification:20,condition:15,evidence:10},reasons:[{zh:'僅比較測試資料明示規格。',en:'Compare only specifications stated in test data.'}],limitations:[{zh:'運費與實物狀況未核實。',en:'Shipping and actual condition unverified.'}]}));};
- const result=await evaluateCp(all,provider);expect(result.evaluated).toBe(6);expect(calls).toBe(1);
- const attached=await attachCp(all);const scored=attached.filter(p=>p.cp);expect(scored).toHaveLength(6);
- const publicRead=await http.get('/discovery/cp');expect(publicRead.status).toBe(200);expect(publicRead.body.total).toBe(6);expect(calls).toBe(1);
- const peerKey=scored[0].cp!.basis[0].key,peer=all.find(p=>p.key===peerKey)!;
- const changed=await attachCp(all.map(p=>p.key===peerKey?{...p,price:999999}:p));expect(changed.find(p=>p.key===scored[0].key)?.cp).toBeUndefined();
- expect(peer).toBeTruthy();
+it('uses only external original-new evidence, invalidates expired or changed inputs, and never evaluates from a GET',async()=>{
+ expect((await http.post('/discovery/cp-evaluations').send({})).status).toBe(401);const all=await loadDiscovery();let calls=0;
+ const selected=all.filter(p=>p.mainId==='electronics'&&p.subId==='monitors'&&p.price!==null).slice(0,6);
+ for(const p of selected){const id=randomUUID();retailIds.push(id);await prisma.retailPriceObservation.create({data:retailObservation({requestId:id,productKey:p.key,bindingHash:retailBinding(p),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.benq.com/zh-tw/monitor.html',sourceTitle:'Synthetic original price evidence',sourceProductTitle:'BenQ GW2270',sourcePeriod:'2026-10',evidenceQuote:'BenQ GW2270 新品原價 NT$4990',checkedAt:new Date().toISOString()},p)});}
+ const provider=async(targets:any[])=>{calls++;expect(targets.every(t=>t.comparables.length===1&&t.comparables[0].key.startsWith('retail:'))).toBe(true);return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價比較。',en:'Same-model original-new comparison.'}],limitations:[{zh:'品況與庫存待確認。',en:'Condition and stock unconfirmed.'}]}));};
+ const result=await evaluateCp(all,provider);expect(result.evaluated).toBe(6);expect(calls).toBe(1);const attached=await attachCp(all),scored=attached.filter(p=>p.cp);expect(scored).toHaveLength(6);
+ const page=await http.get('/discovery/cp');expect(page.status).toBe(200);expect(page.body.total).toBe(6);expect(calls).toBe(1);
+ const key=scored[0].key;const priceChanged=await attachCp(all.map(p=>p.key===key?{...p,price:999999}:p));expect(priceChanged.find(p=>p.key===key)?.cp).toBeUndefined();
+ await prisma.retailPriceObservation.update({where:{id:scored[0].cp!.retail.id},data:{expiresAt:new Date(0)}});expect((await attachCp(all)).find(p=>p.key===key)?.cp).toBeUndefined();
 });

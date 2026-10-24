@@ -6,7 +6,7 @@ import type { SourceChatContext } from './SourceLeadExplorer';
 import { PrivateListingPhoto } from './PrivateListingPhoto';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 
-export type SourceInquiryThread = { id: string; state: string; context: SourceChatContext };
+export type SourceInquiryThread = { id: string; state: string; context: SourceChatContext; unreadCount?:number };
 type Row = { kind: 'person'; room: ChatRoomRecord } | { kind: 'ai'; thread: SourceInquiryThread };
 type Section = { kind: 'person' | 'ai'; title: string; data: Row[] };
 type Props = {
@@ -39,7 +39,7 @@ export function ChatInboxList(props: Props) {
           style={s.card} onPress={() => props.onSourceChatChange?.(thread.context)}>
           <View style={s.body}><Text numberOfLines={2} style={s.title}>{thread.context.title}</Text>
             <Text style={s.preview}>Wishlist AI · {thread.state === 'WAITING_ROUTE' ? '待核實原賣家，未送出' : thread.state === 'DELIVERED' ? '已代轉，等待賣家回覆' : thread.state === 'CANCELLED' ? '已取消' : '查看問題與下一步'}</Text>
-          </View>
+          </View>{typeof thread.unreadCount==='number'&&thread.unreadCount>0&&<View style={s.unreadBadge} accessibilityLabel={`${thread.unreadCount} 則原賣家未讀回覆`}><Text style={s.unreadText}>{thread.unreadCount>99?'99+':thread.unreadCount}</Text></View>}
         </Pressable>;
       }
       const { room } = item;
@@ -54,7 +54,7 @@ export function ChatInboxList(props: Props) {
           <Text style={s.time}>{new Date(room.lastMessageAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</Text></View>
           <Text numberOfLines={1} style={s.contact}>與 {contact} · {price}</Text>
           <Text numberOfLines={1} style={s.preview}>{room.archived ? '已封存 · 僅供查看' : room.blocked ? '已封鎖 · 歷史仍可查看' : !room.listingAvailable ? '商品已停止刊登 · 歷史仍可查看' : room.lastMessageText || '開始討論這件商品'}</Text>
-        </View>{room.unreadCount > 0 && <View style={s.unreadDot} accessibilityLabel={`${room.unreadCount} 則未讀`} />}
+        </View>{room.unreadCount > 0 && <View style={s.unreadBadge} accessibilityLabel={`${room.unreadCount} 則未讀`}><Text style={s.unreadText}>{room.unreadCount>99?'99+':room.unreadCount}</Text></View>}
       </Pressable>;
     }}
     renderSectionFooter={({ section }) => section.kind === 'person' ? <View style={s.footer}>
@@ -80,6 +80,7 @@ const s = StyleSheet.create({
   body: { flex: 1, minWidth: 0, gap: iosSpacing.xxs }, top: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.xs },
   title: { ...iosType.headline, color: iosColors.label, flex: 1 }, time: { ...iosType.footnote, color: iosColors.secondaryLabel },
   contact: { ...iosType.footnote, color: iosColors.label }, preview: { ...iosType.footnote, color: iosColors.secondaryLabel },
+  unreadBadge:{minWidth:22,minHeight:22,paddingHorizontal:6,borderRadius:11,backgroundColor:'#B91C1C',alignItems:'center',justifyContent:'center'},unreadText:{color:iosColors.white,fontSize:12,fontWeight:'700'},
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: iosColors.tint },
   photoShell: { width: 56, height: 56, borderRadius: iosRadius.small, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.surfaceSecondary },
   photo: { width: 56, height: 56, borderRadius: iosRadius.small }, footer: { gap: iosSpacing.sm, paddingBottom: iosSpacing.sm },

@@ -13,7 +13,7 @@ vi.mock('expo-file-system', () => ({
   },
 }));
 
-import { jpegPhotoUploadForm } from '../photoUploadForm';
+import { jpegPhotoUploadForm,jpegChatPhotoUploadForm } from '../photoUploadForm';
 
 describe('jpegPhotoUploadForm', () => {
   it('sends actual file bytes as a multipart Blob, never a legacy URI part', () => {
@@ -37,5 +37,16 @@ describe('jpegPhotoUploadForm', () => {
     expect(batch.get('capturePurpose')).toBe('BATCH_ITEM');
     expect(manual.get('capturePurpose')).toBe('MANUAL_PHOTO');
     expect(jpegPhotoUploadForm('legacy-id', 'file:///cache/processed.jpg', 'wish-photo.jpg').get('capturePurpose')).toBeNull();
+  });
+  it('uploads chat bytes with the original message identifier and caption, without sending a URI descriptor or hash field',async()=>{
+    const request={clientMessageId:'2bc41dd0-5b85-4a46-9c3e-e2a6abe707ca',text:'Original caption',photoHash:'a'.repeat(64)};
+    const form=jpegChatPhotoUploadForm(request,'file:///cache/processed.jpg');
+    expect([...form.keys()]).toEqual(['clientMessageId','text','photo']);
+    expect(form.get('clientMessageId')).toBe(request.clientMessageId);
+    expect(form.get('text')).toBe(request.text);
+    const file=form.get('photo') as Blob;
+    expect(file).toBeInstanceOf(Blob);expect(file.type).toBe('image/jpeg');
+    expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0xff,0xd8,0xff]);
+    expect(()=>jpegChatPhotoUploadForm(request,'file:///cache/missing.jpg')).toThrow();
   });
 });

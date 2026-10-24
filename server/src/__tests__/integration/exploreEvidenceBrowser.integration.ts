@@ -60,11 +60,11 @@ describe('actual Explore query evidence display and download',()=>{
  test('actual built Explore evidence distinguishes empty, disabled,404 and failure without extra reads',async()=>{
   const page=await browser.newPage();await page.setRequestInterception(true);
   downloadRoot=fs.mkdtempSync(path.join(require('os').tmpdir(),'wishlist-query-downloads-'));
-  const cdp=await page.target().createCDPSession();await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:downloadRoot,eventsEnabled:true});
+  const cdp=await page.target().createCDPSession(),downloadEvents:unknown[]=[];cdp.on('Browser.downloadWillBegin',(e:any)=>downloadEvents.push({kind:'begin',name:e.suggestedFilename,protocol:new URL(e.url).protocol}));cdp.on('Browser.downloadProgress',(e:any)=>{if(e.state!=='inProgress')downloadEvents.push({kind:'progress',state:e.state});});await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:downloadRoot,eventsEnabled:true});
   page.on('pageerror',(e:Error)=>errors.push(e.message));
   await page.evaluateOnNewDocument((host:string)=>{if(window===window.top&&location.origin===host)localStorage.setItem('user-locale','zh-TW');},origin);
   page.on('request',async(req:any)=>{try{
-   const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}
+   const u=new URL(req.url());if(u.protocol==='blob:'){await req.continue();return;}if(u.origin!==origin){await req.abort();return;}
    if(u.pathname.startsWith('/api/')){
     if(u.pathname==='/api/source-leads'&&mode==='public-browse'){
       const first=u.searchParams.get('cursor')?Number(u.searchParams.get('cursor')!.slice(-12))+1:1,last=Math.min(first+24,564);
@@ -97,8 +97,9 @@ describe('actual Explore query evidence display and download',()=>{
    const counts=traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path));expect(counts).toHaveLength(3);
    const downloadName='explore-query-'+receipt.query.serial+'.json',downloadFile=path.join(downloadRoot,downloadName);
    if(fs.existsSync(downloadFile))fs.unlinkSync(downloadFile);
+   await page.$eval('[data-testid="explore-query-evidence"] button',(element:Element)=>element.scrollIntoView({block:'center',inline:'nearest'}));
    await page.click('[data-testid="explore-query-evidence"] button');
-   await new Promise<void>((resolve,reject)=>{const deadline=Date.now()+10000;const check=()=>{if(fs.existsSync(downloadFile)){try{JSON.parse(fs.readFileSync(downloadFile,'utf8'));resolve();return;}catch{}}if(Date.now()>deadline){reject(Error('Normal browser download did not complete'));return;}setTimeout(check,50);};check();});
+   await new Promise<void>((resolve,reject)=>{const deadline=Date.now()+10000;const check=()=>{if(fs.existsSync(downloadFile)){try{JSON.parse(fs.readFileSync(downloadFile,'utf8'));resolve();return;}catch{}}if(Date.now()>deadline){reject(Error('Normal browser download did not complete; '+JSON.stringify({width,scenario,events:downloadEvents,files:fs.readdirSync(downloadRoot),url:page.url()})));return;}setTimeout(check,50);};check();});
    const downloadedBytes=fs.readFileSync(downloadFile),exported=JSON.parse(downloadedBytes.toString('utf8'));
    expect(exported.query).toEqual(receipt.query);expect(exported.layers).toEqual(receipt.layers);
    expect(traffic.slice(before).filter(x=>['/api/listings','/api/external-listings','/api/source-leads'].includes(x.path))).toHaveLength(3);

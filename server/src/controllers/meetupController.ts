@@ -1,3 +1,4 @@
+import { queuePush } from '../lib/pushOutbox';
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -114,6 +115,7 @@ export async function mutateMeetup(req: AuthRequest, res: Response) {
                 const sellerCompletedAt = buyer ? current!.sellerCompletedAt : current!.sellerCompletedAt ?? now;
                 current = await tx.meetupAppointment.update({ where: { conversationId }, data: { buyerCompletedAt, sellerCompletedAt, status: buyerCompletedAt && sellerCompletedAt ? 'COMPLETED' : 'CONFIRMED' }, select });
             }
+            await queuePush(tx,actorUserId===room.buyerUserId?room.sellerUserId:room.buyerUserId,'meetup.'+conversationId+'.'+input.clientActionId,'MEETUP',{meetupId:current!.id});
             const saved = await tx.meetupOperation.create({ data: { ...receiptKey, requestHash: input.requestHash, action: input.action, resultingVersion: current!.version }, select: { resultingVersion: true } });
             return { appointment: current, receipt: { ...receiptKey, action: input.action, resultingVersion: saved.resultingVersion, abandoned: false }, replayed: false };
         }, { timeout: 15_000 });

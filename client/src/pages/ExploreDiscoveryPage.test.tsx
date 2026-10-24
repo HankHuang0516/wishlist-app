@@ -1,4 +1,4 @@
-import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,fireEvent,render,screen,within,waitFor} from '@testing-library/react';
 import {MemoryRouter,useLocation} from 'react-router-dom';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {AuthContext} from '../context/AuthContext';
@@ -32,8 +32,8 @@ it('shows positive public counts, original photos and a safe contact route',asyn
  render(view());await screen.findByText('1 筆公開來源');expect(screen.queryByText(/0 件站內商品/)).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:'查看商品：BenQ 合成螢幕'}));const dialog=await screen.findByRole('dialog');expect(dialog).toHaveTextContent('庫存與交易待確認');
  fireEvent.click(screen.getByRole('button',{name:'下一張照片'}));expect(dialog).toHaveTextContent('2 / 2');
- expect(screen.getByRole('link',{name:'查看原始來源'})).toHaveAttribute('href','https://example.invalid/product');
- expect(screen.getByRole('link',{name:'詢問商品'})).toHaveAttribute('href','/chat?source='+p.id);
+ expect(screen.getAllByRole('link',{name:'原始來源'}).at(-1)).toHaveAttribute('href','https://example.invalid/product');
+ expect(screen.getByRole('link',{name:'請 Wishlist AI 代問'})).toHaveAttribute('href','/chat?source='+p.id);
 });
 it('rejects a stale response after switching category or account',async()=>{
  let old!:(v:unknown)=>void;publicApi.mockImplementationOnce(()=>new Promise(resolve=>{old=resolve;})).mockResolvedValue(page);
@@ -98,4 +98,16 @@ it('shows same-model original-new price and deterministic savings with an attrib
  const retail={price:4990,priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original price',sourcePeriod:'2025-04',checkedAt:'2026-10-24T00:00:00Z'};
  publicApi.mockResolvedValue({...page,items:[{...p,title:'Samsung Galaxy Buds3',price:2500,cp:{score:80,confidence:'MEDIUM',reasons:[],limitations:[],basis:[],model:'synthetic',evaluatedAt:'2026-10-24T00:00:00Z',dimensions:null,retail,conversion:{originalPrice:4990,priceRatio:5,savingsPercent:49.9,pricePoints:20}}}],cpStatus:{evaluated:1,scored:1,pending:0,providerConfigured:true,threshold:75}});
  render(view('/explore?feed=cp'));await screen.findByText(/約 5\.0 折，比原價低 49\.9%/);expect(screen.getByText('NT$ 4,990')).toBeVisible();expect(screen.getByRole('link',{name:'原廠建議售價依據'})).toHaveAttribute('href',retail.sourceUrl);expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+});
+it.each([['zh-TW','查看 Facebook 原文','請 Wishlist AI 代問'],['en-US','View original Facebook post','Ask Wishlist AI to inquire']])('keeps the exact FB original visible on the card and above photos in %s without starting an inquiry',async(locale,original,inquire)=>{
+ localStorage.setItem('user-locale',locale);
+ const url='https://www.facebook.com/groups/254672985639737/posts/1775766086863745';
+ publicApi.mockResolvedValue({...page,items:[{...p,canonicalUrl:url}]});render(view());
+ const cardLink=await screen.findByRole('link',{name:original});expect(cardLink).toHaveAttribute('href',url);expect(cardLink).toHaveAttribute('target','_blank');expect(cardLink).toHaveAttribute('rel','noopener noreferrer');
+ fireEvent.click(screen.getByRole('button',{name:locale==='zh-TW'?'查看商品：BenQ 合成螢幕':'View product: BenQ 合成螢幕'}));
+ const dialog=await screen.findByRole('dialog');const link=within(dialog).getByRole('link',{name:original});
+ expect(link).toHaveAttribute('href',url);expect(link.compareDocumentPosition(within(dialog).getAllByRole('img')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(within(dialog).getByRole('link',{name:inquire})).toHaveAttribute('href','/chat?source='+p.id);
+ expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+ fireEvent.click(within(dialog).getByRole('button',{name:locale==='zh-TW'?'關閉':'Close'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

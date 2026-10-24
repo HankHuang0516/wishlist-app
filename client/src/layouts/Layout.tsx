@@ -1,3 +1,5 @@
+import BottomNav from '../components/BottomNav';
+import { useUnreadCount } from '../lib/useUnreadCount';
 import { useState } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Gift, LogOut, CircleHelp, Crown } from "lucide-react";
@@ -13,13 +15,14 @@ import {isLegacyExplore} from '../lib/discovery';
 export default function Layout() {
     const location=useLocation(), managerPage=location.pathname.startsWith('/manage/');
     const discoveryPage=location.pathname==='/explore'&&!isLegacyExplore(location.search);
-    const { isAuthenticated, logout, user } = useAuth();
+    const { isAuthenticated, logout, user, token } = useAuth();
+    const unreadCount=useUnreadCount(token,user?.id);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     // Cast user to any to access isPremium until context is updated
     const isPremium = (user as any)?.isPremium;
 
     return (
-        <div className={'min-h-screen font-sans text-muji-primary flex flex-col '+(discoveryPage?'bg-white':'bg-muji-bg')}>
+        <div className={'min-h-screen pb-20 sm:pb-0 font-sans text-muji-primary flex flex-col '+(discoveryPage?'bg-white':'bg-muji-bg')}>
             {/* Navbar */}
 <header className="sticky top-0 z-50 w-full border-b border-muji-border bg-white/80 backdrop-blur-md">
                 <div className="container mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-4 px-4 py-1">
@@ -43,7 +46,7 @@ export default function Layout() {
                     </div>
 
 
-                    {isAuthenticated && <div className="order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation /></div>}
+                    {isAuthenticated && <div className="hidden sm:block order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation unreadCount={unreadCount} /></div>}
                     <div className="flex items-center gap-1">
                         {isAuthenticated ? <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('logout')} title={webShellText('logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
                             : <Link to="/login" className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm hover:bg-gray-100">{managerPage?'一般會員登入':webShellText('login')}</Link>}
@@ -60,6 +63,7 @@ export default function Layout() {
                 <Outlet />
             </main>
 
+            <BottomNav unreadCount={unreadCount}/>
             {/* Footer */}
             <footer className="border-t border-muji-border bg-white py-2">
                 <div className="mx-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 text-xs text-muji-secondary xl:grid-cols-[auto_minmax(0,1fr)_auto]">

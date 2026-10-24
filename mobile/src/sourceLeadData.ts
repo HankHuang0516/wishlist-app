@@ -5,8 +5,10 @@ export type ContactRouting={status:'VERIFIED'|'UNAVAILABLE'|'UNVERIFIED';reason:
 export function parseContactRouting(value:unknown):ContactRouting {
  const c=obj(value);if(Object.keys(c).some(k=>!['status','reason','checkedAt'].includes(k))||!['VERIFIED','UNAVAILABLE','UNVERIFIED'].includes(c.status)||typeof c.reason!=='string'||!c.reason.trim()||c.reason.length>240||!(c.checkedAt===null||typeof c.checkedAt==='string'&&Number.isFinite(Date.parse(c.checkedAt))))throw new Error('來源聯絡狀態錯誤');return c as ContactRouting;
 }
+export type PhotoCompleteness={status:'UNVERIFIED'|'INCOMPLETE'|'IMPORTED_COMPLETE'|'STALE'|'OVER_LIMIT';sourceCount:number|null;physicalSourceCount:number|null;importedCount:number;limit:number};
 export type SourceLead = {
-    locationPrecision?:'COUNTY_ILLUSTRATION';
+    photoCompleteness?:PhotoCompleteness;
+    locationPrecision?:'COUNTY_ILLUSTRATION'|'CONTACT_FOR_LOCATION';
     contactRouting?:ContactRouting;
     media?: LeadPhoto[];
     id: string;
@@ -14,12 +16,13 @@ export type SourceLead = {
     title: string;
     summary: string;
     canonicalUrl: string;
-    county: string;
-    district: string;
-    publicPlaceName: string;
-    publicAddress: string;
-    latitude: number;
-    longitude: number;
+    // All null only for CONTACT_FOR_LOCATION: no region, never on the map.
+    county: string | null;
+    district: string | null;
+    publicPlaceName: string | null;
+    publicAddress: string | null;
+    latitude: number | null;
+    longitude: number | null;
     postedEarliestAt: string;
     postedLatestAt: string;
     checkedAt: string;
@@ -36,7 +39,7 @@ export type SourceLead = {
         locationRelation: string;
         coordinateQualityNotes: string[];
     } | null;
-    coordinateSourceUrl: string;
+    coordinateSourceUrl: string | null;
     coordinateAttribution: {
         text: string;
         url: string;
@@ -47,30 +50,31 @@ export type SourceLead = {
 const obj = (v: unknown): Record<string, any> => { if (!v || typeof v !== 'object' || Array.isArray(v))
     throw new Error('線索格式錯誤'); return v as Record<string, any>; };
 export function sourceLeadCutoff(now = Date.now()) { const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now).split('-').map(Number); const first = new Date(Date.UTC(y, m - 3, 1)), end = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, end)) - 8 * 3600000; }
-export function parseLead(v: unknown): SourceLead { const r = obj(v); const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','contactRouting','locationPrecision']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&r.county==='臺北市'&&r.district==='行政區未明示')) || ['title', 'summary', 'publicPlaceName', 'publicAddress', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240 || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude))
-    throw new Error('線索格式錯誤'); if(r.locationPrecision!==undefined&&(r.locationPrecision!=='COUNTY_ILLUSTRATION'||r.publicPlaceName!==r.county+'概略示意位置'||r.publicAddress!==r.county+'（概略位置，非取貨點）'||r.coordinateAttribution!==null))throw new Error('概略位置格式錯誤'); const u = new URL(r.canonicalUrl); if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search)
+export function parseLead(v: unknown): SourceLead { const r = obj(v); const contact = r.locationPrecision === 'CONTACT_FOR_LOCATION'; const keys = ['id', 'kind', 'title', 'summary', 'canonicalUrl', 'county', 'district', 'publicPlaceName', 'publicAddress', 'latitude', 'longitude', 'postedEarliestAt', 'postedLatestAt', 'checkedAt', 'stockStatus', 'qualifiedSupply', 'checkoutEnabled', 'notice', 'publicFacts', 'coordinateSourceUrl', 'coordinateAttribution', 'media','photoCompleteness','contactRouting','locationPrecision']; if (Object.keys(r).some(k => !keys.includes(k)) || !uuid(r.id) || r.kind !== 'SOURCE_LEAD' || r.stockStatus !== 'UNKNOWN' || r.qualifiedSupply !== false || r.checkoutEnabled !== false || (contact?['county','district','publicPlaceName','publicAddress','latitude','longitude','coordinateSourceUrl','coordinateAttribution'].some(k=>r[k]!==null):(!TAIWAN_DISTRICTS[r.county]?.has(r.district)&&!(r.locationPrecision==='COUNTY_ILLUSTRATION'&&!!TAIWAN_DISTRICTS[r.county]&&r.district==='行政區未明示')) || ['publicPlaceName', 'publicAddress'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || typeof r.latitude !== 'number' || r.latitude < 20 || r.latitude > 26.6 || typeof r.longitude !== 'number' || r.longitude < 117 || r.longitude > 123.8 || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) || ['title', 'summary', 'notice'].some(k => typeof r[k] !== 'string' || !r[k].trim()) || r.title.length > 100 || r.summary.length > 240)
+    throw new Error('線索格式錯誤'); if(r.locationPrecision!==undefined&&!contact&&(r.locationPrecision!=='COUNTY_ILLUSTRATION'||r.publicPlaceName!==r.county+'概略示意位置'||r.publicAddress!==r.county+'（概略位置，非取貨點）'||r.coordinateAttribution!==null))throw new Error('概略位置格式錯誤'); const u = new URL(r.canonicalUrl); if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search)
     throw new Error('來源連結錯誤'); if (r.publicFacts !== null) {
     const f = obj(r.publicFacts);
     if (Object.keys(f).some(k => !['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation', 'coordinateQualityNotes'].includes(k)) || ['priceText', 'priceUnitStatus', 'currencyStatus', 'sourceAccessNotice', 'originalDateLabel', 'locationRelation'].some(k => typeof f[k] !== 'string' || !f[k] || f[k].length > 300) || !Array.isArray(f.coordinateQualityNotes) || f.coordinateQualityNotes.some((v: unknown) => typeof v !== 'string' || v.length > 500))
         throw new Error('公開事實格式錯誤');
-} const cu = new URL(r.coordinateSourceUrl); if (cu.protocol !== 'https:' || cu.username || cu.password || cu.search || cu.hash)
+} const cu = contact ? null : new URL(r.coordinateSourceUrl); if (cu && (cu.protocol !== 'https:' || cu.username || cu.password || cu.search || cu.hash))
     throw new Error('座標來源錯誤'); if (r.coordinateAttribution !== null) {
     const a = obj(r.coordinateAttribution);
     if (a.text !== '© OpenStreetMap contributors' || a.url !== 'https://www.openstreetmap.org/copyright' || a.license !== 'ODbL-1.0' || a.licenseUrl !== 'https://opendatacommons.org/licenses/odbl/1-0/')
         throw new Error('座標署名錯誤');
 } if (r.media !== undefined) {
- if (!Array.isArray(r.media) || r.media.length > 8 || new Set(r.media.map((m:any)=>m.id)).size !== r.media.length) throw new Error('來源圖片映射錯誤');
+ if (!Array.isArray(r.media) || r.media.length > 32 || new Set(r.media.map((m:any)=>m.id)).size !== r.media.length) throw new Error('來源圖片映射錯誤');
  for (const m of r.media) {
   if (!m || Object.keys(m).some(k=>!['id','sourceUrl','imageUrl','thumbnailUrl','alt'].includes(k)) || !uuid(m.id) || m.sourceUrl !== r.canonicalUrl || typeof m.alt !== 'string' || !m.alt.trim() || m.alt.length > 100) throw new Error('來源圖片映射錯誤');
   const image = new URL(m.imageUrl), thumbnail = new URL(m.thumbnailUrl);
   if (image.protocol !== 'https:' || image.username || image.password || image.port || image.search || image.hash || thumbnail.origin !== image.origin || thumbnail.search || thumbnail.hash || thumbnail.username || thumbnail.password || image.pathname !== '/api/source-leads/'+r.id+'/media/'+m.id+'/image' || thumbnail.pathname !== '/api/source-leads/'+r.id+'/media/'+m.id+'/thumbnail') throw new Error('來源圖片路由錯誤');
  }
-} if(r.contactRouting!==undefined)parseContactRouting(r.contactRouting); const times = [r.postedEarliestAt, r.postedLatestAt, r.checkedAt].map(Date.parse); if (times.some(v => !Number.isFinite(v)) || times[0] < sourceLeadCutoff() || times[0] > times[1] || times[1] > Date.now() || times[2] > Date.now() || Date.now() - times[2] > 48 * 3600000)
+} if(r.photoCompleteness!==undefined){const c=obj(r.photoCompleteness);if(Object.keys(c).some(k=>!['status','sourceCount','physicalSourceCount','importedCount','limit'].includes(k))||!['UNVERIFIED','INCOMPLETE','IMPORTED_COMPLETE','STALE','OVER_LIMIT'].includes(c.status)||c.limit!==32||!(c.sourceCount===null||Number.isSafeInteger(c.sourceCount)&&c.sourceCount>=0&&c.sourceCount<=500)||!(c.physicalSourceCount===null||Number.isSafeInteger(c.physicalSourceCount)&&c.physicalSourceCount>=0&&c.sourceCount!==null&&c.physicalSourceCount<=c.sourceCount)||!Number.isSafeInteger(c.importedCount)||c.importedCount!==(r.media??[]).length||(c.status==='IMPORTED_COMPLETE'&&(c.sourceCount===0||c.sourceCount!==c.importedCount))||(c.status==='OVER_LIMIT'&&!(c.sourceCount>c.limit)))throw new Error('來源圖片完整性格式錯誤');} if(r.contactRouting!==undefined)parseContactRouting(r.contactRouting); const times = [r.postedEarliestAt, r.postedLatestAt, r.checkedAt].map(Date.parse); if (times.some(v => !Number.isFinite(v)) || times[0] > times[1] || times[1] > Date.now() || times[2] > Date.now())
     throw new Error('線索日期失效'); return r as SourceLead; }
 export function parseLeadPage(v: unknown) { const r = obj(v); if (typeof r.enabled !== 'boolean' || !Array.isArray(r.items) || r.items.length > 25 || !(r.nextCursor === null || uuid(r.nextCursor)) || (!r.enabled && (r.items.length || r.nextCursor !== null)))
     throw new Error('線索分頁錯誤'); const items = r.items.map(parseLead); if (new Set(items.map((r: SourceLead) => r.id)).size !== items.length)
     throw new Error('線索重複'); return { items: items as SourceLead[], nextCursor: r.nextCursor as string | null, enabled: r.enabled as boolean }; }
 export type LeadRoom = {
+    transferIssue?: { code: 'FACEBOOK_COMMENT_REJECTED'; checkedAt: string; originalPostUrl: string };
     id: string;
     leadId: string;
     state: string;
@@ -80,6 +84,7 @@ export type LeadRoom = {
         action: string;
         text?: string;
         at: string;
+        reservationId?:string;
     }[];
     transferHash: string;
     routeVerified: boolean;
@@ -93,11 +98,17 @@ export type LeadRoom = {
     orderCreated: false;
     notice: string;
 };
-export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = obj(v); if (Object.keys(r).some(k => !['id', 'leadId', 'state', 'available', 'events', 'transferHash', 'routeVerified', 'delivered', 'delivery', 'checkoutEnabled', 'orderCreated', 'notice'].includes(k)) || !uuid(r.id) || r.leadId !== leadId || !['INQUIRY', 'WAITING_ROUTE', 'TRANSFER_RESERVED', 'CANCEL_REQUESTED', 'CANCELLED', 'DELIVERED', 'DELIVERY_REQUIRES_REVIEW'].includes(r.state) || typeof r.available !== 'boolean' || typeof r.routeVerified !== 'boolean' || typeof r.delivered !== 'boolean' || r.checkoutEnabled !== false || r.orderCreated !== false || !/^[a-f0-9]{64}$/.test(r.transferHash) || !Array.isArray(r.events) || r.events.length > 200 || r.events.some((e: any) => !uuid(e.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'SELLER_REPLY'].includes(e.action) || !Number.isFinite(Date.parse(e.at)) || (e.text !== undefined && (typeof e.text !== 'string' || e.text.length > 1500))))
+export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = obj(v); if (Object.keys(r).some(k => !['id', 'leadId', 'state', 'available', 'events', 'transferHash', 'routeVerified', 'delivered', 'delivery', 'transferIssue', 'checkoutEnabled', 'orderCreated', 'notice'].includes(k)) || !uuid(r.id) || r.leadId !== leadId || !['INQUIRY', 'WAITING_ROUTE', 'TRANSFER_RESERVED', 'CANCEL_REQUESTED', 'CANCELLED', 'DELIVERED', 'DELIVERY_REQUIRES_REVIEW'].includes(r.state) || typeof r.available !== 'boolean' || typeof r.routeVerified !== 'boolean' || typeof r.delivered !== 'boolean' || r.checkoutEnabled !== false || r.orderCreated !== false || !/^[a-f0-9]{64}$/.test(r.transferHash) || !Array.isArray(r.events) || r.events.length > 201 || r.events.length===201&&r.events[200]?.action!=='CANCEL' || r.events.some((e: any) => e.reservationId!==undefined&&!uuid(e.reservationId) || !uuid(e.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'SELLER_REPLY', 'REVISE', 'REOPEN'].includes(e.action) || !Number.isFinite(Date.parse(e.at)) || (e.text !== undefined && (typeof e.text !== 'string' || e.text.length > 1500))))
     throw new Error('線索收件錯誤'); if (r.delivery !== null) {
     const d = obj(r.delivery);
     if (Object.keys(d).some(k => !['at', 'channel', 'verification'].includes(k)) || !Number.isFinite(Date.parse(d.at)) || !['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(d.channel) || d.verification !== 'MANUAL_UI_RECEIPT')
         throw new Error('回執格式錯誤');
+} if (r.transferIssue !== undefined) {
+    const issue = obj(r.transferIssue); let safe = false;
+    try { const url = new URL(issue.originalPostUrl); safe = url.protocol === 'https:' && url.hostname === 'www.facebook.com' && !url.username && !url.password && !url.port && !url.search && !url.hash && /^\/groups\/\d+\/posts\/\d+\/?$/.test(url.pathname); } catch { /* Invalid original source stays unreadable. */ }
+    if (Object.keys(issue).some(k => !['code', 'checkedAt', 'originalPostUrl'].includes(k)) || issue.code !== 'FACEBOOK_COMMENT_REJECTED' || !Number.isFinite(Date.parse(issue.checkedAt)) || !safe || r.state !== 'DELIVERY_REQUIRES_REVIEW' || r.delivered || r.delivery !== null) throw new Error('代問未送達紀錄錯誤');
 } return r as LeadRoom; }
 
-export const sourceLocationLabel=(r:Pick<SourceLead,'locationPrecision'>)=>r.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':'公共面交點';
+export const sourceLocationLabel=(lead:Pick<SourceLead,'locationPrecision'>)=>lead.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':lead.locationPrecision==='CONTACT_FOR_LOCATION'?'未提供地區，面交地點需聯絡賣家；寄送不受影響':'公共面交點';
+export type LocatedSourceLead = SourceLead & { county: string; district: string; publicPlaceName: string; publicAddress: string; latitude: number; longitude: number; coordinateSourceUrl: string };
+export const isLocatedLead = (lead: SourceLead): lead is LocatedSourceLead => lead.locationPrecision !== 'CONTACT_FOR_LOCATION';

@@ -40,5 +40,5 @@ it('keeps public login and policy links usable without locale storage', () => {
   render(<MemoryRouter><Layout /></MemoryRouter>);
   expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
   expect(screen.getByRole('link', { name: 'Account deletion' })).toHaveAttribute('href', '/account-deletion');
-  expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  const mobile=screen.getByRole('navigation');expect(within(mobile).getAllByRole('link')).toHaveLength(4);for(const path of ['/explore','/wishes','/chat','/settings'])expect(within(mobile).getAllByRole('link').some(link=>link.getAttribute('href')===path)).toBe(true);
 });

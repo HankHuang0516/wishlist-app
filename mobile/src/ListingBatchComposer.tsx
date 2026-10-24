@@ -1,3 +1,4 @@
+import { ListingLocationPicker } from './ListingLocationPicker';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -36,6 +37,9 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string;
   onClose: () => void; onAdvanced: () => void; onPublished: (count: number) => void;
 }) {
+  const [leaving, setLeaving] = useState(false);
+  const exitAction = useRef<(() => void) | null>(null);
+  function afterDismiss(action: () => void) { if (Platform.OS === 'ios') { exitAction.current = action; setLeaving(true); } else action(); }
   const [cards, setCards] = useState<Card[]>([]);
   const [legacyPhotos, setLegacyPhotos] = useState<PhotoRecord[]>([]);
   const [legacyRecoveryError, setLegacyRecoveryError] = useState(false);
@@ -356,7 +360,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         sellerSync.current?.discard(card.record.id);
         setCards(old => old.map(current => current.key === card.key ? { ...current, published: true } : current));
       }
-      if (count) onPublished(count);
+      if (count) afterDismiss(() => onPublished(count));
     } catch (failure) {
       if (candidate && failure instanceof ApiError && [400, 403, 422].includes(failure.status)) {
         try { await privatePendingStore.clear(keyRef.current, candidate); setPending(null); }
@@ -380,7 +384,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     for (const card of cards) if (card.record && !card.published)
       sellerSync.current?.queue(card.record.id, sellerDraftFromCard(card));
     if (sellerSync.current && !await sellerSync.current.flushAll()) return;
-    action();
+    afterDismiss(action);
   }
   async function refreshMarketingDraft(mediaId: string) {
     const rows = await loadPrivateMediaPages(cursor => api<unknown>('/listing-media/unused?purpose=BATCH_ITEM' +
@@ -402,7 +406,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline}
         style={[s.input, multiline && s.multiline, highlightKey === targetKey && s.highlight]} />
     </View>;
-  return <Modal visible animationType="slide" onRequestClose={() => void leave(onClose)}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+  return <Modal visible={!leaving} onDismiss={()=>{const action=exitAction.current;exitAction.current=null;action?.();}} animationType="slide" onRequestClose={() => void leave(onClose)}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text accessibilityRole="header" testID="listing-batch-title" style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onClose)} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
     <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'} contentContainerStyle={s.content}>
       <View style={s.modeCurrent}><Text style={s.modeLabel}>目前模式 · 快速刊登</Text><Text style={s.small}>每張照片建立一件商品，AI 分別補齊資訊；刊登前仍要逐件確認。</Text></View>
@@ -456,10 +460,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       </View>)}
       <View onLayout={event => { offsets.current['shared:location'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:location' && s.highlight]}>
         <Text style={s.section}>商品地點 · 刊登必要</Text>
-        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置並自動填行政區</Text></Pressable>
-        {input(shared.county, '縣市', value => changeShared('county', value))}{input(shared.district, '行政區', value => changeShared('district', value))}
-        <Text style={s.small}>需同時有縣市、行政區與地圖座標。公開地圖只顯示約 2 公里模糊位置。</Text>
-        {input(shared.latitude, '位置緯度', value => changeShared('latitude', value), true)}{input(shared.longitude, '位置經度', value => changeShared('longitude', value), true)}
+        <ListingLocationPicker value={shared} disabled={busy||!!pending} onChange={value=>{setShared(old=>({...old,...value,consent:false}));setCards(old=>old.map(card=>({...card,confirmed:false})));setFieldIssue(null);}}/>
+        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置協助選位</Text></Pressable>
         {issueText('shared:location')}
       </View>
       <View onLayout={event => { offsets.current['shared:delivery'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:delivery' && s.highlight]}>

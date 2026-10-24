@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LockKeyhole, ChevronDown } from 'lucide-react';
+import { LockKeyhole, ChevronRight, Monitor, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
-import { settingsText as st, settingsMessage } from '../lib/settingsCopy';
+import { settingsText as st, settingsMessage, settingsChinese } from '../lib/settingsCopy';
 import { Input } from './ui/Input';
 import { performSecurityOperation, securityPayload, type SecurityOperation } from '../lib/accountSecurityWeb';
 import MarketplaceDialog from './MarketplaceDialog';
 
 type Confirmation = { operation: SecurityOperation; payload: ReturnType<typeof securityPayload>; token: string };
 
-export default function AccountSecurityPanel({ initiallyOpen = false, onOperationBusy, reloadPending = false }: { initiallyOpen?: boolean; onOperationBusy?: (busy: boolean) => void; reloadPending?: boolean }) {
+export default function AccountSecurityPanel({ onOperationBusy, reloadPending = false, initialPage = 'directory' }: { onOperationBusy?: (busy: boolean) => void; reloadPending?: boolean; initialPage?: 'directory' | SecurityOperation }) {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(initiallyOpen);
+  const [page, setPage] = useState<'directory' | SecurityOperation>(initialPage);
+  const pageTitle = useRef<HTMLHeadingElement>(null);
+  const passwordButton = useRef<HTMLButtonElement>(null), sessionsButton = useRef<HTMLButtonElement>(null);
+  const lastPage = useRef<SecurityOperation | null>(null);
+  useEffect(() => {
+    if (page !== 'directory') pageTitle.current?.focus();
+    else if (lastPage.current) (lastPage.current === 'password' ? passwordButton : sessionsButton).current?.focus();
+  }, [page]);
   const [current, setCurrent] = useState(''), [replacement, setReplacement] = useState(''), [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false), [issue, setIssue] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<Confirmation | null>(null);
@@ -59,37 +66,48 @@ export default function AccountSecurityPanel({ initiallyOpen = false, onOperatio
   }
 
   const locked = reloadPending || busy || pendingConfirmation !== null;
+  const copy = (zh: string, en: string) => settingsChinese() ? zh : en;
+  function selectPage(next: typeof page) {
+    if (locked || running.current) return;
+    if (next !== 'directory') lastPage.current = next;
+    setCurrent(''); setReplacement(''); setConfirmation(''); setIssue(''); setPage(next);
+  }
 
-  return <section className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden" aria-label={st("帳號安全")}>
-    <button type="button" className="w-full flex items-center gap-3 p-5 text-left font-semibold"
-      aria-label={st("帳號安全")} aria-expanded={open} aria-controls="account-security-fields" onClick={() => setOpen(value => !value)}>
-      <LockKeyhole aria-hidden className="h-5 w-5" /><span><span className="block">{st("帳號安全")}</span><span className="block text-xs font-normal text-gray-500">{st("密碼・登入裝置・登出・刪除帳號")}</span></span>
-      <ChevronDown aria-hidden className={`ml-auto h-5 w-5 transition-transform ${open ? 'rotate-180' : ''}`} />
-    </button>
-    {open && <div id="account-security-fields" className="p-5 pt-0 space-y-4">
+  return <section className="space-y-4" aria-label={st("帳號安全")}>
+    {page === 'directory' ? <>
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        {([{ page: 'password', label: copy('修改密碼', 'Change password'), Icon: LockKeyhole },
+          { page: 'sessions', label: copy('管理登入裝置', 'Manage signed-in devices'), Icon: Monitor }] as const).map(({page: target, label, Icon}) =>
+          <button key={target} ref={target === 'password' ? passwordButton : sessionsButton} type="button" disabled={locked} onClick={() => selectPage(target)} className="flex min-h-14 w-full items-center gap-3 border-b p-4 text-left font-medium disabled:opacity-50">
+            <Icon className="h-5 w-5 shrink-0" aria-hidden="true"/><span className="flex-1">{label}</span><ChevronRight className="h-5 w-5" aria-hidden="true"/>
+          </button>)}
+        <button type="button" disabled={locked} onClick={logout} className="flex min-h-14 w-full items-center gap-3 p-4 text-left font-medium disabled:opacity-50"><LogOut className="h-5 w-5" aria-hidden="true"/><span>{st('登出此裝置')}</span></button>
+      </div>
+      <div className="space-y-2 rounded-2xl border border-red-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-red-800">{copy('危險操作', 'Danger zone')}</h2>
+        <Link to="/account-deletion" aria-disabled={locked} tabIndex={locked ? -1 : undefined} onClick={event => { if (locked) event.preventDefault(); }} className={`flex min-h-12 items-center justify-between gap-3 font-medium text-red-700 ${locked ? 'opacity-50' : ''}`}><span>{st('刪除本人帳號與資料')}</span><ChevronRight className="h-5 w-5 shrink-0" aria-hidden="true"/></Link>
+        <p className="text-sm leading-6 text-gray-600">{copy('刪除前會列出影響範圍，並要求再次確認。', 'Review the affected data and confirm again before deletion.')}</p>
+      </div>
+    </> : <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5">
+      <Button type="button" variant="outline" className="min-h-11" disabled={locked} onClick={() => selectPage('directory')}>{copy('‹ 返回帳號安全', '‹ Back to account security')}</Button>
+      <h2 ref={pageTitle} tabIndex={-1} className="text-lg font-semibold">{page === 'password' ? copy('修改密碼', 'Change password') : copy('管理登入裝置', 'Manage signed-in devices')}</h2>
       <p className="text-sm text-gray-600">{st("請輸入目前密碼以確認操作。密碼不會儲存在瀏覽器，也不會自動重送。")}</p>
-      <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit('password'); }}>
+      {page === 'sessions' && <p className="text-sm leading-6 text-gray-600">{copy('可撤銷所有裝置的登入，包含此裝置；完成後需要重新登入。', 'Revoke sign-in on all devices, including this one. You will need to sign in again.')}</p>}
+      <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit(page); }}>
         <div className="space-y-2"><label htmlFor="security-current">{st("目前密碼")}</label>
           <Input id="security-current" type="password" autoComplete="current-password" disabled={locked} value={current}
             onChange={event => setCurrent(event.target.value)} maxLength={1024} /></div>
-        <div className="space-y-2"><label htmlFor="security-new">{st("新密碼")}</label>
+        {page === 'password' && <><div className="space-y-2"><label htmlFor="security-new">{st("新密碼")}</label>
           <Input id="security-new" type="password" autoComplete="new-password" disabled={locked} value={replacement}
             onChange={event => setReplacement(event.target.value)} maxLength={73} aria-describedby="security-password-rules" /></div>
         <div className="space-y-2"><label htmlFor="security-confirm">{st("再次輸入新密碼")}</label>
           <Input id="security-confirm" type="password" autoComplete="new-password" disabled={locked} value={confirmation}
             onChange={event => setConfirmation(event.target.value)} maxLength={73} /></div>
-        <p id="security-password-rules" className="text-sm text-gray-600">{st("新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。")}</p>
+        <p id="security-password-rules" className="text-sm text-gray-600">{st("新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。")}</p></>}
         {issue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{settingsMessage(issue)}</p>}
-        <Button type="submit" className="w-full min-h-12" disabled={locked || !token || !current || !replacement || !confirmation}>
-          {busy ? st("確認中…") : st("更新密碼並重新登入")}</Button>
-        <Button type="button" variant="outline" className="w-full min-h-12" disabled={locked || !token || !current}
-          onClick={() => void submit('sessions')}>{st("撤銷所有裝置登入")}</Button>
+        <Button type="submit" className="w-full min-h-12" disabled={locked || !token || !current || (page === 'password' && (!replacement || !confirmation))}>
+          {busy ? st('確認中…') : st(page === 'password' ? '更新密碼並重新登入' : '撤銷所有裝置登入')}</Button>
       </form>
-      <Button type="button" variant="outline" className="w-full min-h-12" disabled={locked} onClick={logout}>{st("登出此裝置")}</Button>
-      <Link to="/account-deletion" aria-disabled={locked} tabIndex={locked ? -1 : undefined}
-        onClick={event => { if (locked) event.preventDefault(); }}
-        className={`flex min-h-12 items-center justify-center rounded-xl bg-red-50 text-red-700 font-medium ${locked ? 'opacity-50' : ''}`}>
-        {st("刪除本人帳號與資料")}</Link>
     </div>}
     {pendingConfirmation && <MarketplaceDialog title={st('確認帳號安全操作')} onClose={cancelConfirmation} closeLabel={st('取消')}>
       <p className="text-sm leading-6">{pendingConfirmation.operation === 'password'

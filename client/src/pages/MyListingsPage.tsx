@@ -1,3 +1,4 @@
+import ProductInterest from '../components/ProductInterest';
 import { managementText as t, managementEnglish } from '../lib/listingManagementCopy';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -37,6 +38,7 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
   const [outcome, setOutcome] = useState<ManagementResult | null>(null), [latest, setLatest] = useState<ManagedListing | null>(null);
   const [pendingLoaded, setPendingLoaded] = useState(false), [cancelRequested, setCancelRequested] = useState(false);
   const [mapConfirmation, setMapConfirmation] = useState<{item: ManagedListing; display: boolean} | null>(null);
+  const [statusConfirmation, setStatusConfirmation] = useState<{item: ManagedListing; action:'reserve'|'release'|'sold'|'remove'; label:string} | null>(null);
   const [extensionConfirmation, setExtensionConfirmation] = useState<{item: ManagedListing; date: string} | null>(null);
   const pendingKey = useRef('');
   const unconfirmed = pendingRaw ? journal?.body.listingId ?? 'restoring' : null;
@@ -206,8 +208,8 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     finally { if (isCurrent(epoch)) { running.current = false; setBusy(false); } }
   }
   function statusAction(item: ManagedListing, action: 'reserve' | 'release' | 'sold' | 'remove', _next: ManagedListing['status'], label: string) {
-    if (!window.confirm(t("確認{action}「{title}」？{warning}", { action: label, title: item.title, warning: action === 'remove' ? t("移除後不會出現在探索地圖，無法從此頁恢復。") : '' }))) return;
-    void mutate(item, 'STATUS', { action });
+    if (!active.current || running.current || unconfirmed || !pendingLoaded || statusConfirmation) return;
+    setStatusConfirmation({item,action,label});
   }
   function extend(item: ManagedListing) {
     if (running.current || unconfirmed || !pendingLoaded || extensionConfirmation) return;
@@ -231,8 +233,12 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     } catch (error) { if (isCurrent(epoch) && !(error instanceof DOMException && error.name === 'AbortError')) setIssue(t("無法開啟分享或複製連結，請使用下方商品網址。")); }
   }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);
-  const blocked = busy || !!unconfirmed || !pendingLoaded || !!mapConfirmation || !!extensionConfirmation;
-  return <div className="max-w-3xl mx-auto p-4 space-y-5 [&_button]:min-h-11">
+  const blocked = busy || !!unconfirmed || !pendingLoaded || !!mapConfirmation || !!extensionConfirmation || !!statusConfirmation;
+  return <div className="max-w-3xl mx-auto p-0 sm:p-4 space-y-5 [&_button]:min-h-11">
+    {statusConfirmation && <MarketplaceDialog title={t("確認商品狀態")} closeLabel={t("取消")} onClose={()=>setStatusConfirmation(null)}>
+      <p className="mb-5 text-sm leading-6 break-words">{t("確認{action}「{title}」？{warning}", {action:statusConfirmation.label,title:statusConfirmation.item.title,warning:statusConfirmation.action==='remove'?t("移除後不會出現在探索地圖，無法從此頁恢復。"):''})}</p>
+      <Button variant={statusConfirmation.action==='remove'?'destructive':'primary'} disabled={busy || !!unconfirmed || !pendingLoaded} onClick={()=>{const confirmation=statusConfirmation;setStatusConfirmation(null);void mutate(confirmation.item,'STATUS',{action:confirmation.action});}}>{t("確認這次狀態變更")}</Button>
+    </MarketplaceDialog>}
     {extensionConfirmation && <MarketplaceDialog title={t("確認延長")} closeLabel={t("取消延長")} onClose={()=>setExtensionConfirmation(null)}>
       <p className="mb-3 font-semibold break-words">{extensionConfirmation.item.title}</p>
       <p className="mb-5 text-sm leading-6">{t("確認延長至 {date}？{warning}", { date: extensionConfirmation.date, warning: t("延長刊登不會自動更新地圖顯示。") })}</p>
@@ -246,8 +252,8 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     </MarketplaceDialog>}
     <Link to="/settings" className="text-blue-700">{t("返回我的／設定")}</Link>
     <div className="flex items-center justify-between gap-3"><h1 className="text-3xl font-bold">{t("我的商品")}</h1><Link to="/sell" className="rounded-xl bg-blue-600 text-white p-3">{t("刊登好物")}</Link></div>
-    <div role="tablist" aria-label={t("我的商品狀態")} className="flex flex-wrap gap-2">{MANAGEMENT_TABS.map(name => <button key={name} type="button" role="tab" aria-selected={tab === name}
-      className={`min-h-11 rounded-full px-4 ${tab === name ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+    <div role="tablist" aria-label={t("我的商品狀態")} className="flex gap-2 overflow-x-auto pb-1">{MANAGEMENT_TABS.map(name => <button key={name} type="button" role="tab" aria-selected={tab === name}
+      className={`min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 ${tab === name ? 'bg-blue-600 text-white' : 'bg-white border'}`}
       onClick={() => { setTab(name); setEditing(null); setExpiryId(null); }}>{t(name)} ({rows.filter(item => managementTab(item, now) === name).length})</button>)}</div>
     {!!cursor && <p className="text-sm text-gray-600">{t("本頁「{tab}」已載入 {visible} 件；全部狀態共已載入 {total} 件，還有更多。", { tab: t(tab), visible: visible.length, total: rows.length })}</p>}
     {notice && <p role="status" className="rounded-xl bg-green-50 p-3 text-green-800">{notice}</p>}
@@ -279,21 +285,29 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
     {visible.map(item => {
       const expired = managementTab(item, now) === '已失效';
       const editable = ['DRAFT', 'ACTIVE', 'RESERVED'].includes(item.status) && !expired;
-      return <article key={item.id} aria-label={item.title} className="rounded-2xl bg-white border shadow-sm p-5 space-y-4">
-        <div className="flex gap-4"><div className="w-28 shrink-0">{item.media[0] ? <PrivatePhoto id={item.media[0].id} token={token} label={t("{title}商品縮圖", { title: item.title })} /> : <p className="rounded-xl bg-gray-100 p-4">{t("無照片")}</p>}</div>
+      return <article key={item.id} aria-label={item.title} className="rounded-2xl bg-white border shadow-sm p-4 space-y-3">
+        <div className="flex gap-4"><div className="w-24 sm:w-28 shrink-0">{item.media[0] ? <PrivatePhoto id={item.media[0].id} token={token} label={t("{title}商品縮圖", { title: item.title })} /> : <p className="rounded-xl bg-gray-100 p-4">{t("無照片")}</p>}</div>
           <div className="min-w-0 space-y-1"><h2 className="text-lg font-semibold break-words">{item.title}</h2><p className="font-semibold text-blue-700">{item.price === null ? t("售價未填") : item.price === 0 ? t("免費贈送") : `NT$ ${item.price.toLocaleString(managementEnglish() ? 'en-US' : 'zh-TW')}`}</p>
             <p>{managementStatusText(item, now)} · {item.condition === 'USED' ? t("二手") : t("新品")}</p><p className="text-sm text-gray-600">{item.location ? `${item.location.county}${item.location.district}` : t("地點未填")}{item.expiresAt ? t(" · 至 {date}", { date: item.expiresAt.slice(0, 10) }) : ''}</p></div></div>
-        {detailId === item.id && <div className="space-y-2"><p className="whitespace-pre-wrap">{item.description || t("尚未填寫說明")}</p><p className="text-xs text-gray-600 break-all">{t("分類：")}{item.category ?? t("未分類")}{t(" · 建立：")}{item.createdAt.slice(0, 10)}{t(" · 商品編號：")}{item.id}</p></div>}
+        <ProductInterest kind="listing" id={item.id} compact readOnly/>{detailId === item.id && <div className="space-y-2"><p className="whitespace-pre-wrap">{item.description || t("尚未填寫說明")}</p><p className="text-xs text-gray-600 break-all">{t("分類：")}{item.category ?? t("未分類")}{t(" · 建立：")}{item.createdAt.slice(0, 10)}{t(" · 商品編號：")}{item.id}</p></div>}
         <p className="text-sm text-gray-600">{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > now ? t("地圖顯示至 {time}；不會自動續期。", {time:new Date(item.mapVisibleUntil).toLocaleTimeString(managementEnglish() ? 'en-US' : 'zh-TW')}) : t("目前不在地圖顯示；需手動確認這次顯示。")}</p>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
+        <div className="flex items-start gap-2">
+          <Button className="flex-1" variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
+          {item.status === 'ACTIVE' && !expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
+          {item.status === 'RESERVED' && !expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}
+          {item.status === 'DRAFT' && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
+          {expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
+          <details data-listing-actions className="relative shrink-0" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
+            <summary aria-label={t("更多操作")} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border text-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden"><span aria-hidden="true">⋯</span></summary>
+            <div className="absolute right-0 top-12 z-20 flex max-h-[50dvh] w-64 max-w-[75vw] flex-col gap-2 overflow-y-auto rounded-xl border bg-white p-3 shadow-lg">
           {item.publishedAt && <><Button variant="outline" onClick={() => void share(item)}>{t("分享連結")}</Button><Link className="p-2 text-blue-700 underline" to={`/listings/${item.id}?v=${item.version}`}>{t("商品網址")}</Link></>}
           {['ACTIVE','RESERVED'].includes(item.status) && !expired && <><Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,true)}>{t("手動顯示地圖一小時")}</Button>{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil)>now && <Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,false)}>{t("停止地圖顯示")}</Button>}</>}
-          {editable && <Button variant="outline" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
-          {item.status === 'ACTIVE' && !expired && detailId === item.id && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
-          {item.status === 'RESERVED' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}
+          {editable && item.status !== 'DRAFT' && <Button variant="outline" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
           {['ACTIVE', 'RESERVED'].includes(item.status) && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'sold', 'SOLD', t("標記售出"))}>{t("標記售出")}</Button>}
-          {['ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="outline" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
-          {['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && detailId === item.id && <Button variant="destructive" disabled={blocked} onClick={() => statusAction(item, 'remove', 'REMOVED', t("移除"))}>{t("移除")}</Button>}
+          {!expired && ['ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="outline" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
+          {['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="destructive" disabled={blocked} onClick={() => statusAction(item, 'remove', 'REMOVED', t("移除"))}>{t("移除")}</Button>}
+            </div>
+          </details>
         </div>
         {expired && <p className="text-sm text-gray-600">{t("此商品已失效；請先延長期限，再編輯或繼續刊登。")}</p>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <p className="text-sm text-gray-600">{t("分享連結仍可複製，但其他人只會看到「已停止刊登」。")}</p>}

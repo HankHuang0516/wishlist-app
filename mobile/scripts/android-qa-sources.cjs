@@ -30,7 +30,7 @@ function androidQaSources(mobile, { includeInstrumentation = true, verifyFiles =
     'scripts/android-native-qa.cjs', 'scripts/android-qa-config.cjs', 'scripts/android-qa-input.cjs',
     'scripts/external-map-android-smoke.cjs',
     'scripts/listing-ai-android-smoke.cjs',
-    'scripts/android-qa-sources.cjs', 'scripts/build-android-qa.cjs', 'scripts/metro-qa-probe.cjs',
+    'scripts/android-qa-sources.cjs', 'scripts/android-foreground.cjs', 'scripts/android-visual-home-smoke.cjs', 'scripts/build-android-qa.cjs', 'scripts/metro-qa-probe.cjs',
     'scripts/native-qa.cjs', 'scripts/native-qa-api-smoke.cjs', 'scripts/native-qa-marketplace-fixture.cjs',
     'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
     'scripts/test-native-qa-marketplace-fixture.cjs',

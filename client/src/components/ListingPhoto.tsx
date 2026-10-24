@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type {PhotoCompleteness} from '../lib/sourceLeadData';
 import {sourceLeadText as text} from '../lib/sourceLeadCopy';
 import {publicListingText} from '../lib/publicListingCopy';
 export function ListingPhotoDisclosure() {
  return <p className="mt-1 break-words text-xs text-stone-600">{publicListingText('AI 行銷示意圖')}</p>;
 }
-export function ListingPhoto({src,alt,detail=false,marketing=false,onResult}:{src?:string;alt:string;detail?:boolean;marketing?:boolean;onResult?:(result:'ready'|'error')=>void}) {
+type ListingPhotoProps={src?:string;alt:string;detail?:boolean;square?:boolean;marketing?:boolean;onResult?:(result:'ready'|'error')=>void};
+export function ListingPhoto(props:ListingPhotoProps) {
+ return <ListingPhotoImage key={props.src??'no-photo'} {...props}/>;
+}
+function ListingPhotoImage({src,alt,detail=false,square=false,marketing=false,onResult}:ListingPhotoProps) {
  const [state,setState]=useState<'loading'|'ready'|'error'>(src?'loading':'error');
- useEffect(()=>setState(src?'loading':'error'),[src]);
- return <div className={detail?'w-full':'w-24 shrink-0'}><div className={detail?'relative aspect-square w-full overflow-hidden bg-stone-100 sm:aspect-video':'relative h-24 w-24 overflow-hidden rounded-xl bg-stone-100'}>
- {!!src && state!=='error' && <img src={src} alt={alt} loading={detail?'eager':'lazy'} referrerPolicy="no-referrer" className={'h-full w-full '+(detail?'object-contain':'object-cover')} onLoad={()=>{setState('ready');onResult?.('ready');}} onError={()=>{setState('error');onResult?.('error');}}/>}
+ const image=useRef<HTMLImageElement>(null),result=useRef(onResult);result.current=onResult;
+ useLayoutEffect(()=>{if(image.current?.complete){const next=image.current.naturalWidth>0?'ready':'error';setState(next);result.current?.(next);}},[]);
+ return <div className={detail?'w-full':'w-24 shrink-0'}><div className={detail?'relative aspect-square w-full overflow-hidden bg-stone-100'+(square?'':' sm:aspect-video'):'relative h-24 w-24 overflow-hidden rounded-xl bg-stone-100'}>
+ {!!src && state!=='error' && <img ref={image} src={src} alt={alt} loading={detail?'eager':'lazy'} referrerPolicy="no-referrer" className={'h-full w-full '+(detail?'object-contain':'object-cover')} onLoad={()=>{setState('ready');onResult?.('ready');}} onError={()=>{setState('error');onResult?.('error');}}/>}
  {state!=='ready' && <div role="status" className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-stone-500">{text(!src?'目前沒有可顯示的商品圖片':state==='error'?'圖片暫時無法載入':'圖片載入中…')}</div>}
  </div>{marketing&&<ListingPhotoDisclosure/>}</div>;
 }

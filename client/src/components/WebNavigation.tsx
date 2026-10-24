@@ -12,12 +12,12 @@ const entries: { to: string; label: Parameters<typeof webShellText>[0]; descript
 ];
 
 /** One labelled navigation for desktop and narrow web; no duplicate settings icon. */
-export default function WebNavigation() {
+export default function WebNavigation({unreadCount=null}:{unreadCount?:number|null}) {
   return <nav aria-label={webShellText('navigation')} className="flex min-w-0 items-center justify-between gap-1 md:gap-2">
     {entries.map(({ to, label, description, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'}
       aria-label={webShellText(description ?? label)} title={webShellText(description ?? label)}
       className={({ isActive }) => `flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-1 rounded-md px-1 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary md:px-2 ${isActive ? 'bg-gray-100 text-muji-primary' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Icon className="h-5 w-5" aria-hidden="true" /><span>{webShellText(label)}</span>
+      <span className="relative"><Icon className="h-5 w-5" aria-hidden="true" />{to==='/chat'&&unreadCount!==null&&unreadCount>0&&<span className="absolute -right-4 -top-2 min-w-5 rounded-full bg-red-700 px-1 text-center text-xs leading-5 text-white">{unreadCount>99?'99+':unreadCount}</span>}</span><span>{webShellText(label)}</span>
     </NavLink>)}
   </nav>;
 }

@@ -1,3 +1,5 @@
+import {ProductInterestProvider} from './components/ProductInterest';
+const SellerStorefrontPage = createLazyPage(() => import('./pages/SellerStorefrontPage'));
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "./layouts/Layout";
@@ -61,7 +63,7 @@ function App() {
   return (
     <BrowserRouter>
       <RouteTracker />
-      <WebAppInstallProvider><WebUpdateProvider><AuthProvider><ProductNoticeVisitProvider>
+      <WebAppInstallProvider><WebUpdateProvider><AuthProvider><ProductNoticeVisitProvider><ProductInterestProvider>
         <OfflineBanner />
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -103,11 +105,12 @@ function App() {
             <Route path="change-password" element={<ChangePasswordPage />} />
             <Route path="purchase-history" element={<PurchaseHistoryPage />} />
             <Route path="users/:userId/wishlists" element={<WishlistDashboard />} />
+            <Route path="users/:id/storefront" element={<SellerStorefrontPage />} />
             <Route path="users/:id/profile" element={<FriendProfilePage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
-      </ProductNoticeVisitProvider></AuthProvider></WebUpdateProvider></WebAppInstallProvider>
+      </ProductInterestProvider></ProductNoticeVisitProvider></AuthProvider></WebUpdateProvider></WebAppInstallProvider>
     </BrowserRouter>
   );
 }

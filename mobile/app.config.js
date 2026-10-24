@@ -3,6 +3,7 @@ const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
 module.exports = {
   expo: {
     name: 'Wishlist.ai',
+    icon: './assets/app-icon.png',
     slug: 'weeshgifts',
     version: '2.0.16',
     orientation: 'portrait',
@@ -23,6 +24,7 @@ module.exports = {
       },
     },
     android: {
+      ...(process.env.GOOGLE_SERVICES_JSON ? {googleServicesFile:process.env.GOOGLE_SERVICES_JSON} : {}),
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
       versionCode: 33,
       allowBackup: false,
@@ -51,12 +53,13 @@ module.exports = {
       }],
       './plugins/withForegroundOnlyLocation',
       ['expo-image-picker', {
-        photosPermission: '選取商品實拍照片，用於願望或商品刊登。',
-        cameraPermission: '拍攝商品實拍照片，用於願望或商品刊登。',
+        photosPermission: '選取商品實拍照片，用於願望、商品刊登或私人商品對話補充照片。',
+        cameraPermission: '拍攝商品實拍照片，用於願望、商品刊登或私人商品對話補充照片。',
         microphonePermission: false,
       }],
       ['expo-secure-store', { configureAndroidBackup: false, faceIDPermission: false }],
       'expo-notifications',
+      './plugins/withOptInPush',
       '@react-native-community/datetimepicker',
     ],
     updates: { enabled: false },

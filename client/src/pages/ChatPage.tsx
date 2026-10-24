@@ -1,3 +1,7 @@
+import { Flag } from 'lucide-react';
+import { getDisplayLocale } from '../utils/localization';
+import ChatReportWeb from '../components/ChatReportWeb';
+import { ChatPhotoAttachment, ChatMessagePhoto } from '../components/ChatPhotoAttachment';
 import ChatQuery from '../components/ChatQuery';
 import { chatMessage, chatRoomPrice, chatRoomTitle, chatText, chatTime, sourceInquiryStatus } from '../lib/chatCopy';
 import {parseLead,parseContactRouting} from '../lib/sourceLeadData';
@@ -18,6 +22,7 @@ import MeetupWeb from '../components/MeetupWeb';
 import { shouldPauseChatReads, useChatReadPause } from '../lib/useChatReadPause';
 import { isNonSaleQaTitle } from '../lib/nonSaleListing';
 const button = 'min-h-11 rounded-xl border px-4 py-2 disabled:opacity-50';
+const say=(zh:string,en:string)=>getDisplayLocale().startsWith('zh')?zh:en;
 function RoomPhoto({ room, token }: { room: ChatRoomRecord; token: string }) {
   const id = privateChatPhotoId(room, getFullApiUrl());
   return id ? <PrivatePhoto id={id} token={token} label={chatText("聊天商品照片")} compact /> : <div role="img" aria-label={chatText("聊天商品照片未提供或已停止公開")} className="flex h-16 w-16 items-center rounded-xl bg-gray-100 p-2 text-xs">{room.listingAvailable ? chatText("照片未提供") : chatText("已停止公開")}</div>;
@@ -42,7 +47,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
   const location = useLocation(), navigate = useNavigate(), params = new URLSearchParams(location.search);
   const invalidIntent = params.size > 1 || params.size === 1 && (!params.has('room')&&!params.has('source') || !isUuid(params.get('room')??params.get('source')));
   const sourceId=invalidIntent?null:params.get('source');
-  const [source,setSource]=useState<SourceProductContext|null>(null),[sourceIssue,setSourceIssue]=useState(false),[sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceProductContext}[]>([]);
+  const [source,setSource]=useState<SourceProductContext|null>(null),[sourceIssue,setSourceIssue]=useState(false),[sourceThreads,setSourceThreads]=useState<{id:string;state:string;context:SourceProductContext;unreadCount?:number}[]>([]);
   const [sourceBusy,setSourceBusy]=useState(true),[sourceReload,setSourceReload]=useState(0);
   const activeRoom = invalidIntent ? null : params.get('room')?.toLowerCase() ?? null;
   const [rooms, setRooms] = useState<ChatRoomRecord[]>([]), [cursor, setCursor] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [loaded, setLoaded] = useState(false);
@@ -52,7 +57,7 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
     setSource(null);setSourceIssue(false);setSourceBusy(true);
     void (async()=>{
       try {
-        const all:{id:string;state:string;context:SourceProductContext}[]=[];
+        const all:{id:string;state:string;context:SourceProductContext;unreadCount?:number}[]=[];
         let cursor:string|null=null;const seen=new Set<string>();
         do {
           const page:{items:typeof all;nextCursor:string|null}=await api<{items:typeof all;nextCursor:string|null}>(token,'/source-leads/inquiries/mine'+(cursor?'?cursor='+cursor:''),{signal:controller.signal});
@@ -102,21 +107,23 @@ function ChatSession({ token, userId }: { token: string; userId: number }) {
     return () => { active.current = false; seq.current++; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); window.removeEventListener('online', tick); };
   }, []);
   useEffect(() => { if (!activeRoom && loaded) void load(); }, [activeRoom]);
-  return <section className="mx-auto max-w-3xl space-y-4 pb-20"><ChatQuery key={token} token={token}/><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header>
+  return <section className="mx-auto max-w-3xl space-y-4 pb-20">{!activeRoom&&!sourceId?<><ChatQuery key={token} token={token}/><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">{chatText("聊天與面交")}</h1><p className="mt-2 text-sm text-gray-600">{chatText("與買家或賣家聯繫，討論商品細節並約面交。")}</p></div><Link to="/social" className={button}>{chatText("好友與原有社交功能")}</Link></header></>:<h1 className="sr-only">{chatText("聊天與面交")}</h1>}
     {invalidIntent && <div role="alert" className="rounded-xl bg-red-50 p-3">{chatText("聊天連結無效，不會使用不明識別碼查詢。")}<button className={button} onClick={() => navigate('/chat', { replace: true })}>{chatText("返回收件匣")}</button></div>}
     {sourceId ? <>{sourceFeedback}{source&&<SourceContactChat key={`${userId}:${source.id}`} source={source} onBack={()=>navigate('/explore?source='+source.id)}/>}</> : activeRoom ? <ChatRoomWeb key={activeRoom} roomId={activeRoom} token={token} userId={userId} onBack={() => navigate('/chat')} /> : <>
-      {sourceFeedback}<div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{chatText('Wishlist AI 代問')}</h2><button type="button" className={button} disabled={sourceBusy} onClick={()=>setSourceReload(value=>value+1)}>{chatText('重新讀取來源對話')}</button></div>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {sourceInquiryStatus(t.state)}</span></span></button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
+      {sourceFeedback}<div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{chatText('Wishlist AI 代問')}</h2><button type="button" className={button} disabled={sourceBusy} onClick={()=>setSourceReload(value=>value+1)}>{chatText('重新讀取來源對話')}</button></div>{sourceThreads.map(t=><button key={t.id} className="flex w-full rounded-2xl border bg-white p-4 text-left" onClick={()=>navigate('/chat?source='+t.context.id)}><span><span className="block font-semibold">{t.context.title}</span><span className="block text-sm text-gray-600">Wishlist AI · {sourceInquiryStatus(t.state)}</span></span>{typeof t.unreadCount==='number'&&t.unreadCount>0&&<span className="ml-auto min-w-5 rounded-full bg-red-700 px-2 text-xs leading-5 text-white">{t.unreadCount>99?'99+':t.unreadCount}</span>}</button>)}</div>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{busy && <p role="status">{chatText("正在更新聊天…")}</p>}
       {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
       <div className="space-y-3">{rooms.map(room => <button key={room.id} type="button" className="flex w-full min-w-0 items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm" onClick={() => navigate('/chat?room=' + room.id)} aria-label={chatText('{title}，與{name}聊天{unread}', { title: chatRoomTitle(room), name: (room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText('商品聯絡人'), unread: room.unreadCount ? chatText('，{count} 則未讀', { count: room.unreadCount }) : '' })}>
         <span className="w-16 flex-none overflow-hidden rounded-xl"><RoomPhoto room={room} token={token} /></span><span className="min-w-0 flex-1"><span className="block break-words font-semibold">{chatRoomTitle(room)}</span><span className="block text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || (room.archived ? chatText("已移除的帳號") : chatText("商品聯絡人"))} · {chatRoomPrice(room)}</span>
           <span className="mt-1 block break-words text-sm text-gray-600">{room.archived ? chatText("已封存 · 僅供查看") : room.blocked ? chatText("已封鎖 · 歷史仍可查看") : !room.listingAvailable ? chatText("商品已停止刊登 · 歷史仍可查看") : room.lastMessageText || chatText("開始討論這件商品")}</span><span className="mt-1 block text-xs text-gray-500">{chatTime(room.lastMessageAt)}{chatText("（台灣時間）")}</span></span>
-        {room.unreadCount > 0 && <span className="rounded-full bg-green-800 px-2 py-1 text-xs text-white">{room.unreadCount} {chatText("則未讀")}</span>}
+        {room.unreadCount > 0 && <span className="rounded-full bg-red-700 px-2 py-1 text-xs text-white">{room.unreadCount} {chatText("則未讀")}</span>}
       </button>)}</div>{loaded && !rooms.length && !error && !busy && <p className="rounded-2xl bg-white p-6 text-center">{chatText("其他商品尚無聊天。當有買家或賣家聯繫時，對話會顯示在這裡。")}</p>}
       <div className="flex flex-wrap gap-3">{cursor && <button className={button} disabled={busy} onClick={() => void load(cursor)}>{chatText("載入較早的聊天")}</button>}<button className={button} disabled={busy} onClick={() => void load()}>{chatText("重新載入收件匣")}</button><Link to="/explore" className={button}>{chatText("探索商品")}</Link></div>
     </>}
   </section>;
 }
 export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; userId: number; roomId: string; onBack: () => void }) {
+  const [photoPending,setPhotoPending]=useState(true);
+  const [reportedMessage,setReportedMessage]=useState<ChatMessage|null>(null);
   const [room, setRoom] = useState<ChatRoomRecord | null>(null), [messages, setMessages] = useState<ChatMessage[]>([]), [before, setBefore] = useState<number | null>(null), [historyLoaded, setHistoryLoaded] = useState(false);
   const [text, setText] = useState(''), [pending, setPending] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [updating, setUpdating] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [readIssue, setReadIssue] = useState(''), [catchup, setCatchup] = useState(false);
@@ -203,7 +210,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
       // Read ACK can arrive behind a room refresh/block. Update only read fields,
       // never overwrite a newer block/archive/product projection with this ACK.
       if (active.current && roomRef.current && updated.lastReadSequence >= roomRef.current.lastReadSequence) {
-        const current = roomRef.current; roomRef.current = { ...current, lastReadSequence: updated.lastReadSequence, lastMessageSequence: Math.max(updated.lastMessageSequence, current.lastMessageSequence), unreadCount: updated.lastMessageSequence >= current.lastMessageSequence ? updated.unreadCount : current.unreadCount }; setRoom(roomRef.current); setReadIssue('');
+        const current = roomRef.current; roomRef.current = { ...current, lastReadSequence: updated.lastReadSequence, lastMessageSequence: Math.max(updated.lastMessageSequence, current.lastMessageSequence), unreadCount: updated.lastMessageSequence >= current.lastMessageSequence ? updated.unreadCount : current.unreadCount }; setRoom(roomRef.current); setReadIssue(''); window.dispatchEvent(new Event('wishlist:chat-read'));
       }
     } catch { if (active.current) setReadIssue('已讀狀態尚未確認；不會假稱已讀，稍後會依實際可見訊息重試。'); }
     finally { marking.current = false; }
@@ -236,7 +243,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
   }, [messages, showMeetup]);
   async function send() {
     const current = roomRef.current;
-    if (!ready || !current || current.archived || isNonSaleQaTitle(current.listing?.title) || !key.current || mutation.current || blockUnknown || current.blocked && !saved.current) return;
+    if (photoPending || !ready || !current || current.archived || isNonSaleQaTitle(current.listing?.title) || !key.current || mutation.current || blockUnknown || current.blocked && !saved.current) return;
     mutation.current = true; sequence.current++; setBusy(true); setError(''); setNotice(''); let confirmed = false;
     try {
       const body = saved.current ?? JSON.stringify(messageBody(crypto.randomUUID(), text)), requestKey = key.current; parsePendingMessage(body);
@@ -256,28 +263,32 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     } catch { if (active.current) { setBlockUnknown(true); setError('封鎖狀態尚未確認；請只更新聊天查核，不會自動反向操作或重送。'); } }
     finally { mutation.current = false; if (active.current) setBusy(false); }
   }
-  return <div className="space-y-4"><div className="flex flex-wrap items-center gap-2"><button className={button} onClick={onBack}>{chatText("返回收件匣")}</button><button className={button} disabled={updating || busy} onClick={() => void refresh()}>{updating ? chatText("正在更新…") : chatText("只更新聊天")}</button>
-    {room && !room.archived && <button className={`${button} text-red-800`} disabled={busy || blockUnknown} onClick={() => void block()}>{room.blockedByMe ? chatText("解除封鎖") : chatText("封鎖對方")}</button>}</div>
-    {room ? <section aria-label={chatText("聊天商品")} className="flex min-w-0 items-start gap-3 rounded-2xl border bg-white p-4"><span className="w-16 flex-none"><RoomPhoto room={room} token={token} /></span><div className="min-w-0"><h2 className="break-words text-xl font-semibold">{chatRoomTitle(room)}</h2><p className="font-semibold">{chatRoomPrice(room)}</p><p className="text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText("已移除的帳號")}</p></div></section> : !error && <p role="status">{chatText("正在讀取聊天室…")}</p>}
+  return <div className="flex h-[calc(100dvh-10rem)] min-h-[32rem] flex-col gap-2 sm:h-[calc(100dvh-9rem)]"><div className="flex flex-none flex-wrap items-center justify-between gap-2"><button className={button} aria-label={chatText("返回收件匣")} onClick={onBack}>{say("返回","Back")}</button><button className={button} aria-label={updating ? chatText("正在更新…") : chatText("只更新聊天")} disabled={updating || busy} onClick={() => void refresh()}>{updating ? chatText("正在更新…") : say("更新","Refresh")}</button>
+    {room && !room.archived && <button className={`${button} text-red-800`} aria-label={room.blockedByMe ? chatText("解除封鎖") : chatText("封鎖對方")} disabled={busy || blockUnknown} onClick={() => void block()}>{room.blockedByMe ? chatText("解除封鎖") : say("封鎖","Block")}</button>}</div>
+    {room ? <section aria-label={chatText("聊天商品")} className="flex min-w-0 flex-none items-start gap-3 rounded-2xl border bg-white p-3"><span className="w-16 flex-none"><RoomPhoto room={room} token={token} /></span><div className="min-w-0"><h2 className="break-words text-base font-semibold">{chatRoomTitle(room)}</h2><p className="font-semibold">{chatRoomPrice(room)}</p><p className="text-sm">{chatText("與")} {(room.buyerUserId === userId ? room.seller.name : room.buyer.name) || chatText("已移除的帳號")}</p>{room.sellerUserId!==null&&<Link className="inline-flex min-h-11 items-center text-blue-800 underline" to={'/users/'+room.sellerUserId+'/storefront'}>{chatText("查看賣場")}</Link>}</div></section> : !error && <p role="status">{chatText("正在讀取聊天室…")}</p>}
     {room?.archived && <p className="rounded-xl bg-gray-100 p-3">{chatText("聊天室已封存，僅可查看保留歷史；對方刪除帳號時其訊息及私密預約會移除。")}</p>}{room?.blocked && !room.archived && <p>{chatText("已封鎖，停止傳送新訊息；歷史仍可查看，原訊息可查核回執。")}</p>}{room && !room.listingAvailable && !room.archived && <p>{chatText("商品已停止刊登；請與對方確認交易狀態。")}</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(error)}</p>}{readIssue && <p role="status" className="text-sm text-gray-600">{chatMessage(readIssue)}</p>}{notice && <p role="status" className="text-sm text-green-800">{chatMessage(notice)}</p>}
     {autoPause.paused && <p role="status" className="text-sm text-gray-600">{chatText('自動讀取已暫停；請使用本頁更新按鈕重新核對，成功後才會恢復。登入失效時請先重新登入原帳號。')}</p>}
     {restoreIssue && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{chatMessage(restoreIssue)}</p>}
-    <div ref={scroll} onScroll={() => { const el = scroll.current!; following.current = el.scrollHeight - el.clientHeight - el.scrollTop < 40; }} tabIndex={0} role="region" aria-label={chatText("商品聊天訊息紀錄")} className="max-h-[50dvh] min-h-40 space-y-3 overflow-y-auto rounded-2xl border bg-gray-50 p-4 focus:outline-green-800">
+    <div ref={scroll} onScroll={() => { const el = scroll.current!; following.current = el.scrollHeight - el.clientHeight - el.scrollTop < 40; }} tabIndex={0} role="region" aria-label={chatText("商品聊天訊息紀錄")} className="min-h-32 flex-1 space-y-3 overflow-y-auto rounded-2xl border bg-gray-50 p-3 focus:outline-green-800">
       {before && <button className={button} disabled={updating || busy} onClick={() => void refresh(before)}>{chatText("載入較早訊息")}</button>}
-      {messages.map(message => <article key={message.id} data-sequence={message.sequence} aria-label={message.senderUserId === userId ? chatText("本人訊息") : chatText("對方訊息")} className={`max-w-[88%] rounded-2xl p-3 ${message.senderUserId === userId ? 'ml-auto bg-green-800 text-white' : 'mr-auto border bg-white'}`}><p className="whitespace-pre-wrap break-words">{message.text}</p><p className="mt-1 text-xs opacity-75">{chatTime(message.createdAt)}{chatText("（台灣時間）")}</p></article>)}
+      {messages.map(message => <article key={message.id} data-sequence={message.sequence} aria-label={message.senderUserId === userId ? chatText("本人訊息") : chatText("對方訊息")} className={`max-w-[88%] rounded-2xl p-3 ${message.senderUserId === userId ? 'ml-auto bg-green-800 text-white' : 'mr-auto border bg-white'}`}>{message.photoHash&&<ChatMessagePhoto message={message} token={token} onLoaded={()=>{const el=scroll.current;if(el&&following.current)el.scrollTop=el.scrollHeight;}}/>}{!(message.photoHash&&message.text==='[商品照片]')&&<p className="whitespace-pre-wrap break-words">{message.text}</p>}<p className="mt-1 text-xs opacity-75">{chatTime(message.createdAt)}{chatText("（台灣時間）")}</p>{message.senderUserId!==userId&&!room?.archived&&<button type="button" aria-label={chatText("檢舉這則訊息")} className="ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl border text-sm" onClick={()=>setReportedMessage(message)}><Flag className="h-4 w-4" aria-hidden="true"/></button>}</article>)}
       {historyLoaded && !messages.length && !error && <p>{chatText("還沒有訊息，打聲招呼吧。")}</p>}
     </div>{catchup && <p role="status">{chatText("仍有更新的訊息尚未讀完；下一次更新會繼續讀取，不代表最新紀錄已完整。")}</p>}
-    {room && !room.archived && <section aria-label={chatText("聊天面交預約")} className="space-y-3 rounded-2xl border bg-white p-4"><button className={button} onClick={() => setShowMeetup(true)}>{chatText("查看或提議面交預約")}</button>{meetup && <div className="space-y-1"><h3 className="font-semibold">{chatText("面交預約 ·")} {chatMessage(meetupLabels[meetup.status])} {chatText("· 第")}{meetup.version}{chatText("版")}</h3><p>{chatTime(meetup.startsAt)}{chatText("（台灣時間）")}</p><p className="break-words">{meetup.placeName}</p>{meetup.status === 'PROPOSED' && <p className="text-sm">{chatText("時間與地點仍待雙方確認，請在詳情核對後回覆。")}</p>}</div>}{meetupIssue && <p role="alert" className="text-red-800">{chatMessage(meetupIssue)}</p>}</section>}
-    <form className="space-y-3 rounded-2xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void send(); }}>
+    <div className="flex flex-none flex-wrap items-start gap-2">{room && !room.archived && <section aria-label={chatText("聊天面交預約")} className="min-w-0 flex-1 space-y-2"><button className={button+" w-full"} aria-label={chatText("查看或提議面交預約")} onClick={() => setShowMeetup(true)}>{say("面交預約","Meetup")}</button>{meetup && <div className="space-y-1"><h3 className="font-semibold">{chatText("面交預約 ·")} {chatMessage(meetupLabels[meetup.status])} {chatText("· 第")}{meetup.version}{chatText("版")}</h3><p>{chatTime(meetup.startsAt)}{chatText("（台灣時間）")}</p><p className="break-words">{meetup.placeName}</p>{meetup.status === 'PROPOSED' && <p className="text-sm">{chatText("時間與地點仍待雙方確認，請在詳情核對後回覆。")}</p>}</div>}{meetupIssue && <p role="alert" className="text-red-800">{chatMessage(meetupIssue)}</p>}</section>}
+    {room&&<ChatPhotoAttachment compact room={room} token={token} userId={userId} disabled={busy||!!pending||!!room.blocked||room.archived||blockUnknown||isNonSaleQaTitle(room.listing?.title)} onPendingChange={setPhotoPending} onSent={message=>{following.current=true;append([message]);void refresh(undefined,true);}}/>}</div>
+    <form className="flex-none space-y-2 rounded-2xl border bg-white p-3" onSubmit={event => { event.preventDefault(); void send(); }}>
       {pending && <p className="text-sm">{chatText("上一則訊息結果尚未確認，原識別碼與文字已保留；不會自動重送或建立重複訊息。")}{room?.archived ? chatText("聊天室已封存，不能重新傳送。") : ''}</p>}
       {!ready && <button type="button" className={button} disabled={busy} onClick={() => void restore()}>{chatText("重試恢復待確認訊息")}</button>}
-      <label className="block">{chatText("商品聊天訊息（最多2000字元）")}<textarea disabled={!ready || busy || !!pending || !room || room.blocked || room.archived || isNonSaleQaTitle(room.listing?.title) || blockUnknown} maxLength={2000} value={text} onChange={event => setText(event.target.value)} className="mt-2 min-h-24 w-full rounded-xl border p-3" placeholder={chatText("輸入訊息，預約前請確認商品狀態")} /></label>
-      <div className="flex flex-wrap gap-2"><button type="submit" className={`${button} bg-green-800 text-white`} disabled={busy || !ready || !room || room.archived || isNonSaleQaTitle(room.listing?.title) || blockUnknown || !pending && (!text.trim() || room.blocked)}>{pending ? chatText("明確重試相同訊息") : chatText("傳送訊息")}</button>
-        {pending && <button type="button" className={button} disabled={busy || !room} onClick={() => void checkPending()}>{chatText("只查核原訊息回執")}</button>}
+      <label className="block"><span className="sr-only">{chatText("商品聊天訊息（最多2000字元）")}</span><textarea disabled={photoPending || !ready || busy || !!pending || !room || room.blocked || room.archived || isNonSaleQaTitle(room.listing?.title) || blockUnknown} maxLength={2000} value={text} onChange={event => setText(event.target.value)} rows={2} className="min-h-12 w-full resize-none rounded-xl border p-2" placeholder={chatText("輸入訊息，預約前請確認商品狀態")} /></label>
+      <div className="flex flex-wrap gap-2">{pending ? <>
+        <button type="button" className={`${button} bg-green-800 text-white`} disabled={busy || !room} onClick={() => void checkPending()}>{chatText("只查核原訊息回執")}</button>
+        <button type="button" className={button} disabled={photoPending || busy || !ready || !room || room.archived || room.blocked || isNonSaleQaTitle(room.listing?.title) || blockUnknown} onClick={()=>void send()}>{chatText("明確重試相同訊息")}</button>
+      </> : <button type="submit" className={`${button} bg-green-800 text-white`} disabled={photoPending || busy || !ready || !room || room.archived || room.blocked || isNonSaleQaTitle(room.listing?.title) || blockUnknown || !text.trim()}>{chatText("傳送訊息")}</button>}
         {room && !('IntersectionObserver' in window) && <><p className="text-sm">{chatText("此瀏覽器無法偵測訊息可見範圍，不會自動標記已讀；可由你明確確認。")}</p><button type="button" className={button} disabled={!messages.length || autoPause.paused} onClick={() => { viewed.current = Math.max(viewed.current, ...messages.map(m => m.sequence)); void markRef.current(); }}>{chatText("將目前已載入訊息標記為已讀")}</button></>}
       </div>
-    </form>{showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onAppointmentChange={appointment => {
+    </form>{reportedMessage&&room&&!room.archived&&<ChatReportWeb token={token} userId={userId} roomId={room.id} reportedUserId={reportedMessage.senderUserId} messageId={reportedMessage.id} onClose={()=>setReportedMessage(null)}/>}
+    {showMeetup && room && !room.archived && <MeetupWeb key={`${userId}:${token}:${room.id}`} room={room} token={token} userId={userId} onAppointmentChange={appointment => {
       if (!active.current || !roomRef.current || roomRef.current.archived) return;
       // The dialog has a validated current result; an earlier summary read must not replace it.
       meetupSequence.current++; setMeetup(appointment); setMeetupIssue('');

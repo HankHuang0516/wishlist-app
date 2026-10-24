@@ -26,6 +26,14 @@ describe('store-facing support and privacy pages', () => {
     expect(screen.getByText(/不傳送網址查詢參數、驗證碼/)).toBeInTheDocument();
   });
 
+  it.each(['zh-TW','en-US'])('explains private chat photos, truthful public counts and optional push identifiers in %s', locale => {
+    localStorage.setItem('user-locale',locale);render(<MemoryRouter><PrivacyPolicy/></MemoryRouter>);
+    const content=document.body.textContent!;
+    expect(content).toContain('EXIF');expect(content).toContain('Expo');expect(content).toContain('APNs');expect(content).toContain('FCM');
+    if(locale==='zh-TW') {expect(content).toContain('不公開名單');expect(content).toContain('訊息內容預覽預設關閉');expect(content).toContain('不會因補傳照片而自動送交 AI');}
+    else {expect(content).toContain('never lists of people');expect(content).toContain('Message previews are off by default');expect(content).toContain('not automatically sent to AI');}
+  });
+
   it('offers public feedback without requiring app sign-in', () => {
     localStorage.setItem('user-locale', 'en-US');
     render(<MemoryRouter><AuthContext.Provider value={auth}><SupportPage /></AuthContext.Provider></MemoryRouter>);

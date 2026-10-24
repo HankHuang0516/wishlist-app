@@ -1,7 +1,10 @@
+import {ListingDetailContent} from './ListingDetailContent';
+import {ProductInterest} from './ProductInterestView';
+import { SellerStorefront } from './SellerStorefront';
 import { ListingPhoto, listingPresentation } from './ListingPhoto';
 import { useSourceLeads, type SourceChatContext } from './SourceLeadExplorer';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, CameraRef, GeoJSONSource, GeoJSONSourceRef, Images, Layer, Map as NativeMap } from '@maplibre/maplibre-react-native';
 import type { Feature } from 'geojson';
@@ -41,6 +44,9 @@ function ExternalDetailPhoto({ imageUrl, thumbnailUrl }: { imageUrl: string; thu
 }
 
 export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceChat, wishItemId, onClearWish, initialSourceId,onInitialSourceHandled, initialListing, onInitialListingHandled }: Props) {
+  const [sellerId,setSellerId]=useState<number|null>(null);
+  const pendingChatRoute=useRef<string|null>(null);
+  const [leavingForChat,setLeavingForChat]=useState(false);
   const insets = useSafeAreaInsets();
   const { fontScale, width } = useWindowDimensions();
   const compactControls = fontScale >= 1.3;
@@ -292,10 +298,19 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     } catch { if (mounted.current && current === sequence.current && request === detailSequence.current) { setError('商品已停止刊登，或目前無法取得最新資料。'); setSelected(null); return true; } }
     return false;
   }
+  function openChatAfterDismiss(id:string){
+    setSellerId(null);setDetail(null);
+    if(Platform.OS==='ios'){pendingChatRoute.current=id;setLeavingForChat(true);}
+    else onOpenChat(id);
+  }
+  function finishChatRoute(){
+    const id=pendingChatRoute.current;pendingChatRoute.current=null;setLeavingForChat(false);
+    if(id&&mounted.current)onOpenChat(id);
+  }
   async function contactSeller(item: PublicListing) {
     try {
       const room = parseChatRoom(await api<unknown>('/chat/conversations', { method: 'POST', body: JSON.stringify({ listingId: item.id }) }), userId);
-      if (mounted.current) { setDetail(null); onOpenChat(room.id); }
+      if (mounted.current) openChatAfterDismiss(room.id);
     } catch { if (mounted.current) setError('無法開啟商品聊天，請確認登入、封鎖與商品狀態後重試。'); }
   }
   async function openExternalDetail(item: ExternalListing) {
@@ -320,7 +335,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   }
   const card = (item: PublicListing, compact = false) => <Pressable accessibilityRole="button" accessibilityLabel={`${wishItemId && item.owner.id === userId ? '我的商品配對預覽，' : ''}${item.title}，${listingPrice(item)}，${item.location.county}${item.location.district}`} onPress={() => void openDetail(item)} style={[s.card, compact && s.floatingCard, compact && narrowMapCard && s.narrowFloatingCard]}>
     <ListingPhoto uri={item.media[0].thumbnailUrl} label="商品縮圖" style={[s.thumbnail, compact && narrowMapCard && s.narrowFloatingThumbnail]} />
-    <View style={s.cardText}>{wishItemId && item.owner.id === userId && <Text numberOfLines={compact && narrowMapCard ? 1 : undefined} style={s.small}>我的商品 · 配對預覽，非買家推薦</Text>}<Text numberOfLines={compact && narrowMapCard ? 1 : 2} style={s.cardTitle}>{item.title}</Text><Text numberOfLines={1} style={[s.price, compact && narrowMapCard && s.narrowFloatingPrice]}>{listingPrice(item)}</Text><Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.location.county} {item.location.district} · {item.condition === 'NEW' ? '新品' : '二手'}{item.status === 'RESERVED' ? ' · 已保留' : ''}</Text>{(!compact || !narrowMapCard) && matchReasons[item.id]?.slice(0, 2).map(reason => <Text key={reason} style={s.small}>{reason}</Text>)}</View>
+    <View style={s.cardText}>{wishItemId && item.owner.id === userId && <Text numberOfLines={compact && narrowMapCard ? 1 : undefined} style={s.small}>我的商品 · 配對預覽，非買家推薦</Text>}<Text numberOfLines={compact && narrowMapCard ? 1 : 2} style={s.cardTitle}>{item.title}</Text><Text numberOfLines={1} style={[s.price, compact && narrowMapCard && s.narrowFloatingPrice]}>{listingPrice(item)}</Text><Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.location.county} {item.location.district} · {item.condition === 'NEW' ? '新品' : '二手'}{item.status === 'RESERVED' ? ' · 已保留' : ''}</Text><ProductInterest kind="listing" id={item.id} compact readOnly/>{(!compact || !narrowMapCard) && matchReasons[item.id]?.slice(0, 2).map(reason => <Text key={reason} style={s.small}>{reason}</Text>)}</View>
   </Pressable>;
   const externalCard = (item: ExternalListing, compact = false) => <Pressable accessibilityRole="button"
     accessibilityLabel={`外部來源商品，${item.title}，${externalPrice(item)}，${item.county}${item.district}`}
@@ -328,7 +343,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     <ListingPhoto uri={item.thumbnailUrl} label="來源商品縮圖" style={[s.thumbnail, compact && narrowMapCard && s.narrowFloatingThumbnail]} />
     <View style={s.cardText}><Text style={s.externalBadge}>外部來源 · {item.source.host}</Text>
       <Text numberOfLines={compact && narrowMapCard ? 1 : 2} style={s.cardTitle}>{item.title}</Text><Text numberOfLines={1} style={[s.price, compact && narrowMapCard && s.narrowFloatingPrice]}>{externalPrice(item)}</Text>
-      <Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.county} {item.district} · {compact && narrowMapCard ? '約略位置' : '行政區中心示意 · 回原站交易'}</Text></View>
+      <Text numberOfLines={compact && narrowMapCard || compactControls ? 1 : undefined} style={s.small}>{item.county} {item.district} · {compact && narrowMapCard ? '約略位置' : '行政區中心示意 · 回原站交易'}</Text><ProductInterest kind="external" id={item.id} compact readOnly/></View>
   </Pressable>;
   const allListItems = [...visible.map(item => ({ kind: 'seller' as const, item })),
     ...externalVisible.map(item => ({ kind: 'external' as const, item }))];
@@ -339,7 +354,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   const resultSummary = `此次搜尋範圍（搜尋時的地圖視野）· 已載入 ${loadedCount} 件（站內 ${visible.length} 件${wishItemId ? `，其中自己的配對預覽 ${visible.filter(item => item.owner.id === userId).length} 件` : ''}${externalEnabled ? `／外部 ${externalVisible.length} 件` : ''}）${cursor || externalCursor ? ' · 還有更多' : ''}`;
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
-  return <View style={s.screen}>
+  return <View style={s.screen} pointerEvents={leavingForChat?'none':'auto'} accessibilityState={{busy:leavingForChat}}>
     {wishItemId && <View style={s.wishBanner}>
       <View style={s.wishBannerRow}>
         <Text style={s.wishBannerTitle}>符合所選願望</Text>
@@ -363,7 +378,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     <Text style={s.small}>商品地區示意，不顯示使用者即時位置。站內商品須由賣家手動同意顯示，一小時後停止；來源圖釘是公開地區示意。</Text>
     {!bounds && <Text style={s.notice}>目前視野不在台灣，請將地圖移回台灣範圍。</Text>}
     {listMode ? <FlatList data={listItems} keyExtractor={entry => entry.kind + ':' + entry.item.id}
-      ListHeaderComponent={<View style={s.listStatus}>{leads.list}<Text accessibilityLiveRegion="polite" style={s.small}>{clusterPreview ? `此圖釘包含 ${listItems.length} 件商品 · 此次搜尋共載入 ${loadedCount} 件` : resultSummary}</Text><View style={s.wrap}>
+      ListHeaderComponent={<View style={s.listStatus}><Text accessibilityLiveRegion="polite" style={s.small}>{clusterPreview ? `此圖釘包含 ${listItems.length} 件商品 · 此次搜尋共載入 ${loadedCount} 件` : resultSummary}</Text><View style={s.wrap}>
         {clusterPreview && <Pressable accessibilityRole="button" style={s.chip} onPress={() => setClusterPreview(null)}><Text style={s.text}>查看全部已載入商品</Text></Pressable>}
         {!clusterPreview && canExpand && <Pressable accessibilityRole="button" style={s.scopeButton} onPress={expandSearch}><Text style={s.scopeText}>擴大範圍搜尋</Text></Pressable>}
         {!clusterPreview && !!resultFrame && <Pressable accessibilityRole="button" style={s.chip} onPress={returnToResults}><Text style={s.text}>回到搜尋結果</Text></Pressable>}
@@ -376,8 +391,8 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
           <Text style={s.mapLinkText}>在地圖上查看</Text>
         </Pressable></View>}
       contentContainerStyle={s.list} ListEmptyComponent={!busy && !externalBusy && bounds && !error && !externalError ? <Text style={s.text}>目前地圖範圍 0 件，不代表全站沒有商品。可擴大範圍或減少篩選。</Text> : null}
-      ListFooterComponent={clusterPreview ? null : <View style={s.wrap}>{cursor && <Pressable accessibilityRole="button" disabled={busy || items.length >= MAX_LOADED} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>{items.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多站內商品'}</Text></Pressable>}
-        {externalCursor && <Pressable accessibilityRole="button" disabled={externalBusy || externalItems.length >= MAX_LOADED} style={s.chip} onPress={() => void loadExternal(externalCursor)}><Text style={s.text}>{externalItems.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多外部商品'}</Text></Pressable>}</View>} /> : <View style={s.flex}>
+      ListFooterComponent={<View style={s.listStatus}>{!clusterPreview&&<View style={s.wrap}>{cursor && <Pressable accessibilityRole="button" disabled={busy || items.length >= MAX_LOADED} style={s.chip} onPress={() => void load(cursor)}><Text style={s.text}>{items.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多站內商品'}</Text></Pressable>}
+        {externalCursor && <Pressable accessibilityRole="button" disabled={externalBusy || externalItems.length >= MAX_LOADED} style={s.chip} onPress={() => void loadExternal(externalCursor)}><Text style={s.text}>{externalItems.length >= MAX_LOADED ? '請縮小地圖範圍或增加條件' : '載入更多外部商品'}</Text></Pressable>}</View>}{leads.list}</View>} /> : <View style={s.flex}>
       <NativeMap style={s.flex} mapStyle={libertyZhHantStyle} attribution onRegionDidChange={event => viewport(event.nativeEvent.bounds)} onDidFailLoadingMap={() => setMapError(true)} onDidFinishLoadingStyle={() => { setMapError(false); setMapReady(true); }} onDidFinishLoadingMap={() => { setMapError(false); setMapReady(true); }}>
         <Camera ref={camera} initialViewState={{ bounds: latestViewport.current ?? bounds ?? TAIWAN_BOUNDS }} maxZoom={19} />
         <Images images={images} />
@@ -422,19 +437,18 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
       <Pressable accessibilityRole="button" style={s.button} onPress={apply}><Text style={s.white}>套用條件</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => { setFilters({ ...emptySearchFilters }); setRadiusInput(''); }}><Text style={s.text}>清除條件</Text></Pressable><Pressable accessibilityRole="button" style={s.chip} onPress={() => setFiltering(false)}><Text style={s.text}>返回探索</Text></Pressable>
     </ScrollView></View></Modal>
-    <Modal visible={!!detail || reporting} animationType="slide" onRequestClose={() => { if (reporting) closeReport(); else { detailSequence.current++; setDetail(null); } }}>{reporting ? <ListingReportSheet api={api} apiUrl={apiUrl} userId={userId} listing={reportTarget} onClose={closeReport} onBusyChange={value => { reportBusy.current = value; }} /> : <View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><ScrollView contentContainerStyle={s.list}>
-      <Pressable accessibilityRole="button" style={s.chip} onPress={() => { detailSequence.current++; setDetail(null); }}><Text style={s.text}>返回探索</Text></Pressable>
-      {detail && <><Text style={s.heading}>{detail.title}</Text><Text style={s.price}>{listingPrice(detail)}</Text><ScrollView horizontal>{detail.media.map(photo => <Image key={photo.id} source={{ uri: photo.thumbnailUrl }} style={s.detailPhoto} accessibilityLabel="商品實拍照片" />)}</ScrollView><Text style={s.text}>{detail.description}</Text><Text style={s.text}>品牌：{detail.brand || '未標示'} · {detail.condition === 'NEW' ? '新品' : '二手'}</Text><Text style={s.text}>{detail.location.county} {detail.location.district} · 約略位置</Text><Text style={s.small}>地圖位置已模糊化約2公里；不是面交地址。</Text><Text style={s.text}>{detail.deliveryMethods.map(method => method === 'MEETUP' ? '面交' : '寄送').join('／')}{detail.negotiable ? ' · 可議價' : ''}{detail.status === 'RESERVED' ? ' · 已保留' : ''}</Text><Text style={s.small}>刊登至 {new Date(detail.expiresAt).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' })}</Text></>}
-      {detail && detail.owner.id !== userId && <Pressable accessibilityRole="button" style={s.button} onPress={() => void contactSeller(detail)}><Text style={s.white}>聯絡賣家</Text></Pressable>}
-      {detail && detail.owner.id !== userId && <Pressable accessibilityRole="button" style={s.chip} onPress={() => openReport(detail)}><Text style={s.text}>檢舉商品</Text></Pressable>}
-      {detail && matchReasons[detail.id]?.map(reason => <Text key={reason} style={s.small}>{reason}</Text>)}
-      {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    </ScrollView></View>}</Modal>
+    <Modal visible={!!detail || reporting || sellerId!==null} onDismiss={finishChatRoute} animationType="slide" onRequestClose={() => { if(sellerId!==null)setSellerId(null);else if (reporting) closeReport(); else { detailSequence.current++; setDetail(null); } }}>
+      {sellerId!==null ? <View style={[s.screen,{paddingTop:insets.top,paddingBottom:insets.bottom}]}><SellerStorefront key={sellerId} api={api} apiUrl={apiUrl} userId={userId} sellerId={sellerId} onClose={()=>setSellerId(null)} onOpenChat={openChatAfterDismiss} onOpenListing={item=>{setSellerId(null);setDetail(item);}}/></View> : reporting ? <ListingReportSheet api={api} apiUrl={apiUrl} userId={userId} listing={reportTarget} onClose={closeReport} onBusyChange={value => { reportBusy.current = value; }} /> : <View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {detail && <ListingDetailContent key={detail.id} listing={detail} userId={userId} error={error} reasons={matchReasons[detail.id]??[]}
+          onBack={()=>{detailSequence.current++;setDetail(null);}} onStorefront={()=>setSellerId(detail.owner.id)}
+          onReport={()=>openReport(detail)} onContact={()=>contactSeller(detail)}/>}
+      </View>}
+    </Modal>
     <Modal visible={!!externalDetail} animationType="slide" onRequestClose={() => { detailSequence.current++; setExternalDetail(null); }}>
       <View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}><ScrollView contentContainerStyle={s.list}>
         <Pressable accessibilityRole="button" style={s.chip} onPress={() => { detailSequence.current++; setExternalDetail(null); }}><Text style={s.text}>返回探索</Text></Pressable>
         {externalDetail && <><Text style={s.externalBadge}>外部來源 · {externalDetail.source.host}</Text>
-          <Text style={s.heading}>{externalDetail.title}</Text><Text style={s.price}>{externalPrice(externalDetail)}</Text>
+          <Text style={s.heading}>{externalDetail.title}</Text><Text style={s.price}>{externalPrice(externalDetail)}</Text><ProductInterest kind="external" id={externalDetail.id}/>
           <ExternalDetailPhoto key={externalDetail.id} imageUrl={externalDetail.imageUrl} thumbnailUrl={externalDetail.thumbnailUrl} />
           <Text style={s.text}>{externalDetail.description}</Text>
           {externalDetail.aiSupplement && <><Text style={s.externalBadge}>AI 補充說明 · 已人工審核</Text>
@@ -447,6 +461,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
           <Text style={s.small}>這是外部導流商品，不提供站內賣家聊天或面交預約。</Text></>}
       </ScrollView></View>
     </Modal>
+
   </View>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, search: { flexDirection: 'row', paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.xs, gap: iosSpacing.xs }, searchInput: { flex: 1, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.pill, paddingHorizontal: iosSpacing.md, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, toolbar: { flexDirection: 'row', padding: iosSpacing.sm, gap: iosSpacing.xs, alignItems: 'center', flexWrap: 'wrap' }, wishBanner: { paddingHorizontal: iosSpacing.md, paddingTop: iosSpacing.xs, gap: iosSpacing.xxs }, wishBannerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: iosSpacing.xs }, wishBannerTitle: { ...iosType.subheadline, color: iosColors.label, fontWeight: '700', flexShrink: 1 },

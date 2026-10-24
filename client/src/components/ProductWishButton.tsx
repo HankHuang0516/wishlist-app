@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Heart } from 'lucide-react';
+import { BookmarkPlus as Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiFailure } from '../lib/marketplaceApi';

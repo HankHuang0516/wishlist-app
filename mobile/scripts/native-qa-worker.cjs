@@ -285,14 +285,16 @@ async function main() {
       if (req.path.startsWith('/api/auth/')) return res.status(503).json({ errorCode: 'QA_EXTERNAL_OPERATION_DISABLED' });
       const userRoute = req.path === '/api/users/me' && ['GET', 'DELETE'].includes(req.method) ||
         req.path === '/api/users/me/deletion-impact' && req.method === 'GET' ||
+        visualHomeFixture && /^\/api\/users\/[1-9][0-9]*\/storefront$/.test(req.path) && req.method==='GET' && userIds.includes(Number(req.path.split('/')[3])) ||
         req.path === '/api/users/me/password' && req.method === 'PUT' ||
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
+      const goldenRoute=visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
       const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path) ||
         !!marketingVisualOwnerRole && req.method === 'GET' && /^\/api\/marketing\/(?:availability|jobs(?:\/[0-9a-f-]{36})?)$/.test(req.path) ||
         externalListingsPilot && /^\/api\/external-listings(?:\/|$)/.test(req.path);
       const workerRoute = listingAiPilot && /^\/api\/internal\/minimax-vision(?:\/|$)/.test(req.path);
-      if (!userRoute && !marketRoute && !workerRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
+      if (!userRoute && !marketRoute && !workerRoute && !goldenRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
       if (req.headers['x-api-key'] !== undefined) return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' });
       if (!workerRoute && req.headers.authorization !== undefined && !(listingAiPilot && req.headers.authorization === 'Bearer ' + callbackToken)) {
         if (typeof req.headers.authorization !== 'string' || !/^Bearer [^\s]{1,8192}$/.test(req.headers.authorization)) throw new jwt.JsonWebTokenError('Invalid QA session');
@@ -324,6 +326,13 @@ async function main() {
     ...(marketingVisualOwnerRole ? [['marketing', 'marketingRoutes']] : []),
     ...(externalListingsPilot ? [['external-listings', 'externalListingRoutes']] : [])]) {
     app.use('/api/' + route, require('../../server/dist/routes/' + file).default);
+  }
+  if(visualHomeFixture){
+    app.use('/api/notifications',require('../../server/dist/routes/notificationRoutes').default);
+    app.use('/api/product-interest',require('../../server/dist/routes/productInterestRoutes').default);
+    app.use('/api/discovery',require('../../server/dist/routes/discoveryRoutes').createDiscoveryRoutes());
+    app.use('/api/product-wishes',require('../../server/dist/routes/productWishRoutes').createProductWishRoutes());
+    app.use('/api/users',require('../../server/dist/routes/socialRoutes').default);
   }
   if (listingAiPilot) app.use('/api/internal/minimax-vision', require('../../server/dist/routes/minimaxRecognitionRoutes').default);
   app.use((_req, res) => res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' }));

@@ -51,8 +51,8 @@ run('built source inquiry correction and restart',()=>{
    const ext=path.extname(file);await req.respond({status:200,contentType:ext==='.js'?'application/javascript':ext==='.css'?'text/css':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':'text/html',body:fs.readFileSync(file)});
   }catch{if(!req.isInterceptResolutionHandled())await req.abort();}});
   const click=async(label:string)=>{
-   await page.waitForFunction((value:string)=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent===value&&!b.disabled),{},label);
-   for(const button of await page.$$('button'))if(await button.evaluate((b:Element,value:string)=>b.textContent===value,label)){await button.click();return;}
+   try{await page.waitForFunction((value:string)=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent===value&&!b.disabled),{},label);}catch{throw Error('Control unavailable: '+label+'; '+await page.evaluate(()=>JSON.stringify({buttons:Array.from(document.querySelectorAll('button')).map(b=>({label:b.textContent,disabled:b.disabled})),alerts:Array.from(document.querySelectorAll('[role=alert]')).map(e=>e.textContent)})));}
+   for(const button of await page.$$('button'))if(await button.evaluate((b:Element,value:string)=>b.textContent===value,label)){await button.evaluate((element:Element)=>element.scrollIntoView({block:'center',inline:'nearest'}));await button.click();return;}
    throw Error('Missing visible control '+label);
   };
   const write=async(value:string)=>{const field='textarea[aria-label="詢問內容"]';await page.waitForSelector(field);await page.waitForFunction(()=>{const field=document.querySelector('textarea') as HTMLTextAreaElement|null;return !!field&&!field.disabled;});await page.click(field,{clickCount:3});await page.type(field,value);expect(await page.$eval(field,(e:HTMLTextAreaElement)=>e.value)).toBe(value);};

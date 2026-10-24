@@ -1,6 +1,9 @@
 import { getUserLocale } from '../utils/localization';
 
 const english = {
+  "確認商品狀態": "Confirm listing status",
+  "確認這次狀態變更": "Confirm this status change",
+  "更多操作": "More actions",
   "商品服務網址不正確。": "Invalid listing service URL.",
   "我的商品資料不正確，請重新載入。": "Your listing data could not be verified. Reload and try again.",
   "商品分頁未前進，請重新載入。": "Listing pagination did not advance. Reload and try again.",

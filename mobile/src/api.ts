@@ -45,6 +45,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, allowL
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) throw new Error('無效的 API 等待時間。');
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), timeoutMs);
+    const cancel=()=>abort.abort();fetchOptions.signal?.addEventListener('abort',cancel,{once:true});if(fetchOptions.signal?.aborted)abort.abort();
     const token = getToken();
     const headers = new Headers(fetchOptions.headers);
     headers.set('Accept', 'application/json');
@@ -62,6 +63,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, allowL
       return body as T;
     } finally {
       clearTimeout(timeout);
+      fetchOptions.signal?.removeEventListener('abort',cancel);
     }
   };
 }

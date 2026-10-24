@@ -1,10 +1,16 @@
-import {afterEach,beforeEach,describe,it,expect} from 'vitest';
+import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
 import {render,screen,fireEvent,cleanup} from '@testing-library/react';
 import {ListingPhoto,ListingPhotoGallery} from './ListingPhoto';
 let originalLocale:string|null;
 beforeEach(()=>{originalLocale=localStorage.getItem('user-locale');localStorage.setItem('user-locale','zh-TW')});
 afterEach(()=>{cleanup();if(originalLocale===null)localStorage.removeItem('user-locale');else localStorage.setItem('user-locale',originalLocale)});
 describe('shared listing photo presentation',()=>{
+ it('recognizes a cached image already complete at mount without leaving a loading overlay',()=>{
+  const complete=vi.spyOn(HTMLImageElement.prototype,'complete','get').mockReturnValue(true);
+  const width=vi.spyOn(HTMLImageElement.prototype,'naturalWidth','get').mockReturnValue(320);
+  try{render(<ListingPhoto src="https://example.invalid/cached.jpg" alt="快取實物圖" detail/>);expect(screen.getByRole('img')).toBeVisible();expect(screen.queryByRole('status')).toBeNull();}
+  finally{complete.mockRestore();width.mockRestore();}
+ });
  it('keeps the marketing disclosure visible through loading and failure, then removes it for a real-photo replacement',()=>{
   const v=render(<ListingPhoto src="https://example.invalid/ai.jpg" alt="行銷圖" marketing/>);
   expect(screen.getByText('AI 行銷示意圖')).toBeVisible();fireEvent.error(screen.getByRole('img'));

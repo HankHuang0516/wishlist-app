@@ -1,31 +1,13 @@
-import {cpTargets,cpFacts,validateCpOutput} from '../lib/discoveryCp';
+import {cpTargets,cpFacts,validateCpOutput,cpIdentity} from '../lib/discoveryCp';
 import {discoveryHash,type DiscoveryProduct} from '../lib/discovery';
-const product=(i:number,extra:Partial<DiscoveryProduct>={}):DiscoveryProduct=>({kind:'source',id:String(i),key:'source:'+i,title:'BenQ GW2270 22吋 二手螢幕 '+i,description:'Full HD VA',mainId:'electronics',subId:'monitors',classificationMethod:'TITLE_RULE',price:900+i*100,priceText:'1000',currency:'TWD',priceUnitVerified:true,thumbnailUrl:null,photos:[],county:'臺北市',district:null,condition:'USED',sourceLabel:'example.invalid',stockStatus:'UNKNOWN',canonicalUrl:null,detailPath:'/explore',date:'2026-10-24T00:00:00Z',dateBasis:'COLLECTED',dateEarliest:null,...extra});
-const products=[product(1),product(2),product(3)],targets=cpTargets(products),copy={zh:'明示同型號及規格，價格較低。',en:'Same stated model and specifications at a lower price.'};
-const output=()=>targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:t.comparables.map(c=>c.key),dimensions:{price:30,specification:20,condition:15,evidence:10},reasons:[copy],limitations:[{zh:'運費、庫存及實際狀況仍需確認。',en:'Shipping, stock and actual condition require confirmation.'}]}));
-test('requires known TWD price, unit, condition, permission and at least two peers',()=>{
- expect(targets).toHaveLength(3);
- for(const patch of [{price:null},{currency:null},{priceUnitVerified:false},{condition:'UNKNOWN'},{cpAllowed:false},{subId:'unclassified'}])expect(cpTargets([product(1,patch),products[1],products[2]])).toHaveLength(0);
- expect(cpTargets(products,new Set(['source:1','source:2','source:3']))).toEqual([]);
-});
-test('binds scores and source evidence hashes to the exact product snapshot',()=>{
- const result=validateCpOutput(output(),targets,'synthetic-model',new Date('2026-10-24T01:00:00Z'));
- expect(result['source:1']).toMatchObject({score:75,confidence:'MEDIUM',productHash:discoveryHash(cpFacts(products[0])),evaluatedAt:'2026-10-24T01:00:00.000Z'});
- expect(result['source:1'].basis).toHaveLength(2);
-});
-test('rejects hallucinated evidence, duplicated peers, impossible scores and missing outputs',()=>{
- const bad=output();bad[0].basisKeys=['source:999','source:2'];expect(()=>validateCpOutput(bad,targets,'m')).toThrow('CP_INVALID_EVALUATION');
- const duplicated=output();duplicated[0].basisKeys=['source:2','source:2'];expect(()=>validateCpOutput(duplicated,targets,'m')).toThrow();
- const score=output();score[0].dimensions.price=100;expect(()=>validateCpOutput(score,targets,'m')).toThrow();
- expect(()=>validateCpOutput(output().slice(1),targets,'m')).toThrow();
-});
-test('keeps insufficient evidence unscored, never turning it into a high-CP recommendation',()=>{
- const raw=output().map(x=>({...x,verdict:'INSUFFICIENT',dimensions:null,basisKeys:[]}));
- expect(Object.values(validateCpOutput(raw,targets,'m')).every(e=>e.score===null&&e.confidence==='LOW'&&e.dimensions===null)).toBe(true);
-});
-
-test('never scores different gemstone bracelets from shared size or category alone',()=>{
- const jewelry=[product(1,{title:'白水晶手鍊 16公分',mainId:'fashion',subId:'accessories'}),product(2,{title:'紫水晶手鍊 16公分',mainId:'fashion',subId:'accessories'}),product(3,{title:'金髮晶手鍊 16公分',mainId:'fashion',subId:'accessories'})],t=cpTargets(jewelry);
- const raw=t.map(x=>({key:x.product.key,verdict:'COMPARABLE',basisKeys:x.comparables.map(c=>c.key),dimensions:{price:40,specification:25,condition:20,evidence:15},reasons:[copy],limitations:[copy]}));
- expect(Object.values(validateCpOutput(raw,t,'m')).every(e=>e.score===null&&e.basis.length===0)).toBe(true);
-});
+import {retailBinding,retailConversion,type RetailReference} from '../lib/retailPrices';
+const make=(i=1,patch:Partial<DiscoveryProduct>={}):DiscoveryProduct=>{const p:DiscoveryProduct={kind:'source',id:String(i),key:'source:'+i,title:'Samsung Galaxy Buds3 全新未拆',description:'賣家標示全新，實物與庫存待確認',mainId:'electronics',subId:'audio',classificationMethod:'TITLE_RULE',price:2500,priceText:'2500',currency:'TWD',priceUnitVerified:true,thumbnailUrl:null,photos:[],county:null,district:null,condition:'NEW',sourceLabel:'reference',stockStatus:'UNKNOWN',canonicalUrl:null,detailPath:'/explore',date:'2026-10-24T00:00:00Z',dateBasis:'COLLECTED',dateEarliest:null,...patch};const r:RetailReference={id:String(i),key:'retail:'+i,productKey:p.key,bindingHash:retailBinding(p),identity:cpIdentity(p)!,price:4990,currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.samsung.com/tw/',sourceTitle:'Synthetic original price reference',sourceProductTitle:'Samsung Galaxy Buds3',evidenceQuote:'Galaxy Buds3 建議售價 NT$4,990',sourcePeriod:'2025-04',checkedAt:'2026-10-24T00:00:00Z'};return{...p,retail:r};};
+const copy={zh:'同型號新品原價已明示，品況以賣家標示為準。',en:'Same-model original-new price is stated; condition is seller-stated.'};
+const output=(targets=cpTargets([make()]))=>targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[copy],limitations:[copy]}));
+test('one verified external retail reference is sufficient; on-site peers never form a price baseline',()=>{expect(cpTargets([make()])).toHaveLength(1);const noRef={...make(),retail:undefined};expect(cpTargets([noRef,{...noRef,id:'2',key:'source:2'}])).toEqual([]);expect(cpTargets([make()])[0].comparables.map(x=>x.key)).toEqual(['retail:1']);});
+test('calculates price points itself and records exact original-price provenance',()=>{const t=cpTargets([make()]),r=validateCpOutput(output(t),t,'synthetic-model');expect(r['source:1']).toMatchObject({policyVersion:3,score:80,confidence:'MEDIUM',conversion:{originalPrice:4990,priceRatio:5,savingsPercent:49.9,pricePoints:20},productHash:discoveryHash(cpFacts(make()))});expect(r['source:1'].retail.sourceUrl).toBe('https://www.samsung.com/tw/');});
+test('rejects invented evidence and AI-invented price scores',()=>{const t=cpTargets([make()]);const bad=output(t);bad[0].basisKeys=['source:another-item'];expect(()=>validateCpOutput(bad,t,'m')).toThrow();const d=output(t);(d[0].dimensions as any).price=40;expect(()=>validateCpOutput(d,t,'m')).toThrow();const high=output(t);high[0].dimensions.condition=100;expect(()=>validateCpOutput(high,t,'m')).toThrow();expect(()=>validateCpOutput([],t,'m')).toThrow();});
+test('keeps uncertain comparisons unscored while retaining transparent price arithmetic',()=>{const t=cpTargets([make()]),raw=output(t).map(r=>({...r,verdict:'INSUFFICIENT',dimensions:null}));expect(validateCpOutput(raw,t,'m')['source:1']).toMatchObject({score:null,confidence:'LOW',conversion:{originalPrice:4990}});});
+test.each([{price:null},{currency:'USD'},{priceUnitVerified:false},{condition:'UNKNOWN'},{cpAllowed:false},{title:'Samsung Galaxy Buds3 故障零件機'},{title:'三星風格耳機（非正品）'}])('requires supported price, condition, permission and usable product %p',patch=>expect(cpTargets([make(1,patch)])).toEqual([]));
+test('binds variant and bundle identity; does not price Pro as base or bare monitor as a kit',()=>{expect(cpIdentity(make())).not.toBe(cpIdentity(make(2,{title:'Samsung Galaxy Buds3 Pro'})));const base=make(1,{title:'Samsung S43FM703UC 螢幕',subId:'monitors'}),kit=make(1,{title:'Samsung S43FM703UC FollowMe Pro 移動式螢幕組',subId:'monitors'});expect(cpIdentity(base)).not.toBe(cpIdentity(kit));expect(cpTargets([{...kit,retail:base.retail}])).toEqual([]);});
+test('does not need to research original price again for an asking-price change, but invalidates changed model bindings',()=>{const p=make();expect(retailBinding({...p,price:2000})).toBe(retailBinding(p));expect(cpTargets([{...p,title:'Samsung Galaxy Buds3 Pro'}])).toEqual([]);expect(retailConversion(6000,4990).pricePoints).toBe(0);expect(retailConversion(6000,4990).savingsPercent).toBeLessThan(0);});

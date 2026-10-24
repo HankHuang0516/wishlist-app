@@ -1,3 +1,4 @@
+import {createRetailPriceAdmin} from './routes/retailPriceRoutes';
 import {createSourceManagerRoutes} from './routes/sourceManagerRoutes';
 import { authenticateToken } from './middleware/auth';
 import { createProductWishRoutes } from './routes/productWishRoutes';
@@ -91,6 +92,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/wishlists', wishlistRoutes);
 app.use('/api/product-wishes', createProductWishRoutes());
 app.use('/api/discovery', createDiscoveryRoutes());
+app.use('/api/retail-price-admin',createRetailPriceAdmin());
 app.use('/api/items', itemRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', socialRoutes);

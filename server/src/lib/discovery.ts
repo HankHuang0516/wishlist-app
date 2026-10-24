@@ -19,7 +19,8 @@ export type DiscoveryProduct = {
   date: string; dateBasis: 'PUBLISHED' | 'SOURCE_POST_RANGE' | 'COLLECTED'; dateEarliest: string | null;
   match?: { wishItemId: number; reasons: ('NAME' | 'BUDGET')[]; score: number };
   cpAllowed?: boolean;
-  cp?: {score:number|null;confidence:string;reasons:{zh:string;en:string}[];limitations:{zh:string;en:string}[];basis:{key:string;hash:string}[];model:string;evaluatedAt:string;dimensions:{price:number;specification:number;condition:number;evidence:number}|null};
+  retail?: import('./retailPrices').RetailReference;
+  cp?: {retail?:import('./retailPrices').RetailReference;conversion?:{originalPrice:number;priceRatio:number;savingsPercent:number;pricePoints:number};score:number|null;confidence:string;reasons:{zh:string;en:string}[];limitations:{zh:string;en:string}[];basis:{key:string;hash:string}[];model:string;evaluatedAt:string;dimensions:{price:number;specification:number;condition:number;evidence:number}|null};
 };
 export type DiscoveryQuery = { q: string; main: string; sub: string; source: string; condition: string; county: string; min?: number; max?: number; sort: string; cursor: string; limit: number };
 export class DiscoveryError extends Error { constructor(public status: number, public code: string) { super(code); } }

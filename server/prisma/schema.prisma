@@ -1166,3 +1166,27 @@ model SourceReferenceRegistration {
  createdAt DateTime @default(now())
  @@index([actorSessionId, createdAt])
 }
+
+// Public, exact-model original-new-price evidence. Never a seller stock assertion.
+model RetailPriceObservation {
+ id String @id @db.Uuid
+ payloadHash String @db.VarChar(64)
+ productKey String @db.VarChar(80)
+ bindingHash String @db.VarChar(64)
+ identity String? @db.VarChar(220)
+ status String @db.VarChar(20)
+ originalPrice Decimal? @db.Decimal(12,2)
+ currency String @default("TWD")
+ priceType String? @db.VarChar(30)
+ sourceUrl String?
+ sourceTitle String?
+ sourceProductTitle String?
+ sourcePeriod String?
+ evidenceQuote String?
+ notes String?
+ checkedAt DateTime
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([productKey, status, expiresAt])
+ @@index([expiresAt])
+}

@@ -1,0 +1,16 @@
+import express from 'express';
+import {randomUUID} from 'crypto';
+import prisma from '../../lib/prisma';
+import {createRetailPriceAdmin} from '../../routes/retailPriceRoutes';
+import {createLoopbackRequest} from './loopbackHttp';
+import {loadDiscovery} from '../../lib/discovery';
+import {retailBinding,retailReferences} from '../../lib/retailPrices';
+require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
+if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated DB required');
+const app=express();app.use(express.json());app.use('/retail',createRetailPriceAdmin(()=> 'synthetic-retail-admin'));
+const http=createLoopbackRequest(app),ids:string[]=[],run=randomUUID();let userId:number,listingId:string;
+const post=(b:object,key='synthetic-retail-admin')=>http.post('/retail/observations').set('X-Admin-Key',key).send(b);
+beforeAll(async()=>{userId=(await prisma.user.create({data:{phoneNumber:'retail-test-'+run,password:'synthetic-only'}})).id;listingId=(await prisma.listing.create({data:{ownerUserId:userId,clientListingId:randomUUID(),requestHash:'synthetic-retail-test',title:'Samsung Galaxy Buds3 全新未拆',category:'electronics',condition:'NEW',price:2500,currency:'TWD',status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000)}})).id;});
+afterAll(async()=>{await prisma.retailPriceObservation.deleteMany({where:{id:{in:ids}}});await prisma.listing.deleteMany({where:{ownerUserId:userId}});await prisma.user.delete({where:{id:userId}});await prisma.$disconnect();});
+it('requires the existing admin credential and never opens a public write path',async()=>{expect((await http.get('/retail/candidates')).status).toBe(401);expect((await post({},'forged')).status).toBe(401);});
+it('records exact-source originals idempotently, advances the queue, and invalidates changed products',async()=>{const key='listing:'+listingId,p=(await loadDiscovery()).find(p=>p.key===key)!;const id=randomUUID();ids.push(id);const body={requestId:id,productKey:key,bindingHash:retailBinding(p),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original-new price evidence',sourceProductTitle:'Samsung Galaxy Buds3',sourcePeriod:'2025-04',evidenceQuote:'Galaxy Buds3 建議售價 NT$4,990',checkedAt:new Date().toISOString()};expect((await post(body)).status).toBe(201);expect((await post(body)).body.cached).toBe(true);expect((await post({...body,originalPrice:'990'})).status).toBe(400);const ref=(await retailReferences([p])).get(key);expect(ref?.price).toBe(4990);const queue=await http.get('/retail/candidates?limit=20').set('X-Admin-Key','synthetic-retail-admin');expect(queue.body.items.some((x:any)=>x.productKey===key)).toBe(false);const pending=await http.get('/retail/pending-evaluations').set('X-Admin-Key','synthetic-retail-admin');expect(pending.body.items.some((x:any)=>x.productKey===key)).toBe(true);await prisma.listing.update({where:{id:listingId},data:{title:'Samsung Galaxy Buds3 Pro 全新未拆'}});const changed=(await loadDiscovery()).find(p=>p.key===key)!;expect((await retailReferences([changed])).has(key)).toBe(false);});

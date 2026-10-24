@@ -1,4 +1,4 @@
-import { parseLead, digest, ref } from './sourceLeadRules';
+import { parseLead, digest, ref, transferSnapshot, isInquiryQuestion } from './sourceLeadRules';
 import { isListingId } from './listingRules';
 export type QueryInput={query:string;ids:string[];archiveId:string|null;terms:string[]};
 export function parseConsignmentQuery(body:unknown):QueryInput {
@@ -18,14 +18,13 @@ export function consignmentEligible(row:any):boolean {
   const evidence={...l.evidence};delete evidence.withdrawalRef;
   const input={...Object.fromEntries(['archiveItemId','libraryFileId','archiveVersion','archiveSha256','title','summary','canonicalUrl','county','district','publicPlaceName','publicAddress','latitude','longitude'].map(k=>[k,l[k]])),evidence,postedEarliestAt:l.postedEarliestAt?.toISOString()??null,postedLatestAt:l.postedLatestAt?.toISOString()??null,checkedAt:l.checkedAt?.toISOString()??null};
   if(!l.checkedAt||parseLead(input,l.checkedAt,l.recordOrigin==='DB_MASTER').contentHash!==l.contentHash)return false;
-  if(!Array.isArray(row.events)||row.events.length>201||(row.events.length===201&&row.events[200]?.action!=='CANCEL')||!row.events.some((e:any)=>e.action==='ASK'&&typeof e.text==='string'&&e.text.trim()))return false;
-  if(row.events.some((e:any)=>!isListingId(e.requestId)||!['ASK','CONSENT','CANCEL','SELLER_REPLY'].includes(e.action)||!Number.isFinite(Date.parse(e.at))))return false;
+  if(!Array.isArray(row.events)||row.events.length>201||(row.events.length===201&&row.events[200]?.action!=='CANCEL')||!row.events.some((e:any)=>isInquiryQuestion(e)&&typeof e.text==='string'&&e.text.trim()))return false;
+  if(row.events.some((e:any)=>!isListingId(e.requestId)||!['ASK','CONSENT','CANCEL','SELLER_REPLY','REVISE','REOPEN'].includes(e.action)||!Number.isFinite(Date.parse(e.at))))return false;
   // Consent binds a specific question snapshot; cancellation may clear the
   // current consentHash, but historical read authority still cites the receipt.
   return row.events.some((e:any,i:number)=>{
-   if(e.consent!==true||!['ASK','CONSENT'].includes(e.action)||!/^[a-f0-9]{64}$/.test(e.payloadHash??''))return false;
-   const before=row.events.slice(0,i).filter((x:any)=>x.action==='ASK').map((x:any)=>({requestId:x.requestId,text:x.text}));
-   return e.payloadHash===digest({leadId:l.id,contentHash:l.contentHash,canonicalUrl:l.canonicalUrl,questions:before});
+   if(e.consent!==true||!['ASK','CONSENT','REVISE','REOPEN'].includes(e.action)||!/^[a-f0-9]{64}$/.test(e.payloadHash??''))return false;
+   return e.payloadHash===digest(transferSnapshot(l,row.events.slice(0,i)));
   });
  }catch{return false;}
 }

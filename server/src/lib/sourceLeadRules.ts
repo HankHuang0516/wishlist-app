@@ -90,7 +90,16 @@ export type LeadEvent = {
     payloadHash?: string;
     reservationId?: string;
 };
-export function transferSnapshot(lead: ExternalSourceLead, events: LeadEvent[]) { return { leadId: lead.id, contentHash: lead.contentHash, canonicalUrl: lead.canonicalUrl, questions: events.filter(e => e.action === 'ASK').map(e => ({ requestId: e.requestId, text: e.text })) }; }
+export const isInquiryQuestion = (event: Pick<LeadEvent, 'action'>) => ['ASK', 'REVISE', 'REOPEN'].includes(event.action);
+export function currentInquiryQuestions(events: LeadEvent[]) {
+    let start = 0;
+    events.forEach((event, index) => {
+        if (event.action === 'CANCEL') start = index + 1;
+        if (event.action === 'REVISE' || event.action === 'REOPEN') start = index;
+    });
+    return events.slice(start).filter(isInquiryQuestion);
+}
+export function transferSnapshot(lead: ExternalSourceLead, events: LeadEvent[]) { return { leadId: lead.id, contentHash: lead.contentHash, canonicalUrl: lead.canonicalUrl, questions: currentInquiryQuestions(events).map(e => ({ requestId: e.requestId, text: e.text })) }; }
 export function routeCurrent(lead: ExternalSourceLead, now = new Date()) { try {
     const r = object(lead.sellerRoute);
     return (r.routeKind===undefined||publicCommentRoute(r,lead.canonicalUrl)) && r.leadId === lead.id && r.contentHash === lead.contentHash && r.sourceUrl === lead.canonicalUrl && ['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(r.channel) && ref(r.identityEvidenceRef) && ref(r.routeEvidenceRef) && publicUrl(r.publicRouteUrl) && date(r.verifiedAt) <= now && now.getTime() - date(r.verifiedAt).getTime() < 24 * 3600000;

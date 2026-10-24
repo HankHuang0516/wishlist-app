@@ -6,7 +6,7 @@ import { parseLeadRoom, type LeadRoom } from './sourceLeadData';
 import { privatePendingStore, PendingStoreError } from './webPendingStore';
 import { parseSourcePending, parseSourceReceipt, readSourceRecovery, sourceJournalKey, sourcePendingIdentity, type SourceJournal, type SourcePayload, type SourceRecovery } from './sourceInquiryRecovery';
 import { sourceContactText as text } from './sourceContactCopy';
-type Action = 'READ' | 'RETRY' | 'ASK' | 'CONSENT' | 'CANCEL';
+type Action = 'READ' | 'RETRY' | 'ASK' | 'CONSENT' | 'CANCEL' | 'REVISE' | 'REOPEN';
 type View = { scope: string; room: LeadRoom | null; recovery: SourceRecovery; ready: boolean; error: string; notice: string };
 const empty = (scope: string): View => ({ scope, room: null, recovery: { inquiry: null, cancel: null }, ready: false, error: '', notice: '' });
 export function useSourceInquiry(id: string) {
@@ -74,7 +74,7 @@ export function useSourceInquiry(id: string) {
      await clearJournal(original); recovery = { ...recovery, inquiry: null }; stopped = true;
     }
     await clearJournal(journal); recovery = { ...recovery, [cancelled ? 'cancel' : 'inquiry']: null };
-    if (sourcePendingIdentity(journal.operation).action === 'ASK' || stopped) setDraft(old => current() ? { scope: requestScope, value: '' } : old);
+    if (['ASK', 'REVISE', 'REOPEN'].includes(sourcePendingIdentity(journal.operation).action) || stopped) setDraft(old => current() ? { scope: requestScope, value: '' } : old);
     publish({ recovery, room: found, notice: stopped ? text('stopped') : '' });
    }
    for (const slot of ['inquiry', 'cancel'] as const) {
@@ -93,10 +93,10 @@ export function useSourceInquiry(id: string) {
      await request(`/source-leads/${id}?approximate=1&unlocated=1`); active = parseLeadRoom(await request(roomPath, {}), id); if (!current()) return; publish({ room: active });
     }
     if (kind !== 'CANCEL') {
-     if (room ? room.transferHash !== active.transferHash : active.events.some(e => e.action === 'ASK')) { publish({ error: text('changed') }); return; }
+     if (room ? room.transferHash !== active.transferHash : active.events.some(e => ['ASK', 'REVISE', 'REOPEN'].includes(e.action))) { publish({ error: text('changed') }); return; }
      await request(`/source-leads/${id}?approximate=1&unlocated=1`);
     }
-    const payload: SourcePayload = kind === 'ASK' ? { requestId: crypto.randomUUID(), action: 'ASK', text: question, consent: true, transferHash: active.transferHash } : kind === 'CONSENT' ? { requestId: crypto.randomUUID(), action: 'CONSENT', consent: true, transferHash: active.transferHash } : { requestId: crypto.randomUUID(), action: 'CANCEL' };
+    const payload: SourcePayload = kind === 'ASK' || kind === 'REVISE' || kind === 'REOPEN' ? { requestId: crypto.randomUUID(), action: kind, text: question, consent: true, transferHash: active.transferHash } : kind === 'CONSENT' ? { requestId: crypto.randomUUID(), action: 'CONSENT', consent: true, transferHash: active.transferHash } : { requestId: crypto.randomUUID(), action: 'CANCEL' };
     const body = JSON.stringify({ version: 1, leadId: id, roomId: active.id, payload }), key = await sourceJournalKey(API_URL, owner, id, payload.action === 'CANCEL'), operation = parseSourcePending(body, id);
     await bounded(privatePendingStore.save(key, body)); if (!current()) return;
     journal = { key, body, operation }; recovery = { ...recovery, [payload.action === 'CANCEL' ? 'cancel' : 'inquiry']: journal }; publish({ recovery });
@@ -108,6 +108,7 @@ export function useSourceInquiry(id: string) {
    publish({ room: result }); const found = await receipt(journal, result); if (!current()) return;
    if (!found) { publish({ error: text('failure') }); return; }
    await acknowledge(journal, found);
+   return true;
   } catch (failure) {
    // A later 401/429/409 is not proof about the original unknown POST. Keep
    // its full journal and never display untrusted exception/response text.

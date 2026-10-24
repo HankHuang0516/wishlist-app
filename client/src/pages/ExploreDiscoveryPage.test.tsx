@@ -70,3 +70,16 @@ it('preserves legacy filter deep links and restores the new feed sort explicitly
  expect(isLegacyExplore('?main=electronics&sub=monitors&source=source')).toBe(false);
  expect(readDiscovery('?feed=for-you').sort).toBe('recommended');expect(readDiscovery('?feed=cp').sort).toBe('cp');expect(readDiscovery('?feed=for-you&sort=price-asc').sort).toBe('price-asc');
 });
+
+it('lets a first-time user browse an interest category when no wishes match, without creating a wish',async()=>{
+ api.mockImplementation(async(_token,path)=>path.startsWith('/discovery/for-you')?{...page,items:[],total:0,counts:{listing:0,source:0,external:0},categories:categories.map(c=>({...c,count:0,children:c.children.map(s=>({...s,count:0}))}))}:{lists:[],saved:[]});
+ render(view('/explore?feed=for-you'));
+ await screen.findByText('還沒遇到符合願望的商品');
+ fireEvent.click(screen.getByRole('button',{name:'所有分類'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'搜尋分類'}),{target:{value:'顯示器'}});
+ fireEvent.click(screen.getByRole('button',{name:'3C數位 › 電腦螢幕'}));
+ await screen.findByText('BenQ 合成螢幕');
+ expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');
+ expect(screen.getByTestId('location')).not.toHaveTextContent('feed=for-you');
+ expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+});

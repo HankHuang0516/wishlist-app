@@ -14,10 +14,10 @@ it('public saturation cannot block verified wishes, messages, reports, map contr
   for (let i = 0; i < 500; i++) expect((await request(server).get('/api/source-leads')).status).toBe(200);
   expect((await request(server).get('/partners')).status).toBe(429);
   expect((await request(server).get('/api/users/me').set('Authorization', 'Bearer forged')).status).toBe(401);
-  for (const path of ['/api/users/me', '/api/native-wishes/lists', '/api/listings/mine', '/api/chat/conversations', '/api/source-leads/synthetic/inquiry']) {
+  for (const path of ['/api/users/me', '/api/discovery/for-you', '/api/discovery', '/api/product-wishes', '/api/native-wishes/lists', '/api/listings/mine', '/api/chat/conversations', '/api/source-leads/synthetic/inquiry']) {
    expect((await request(server).get(path).set('Authorization', 'Bearer synthetic-verified')).status).toBe(200);
   }
-  for (const [method, path] of [['post', '/api/chat/conversations/synthetic/reports'], ['put', '/api/listings/synthetic/map-presence'], ['post', '/api/chat/blocks/43'], ['delete', '/api/chat/blocks/43']] as const) {
+  for (const [method, path] of [['post','/api/product-wishes'],['post','/api/discovery/cp-evaluations'],['post', '/api/chat/conversations/synthetic/reports'], ['put', '/api/listings/synthetic/map-presence'], ['post', '/api/chat/blocks/43'], ['delete', '/api/chat/blocks/43']] as const) {
    expect((await request(server)[method](path).set('Authorization', 'Bearer synthetic-verified')).status).toBe(200);
    expect((await request(server)[method](path).set('Authorization', 'Bearer forged')).status).toBe(401);
   }

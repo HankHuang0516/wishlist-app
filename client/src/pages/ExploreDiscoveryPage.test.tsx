@@ -3,6 +3,7 @@ import {MemoryRouter,useLocation} from 'react-router-dom';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {AuthContext} from '../context/AuthContext';
 import ExploreDiscoveryPage from './ExploreDiscoveryPage';
+import {ApiFailure} from '../lib/marketplaceApi';
 import {isLegacyExplore,readDiscovery} from '../lib/discovery';
 import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 const {publicApi,api}=vi.hoisted(()=>({publicApi:vi.fn(),api:vi.fn()}));
@@ -13,8 +14,8 @@ const categories=[{id:'electronics',label:'3C數位',en:'Electronics',icon:'moni
 const page={items:[p],categories,nextCursor:null,snapshot:'fixed',total:1,counts:{listing:0,source:1,external:0},counties:['臺北市'],complete:true,generatedAt:'2026-10-24T00:00:00Z',unknownPriceExcluded:false};
 function Location(){return <output data-testid="location">{useLocation().search}</output>;}
 function view(path='/explore'){return <MemoryRouter initialEntries={[path]}><AuthContext.Provider value={auth}><ExploreDiscoveryPage/><Location/></AuthContext.Provider></MemoryRouter>;}
-beforeEach(()=>{localStorage.clear();localStorage.setItem('user-locale','zh-TW');publicApi.mockReset().mockResolvedValue(page);api.mockReset().mockResolvedValue({lists:[],saved:[]});});
-afterEach(()=>{vi.restoreAllMocks();localStorage.clear();});
+beforeEach(()=>{localStorage.clear();localStorage.setItem('user-locale','zh-TW');publicApi.mockReset().mockResolvedValue(page);api.mockReset().mockImplementation(async(_token,path,options)=>path.startsWith('/discovery')?publicApi(path,options):{lists:[],saved:[]});});
+afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();localStorage.clear();});
 it('applies a subcategory, closes the picker, records recents, and restores URL filters',async()=>{
  render(view('/explore?max=1500&sort=price-asc'));await screen.findByText('BenQ 合成螢幕');
  fireEvent.click(screen.getByRole('button',{name:'所有分類'}));await screen.findByRole('dialog');
@@ -47,7 +48,7 @@ it('preserves loaded products on next-page errors and retries without duplicates
 });
 it('reads CP results without triggering AI and evaluates only after an explicit owner action',async()=>{
  publicApi.mockResolvedValue({...page,items:[],total:0,counts:{listing:0,source:0,external:0},cpStatus:{evaluated:0,scored:0,pending:3,providerConfigured:true,threshold:75}});
- api.mockImplementation(async(_token,path)=>path==='/product-wishes'?{lists:[],saved:[]}:{state:'COMPLETE',evaluated:3});
+ api.mockImplementation(async(_token,path,o)=>path==='/product-wishes'?{lists:[],saved:[]}:o?.method==='POST'?{state:'COMPLETE',evaluated:3}:publicApi(path,o));
  render(view('/explore?feed=cp&main=electronics'));
  await screen.findByRole('button',{name:'評估這批商品的 CP 值'});expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
  fireEvent.click(screen.getByRole('button',{name:'評估這批商品的 CP 值'}));await screen.findByText('已完成 3 件商品的比較，資料不足的商品保留未評分。');
@@ -72,7 +73,7 @@ it('preserves legacy filter deep links and restores the new feed sort explicitly
 });
 
 it('lets a first-time user browse an interest category when no wishes match, without creating a wish',async()=>{
- api.mockImplementation(async(_token,path)=>path.startsWith('/discovery/for-you')?{...page,items:[],total:0,counts:{listing:0,source:0,external:0},categories:categories.map(c=>({...c,count:0,children:c.children.map(s=>({...s,count:0}))}))}:{lists:[],saved:[]});
+ api.mockImplementation(async(_token,path,options)=>path.startsWith('/discovery/for-you')?{...page,items:[],total:0,counts:{listing:0,source:0,external:0},categories:categories.map(c=>({...c,count:0,children:c.children.map(s=>({...s,count:0}))}))}:path.startsWith('/discovery')?publicApi(path,options):{lists:[],saved:[]});
  render(view('/explore?feed=for-you'));
  await screen.findByText('還沒遇到符合願望的商品');
  fireEvent.click(screen.getByRole('button',{name:'所有分類'}));
@@ -82,4 +83,13 @@ it('lets a first-time user browse an interest category when no wishes match, wit
  expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');
  expect(screen.getByTestId('location')).not.toHaveTextContent('feed=for-you');
  expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+});
+
+it('keeps a 429 inside the page, disables repeated retries, then allows one explicit retry',async()=>{
+ vi.useFakeTimers();publicApi.mockRejectedValueOnce(new ApiFailure('limited',429,'RATE_LIMIT_EXCEEDED',50));
+ await act(async()=>{render(view('/explore?main=electronics'));});
+ const button=screen.getByRole('button',{name:/請等候/});expect(button).toBeDisabled();fireEvent.click(button);expect(publicApi).toHaveBeenCalledTimes(1);
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+ const retry=screen.getByRole('button',{name:'重新讀取'});await act(async()=>{fireEvent.click(retry);});
+ expect(screen.getByText('1 筆公開來源')).toBeInTheDocument();expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');expect(publicApi).toHaveBeenCalledTimes(2);
 });

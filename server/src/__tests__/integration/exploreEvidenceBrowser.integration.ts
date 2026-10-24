@@ -35,7 +35,7 @@ describe('actual Explore query evidence display and download',()=>{
   if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Equal isolated DB required');
   process.env.API_URL=origin+'/api';process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';process.env.JWT_SECRET='synthetic-query-ui-only';process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED='1';
   db=require('../../../dist/lib/prisma').default;
-  buyer=(await db.user.create({data:{phoneNumber:'synthetic-query-ui',password:await require('bcryptjs').hash('synthetic-query-ui-pass',4),name:'合成查詢UI',isEmailVerified:true}})).id;
+  buyer=(await db.user.create({data:{phoneNumber:'synthetic-query-ui',password:await require('bcryptjs').hash('synthetic-query-ui-pass',4),name:'合成查詢UI',isEmailVerified:true,isPremium:true}})).id;
   const app=express();app.use(express.json());
   app.use('/api/chat',require('../../../dist/routes/chatRoutes').default);
   app.use('/api/auth',require('../../../dist/routes/authRoutes').default);
@@ -155,17 +155,31 @@ describe('actual Explore query evidence display and download',()=>{
    expect(new URL(await page.url()).searchParams.get('max')).toBe('99');
    await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length===4);
    if(width===1280){
-    await page.click('.discovery-card .product-wish-heart');await page.waitForSelector('[role="dialog"] .space-y-2 button');await page.click('[role="dialog"] .space-y-2 button');
+    await page.waitForSelector('.discovery-card .product-wish-heart:not(:disabled)');await page.click('.discovery-card .product-wish-heart');
     await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
     expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
     const item=await db.item.findFirst({where:{wishlistId:wishList.id}});expect(item.maxPrice).toBeNull();expect(item.link).toMatch(/\/listings\//);
     await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
-    await page.click('.product-wish-heart[aria-pressed="true"]');expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
+    await page.click('.product-wish-heart[aria-pressed="true"]');await page.waitForFunction(()=>!document.querySelector('.product-wish-heart[aria-pressed="true"]'));expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(0);
+    await page.waitForSelector('.discovery-card .product-wish-heart:not(:disabled)');await page.click('.discovery-card .product-wish-heart');await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
    }
    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
    await page.screenshot({path:webQaEvidence('discovery-built-'+width+'.png')});
    reports.push({width,scenario:'new-discovery-built',actualDatabaseListingIds:actualIds,wishlistId:wishList.id,actualWishlistItemCount:await db.item.count({where:{wishlistId:wishList.id}}),productionWrites:0});
   }
+  const secondList=await db.wishlist.create({data:{userId:buyer,title:'第二份確認清單'}});
+  await page.setViewport({width:390,height:900});await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});await page.waitForSelector('.product-wish-heart[aria-pressed="true"]:not(:disabled)');
+  await page.click('.product-wish-heart[aria-pressed="true"]');await page.waitForSelector('[role="dialog"] input[type="radio"]');
+  expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
+  await page.screenshot({path:webQaEvidence('discovery-wishlist-remove-confirm.png')});
+  await page.click('[role="dialog"] fieldset+button');await page.waitForFunction(()=>!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
+  expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(0);
+  await page.waitForSelector('.discovery-card .product-wish-heart:not(:disabled)');await page.click('.discovery-card .product-wish-heart');await page.waitForSelector('[role="dialog"] input[type="radio"]');
+  await page.click('[role="dialog"] input[value="'+secondList.id+'"]');expect(await db.item.count({where:{wishlistId:secondList.id}})).toBe(0);
+  await page.screenshot({path:webQaEvidence('discovery-wishlist-add-confirm.png')});await page.click('[role="dialog"] fieldset+button');await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
+  expect(await db.item.count({where:{wishlistId:secondList.id}})).toBe(1);await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.product-wish-heart[aria-pressed="true"]');
+  expect(await page.$eval('header',(el:Element)=>el.textContent)).toContain('尊榮會員');
+  reports.push({scenario:'multi-list-confirm-add-remove',wishlistId:wishList.id,secondWishlistId:secondList.id,confirmed:true,productionWrites:0});
   expect(errors).toEqual([]);
   // Built assets must retain the existing public icon bytes; no redesign or H editing.
   const crypto=require('crypto'),publicRoot=path.resolve(root,'../public'),icons:any[]=[];

@@ -33,7 +33,7 @@ export function apiObserved<T>(token:string,path:string,init:RequestInit,observe
 async function request<T>(token: string | null, path: string, init: RequestInit, observed?:(status:number)=>void): Promise<T> {
   if (!/^\/[a-zA-Z0-9/_-]+(?:\?[a-zA-Z0-9_=&%+.,-]*)?$/.test(path) || path.startsWith('//') || /%(?![a-fA-F0-9]{2})/.test(path))
     throw new Error('無效的 API 路徑。');
-  const group = token && (init.method ?? 'GET').toUpperCase() === 'GET' && /^\/users\/me(?:\/|\?|$)/.test(path) ? 'account' : 'data';
+  const group = token && (init.method ?? 'GET').toUpperCase() === 'GET' && /^\/(?:users\/me|discovery|product-wishes)(?:\/|\?|$)/.test(path) ? 'account' : 'data';
   const remaining = deadlines[group] - Date.now();
   if (remaining > 0) throw new ApiFailure('請求暫時受限，請稍後再試。', 429, 'RATE_LIMIT_COOLDOWN', remaining);
   deadlines[group] = 0;
@@ -45,7 +45,7 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
     const body = await response.json().catch(() => ({})) as { error?: string; errorCode?: string };
     // Product quotas and route-specific busy responses also use 429. They must
     // retain their own recovery path and cannot pause unrelated account reads.
-    const transportLimited = response.status === 429 && (!body.errorCode || body.errorCode === 'RATE_LIMIT_EXCEEDED' || body.errorCode === 'EXTERNAL_INDEX_RATE_LIMIT' || body.errorCode === 'ACCOUNT_READ_RATE_LIMIT' || body.errorCode === 'ACCOUNT_AUTH_READ_RATE_LIMIT');
+    const transportLimited = response.status === 429 && (!body.errorCode || body.errorCode === 'RATE_LIMIT_EXCEEDED' || body.errorCode === 'EXTERNAL_INDEX_RATE_LIMIT' || body.errorCode === 'ACCOUNT_READ_RATE_LIMIT' || body.errorCode === 'ACCOUNT_AUTH_READ_RATE_LIMIT' || body.errorCode === 'DISCOVERY_READ_RATE_LIMIT');
     const now = Date.now(), delay = transportLimited ? retryDelay(response.headers.get('Retry-After'), now) : 0;
     if (delay) deadlines[group] = Math.max(deadlines[group], now + delay);
     throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status, body.errorCode, delay);

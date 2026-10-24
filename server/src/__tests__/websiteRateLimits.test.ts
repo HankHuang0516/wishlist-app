@@ -40,7 +40,8 @@ describe('published build and data request budgets', () => {
     expect(blocked.status).toBe(429); expect(blocked.body.errorCode).toBe('RATE_LIMIT_EXCEEDED'); expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
     const shell = await request(instance).get('/index.html');
     expect(shell.status).toBe(200); expect(shell.headers['ratelimit-remaining']).toBe('404');
-    for (let i = 96; i < 500; i++) expect((await request(instance).get('/assets/app-abc.js')).status).toBe(200);
+    expect((await request(instance).get('/explore?feed=for-you')).status).toBe(200);
+    for (let i = 97; i < 500; i++) expect((await request(instance).get('/assets/app-abc.js')).status).toBe(200);
     expect((await request(instance).get('/sw.js')).status).toBe(429);
     expect((await request(instance).get('/api/users/me')).status).toBe(429);
     } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }

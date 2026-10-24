@@ -1,0 +1,1 @@
+ALTER TABLE "ProductWishReceipt" ADD COLUMN "action" TEXT NOT NULL DEFAULT 'ADD';

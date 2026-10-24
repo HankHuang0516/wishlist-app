@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
-export default function MarketplaceDialog({ title, children, onClose, closeLabel='關閉', closeDisabled=false }: { title: string; children: ReactNode; onClose: () => void; closeLabel?:string; closeDisabled?:boolean }) {
+export default function MarketplaceDialog({ title, children, onClose, closeLabel='關閉', closeDisabled=false, placement='center' }: { title: string; children: ReactNode; onClose: () => void; closeLabel?:string; closeDisabled?:boolean; placement?:'center'|'bottom' }) {
   const panel = useRef<HTMLDivElement>(null), close = useRef(onClose), titleId = useId(); close.current = onClose;
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null, overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden'; panel.current?.focus();
     return () => { document.body.style.overflow = overflow; if (before?.isConnected) before.focus(); };
   }, []);
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-3" onKeyDown={event => {
+  return <div className={'fixed inset-0 z-[80] flex justify-center bg-black/40 '+(placement==='bottom'?'items-end p-0 sm:p-3':'items-center p-3')} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); if (!closeDisabled) close.current(); }
     if (event.key !== 'Tab') return;
     const elements = [...panel.current!.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]')].filter(el => !el.hidden && !el.closest('[hidden]'));

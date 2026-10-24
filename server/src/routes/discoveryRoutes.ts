@@ -6,7 +6,7 @@ import {attachCp,evaluateCp,cpTargets} from '../lib/discoveryCp';
 
 export function createDiscoveryRoutes() {
   const router=Router();
-  router.use(rateLimit({windowMs:60_000,limit:90,standardHeaders:true,legacyHeaders:false}));
+  router.use(rateLimit({windowMs:60_000,limit:90,standardHeaders:true,legacyHeaders:false,skip:(_q,r)=>r.locals.verifiedAccountRequest===true,message:{errorCode:'DISCOVERY_READ_RATE_LIMIT'}}));
   router.use((_q,r,n)=>{r.set('Cache-Control','private, no-store');n();});
   const read=async(req:AuthRequest,res:any)=>{
     try{

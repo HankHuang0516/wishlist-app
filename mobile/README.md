@@ -1,3 +1,5 @@
+2026-10-25 本次 marketplace golden 增強進行中：已納入 13 個目標，包含聊天私密商品照片、完整賣場與可信度資訊，以及匿名詢問／喜歡人數。目標、真實計數定義與各項 85 分門檻見 `../docs/marketplace-golden-20261024.json`。最新完整本機驗證：server 1129 passed／3 skipped、59 migrations drift0、DB／browser 756 passed、Web 2212 passed、Native 892 passed；後續管理卡片排版調整另有54 focused tests及Web build通過。實際 iOS／Web 照片傳送、成員權限、面交版本及恢復流程已有隔離 QA 證據；Android 靜態 QA 包0500的真登入／首頁通過，新包0510已編譯。這些不是全13項驗收或正式商店產物；逐項功能／UIUX評分、其餘Android畫面、實機推播、新版本包內H自檢、CI及雙商店／Android internal發布仍待完成，未宣稱85分或已發布。
+
 # Wishlist.ai 原生手機端（開發中）
 
 採浪浪地圖同款 React Native／Expo／原生 MapLibre。Web 與後端保留；這裡不是 Capacitor 或遠端 WebView 包裝。

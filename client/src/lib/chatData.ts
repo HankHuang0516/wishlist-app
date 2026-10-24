@@ -2,7 +2,7 @@ import { isUuid as uuid } from './listingBatch';
 export class ChatDataError extends Error { constructor(message = '聊天資料回應不正確') { super(message); } }
 export type ChatRoomRecord = { id: string; listingId: string | null; buyerUserId: number | null; sellerUserId: number | null; archived: boolean; lastMessageSequence: number; lastReadSequence: number; unreadCount: number; blocked: boolean; blockedByMe: boolean; blockedByOther: boolean; listingAvailable: boolean; lastMessageAt: string; lastMessageText: string | null;
   buyer: { id: number | null; name: string | null }; seller: { id: number | null; name: string | null }; listing: { id: string | null; title: string; status: string; expiresAt: string | null; price: number | null; currency: 'TWD'; thumbnailUrl: string | null } };
-export type ChatMessage = { id: string; conversationId: string; senderUserId: number; clientMessageId: string; sequence: number; text: string; createdAt: string };
+export type ChatMessage = { id: string; conversationId: string; senderUserId: number; clientMessageId: string; sequence: number; text: string; createdAt: string; photoHash?: string; photoWidth?: number; photoHeight?: number; photoByteSize?: number };
 const record = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ChatDataError(); return v as Record<string, unknown>; };
 const seq = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 2147483647;
 const date = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
@@ -38,7 +38,11 @@ export function messageBody(clientMessageId: string, value: string) {
 export function parseChatMessage(v: unknown, room: ChatRoomRecord): ChatMessage {
   const r = record(v);
   if (!uuid(r.id) || r.conversationId !== room.id || !uuid(r.clientMessageId) || !seq(r.senderUserId) || r.senderUserId < 1 || ![room.buyerUserId, room.sellerUserId].includes(r.senderUserId) || !seq(r.sequence) || r.sequence < 1 || !text(r.text, 2000) || !date(r.createdAt)) throw new ChatDataError();
-  return { id: r.id, conversationId: room.id, senderUserId: r.senderUserId as number, clientMessageId: r.clientMessageId, sequence: r.sequence, text: r.text, createdAt: r.createdAt };
+  const hasPhoto = r.photoHash != null;
+  if (hasPhoto && (typeof r.photoHash !== 'string' || !/^[a-f0-9]{64}$/.test(r.photoHash) ||
+    ![r.photoWidth, r.photoHeight, r.photoByteSize].every(v => typeof v === 'number' && Number.isSafeInteger(v) && v > 0) ||
+    (r.photoWidth as number) > 1600 || (r.photoHeight as number) > 1600 || (r.photoByteSize as number) > 5242880)) throw new ChatDataError();
+  return { id: r.id, conversationId: room.id, senderUserId: r.senderUserId as number, clientMessageId: r.clientMessageId, sequence: r.sequence, text: r.text, createdAt: r.createdAt, ...(hasPhoto ? { photoHash: r.photoHash as string, photoWidth: r.photoWidth as number, photoHeight: r.photoHeight as number, photoByteSize: r.photoByteSize as number } : {}) };
 }
 export function retainMemberMessages(messages: ChatMessage[], room: ChatRoomRecord) {
   return messages.filter(message => message.conversationId === room.id && [room.buyerUserId, room.sellerUserId].includes(message.senderUserId));

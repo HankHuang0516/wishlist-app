@@ -28,7 +28,7 @@ afterEach(() => {
   }
 });
 async function settings() {
-  await screen.findByRole('heading', { name: 'Personal profile' }, { timeout: 5000 });
+  await screen.findByRole('heading', { name: 'My settings' }, { timeout: 5000 });fireEvent.click(screen.getByRole('link',{name:'Benefits & advanced services',exact:true}));
   const advanced = screen.getByText('More features').closest('details')!;
   advanced.open = true; fireEvent(advanced, new Event('toggle'));
 }
@@ -56,9 +56,9 @@ describe('web app installation across routes and browser outcomes', () => {
     render(<App />); await settings(); let resolve!: (value: unknown) => void;
     const prompt = vi.fn(async () => {}); installEvent(prompt, new Promise(value => { resolve = value; }));
     const button = screen.getByRole('button', { name: 'Install Now' }); fireEvent.click(button); fireEvent.click(button);
-    expect(prompt).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: '繁體中文' })).toBeDisabled();
+    expect(prompt).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeDisabled();
     await act(async () => resolve({ outcome: 'dismissed' }));
-    await screen.findByText(/Installation was cancelled/); expect(screen.getByRole('button', { name: '繁體中文' })).toBeEnabled(); expect(posts()).toHaveLength(0);
+    await screen.findByText(/Installation was cancelled/); expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeEnabled(); expect(posts()).toHaveLength(0);
   });
   it('recognizes installation reported by the browser even when its own button was never used', async () => {
     render(<App />); await settings(); const prompt = vi.fn(async () => {}); installEvent(prompt, Promise.resolve({ outcome: 'accepted' }));
@@ -86,7 +86,7 @@ describe('web app installation across routes and browser outcomes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Install Now' }));
     await screen.findByText('Installation could not be opened or verified. Use the manual steps below or continue on the website.');
     expect(screen.getByText(/Look for the install icon/)).toBeInTheDocument(); expect(prompt).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: '繁體中文' })).toBeEnabled(); expect(posts()).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeEnabled(); expect(posts()).toHaveLength(0);
   });
   it('does not call an accepted prompt completed until the browser actually reports installation', async () => {
     render(<App />); await settings(); installEvent(vi.fn(async () => {}), Promise.resolve({ outcome: 'accepted' }));
@@ -102,7 +102,7 @@ describe('web app installation across routes and browser outcomes', () => {
     const oldPrompt = vi.fn(async () => {}); installEvent(oldPrompt, new Promise(value => { resolve = value; }));
     fireEvent.click(screen.getByRole('button', { name: 'Install Now' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
-    expect(screen.getByText(/Installation is unconfirmed/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文' })).toBeEnabled();
+    expect(screen.getByText(/Installation is unconfirmed/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeEnabled();
     await act(async () => resolve({ outcome: 'accepted' })); expect(screen.queryByText(/The browser accepted installation/)).not.toBeInTheDocument();
     const freshPrompt = vi.fn(async () => {}); installEvent(freshPrompt, Promise.resolve({ outcome: 'dismissed' }));
     fireEvent.click(screen.getByRole('button', { name: 'Install Now' })); await act(async () => {});
@@ -122,7 +122,7 @@ describe('web app installation across routes and browser outcomes', () => {
     installEvent(vi.fn(async () => {}), new Promise(value => { resolve = value; })); fireEvent.click(screen.getByRole('button', { name: 'Install Now' }));
     act(() => window.dispatchEvent(new Event('appinstalled'))); await screen.findByText(/The browser reported that the Web app was installed/);
     await act(async () => resolve({ outcome: 'dismissed' }));
-    expect(screen.queryByText(/Installation was cancelled/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文' })).toBeEnabled();
+    expect(screen.queryByText(/Installation was cancelled/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Install Now' })).not.toBeInTheDocument(); expect(posts()).toHaveLength(0);
   });
   it('responds to a live standalone display-mode change and releases a pending installation without reloading', async () => {
@@ -133,6 +133,6 @@ describe('web app installation across routes and browser outcomes', () => {
     act(() => { standalone = true; for (const listener of listeners) listener(); });
     await screen.findByText('You are already using the standalone Web app.');
     expect(screen.queryByRole('button', { name: 'Install Now' })).not.toBeInTheDocument(); expect(prompt).toHaveBeenCalledTimes(1); expect(posts()).toHaveLength(0);
-    expect(screen.queryByText(/Finish the installation in the browser/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文' })).toBeEnabled();
+    expect(screen.queryByText(/Finish the installation in the browser/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '繁體中文',hidden:true })).toBeEnabled();
   });
 });

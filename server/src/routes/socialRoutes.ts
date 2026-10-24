@@ -1,3 +1,4 @@
+import { getStorefront } from '../controllers/storefrontController';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { getFollowState, getFollowOperation, submitFollowOperation, abandonFollowOperation, legacyFollow } from '../controllers/followOperationController';
@@ -24,6 +25,7 @@ router.post('/me/follow-operations/:clientActionId',authenticateToken,followWrit
 router.post('/me/follow-operations/:clientActionId/abandon',authenticateToken,followWrites,abandonFollowOperation);
 router.post('/:id/follow',authenticateToken,followWrites,legacyFollow(true));
 router.delete('/:id/follow',authenticateToken,followWrites,legacyFollow(false));
+router.get('/:id/storefront', authenticateToken, getStorefront);
 router.get('/:id/wishlists', authenticateToken, getUserPublicWishlists);
 
 export default router;

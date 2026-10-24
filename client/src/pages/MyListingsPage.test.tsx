@@ -25,7 +25,13 @@ const row = { id, ownerUserId: 19, owner: { id: 19 }, version: 1, title: '三國
   status: 'ACTIVE', condition: 'USED', category: 'books', price: '250', currency: 'TWD', createdAt: '2026-09-29T00:00:00Z', publishedAt: '2026-09-29T00:00:00Z', expiresAt: '2100-10-30T15:59:59Z', location: { county: '臺北市', district: '中山區' }, media: [] };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><MyListingsPage /></AuthContext.Provider></MemoryRouter>;
-const ready = async () => waitFor(()=>expect(screen.getByRole('button',{name:'延長期限',exact:true})).toBeEnabled());
+async function openActions() {
+  await screen.findByRole('article');
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details[data-listing-actions]')) {
+    if (!menu.open) fireEvent.click(menu.querySelector('summary')!);
+  }
+}
+const ready = async () => { await openActions(); await waitFor(()=>expect(screen.getByRole('button',{name:'延長期限',exact:true})).toBeEnabled()); };
 async function prepareCompetingEdit(strict = false) {
   let writes = 0;
   const proposal = { title: '我的原操作修改', description: row.description, price: 300 };
@@ -53,6 +59,21 @@ async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?
 beforeEach(() => {localStorage.setItem('user-locale','zh-TW');journals.clear();vi.clearAllMocks();vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
 afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('native-equivalent owner management', () => {
+  it('keeps secondary controls folded while exposing the state action and keyboard return', async () => {
+    const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());
+    await screen.findByRole('heading',{name:row.title});
+    expect(screen.getByRole('button',{name:'查看詳情'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'標記保留'})).toBeInTheDocument();
+    const summary=screen.getByLabelText('更多操作');const menu=summary.closest('details')!;
+    expect(menu.open).toBe(false);
+    // Closed details hides secondary controls in the browser accessibility tree.
+    fireEvent.click(summary);expect(menu.open).toBe(true);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());
+    expect(screen.getByRole('button',{name:'移除',exact:true})).toBeInTheDocument();
+    fireEvent.keyDown(menu,{key:'Escape'});expect(menu.open).toBe(false);expect(summary).toHaveFocus();
+    expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
+  });
+
   it('provides a login return path without requesting private data before login', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     render(view({ ...auth, token: null, user: null, isAuthenticated: false } as typeof auth));
@@ -174,7 +195,7 @@ describe('native-equivalent owner management', () => {
     localStorage.setItem('user-locale','en');
     const fetcher=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith(`/listings/${id}`)?ok({...row,expiresAt:'2100-12-15T15:59:59Z',version:2}):ok({items:[row],nextCursor:null}));
     vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('heading',{name:row.title});
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry',exact:true})).toBeEnabled());
+    await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry',exact:true})).toBeEnabled());
     fireEvent.click(screen.getByRole('button',{name:'Extend expiry',exact:true}));
     fireEvent.change(screen.getByLabelText('New expiry date (Taiwan time)'),{target:{value:'2100-12-15'}});
     fireEvent.click(screen.getByRole('button',{name:'Confirm extension',exact:true}));
@@ -465,7 +486,7 @@ describe('complete owner paging and English recovery', () => {
       if(url.endsWith('/listings/'+id))return ok(current);
       return ok({items:[receipt?current:row],nextCursor:null});
     });vi.stubGlobal('fetch',fetch);const first=render(view());await screen.findByRole('heading',{name:row.title});
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
+    await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
     fireEvent.change(screen.getByLabelText('Listing title'),{target:{value:current.title}});fireEvent.change(screen.getByLabelText('Price (TWD; 0 means free giveaway)'),{target:{value:'0'}});
     fireEvent.click(screen.getByRole('button',{name:'Save changes'}));await screen.findByRole('button',{name:'Read original receipt and latest listing'});
     await waitFor(()=>expect(screen.getByRole('button',{name:'Read original receipt and latest listing'})).toBeEnabled());first.unmount();render(view());
@@ -479,7 +500,7 @@ describe('complete owner paging and English recovery', () => {
   it('selects and confirms an English expiry date with Taiwan semantics and the original version', async () => {
     localStorage.setItem('user-locale','en-US');const current={...row,expiresAt:'2100-10-31T15:59:59.999Z',version:2};
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith('/listings/'+id)?ok(current):ok({items:[row],nextCursor:null}));
-    vi.stubGlobal('fetch',fetch);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Extend expiry'}));
+    vi.stubGlobal('fetch',fetch);render(view());await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Extend expiry'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Extend expiry'}));
     fireEvent.click(screen.getByRole('button',{name:'Open calendar for New expiry date (Taiwan time)'}));expect(screen.getByRole('heading',{name:'October 2100'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Select 2100-10-31'}));fireEvent.click(screen.getByRole('button',{name:'Confirm extension'}));
     const dialog=screen.getByRole('dialog',{name:'Confirm extension'});
@@ -491,7 +512,7 @@ describe('complete owner paging and English recovery', () => {
   });
   it('retains English unsaved text and blocks submission when local persistence fails', async () => {
     localStorage.setItem('user-locale','en-US');const fetch=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);render(view());
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
+    await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));await waitFor(()=>expect(screen.getByLabelText('Listing title')).toBeEnabled());
     vi.mocked(privatePendingStore.replaceDraft).mockRejectedValueOnce(Error('private disk details'));
     fireEvent.change(screen.getByLabelText('Listing title'),{target:{value:'Retain this text'}});expect(await screen.findByRole('alert')).toHaveTextContent('Copy it before closing');
     expect(screen.getByLabelText('Listing title')).toHaveValue('Retain this text');expect(screen.getByRole('button',{name:'Save changes'})).toBeDisabled();expect(fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);expect(screen.queryByText('private disk details')).not.toBeInTheDocument();
@@ -525,7 +546,7 @@ it('retains an unconfirmed map action and reloads only by GET without replay',as
  const originalDeadline=current.mapVisibleUntil;current={...current,version:3,mapVisibleUntil:null};first.unmount();render(view());await screen.findByText('版本：3 · 原操作完成後又有更新');await screen.findByText(/原操作顯示期限：/);expect(JSON.stringify(receipt)).toContain(originalDeadline);expect(screen.getByRole('region',{name:'原商品操作與最新資料比較'})).toHaveTextContent('目前不在地圖顯示');expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
 });
 it('uses English keyboard-accessible map confirmation without submitting on Escape',async()=>{
- localStorage.setItem('user-locale','en');const fetcher=vi.fn(async()=>ok({items:[{...row,mapVisibleUntil:null}],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await waitFor(()=>expect(screen.getByRole('button',{name:'Check in on the map for one hour'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Check in on the map for one hour'}));const dialog=screen.getByRole('dialog',{name:'Confirm product map display'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent('never renews automatically');fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
+ localStorage.setItem('user-locale','en');const fetcher=vi.fn(async()=>ok({items:[{...row,mapVisibleUntil:null}],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Check in on the map for one hour'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Check in on the map for one hour'}));const dialog=screen.getByRole('dialog',{name:'Confirm product map display'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent('never renews automatically');fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
 });
 
 describe('conflicting edit draft handoff', () => {

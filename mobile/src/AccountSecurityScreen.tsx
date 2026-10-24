@@ -1,10 +1,12 @@
+import { SafeAreaModal } from './SafeAreaModal';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { performSecurityOperation, securityPayload, SecurityApi, SecurityOperation } from './accountSecurity';
 import type { AuthOperationGate } from './authOperation';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType } from './iosTheme';
-export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRevoked, onDelete, operationGate }: { api: SecurityApi; onPublish: () => void; onManage: () => void; onLogout: () => void; onRevoked: (message: string) => Promise<void>; onDelete: () => void; operationGate: AuthOperationGate }) {
+export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRevoked, onDelete, onNotifications, operationGate }: { api: SecurityApi; onPublish: () => void; onManage: () => void; onLogout: () => void; onRevoked: (message: string) => Promise<void>; onDelete: () => void; onNotifications?:()=>void; operationGate: AuthOperationGate }) {
+  const [securityAction,setSecurityAction]=useState<'password'|'sessions'|null>(null);
   const [current, setCurrent] = useState(''), [replacement, setReplacement] = useState(''), [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false), [issue, setIssue] = useState('');
   const [securityOpen, setSecurityOpen] = useState(false), [benefits, setBenefits] = useState<{ freeMonthlyLimit: number; freeUsedThisMonth: number; permanentCreditsRemaining: number; paidPurchasesAvailable: boolean } | null>(null);
@@ -50,17 +52,31 @@ export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRe
       <View style={styles.rowSeparator} />
       <Pressable accessibilityRole="button" accessibilityLabel="我的商品 · 閱覽與管理" accessibilityHint="查看、編輯、保留、售出或延長刊登" disabled={busy} style={styles.actionRow} onPress={onManage}><View style={styles.actionIcon}><Ionicons name="list-outline" size={24} color={iosColors.white} /></View><View style={styles.actionCopy}><Text style={styles.actionTitle}>我的商品 · 閱覽與管理</Text><Text style={styles.note}>查看、編輯、保留、售出或延長刊登</Text></View><Ionicons name="chevron-forward" size={19} color={iosColors.tertiaryLabel} /></Pressable>
     </View>
-    <Pressable accessibilityRole="button" accessibilityLabel={securityOpen ? '收合帳號安全' : '展開帳號安全'} accessibilityState={{ expanded: securityOpen }} style={styles.securityRow} onPress={() => setSecurityOpen(open => !open)}><Ionicons name="shield-checkmark-outline" size={23} color={iosColors.label} /><Text style={styles.actionTitle}>帳號安全</Text><Ionicons name={securityOpen ? 'chevron-up' : 'chevron-down'} size={19} color={iosColors.secondaryLabel} /></Pressable>
-    {securityOpen && <><Text style={styles.note}>請輸入目前密碼以確認操作。密碼不會儲存在裝置，也不會自動重送。</Text>
+    {onNotifications&&<View style={styles.actionGroup}><Pressable accessibilityRole="button" style={styles.actionRow} onPress={onNotifications}><Ionicons name="notifications-outline" size={23} color={iosColors.label}/><Text style={styles.actionTitle}>通知設定</Text><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel}/></Pressable></View>}
+    <Pressable accessibilityRole="button" accessibilityLabel="帳號安全" accessibilityHint="查看密碼、裝置登入與帳號刪除" style={styles.securityRow} onPress={() => {setSecurityAction(null);setSecurityOpen(true);}}><Ionicons name="shield-checkmark-outline" size={23} color={iosColors.label} /><Text style={styles.actionTitle}>帳號安全</Text><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel} /></Pressable>
+    {securityOpen&&<SafeAreaModal visible animationType="slide" contentStyle={styles.flex} onRequestClose={()=>{if(!busy){setSecurityOpen(false);setSecurityAction(null);setCurrent('');setReplacement('');setConfirmation('');}}}><KeyboardAvoidingView style={styles.flex} behavior={Platform.OS==='ios'?'padding':undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.securityContent}>
+    {securityAction ? <>
+    <Pressable accessibilityRole="button" disabled={busy} style={styles.securityRow} onPress={()=>{setSecurityAction(null);setCurrent('');setReplacement('');setConfirmation('');}}><Text style={styles.actionTitle}>返回帳號安全</Text></Pressable><Text style={styles.title}>{securityAction==='password'?'更改密碼':'登入與裝置安全'}</Text>
+    <Text style={styles.note}>請輸入目前密碼以確認。密碼不會儲存在裝置，也不會自動重送。</Text>
     <Text style={styles.fieldLabel}>目前密碼</Text><TextInput accessibilityLabel="目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={current} onChangeText={setCurrent} maxLength={1024} style={styles.input} />
+    {securityAction==='password'?<>
     <Text style={styles.fieldLabel}>新密碼</Text><TextInput accessibilityLabel="新密碼" placeholder="新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={replacement} onChangeText={setReplacement} maxLength={73} style={styles.input} />
     <Text style={styles.fieldLabel}>再次輸入新密碼</Text><TextInput accessibilityLabel="再次輸入新密碼" placeholder="再次輸入新密碼" secureTextEntry autoComplete="new-password" autoCapitalize="none" autoCorrect={false} editable={!busy} value={confirmation} onChangeText={setConfirmation} maxLength={73} style={styles.input} />
     <Text style={styles.note}>新密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。</Text>
-    {!!issue && <Text accessibilityRole="alert" style={styles.error}>{issue}</Text>}
     <Pressable accessibilityRole="button" disabled={busy || !current || !replacement || !confirmation} style={[styles.button, (busy || !current || !replacement || !confirmation) && styles.disabled]} onPress={() => confirm('password')}><Text style={styles.buttonText}>{busy ? '確認中…' : '更新密碼並重新登入'}</Text></Pressable>
+</> : <>
     <Pressable accessibilityRole="button" disabled={busy || !current} style={[styles.button, styles.secondaryButton, (busy || !current) && styles.disabled]} onPress={() => confirm('sessions')}><Text style={styles.secondaryButtonText}>撤銷所有裝置登入</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton, busy && styles.disabled]} onPress={onLogout}><Text style={styles.secondaryButtonText}>登出此裝置</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.dangerButton, busy && styles.disabled]} onPress={onDelete}><Text style={styles.dangerButtonText}>刪除本人帳號與資料</Text></Pressable></>}
+<Text style={styles.note}>這會撤銷所有裝置的登入，包含此裝置。目前未提供逐一裝置清單。</Text></>}
+    {!!issue&&<Text accessibilityRole="alert" style={styles.error}>{issue}</Text>}
+</> : <><View style={styles.directoryHeader}><Pressable accessibilityRole="button" accessibilityLabel="返回我的" style={styles.directoryBack} onPress={()=>setSecurityOpen(false)}><Ionicons name="chevron-back" size={22} color={iosColors.tint}/><Text style={styles.secondaryButtonText}>我的</Text></Pressable><Text style={styles.title}>帳號安全</Text></View>
+    <Text style={styles.note}>為了保障帳號安全，敏感操作會再次確認目前密碼。</Text>
+    <View style={styles.actionGroup}>
+      <Pressable accessibilityRole="button" style={styles.actionRow} disabled={busy} onPress={()=>{setCurrent('');setReplacement('');setConfirmation('');setIssue('');setSecurityAction('password');}}><Ionicons name="key-outline" size={23} color={iosColors.label}/><Text style={styles.actionTitle}>更改密碼</Text><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel}/></Pressable>
+      <View style={styles.rowSeparator}/><Pressable accessibilityRole="button" style={styles.actionRow} disabled={busy} onPress={()=>{setCurrent('');setIssue('');setSecurityAction('sessions');}}><Ionicons name="phone-portrait-outline" size={23} color={iosColors.label}/><View style={styles.actionCopy}><Text style={styles.actionTitle}>登出所有裝置</Text><Text style={styles.note}>操作後需要重新登入</Text></View><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel}/></Pressable>
+      <View style={styles.rowSeparator}/><Pressable accessibilityRole="button" style={styles.actionRow} disabled={busy} onPress={onLogout}><Ionicons name="log-out-outline" size={23} color={iosColors.label}/><Text style={styles.actionTitle}>登出此裝置</Text></Pressable>
+</View>
+    <Text style={styles.dangerSection}>危險操作</Text><View style={styles.actionGroup}><Pressable accessibilityRole="button" disabled={busy} style={styles.actionRow} onPress={()=>{setSecurityOpen(false);onDelete();}}><Ionicons name="trash-outline" size={25} color={iosColors.danger}/><View style={styles.actionCopy}><Text style={styles.dangerButtonText}>刪除帳號</Text><Text style={styles.note}>此操作無法復原，下一步會說明資料影響。</Text></View><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel}/></Pressable></View></>}
+    </ScrollView></KeyboardAvoidingView></SafeAreaModal>}
     <View style={styles.billingCard}>
       <Text style={styles.billingHeading}>贊助與升級</Text>
       <View style={styles.pausedNotice}><Ionicons name="ban-outline" size={20} color={iosColors.danger} /><View style={styles.actionCopy}><Text style={styles.pausedTitle}>購買與訂閱操作暫停</Text><Text style={styles.billingNote}>商店付款與後端驗單尚未開放；既有權益不受影響。</Text></View></View>
@@ -84,6 +100,10 @@ const styles = StyleSheet.create({
   actionCopy: { flex: 1, gap: iosSpacing.xxs },
   actionTitle: { ...iosType.headline, color: iosColors.label, flex: 1 },
   rowSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: iosColors.separator, marginLeft: 56 },
+  securityContent: { padding: iosSpacing.lg, gap: iosSpacing.lg, paddingBottom: iosSpacing.xxl },
+  directoryHeader: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.lg },
+  directoryBack: { minHeight: 48, flexDirection: 'row', alignItems: 'center' },
+  dangerSection: { ...iosType.subheadline, color: iosColors.secondaryLabel, marginTop: iosSpacing.lg },
   securityRow: { minHeight: 58, backgroundColor: iosColors.surface, borderRadius: iosRadius.card, paddingHorizontal: iosSpacing.md, flexDirection: 'row', alignItems: 'center', gap: iosSpacing.md, ...iosShadow },
   billingCard: { backgroundColor: iosColors.surface, borderRadius: iosRadius.card, padding: iosSpacing.sm, gap: iosSpacing.xxs, ...iosShadow },
   billingHeading: { ...iosType.subheadline, color: iosColors.label, fontWeight: '700' },

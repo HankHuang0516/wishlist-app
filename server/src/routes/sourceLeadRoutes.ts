@@ -1,3 +1,4 @@
+import { queuePush } from '../lib/pushOutbox';
 import {createSourceReferenceEvidenceRoutes} from './sourceReferenceEvidenceRoutes';
 import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
 import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound,reopenInquiryDelivery} from '../lib/sourceInquiryRounds';
@@ -247,7 +248,8 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             const sameSeller=delivery.reservation?.sellerBindingHash?delivery.reservation.sellerBindingHash===sellerBindingHash(r.lead.sellerRoute):digest(r.lead.sellerRoute)===b.routeHash;
             if(r.leadId!==b.leadId||r.lead.canonicalUrl!==b.sourceUrl||!receipt||receipt.leadId!==b.leadId||receipt.sourceUrl!==b.sourceUrl||receipt.reservationId!==b.reservationId||receipt.routeHash!==b.routeHash||!routeCurrent(r.lead)||!sameSeller||at<date(receipt.sentAt))throw new LeadError('VERIFIED_REPLY_BINDING_REQUIRED');
             if(events.length>=200)throw new LeadError('INQUIRY_LIMIT');
-            const saved=await tx.sourceLeadInquiry.update({where:{id:r.id},data:{events:[...events,{requestId:b.requestId,action:'SELLER_REPLY',text:b.text,at:at.toISOString(),payloadHash:boundHash,receiptRef:b.receiptRef,reservationId:b.reservationId}] as unknown as Prisma.InputJsonValue}});
+            const saved=await tx.sourceLeadInquiry.update({where:{id:r.id},data:{replySequence:{increment:1},events:[...events,{requestId:b.requestId,action:'SELLER_REPLY',text:b.text,at:at.toISOString(),payloadHash:boundHash,receiptRef:b.receiptRef,reservationId:b.reservationId}] as unknown as Prisma.InputJsonValue}});
+            await queuePush(tx,r.buyerUserId,'source-reply.'+r.id+'.'+b.requestId,'SOURCE_REPLY',{inquiryId:r.id});
             return dto(saved,r.lead,true);
         });return res.json(result);
     }catch(e){return fail(res,e);}});
@@ -340,7 +342,7 @@ export function createSourceLeadRoutes() {
     router.get('/inquiries/mine', authenticateToken, async (req: AuthRequest, res) => { try {
         if (!req.user || Object.keys(req.query).some(k=>k!=='cursor') || (req.query.cursor&&!isListingId(req.query.cursor))) return res.sendStatus(404);
         const rows=await prisma.sourceLeadInquiry.findMany({where:{buyerUserId:req.user.id},include:{lead:true},orderBy:{id:'asc'},take:26,...(req.query.cursor?{cursor:{id:String(req.query.cursor)},skip:1}:{})});
-        return res.json({items:rows.slice(0,25).map(r=>({id:r.id,leadId:r.leadId,state:r.state,context:{id:r.leadId,title:r.lead.title,canonicalUrl:r.lead.canonicalUrl,county:r.lead.county,district:r.lead.district,...(isCountyIllustration(r.lead.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:isContactLocation(r.lead.evidence)?{locationPrecision:'CONTACT_FOR_LOCATION'}:{}),contactRouting:contactRoutingDTO(r.lead),publicFacts:{priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問'},media:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead):[],priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問',thumbnailUrl:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead)[0]?.thumbnailUrl:undefined}})),nextCursor:rows.length>25?rows[24].id:null});
+        return res.json({items:rows.slice(0,25).map(r=>({id:r.id,leadId:r.leadId,state:r.state,unreadCount:Math.max(0,r.replySequence-r.lastReadReplySequence),context:{id:r.leadId,title:r.lead.title,canonicalUrl:r.lead.canonicalUrl,county:r.lead.county,district:r.lead.district,...(isCountyIllustration(r.lead.evidence)?{locationPrecision:'COUNTY_ILLUSTRATION'}:isContactLocation(r.lead.evidence)?{locationPrecision:'CONTACT_FOR_LOCATION'}:{}),contactRouting:contactRoutingDTO(r.lead),publicFacts:{priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問'},media:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead):[],priceText:object(r.lead.evidence).publicFacts?.priceText??'售價待詢問',thumbnailUrl:enabled()&&leadCurrent(r.lead)?sourceLeadMediaDTO(r.lead)[0]?.thumbnailUrl:undefined}})),nextCursor:rows.length>25?rows[24].id:null});
     } catch(e){return fail(res,e);} });
     router.get('/:id/media/:mediaId/:variant', async (req, res) => { try {
         if (!enabled() || !isListingId(req.params.id) || !isListingId(req.params.mediaId) || !['image','thumbnail'].includes(String(req.params.variant))) return res.sendStatus(404);

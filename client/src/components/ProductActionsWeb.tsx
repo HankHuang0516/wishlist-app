@@ -8,13 +8,13 @@ import { isNonSaleQaTitle } from '../lib/nonSaleListing';
 import { getDisplayLocale } from '../utils/localization';
 import { publicListingText as text, type PublicListingCopyKey } from '../lib/publicListingCopy';
 const button = 'inline-flex min-h-11 items-center rounded-xl border px-4 py-2 disabled:opacity-50';
-export default function ProductActionsWeb({ listing, onReport }: { listing: PublicListing; onReport: () => void }) {
+export default function ProductActionsWeb({ listing, onReport, compact = false }: { listing: PublicListing; onReport: () => void; compact?: boolean }) {
   const { token, user } = useAuth();
   if (isNonSaleQaTitle(listing.title) && listing.owner.id !== user?.id) return <p role="status">{getDisplayLocale().startsWith('zh') ? '此為非販售測試資料，不能聯絡購買或預約面交。' : 'This is non-sale test data. Contact and meetup booking are unavailable.'}</p>;
   if (!token || !user) return <div className="space-y-2"><Link className={button} to={'/login?next=' + encodeURIComponent('/listings/' + listing.id)}>{text('登入以聯絡賣家或檢舉商品')}</Link></div>;
-  return <Actions key={`${user.id}:${token}:${listing.id}`} token={token} userId={user.id} listing={listing} onReport={onReport} />;
+  return <Actions key={`${user.id}:${token}:${listing.id}`} token={token} userId={user.id} listing={listing} onReport={onReport} compact={compact} />;
 }
-function Actions({ token, userId, listing, onReport }: { token: string; userId: number; listing: PublicListing; onReport: () => void }) {
+function Actions({ token, userId, listing, onReport, compact }: { token: string; userId: number; listing: PublicListing; onReport: () => void; compact: boolean }) {
   const navigate = useNavigate(), active = useRef(true), gate = useRef(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState<PublicListingCopyKey | ''>('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -29,7 +29,7 @@ function Actions({ token, userId, listing, onReport }: { token: string; userId: 
     finally { gate.current = false; if (active.current) setBusy(false); }
   }
   if (listing.owner.id === userId) return <Link className={button} to="/my-listings">{text('管理我的商品')}</Link>;
-  return <div className="space-y-3"><div className="flex flex-wrap gap-3"><button className={`${button} bg-green-800 text-white`} disabled={busy} onClick={() => void contact()}>{text(busy ? '正在確認聊天室…' : '聯絡賣家／預約面交')}</button><button className={`${button} text-red-800`} disabled={busy} onClick={onReport}>{text('檢舉此商品')}</button></div>
+  return <div className="space-y-3"><div className="flex flex-wrap gap-3"><button aria-label={text(busy ? '正在確認聊天室…' : '聯絡賣家／預約面交')} className={`${button} flex-1 justify-center bg-green-800 text-white`} disabled={busy} onClick={() => void contact()}>{compact && !busy ? (getDisplayLocale().startsWith('zh') ? '聊聊商品' : 'Chat with seller') : text(busy ? '正在確認聊天室…' : '聯絡賣家／預約面交')}</button><button aria-label={text('檢舉此商品')} className={`${button} justify-center text-red-800`} disabled={busy} onClick={onReport}>{compact ? (getDisplayLocale().startsWith('zh') ? '檢舉' : 'Report') : text('檢舉此商品')}</button></div>
     {error && <div role="alert" className="space-y-2 rounded-xl bg-red-50 p-3 text-red-800"><p>{text(error)}</p><Link className={button} to="/chat">{text('查看聊天收件匣')}</Link></div>}
   </div>;
 }

@@ -63,6 +63,8 @@ model User {
   purchases       Purchase[]
   wishlists       Wishlist[]
   wishCreateReceipts WishCreateReceipt[]
+  productInterests ProductInterest[]
+  productInterestOperations ProductInterestOperation[]
   productWishLinks ProductWishLink[]
   productWishReceipts ProductWishReceipt[]
   legacyWishCreateReceipts LegacyWishCreateReceipt[]
@@ -84,6 +86,10 @@ model User {
   buyerConversations Conversation[] @relation("ConversationBuyer")
   sellerConversations Conversation[] @relation("ConversationSeller")
   conversationParticipants ConversationParticipant[]
+  pushDevices PushDevice[]
+  notificationPreference NotificationPreference?
+  notificationOperations NotificationPreferenceOperation[]
+  pushEvents PushOutbox[]
   messages Message[]
   blocksSent UserBlock[] @relation("Blocker")
   blocksReceived UserBlock[] @relation("Blocked")
@@ -616,6 +622,7 @@ model ConversationParticipant {
   lastReadSequence Int          @default(0)
   conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoCancellations ChatPhotoCancellation[]
   sentMessages     Message[]
   meetupProposals  MeetupAppointment[] @relation("MeetupProposer")
   meetupOperations MeetupOperation[]
@@ -632,6 +639,14 @@ model Message {
   clientMessageId String
   sequence        Int
   text            String
+  // Sanitized private WebP, atomically persisted with the message and erased
+  // by the existing sender/member cascade. Never returned by list projections.
+  pushEvents      PushOutbox[]
+  photoBytes      Bytes?
+  photoHash       String?
+  photoWidth      Int?
+  photoHeight     Int?
+  photoByteSize   Int?
   createdAt       DateTime     @default(now())
   conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender          User         @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
@@ -685,6 +700,8 @@ model MeetupAppointment {
   proposer          ConversationParticipant @relation("MeetupProposer", fields: [conversationId, proposedByUserId], references: [conversationId, userId], onDelete: Cascade)
 
   @@index([status, startsAt, endsAt])
+  pushEvents PushOutbox[]
+
 }
 
 // Durable retry receipts; the hash includes action/version/terms, not secrets.
@@ -1090,6 +1107,10 @@ model SourceLeadInquiry {
   lead ExternalSourceLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
   buyer User @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
   @@unique([leadId, buyerUserId])
+  replySequence Int @default(0)
+  lastReadReplySequence Int @default(0)
+  pushEvents PushOutbox[]
+
 }
 
 model SourceLeadRecordEvent {
@@ -1189,4 +1210,108 @@ model RetailPriceObservation {
  createdAt DateTime @default(now())
  @@index([productKey, status, expiresAt])
  @@index([expiresAt])
+}
+
+// A durable negative receipt prevents a delayed upload resurrecting a cancelled send.
+model ChatPhotoCancellation {
+  conversationId String
+  senderUserId Int
+  clientMessageId String
+  photoHash String
+  text String
+  createdAt DateTime @default(now())
+  participant ConversationParticipant @relation(fields: [conversationId, senderUserId], references: [conversationId, userId], onDelete: Cascade, map: "ChatPhotoCancellation_participant_fkey")
+  @@id([conversationId, senderUserId, clientMessageId])
+}
+
+// Transactional notification preferences share one authoritative version.
+model NotificationPreference {
+ userId Int @id
+ chat Boolean @default(true)
+ meetup Boolean @default(true)
+ sourceReply Boolean @default(true)
+ preview Boolean @default(false)
+ version Int @default(0)
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+}
+model NotificationPreferenceOperation {
+ userId Int
+ clientActionId String
+ requestHash String
+ state String
+ appliedVersion Int?
+ createdAt DateTime @default(now())
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ @@id([userId,clientActionId])
+}
+// Random per-install ID, not a hardware identifier. Token/binding never leave the server API.
+model PushDevice {
+ id String @id
+ userId Int
+ authVersion Int
+ registrationVersion Int @default(0)
+ expoPushToken String @unique
+ bindingId String
+ platform String
+ registeredAt DateTime @default(now())
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ deliveries PushDelivery[]
+ @@index([userId])
+}
+model PushOutbox {
+ id String @id @default(uuid())
+ eventKey String @unique
+ userId Int
+ kind String
+ messageId String?
+ meetupId String?
+ inquiryId String?
+ createdAt DateTime @default(now())
+ nextAttemptAt DateTime @default(now())
+ lockedUntil DateTime?
+ attempts Int @default(0)
+ processedAt DateTime?
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ message Message? @relation(fields:[messageId],references:[id],onDelete:Cascade)
+ meetup MeetupAppointment? @relation(fields:[meetupId],references:[id],onDelete:Cascade)
+ inquiry SourceLeadInquiry? @relation(fields:[inquiryId],references:[id],onDelete:Cascade)
+ deliveries PushDelivery[]
+ @@index([processedAt,nextAttemptAt])
+}
+model PushDelivery {
+ outboxId String
+ deviceId String
+ bindingId String
+ state String @default("PENDING")
+ ticketId String?
+ receiptCheckAt DateTime?
+ checkedAt DateTime?
+ outbox PushOutbox @relation(fields:[outboxId],references:[id],onDelete:Cascade)
+ device PushDevice @relation(fields:[deviceId],references:[id],onDelete:Cascade)
+ @@id([outboxId,deviceId])
+ @@index([state,receiptCheckAt])
+}
+
+// Explicit public aggregate likes are separate from private wishlists.
+model ProductInterest {
+ userId Int
+ productKey String @db.VarChar(80)
+ liked Boolean @default(false)
+ version Int @default(0)
+ updatedAt DateTime @updatedAt
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ @@id([userId,productKey])
+ @@index([productKey,liked])
+}
+model ProductInterestOperation {
+ userId Int
+ clientActionId String @db.Uuid
+ productKey String @db.VarChar(80)
+ requestHash String @db.VarChar(64)
+ state String
+ appliedVersion Int?
+ createdAt DateTime @default(now())
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ @@id([userId,clientActionId])
+ @@index([productKey])
 }

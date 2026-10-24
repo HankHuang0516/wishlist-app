@@ -1,8 +1,11 @@
+import { NativeDisclosure } from './NativeDisclosure';
+import { SellerStorefront } from './SellerStorefront';
+import { ChatPhotoAttachment, ChatMessagePhoto } from './ChatPhotoAttachment';
 import { SourceLeadInquiry, type SourceChatContext } from './SourceLeadExplorer';
 import { ChatReportSheet } from './ChatReportSheet';
 import { ChatMessageBubble } from './ChatPresentation';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
+import { ActivityIndicator, AppState, DeviceEventEmitter, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewToken } from 'react-native';
 import { SafeAreaModal } from './SafeAreaModal';
 import { ChatInboxList, type SourceInquiryThread } from './ChatInboxList';
 import * as Crypto from 'expo-crypto';
@@ -38,7 +41,7 @@ export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange
     finally { if (alive.current && current === sequence.current) { setBusy(false); loading.current = false; } }
   }
   async function loadSources(next?:string) {
-    try{const p=await api<{items:{id:string;state:string;context:SourceChatContext}[];nextCursor:string|null}>('/source-leads/inquiries/mine'+(next?'?cursor='+next:''));
+    try{const p=await api<{items:{id:string;state:string;context:SourceChatContext;unreadCount?:number}[];nextCursor:string|null}>('/source-leads/inquiries/mine'+(next?'?cursor='+next:''));
       if(!Array.isArray(p.items)||p.items.length>25||p.items.some(t=>!t.context||t.context.id.length!==36||typeof t.context.title!=='string'||typeof t.context.canonicalUrl!=='string'||!t.context.canonicalUrl.startsWith('https://')))throw Error();
       if(alive.current){setSourceThreads(old=>next?[...new Map([...old,...p.items].map(t=>[t.id,t])).values()]:p.items);setSourceCursor(p.nextCursor);setSourceError('');}
     }catch{if(alive.current)setSourceError('Wishlist AI 代問收件暫時無法讀取，請重試。');}
@@ -52,10 +55,13 @@ export function ChatInbox({ api, apiUrl, token, userId, activeRoom, onRoomChange
       onRefresh={() => void load()} onLoadMore={() => { if (cursor) void load(cursor); }}
       onRefreshSources={() => void loadSources()} onLoadMoreSources={() => { if (sourceCursor) void loadSources(sourceCursor); }} />
     {!!activeSourceChat && <SafeAreaModal visible animationType="slide" contentStyle={s.screen} onRequestClose={()=>onSourceChatChange?.(null)}><SourceLeadInquiry key={String(userId)+activeSourceChat.id} api={api} apiUrl={apiUrl} userId={userId} context={activeSourceChat} onBack={()=>onSourceChatChange?.(null)}/></SafeAreaModal>}
-    {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} token={token} userId={userId} roomId={activeRoom} onClose={() => { onRoomChange(null); void load(); }} />}
+    {!!activeRoom && <ChatRoom key={activeRoom} api={api} apiUrl={apiUrl} token={token} userId={userId} roomId={activeRoom} onOpenRoom={onRoomChange} onClose={() => { onRoomChange(null); void load(); }} />}
   </View>;
 }
-function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props['api']; apiUrl: string; token: string; userId: number; roomId: string; onClose: () => void }) {
+function ChatRoom({ api, apiUrl, token, userId, roomId, onClose, onOpenRoom }: { api: Props['api']; apiUrl: string; token: string; userId: number; roomId: string; onClose: () => void; onOpenRoom:(id:string)=>void }) {
+  const [photoPending,setPhotoPending]=useState(true);
+  const [nextRoom,setNextRoom]=useState<string|null>(null);
+  const [sellerId,setSellerId]=useState<number|null>(null);
   const { fontScale, width } = useWindowDimensions();
   const [reportMessage, setReportMessage] = useState<string | null | undefined>(undefined);
   const [showMeetup, setShowMeetup] = useState(false);
@@ -70,7 +76,7 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
     const current = roomRef.current; const throughSequence = viewSequence.current;
     if (!current || reading.current || AppState.currentState !== 'active' || throughSequence <= current.lastReadSequence) return;
     reading.current = true;
-    try { const updated = parseChatRoom(await api<unknown>('/chat/conversations/' + roomId + '/read', { method: 'POST', body: JSON.stringify({ throughSequence }) }), userId); if (alive.current) admitRoom(updated); }
+    try { const updated = parseChatRoom(await api<unknown>('/chat/conversations/' + roomId + '/read', { method: 'POST', body: JSON.stringify({ throughSequence }) }), userId); if (alive.current) { admitRoom(updated); DeviceEventEmitter.emit('wishlist:chat-read'); } }
     catch { /* Do not claim read success; a later visible-message update retries. */ }
     finally { reading.current = false; }
   };
@@ -150,7 +156,7 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
   }, []);
   async function send() {
     const current = roomRef.current;
-    if (!ready || !current || current.archived || !key.current || sending.current || (current.blocked && !pendingRef.current)) return;
+    if (photoPending || !ready || !current || current.archived || !key.current || sending.current || (current.blocked && !pendingRef.current)) return;
     sending.current = true; setBusy(true); setError('');
     try {
       const body = pendingRef.current ?? JSON.stringify(messageBody(Crypto.randomUUID(), text));
@@ -172,13 +178,13 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
     catch { if (alive.current) setError('無法確認封鎖狀態，請重新載入。'); }
     finally { sending.current = false; if (alive.current) setBusy(false); }
   }
-  const inputDisabled = !ready || busy || !!pending || !!room?.blocked || !!room?.archived;
+  const inputDisabled = photoPending || !ready || busy || !!pending || !!room?.blocked || !!room?.archived;
   const compactMeetup = fontScale >= 1.5 && !!meetupPreview;
   const meetupStatus = meetupPreview?.status === 'PROPOSED' ? '提議中' : meetupPreview?.status === 'CONFIRMED' ? '已確認' : meetupPreview?.status === 'COMPLETED' ? '已完成' : '已取消';
   const meetupDate = meetupPreview ? new Date(meetupPreview.startsAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const meetupActionLabel = meetupPreview?.status === 'CANCELLED' || meetupPreview?.status === 'COMPLETED' ? '查看面交預約詳情' : '查看面交預約詳情並確認或調整';
   const meetupThread = room && !room.archived ? <View style={s.meetupThread}>
-    {!compactMeetup && <Pressable accessibilityRole="button" accessibilityLabel="查看或提議面交預約" style={s.meetupButton} onPress={() => setShowMeetup(true)}><Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><Text style={s.meetupText}>查看或提議面交預約</Text></Pressable>}
+    {!meetupPreview && <Pressable accessibilityRole="button" accessibilityLabel="查看或提議面交預約" style={s.meetupButton} onPress={() => setShowMeetup(true)}><Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><Text style={s.meetupText}>查看或提議面交預約</Text></Pressable>}
     {compactMeetup && meetupPreview && <Pressable accessibilityRole="button" accessibilityLabel={meetupActionLabel} accessibilityValue={{ text: `面交預約${meetupStatus}，第 ${meetupPreview.version} 版，${meetupDate} 台灣時間，${meetupPreview.placeName}` }} style={s.meetupCompact} onPress={() => setShowMeetup(true)}>
       <Ionicons name="calendar-outline" color={iosColors.tint} size={20} /><View style={s.meetupCompactBody}><Text numberOfLines={1} style={s.meetupCompactTitle}>{meetupStatus} · 第 {meetupPreview.version} 版</Text><Text numberOfLines={2} style={s.meetupCompactDetail}>{meetupDate} · {meetupPreview.placeName}</Text></View><Ionicons name="chevron-forward" size={16} color={iosColors.tint} />
     </Pressable>}
@@ -191,14 +197,16 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
     </View>}
     {!!meetupIssue && <Text accessibilityRole="alert" style={s.meetupIssue}>{meetupIssue}</Text>}
   </View> : null;
-  return <SafeAreaModal visible animationType="slide" onRequestClose={onClose} contentStyle={s.roomScreen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+  return <SafeAreaModal visible={!nextRoom} onDismiss={()=>{if(nextRoom&&alive.current)onOpenRoom(nextRoom);}} animationType="slide" onRequestClose={onClose} contentStyle={s.roomScreen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <View style={s.roomHeader}><Pressable accessibilityRole="button" accessibilityLabel="返回" style={s.roomBack} onPress={onClose}><Ionicons name="chevron-back" color={iosColors.tint} size={22} /><Text style={s.backText}>返回</Text></Pressable><Text numberOfLines={1} accessibilityLabel={room?.listing.title || '商品聊天'} style={s.roomHeading}>{fontScale >= 1.5 || width < 360 ? '商品聊天' : room?.listing.title || '商品聊天'}</Text><View style={s.roomHeaderActions}><Pressable accessibilityRole="button" accessibilityLabel="更新聊天" disabled={manualRefreshing} style={s.roomRefresh} onPress={() => void refreshByUser()}>{manualRefreshing ? <ActivityIndicator size="small" /> : <Ionicons name="refresh-outline" color={iosColors.tint} size={21} />}</Pressable><Pressable accessibilityRole="button" disabled={busy || !room || room.archived} style={s.roomBlock} onPress={() => void block()}><Text style={s.blockText}>{room?.blockedByMe ? '解除封鎖' : '封鎖'}</Text></Pressable></View></View>
     {room && <View style={s.productContext}><ChatListingPhoto room={room} apiUrl={apiUrl} token={token} /><View style={s.productContextBody}><Text numberOfLines={fontScale >= 1.5 ? 2 : 1} style={s.productTitle}>{room.listing.title}</Text><Text style={s.productPrice}>{listingPrice(room)}{room.listingAvailable ? '' : ' · 已停止刊登'}</Text></View></View>}
-    {room && !room.archived && <Pressable accessibilityRole="button" accessibilityLabel="檢舉聊天內容或對方" style={s.chip} onPress={() => setReportMessage(null)}><Text style={s.blockText}>檢舉聊天內容或對方</Text></Pressable>}
     {room && (!room.listingAvailable || room.blocked) && <Text style={s.notice}>{room.archived ? '聊天室已封存，不能再傳送訊息或預約面交。若對方刪除帳號，其訊息與私密預約也會移除。' : room.blocked ? '已封鎖，停止傳送新訊息；歷史仍可查看。' : '商品已停止刊登；請與對方確認交易狀態。'}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    <FlatList inverted data={[...messages].reverse()} keyExtractor={m => m.id} contentContainerStyle={s.list} onViewableItemsChanged={viewable} viewabilityConfig={{ itemVisiblePercentThreshold: 80, minimumViewTime: 500 }} renderItem={({ item }) => { const mine = item.senderUserId === userId; return <View><ChatMessageBubble text={item.text} mine={mine} time={item.createdAt}/>{!mine && room && !room.archived && <Pressable accessibilityRole="button" accessibilityLabel="檢舉這則訊息" style={s.chip} onPress={() => setReportMessage(item.id)}><Text style={s.small}>檢舉這則訊息</Text></Pressable>}</View>; }} ListHeaderComponent={meetupThread} ListEmptyComponent={room && !error ? <Text style={s.text}>還沒有訊息，打聲招呼吧。</Text> : null} ListFooterComponent={before ? <Pressable accessibilityRole="button" style={s.chip} onPress={() => void refresh(before)}><Text style={s.text}>載入較早訊息</Text></Pressable> : null} />
-    <View style={s.composer}>{pending && <Text style={s.small}>{room?.archived ? '聊天室已封存，待確認訊息不會重新送出。可更新聊天核對先前結果。' : '上一則訊息結果尚未確認，已安全保存；重試不會建立重複訊息。'}</Text>}{!ready && <Pressable accessibilityRole="button" style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復</Text></Pressable>}<View style={s.composerRow}><TextInput testID="商品聊天訊息" accessibilityLabel="商品聊天訊息" accessibilityState={{ disabled: inputDisabled }} placeholder="輸入訊息，預約前請確認商品狀態" value={text} onChangeText={setText} maxLength={2000} multiline editable={!inputDisabled} style={[s.input, s.composerInput]} /><Pressable accessibilityRole="button" accessibilityLabel={pending ? '重試相同訊息' : '傳送'} disabled={busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))} style={[s.sendButton, (busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))) && s.sendDisabled]} onPress={() => void send()}><Ionicons name="send" size={23} color={iosColors.white} /></Pressable></View>{busy && <ActivityIndicator />}</View>
+    {room && <View style={s.contextActions}>{room.sellerUserId!=null && <Pressable accessibilityRole="button" style={s.contextAction} onPress={()=>setSellerId(room.sellerUserId)}><Ionicons name="storefront-outline" size={18} color={iosColors.tint}/><Text style={s.contextActionText}>查看賣場</Text></Pressable>}{!room.archived && <Pressable accessibilityRole="button" accessibilityLabel="檢舉聊天內容或對方" style={s.contextAction} onPress={()=>setReportMessage(null)}><Ionicons name="flag-outline" size={18} color={iosColors.secondaryLabel}/><Text style={s.contextActionText}>檢舉</Text></Pressable>}</View>}
+    <FlatList inverted data={[...messages].reverse()} keyExtractor={m => m.id} contentContainerStyle={s.list} onViewableItemsChanged={viewable} viewabilityConfig={{ itemVisiblePercentThreshold: 80, minimumViewTime: 500 }} renderItem={({ item }) => { const mine = item.senderUserId === userId; return <View>{item.photoHash&&<ChatMessagePhoto message={item} apiUrl={apiUrl} token={token} mine={mine}/>}{!item.photoHash&&<ChatMessageBubble text={item.text} mine={mine} time={item.createdAt}/>}{!mine && room && !room.archived && <Pressable accessibilityRole="button" accessibilityLabel="檢舉這則訊息" style={s.messageReport} onPress={() => setReportMessage(item.id)}><Text style={s.small}>檢舉這則訊息</Text></Pressable>}</View>; }} ListHeaderComponent={meetupThread} ListEmptyComponent={room && !error ? <Text style={s.text}>還沒有訊息，打聲招呼吧。</Text> : null} ListFooterComponent={before ? <Pressable accessibilityRole="button" style={s.chip} onPress={() => void refresh(before)}><Text style={s.text}>載入較早訊息</Text></Pressable> : null} />
+    {room&&<ChatPhotoAttachment room={room} api={api} apiUrl={apiUrl} userId={userId} disabled={!ready||busy||!!pending||room.blocked||room.archived} onPendingChange={setPhotoPending} onSent={message=>{append([message]);void refresh();}}/>}
+    <View style={s.composer}>{pending && <Text style={s.small}>{room?.archived ? '聊天室已封存，待確認訊息不會重新送出。可更新聊天核對先前結果。' : '訊息傳送結果待確認。原內容已安全保存，請先確認傳送結果。'}</Text>}{!ready && <Pressable accessibilityRole="button" style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復</Text></Pressable>}<View style={s.composerRow}><TextInput testID="商品聊天訊息" accessibilityLabel="商品聊天訊息" accessibilityState={{ disabled: inputDisabled }} placeholder="輸入訊息，預約前請確認商品狀態" value={text} onChangeText={setText} maxLength={2000} multiline editable={!inputDisabled} style={[s.input, s.composerInput]} /><Pressable accessibilityRole="button" accessibilityLabel={pending ? '確認傳送結果' : '傳送'} disabled={photoPending || busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))} style={[s.sendButton, (busy || !ready || !room || room.archived || (!pending && (!text.trim() || room.blocked))) && s.sendDisabled]} onPress={() => { if(pending)void restore();else void send(); }}><Ionicons name={pending?'refresh':'send'} size={23} color={iosColors.white} /></Pressable></View>{pending&&<NativeDisclosure title="更多復原選項"><Text style={s.small}>查核後仍未收到時，可明確重試相同訊息；不會建立新的識別碼。</Text><Pressable accessibilityRole="button" disabled={busy||!ready||room?.archived||photoPending} style={s.chip} onPress={()=>void send()}><Text style={s.text}>重試相同訊息</Text></Pressable></NativeDisclosure>}{busy && <ActivityIndicator />}</View>
+    {sellerId!==null&&<SafeAreaModal visible animationType="slide" onRequestClose={()=>setSellerId(null)} contentStyle={s.screen}><SellerStorefront key={sellerId} api={api} apiUrl={apiUrl} userId={userId} sellerId={sellerId} onClose={()=>setSellerId(null)} onOpenChat={id=>{setSellerId(null);if(id===roomId)return;if(Platform.OS==='ios')setNextRoom(id);else onOpenRoom(id);}}/></SafeAreaModal>}
     {reportMessage !== undefined && room && !room.archived && <ChatReportSheet api={api} apiUrl={apiUrl} userId={userId} roomId={roomId} reportedUserId={(room.buyerUserId === userId ? room.sellerUserId : room.buyerUserId)!} messageId={reportMessage} onClose={() => setReportMessage(undefined)} />}
     {showMeetup && room && !room.archived && <MeetupSheet key={room.id} api={api} apiUrl={apiUrl} userId={userId} room={room} onClose={() => { setShowMeetup(false); void refresh(); }} />}
   </KeyboardAvoidingView></SafeAreaModal>;
@@ -206,6 +214,10 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose }: { api: Props[
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, flexDirection: 'row', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.sm, paddingVertical: iosSpacing.xs, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, heading: { ...iosType.title, color: iosColors.label }, title: { ...iosType.headline, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.footnote, color: iosColors.secondaryLabel },
   photoShell: { width: 56, height: 56, borderRadius: iosRadius.small, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: iosColors.surfaceSecondary },
   photo: { width: 56, height: 56, borderRadius: iosRadius.small },
+  contextActions: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.sm, paddingHorizontal: iosSpacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator },
+  contextAction: { minHeight: minimumTapSize, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: iosSpacing.xs, paddingHorizontal: iosSpacing.sm },
+  contextActionText: { ...iosType.subheadline, color: iosColors.tint },
+  messageReport: { alignSelf: 'flex-start', minHeight: minimumTapSize, justifyContent: 'center', paddingHorizontal: iosSpacing.md },
   roomScreen: { flex: 1, backgroundColor: iosColors.surface },
   roomHeader: { minHeight: 52, paddingHorizontal: iosSpacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator },
   roomBack: { minWidth: 68, minHeight: minimumTapSize, flexDirection: 'row', alignItems: 'center' },

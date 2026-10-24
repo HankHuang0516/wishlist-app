@@ -21,6 +21,22 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 });
 
 describe('public listing share destination', () => {
+  it('provides bounded keyboard-accessible photo navigation and labels only the selected marketing illustration', async () => {
+    const first=listing().media[0], secondId='19c8cf1b-9911-4e82-b54d-684f5ed95326';
+    const second={...first,id:secondId,imageUrl:first.imageUrl.replace(first.id,secondId),thumbnailUrl:first.thumbnailUrl.replace(first.id,secondId),capturePurpose:'AI_MARKETING'};
+    vi.stubGlobal('fetch',vi.fn(async()=>responseOk({...listing(),media:[first,second]})));
+    mount('/listings/'+id);await screen.findByRole('heading',{name:'二手檯燈'});
+    expect(screen.getByRole('button',{name:'上一張商品照片'})).toBeDisabled();
+    expect(screen.getByRole('img',{name:'二手檯燈商品照片1'})).toBeVisible();
+    expect(screen.queryByText('AI 行銷示意圖')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'下一張商品照片'}));
+    expect(screen.getByRole('img',{name:'二手檯燈商品行銷示意圖2'})).toBeVisible();
+    expect(screen.getByText('AI 行銷示意圖')).toBeVisible();
+    expect(screen.getByRole('button',{name:'下一張商品照片'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'上一張商品照片'}));
+    expect(screen.getByRole('img',{name:'二手檯燈商品照片1'})).toBeVisible();
+    expect(screen.queryByText('AI 行銷示意圖')).not.toBeInTheDocument();
+  });
   it('keeps incomplete map/public listing projections rejected even when metadata can describe absent photos', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => responseOk({ ...listing(), media: [], location: null, deliveryMethods: [] })));
     mount('/listings/' + id);

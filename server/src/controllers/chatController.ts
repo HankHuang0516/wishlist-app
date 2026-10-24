@@ -1,3 +1,6 @@
+import { queuePush, notificationUnreadCount } from '../lib/pushOutbox';
+import { createHash } from 'crypto';
+import { encodeListingPhoto, PhotoInputError } from '../lib/listingPhoto';
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -11,6 +14,7 @@ class ChatConflictError extends Error {}
 class ChatArchivedError extends Error {}
 class ChatNonSaleError extends Error {}
 function fail(res: Response, error: unknown) {
+    if (error instanceof PhotoInputError) return res.status(error.status).json({ error: error.message, errorCode: 'INVALID_CHAT_PHOTO' });
     if (error instanceof ChatInputError) return res.status(400).json({ error: error.message, errorCode: 'INVALID_CHAT_INPUT' });
     if (error instanceof ChatAccessError) return res.status(error.status).json({ error: error.status === 403 ? '已封鎖，無法建立聊天或傳送新訊息' : '聊天室或帳號不存在', errorCode: 'CHAT_ACCESS_DENIED' });
     if (error instanceof ChatConflictError) return res.status(409).json({ error: '訊息識別碼已用於不同內容', errorCode: 'CHAT_MESSAGE_CONFLICT' });
@@ -19,7 +23,12 @@ function fail(res: Response, error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2025'].includes(error.code)) return res.status(404).json({ error: '聊天室或帳號已不存在', errorCode: 'CHAT_ACCESS_DENIED' });
     return res.status(500).json({ error: '聊天服務暫時無法使用', errorCode: 'CHAT_SERVICE_ERROR' });
 }
-const messageSelect = { id: true, conversationId: true, senderUserId: true, clientMessageId: true, sequence: true, text: true, createdAt: true } satisfies Prisma.MessageSelect;
+const messageSelect = { id: true, conversationId: true, senderUserId: true, clientMessageId: true, sequence: true, text: true, createdAt: true, photoHash: true, photoWidth: true, photoHeight: true, photoByteSize: true } satisfies Prisma.MessageSelect;
+function messageDto(message: Prisma.MessageGetPayload<{ select: typeof messageSelect }>) {
+    if (message.photoHash !== null) return message;
+    const { photoHash, photoWidth, photoHeight, photoByteSize, ...textMessage } = message;
+    return textMessage;
+}
 const conversationSelect = {
     id: true, listingId: true, buyerUserId: true, sellerUserId: true, archivedAt: true, lastMessageSequence: true, lastMessageAt: true, createdAt: true,
     buyer: { select: { id: true, name: true } }, seller: { select: { id: true, name: true } },
@@ -120,7 +129,7 @@ export async function getMessages(req: AuthRequest, res: Response) {
             orderBy: { sequence: forward ? 'asc' : 'desc' }, take: page.limit + 1 });
         const chosen = rows.slice(0, page.limit); const hasMore = rows.length > page.limit;
         const anchor = chosen[chosen.length - 1]?.sequence;
-        return res.json({ items: forward ? chosen : chosen.reverse(), nextBeforeSequence: !forward && hasMore ? anchor : null, nextAfterSequence: forward && hasMore ? anchor : null });
+        return res.json({ items: (forward ? chosen : chosen.reverse()).map(messageDto), nextBeforeSequence: !forward && hasMore ? anchor : null, nextAfterSequence: forward && hasMore ? anchor : null });
     } catch (error) { return fail(res, error); }
 }
 export async function getMyMessageReceipt(req: AuthRequest, res: Response) {
@@ -128,7 +137,7 @@ export async function getMyMessageReceipt(req: AuthRequest, res: Response) {
     try {
         const conversationId = chatIdentity(req.params.id); const clientMessageId = chatIdentity(req.params.clientMessageId); await roomFor(req.user.id, conversationId);
         const message = await prisma.message.findUnique({ where: { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId: req.user.id, clientMessageId } }, select: messageSelect });
-        if (!message) return res.status(404).json({ error: '尚未找到已送出的訊息' }); return res.json(message);
+        if (!message) return res.status(404).json({ error: '尚未找到已送出的訊息' }); return res.json(messageDto(message));
     } catch (error) { return fail(res, error); }
 }
 export async function sendMessage(req: AuthRequest, res: Response) {
@@ -139,20 +148,29 @@ export async function sendMessage(req: AuthRequest, res: Response) {
         if (room.buyerUserId === null || room.sellerUserId === null || room.archivedAt || room.listingId === null) throw new ChatArchivedError();
         const buyer = room.buyerUserId, seller = room.sellerUserId;
         const listingId = room.listingId;
+        const photo = req.file ? await encodeListingPhoto(req.file.buffer, req.file.mimetype) : null;
+        const photoHash = req.file ? createHash('sha256').update(req.file.buffer).digest('hex') : null;
         const result = await prisma.$transaction(async tx => {
             await lockListingAdmission(tx, listingId);
             await lockChatPair(tx, buyer, seller);
             const current = await roomFor(senderUserId, conversationId, tx);
             if (current.archivedAt || current.buyerUserId === null || current.sellerUserId === null || current.listingId === null) throw new ChatArchivedError();
             const existing = await tx.message.findUnique({ where: { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId, clientMessageId: input.clientMessageId } }, select: messageSelect });
-            if (existing) { if (existing.text !== input.text) throw new ChatConflictError(); return { message: existing, created: false }; }
+            if (existing) { if (existing.text !== input.text || existing.photoHash !== photoHash) throw new ChatConflictError(); return { message: existing, created: false }; }
+            if (await tx.chatPhotoCancellation.findUnique({ where: { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId, clientMessageId: input.clientMessageId } } }))
+                throw new PhotoInputError('原照片傳送已停止，請建立新的傳送', 409);
             if (current.listing && isExplicitNonSaleFixture(current.listing.title)) throw new ChatNonSaleError();
             if (await tx.userBlock.findFirst({ where: blockedWhere(buyer, seller) })) throw new ChatAccessError(403);
+            if (photo) {
+                const used = await tx.message.aggregate({ where: { senderUserId }, _sum: { photoByteSize: true } });
+                if ((used._sum.photoByteSize ?? 0) + photo.byteSize > 100 * 1024 * 1024) throw new PhotoInputError('聊天照片儲存額度已滿，請使用文字聯絡', 413);
+            }
             const updated = await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageSequence: { increment: 1 }, lastMessageAt: new Date() }, select: { lastMessageSequence: true } });
-            const message = await tx.message.create({ data: { conversationId, senderUserId, ...input, sequence: updated.lastMessageSequence }, select: messageSelect });
+            const message = await tx.message.create({ data: { conversationId, senderUserId, ...input, ...(photo ? { photoBytes: photo.image, photoHash, photoWidth: photo.width, photoHeight: photo.height, photoByteSize: photo.byteSize } : {}), sequence: updated.lastMessageSequence }, select: messageSelect });
+            await queuePush(tx,senderUserId===buyer?seller:buyer,'message.'+message.id,'CHAT',{messageId:message.id});
             return { message, created: true };
         });
-        return res.status(result.created ? 201 : 200).json(result.message);
+        return res.status(result.created ? 201 : 200).json(messageDto(result.message));
     } catch (error) { return fail(res, error); }
 }
 export async function markConversationRead(req: AuthRequest, res: Response) {
@@ -180,4 +198,55 @@ export async function setUserBlock(req: AuthRequest, res: Response) {
         });
         return res.json({ blocked: req.method !== 'DELETE' });
     } catch (error) { return fail(res, error); }
+}
+
+/** No public URL, redirect, disk cache or provider exposure for conversation photos. */
+export async function getMessagePhoto(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    try {
+        const conversationId = chatIdentity(req.params.id);
+        const id = chatIdentity(req.params.messageId);
+        // Authorization is part of the byte query to avoid a check/read race
+        // with membership erasure. The existing deletion gate removes authored bytes.
+        const message = await prisma.message.findFirst({ where: { id, conversationId,
+            conversation: { participants: { some: { userId: req.user.id } } } }, select: { photoBytes: true } });
+        if (!message?.photoBytes) return res.status(404).json({ error: '照片不存在或無權限' });
+        res.set({ 'Cache-Control': 'private, no-store', 'Content-Type': 'image/webp', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline; filename="chat-photo.webp"' });
+        return res.send(message.photoBytes);
+    } catch (error) { return fail(res, error); }
+}
+
+export async function abandonPhotoMessage(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    try {
+        const conversationId = chatIdentity(req.params.id), senderUserId = req.user.id;
+        const value = chatObject(req.body, ['clientMessageId', 'text', 'photoHash']);
+        const { photoHash } = value;
+        if (typeof photoHash !== 'string' || !/^[a-f0-9]{64}$/.test(photoHash)) throw new ChatInputError();
+        const input = parseTextMessage({ clientMessageId: value.clientMessageId, text: value.text });
+        const result = await prisma.$transaction(async tx => {
+            // Same account gates and pair lock as upload, block and erasure.
+            const before = await roomFor(senderUserId, conversationId, tx);
+            for (const member of [...new Set([before.buyerUserId, before.sellerUserId].filter((v): v is number => v !== null))].sort((a,b)=>a-b)) await tx.$executeRaw`SELECT pg_advisory_xact_lock(${4294967296 + member}::bigint)`;
+            if (before.buyerUserId !== null && before.sellerUserId !== null) await lockChatPair(tx, before.buyerUserId, before.sellerUserId);
+            await roomFor(senderUserId, conversationId, tx);
+            const where = { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId, clientMessageId: input.clientMessageId } };
+            const message = await tx.message.findUnique({ where, select: messageSelect });
+            if (message) { if (message.photoHash !== photoHash || message.text !== input.text) throw new ChatConflictError(); return { state: 'SENT', message: messageDto(message) }; }
+            const prior = await tx.chatPhotoCancellation.findUnique({ where });
+            if (prior && (prior.photoHash !== photoHash || prior.text !== input.text)) throw new ChatConflictError();
+            if (!prior) await tx.chatPhotoCancellation.create({ data: { conversationId, senderUserId, ...input, photoHash } });
+            return { state: 'ABANDONED', clientMessageId: input.clientMessageId, photoHash };
+        });
+        return res.json(result);
+    } catch (error) { return fail(res, error); }
+}
+
+export async function getUnreadCount(req: AuthRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: '請先登入' });
+    try {
+        // Actual message rows across the whole inbox, including unloaded pages
+        // and gaps left by sender erasure. Never subtract sequence numbers.
+        return res.json({ unreadCount: await notificationUnreadCount(req.user.id) });
+    } catch { return res.status(503).json({ error: '無法確認未讀數量' }); }
 }

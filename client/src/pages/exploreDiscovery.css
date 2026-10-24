@@ -29,3 +29,11 @@
 
 /* Product reading uses one scroll area; the dialog keeps close and inquiry controls visible. */
 .discovery-product-detail{gap:24px;min-width:0}.discovery-product-detail .discovery-detail-photo{height:auto;aspect-ratio:1/1;max-height:440px}.discovery-product-detail .discovery-detail-thumbs button{width:60px;height:60px}.discovery-product-detail .discovery-detail-thumbs button:focus-visible{outline:2px solid #166534;outline-offset:2px}.discovery-product-detail .discovery-detail-price{overflow-wrap:anywhere}.discovery-product-detail .discovery-detail-thumbs{padding:3px}.discovery-product-detail .discovery-cp-evidence{overflow-wrap:anywhere}
+
+/* Launch readability and touch targets; preserve item photography and evidence. */
+.explore-discovery{--muted:#636366}
+.discovery-eyebrow,.discovery-card-category,.discovery-card-meta,.discovery-reference,.discovery-footnote,.discovery-retail-price,.discovery-retail-price small,.discovery-cp-records span{font-size:13px;line-height:1.65;color:#636366}
+.discovery-product-title{font-size:16px;line-height:1.5}
+.discovery-cp-records summary,.discovery-detail-actions a,.explore-discovery button:not(.discovery-open-photo){min-height:44px}
+.discovery-heading h1{line-height:1.3}
+@media(max-width:700px){.discovery-heading h1{font-size:28px}.discovery-card-category,.discovery-cp-score{font-size:12px}}

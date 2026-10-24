@@ -16,8 +16,10 @@ const auth = { user: { id: 19, phoneNumber: 'fixture' }, token: 'fixture-session
 const profile = { id: 19, profileVersion: 0, name: '合成帳號', phoneNumber: 'fixture', nicknames: '合成暱稱', birthday: '1993-05-16', isPremium: false,
   isAvatarVisible: false, isRealNameVisible: false, isBirthdayVisible: false, isAddressVisible: false, isPhoneVisible: false, isEmailVisible: false, marketingEmailsEnabled: false };
 const ok = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
-const view = (value = auth) => <MemoryRouter><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
+const view = (value = auth) => <MemoryRouter initialEntries={['/settings?section=profile']}><AuthContext.Provider value={value}><SettingsPage /></AuthContext.Provider></MemoryRouter>;
 function LoginDestination() { const route=useLocation();return <output aria-label="Login destination">{route.pathname+route.search}</output>; }
+const goSection=(section:string)=>{const back=screen.queryByRole('link',{name:/返回我的設定|Back to settings/});if(back)fireEvent.click(back);fireEvent.click(screen.getByRole('link',{name:section,exact:true}));};
+const languageButton=(name:string)=>screen.getByRole('button',{name,hidden:true});
 const routedSettings=()=> <MemoryRouter initialEntries={['/settings']}><AuthProvider><Routes><Route path="/settings" element={<SettingsPage/>}/><Route path="/login" element={<LoginDestination/>}/></Routes></AuthProvider></MemoryRouter>;
 describe('actual settings and auth provider security navigation',()=>{
   it.each(['sessions-revoked','security-unconfirmed'])('keeps the %s result after the authenticated settings session unmounts',async notice=>{
@@ -26,7 +28,7 @@ describe('actual settings and auth provider security navigation',()=>{
       if(url.endsWith('/sessions/revoke')){revoked=true;return notice==='sessions-revoked'?ok({changed:true,requiresLogin:true}):{ok:false,status:503,json:async()=>({errorCode:'UNAVAILABLE'})};}
       if(revoked && url.endsWith('/users/me'))return {ok:false,status:401,json:async()=>({errorCode:'UNAUTHORIZED'})};
       return ok(profile);
-    });vi.stubGlobal('fetch',fetcher);render(routedSettings());await screen.findByLabelText('暱稱');fireEvent.click(screen.getByRole('button',{name:'帳號安全',exact:true}));fireEvent.change(screen.getByLabelText('目前密碼'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'撤銷所有裝置登入',exact:true}));
+    });vi.stubGlobal('fetch',fetcher);render(routedSettings());await screen.findByLabelText('暱稱');goSection('帳號安全');fireEvent.click(screen.getByRole('button',{name:'管理登入裝置',exact:true}));fireEvent.change(screen.getByLabelText('目前密碼'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'撤銷所有裝置登入',exact:true}));
     expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/sessions/revoke'))).toHaveLength(0);fireEvent.click(screen.getByRole('button',{name:'確認撤銷登入',exact:true}));
     await waitFor(()=>expect(screen.getByLabelText('Login destination')).toHaveTextContent('/login?security='+notice));
     expect(readSession(localStorage,getFullApiUrl())).toBeNull();expect(localStorage.getItem('pending-fixture')).toBe('KEEP');expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/sessions/revoke'))).toHaveLength(1);
@@ -37,7 +39,7 @@ describe('actual settings and auth provider security navigation',()=>{
 });
 it('freezes language reload during AI instruction acquisition without dispatching when advanced is closed',async()=>{
   let finish!:(value:unknown)=>void;const fetcher=vi.fn(async(url:string,init?:RequestInit)=>url.endsWith('/ai-prompt')?new Promise(resolve=>{finish=resolve;}):ok(url.endsWith('/feedback/test')?{userId:19,canSend:false}:profile));vi.stubGlobal('fetch',fetcher);
-  render(view());await screen.findByLabelText('暱稱');expect(fetcher.mock.calls.some(([url])=>url.endsWith('/ai-prompt'))).toBe(false);const advanced=screen.getByText('進階功能').closest('details')!;advanced.open=true;fireEvent(advanced,new Event('toggle'));fireEvent.click(await screen.findByRole('button',{name:'一鍵複製 AI 指令'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'English'})).toBeDisabled();await act(async()=>finish({ok:false,status:503,json:async()=>({errorCode:'API_INTEGRATION_UNAVAILABLE'})}));await screen.findByText('結果未確認；重開不會自動建立或複製。');expect(screen.getByRole('button',{name:'English'})).toBeEnabled();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+  render(view());await screen.findByLabelText('暱稱');expect(fetcher.mock.calls.some(([url])=>url.endsWith('/ai-prompt'))).toBe(false);goSection('權益與進階功能');const advanced=screen.getByText('進階功能').closest('details')!;advanced.open=true;fireEvent(advanced,new Event('toggle'));fireEvent.click(await screen.findByRole('button',{name:'一鍵複製 AI 指令'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(languageButton('English')).toBeDisabled();await act(async()=>finish({ok:false,status:503,json:async()=>({errorCode:'API_INTEGRATION_UNAVAILABLE'})}));await screen.findByText('結果未確認；重開不會自動建立或複製。');expect(languageButton('English')).toBeEnabled();expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
 });
 it('opens diagnostics from backend admission and blocks language reload during the actual mail dispatch', async () => {
   let finish!: (value: unknown) => void;
@@ -49,11 +51,11 @@ it('opens diagnostics from backend admission and blocks language reload during t
   vi.spyOn(window, 'setTimeout').mockImplementation((callback, delay, ...args) => { if (delay === 500) { reloads.push(callback); return 0; } return originalTimeout(callback, delay, ...args); });
   render(view()); await screen.findByLabelText('暱稱');
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/feedback/test'))).toBe(false);
-  const advanced = screen.getByText('進階功能').closest('details')!; advanced.open = true; fireEvent(advanced, new Event('toggle'));
+  goSection('權益與進階功能');const advanced = screen.getByText('進階功能').closest('details')!; advanced.open = true; fireEvent(advanced, new Event('toggle'));
   fireEvent.click(await screen.findByRole('button', { name:'寄送測試郵件' })); await waitFor(() => expect(finish).toBeTypeOf('function'));
-  expect(screen.getByRole('button', { name:'English' })).toBeDisabled(); fireEvent.click(screen.getByRole('button', { name:'English' })); expect(reloads).toHaveLength(0);
+  expect(languageButton('English')).toBeDisabled(); fireEvent.click(languageButton('English')); expect(reloads).toHaveLength(0);
   await act(async () => finish(ok({ success:true,notificationStatus:'ACCEPTED' }))); await screen.findByText('郵件服務已接受測試請求；尚未確認收件匣送達。');
-  expect(screen.getByRole('button', { name:'English' })).toBeEnabled(); expect(fetcher.mock.calls.filter(([,init]) => init?.method === 'POST')).toHaveLength(1); expect(pending.size).toBe(0);
+  expect(languageButton('English')).toBeEnabled(); expect(fetcher.mock.calls.filter(([,init]) => init?.method === 'POST')).toHaveLength(1); expect(pending.size).toBe(0);
 });
 beforeEach(() => {
   pending.clear(); localStorage.setItem('user-locale', 'zh-TW');
@@ -70,7 +72,7 @@ describe('settings language preserves recoverable operations and unsent drafts',
   ])('installation help is readable for %s on %s',async(locale,agent,title,step)=>{
     localStorage.setItem('user-locale',locale);vi.spyOn(navigator,'userAgent','get').mockReturnValue(agent);
     vi.stubGlobal('fetch',vi.fn(async()=>ok(profile)));render(view());await screen.findByLabelText(locale==='zh-TW'?'暱稱':'Nicknames');
-    screen.getByText(locale==='zh-TW'?'進階功能':'More features').closest('details')!.setAttribute('open','');
+    goSection(locale==='zh-TW'?'權益與進階功能':'Benefits & advanced services');screen.getByText(locale==='zh-TW'?'進階功能':'More features').closest('details')!.setAttribute('open','');
     expect(screen.getByRole('heading',{name:title,exact:true})).toBeInTheDocument();
     expect(screen.getByText(new RegExp(step))).toBeInTheDocument();expect(document.body.textContent).not.toMatch(/pwa\./);
   });
@@ -89,25 +91,25 @@ describe('settings language preserves recoverable operations and unsent drafts',
     expect(screen.getByLabelText('Email')).toBeDisabled(); expect(screen.getByLabelText('Phone Number')).toBeDisabled();
     expect(screen.getByText('Phone Hidden · Email Hidden')).toBeInTheDocument();
     for(const label of ['Show real name','Show birthday','Show delivery address','Show phone number','Show email address'])expect(screen.getByRole('button',{name:label,hidden:true})).toBeInTheDocument();
-    expect(screen.getByRole('link',{name:'My listings · View and manage'})).toHaveAttribute('href','/my-listings');
-    expect(screen.getByRole('button',{name:'Upload avatar'})).toHaveAttribute('tabindex','0');
+    goSection('Benefits & advanced services');expect(screen.getByRole('link',{name:'My listings · View and manage',hidden:true})).toHaveAttribute('href','/my-listings');
+    expect(screen.getByRole('button',{name:'Upload avatar',hidden:true})).toHaveAttribute('tabindex','0');
     expect(screen.getByText('More features').closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByRole('button',{name:'Account security'})).toBeInTheDocument();
+    goSection('Account security');expect(screen.getByRole('button',{name:'Manage signed-in devices'})).toBeInTheDocument();
   });
   it('blocked optional locale storage still renders safely and a failed write leaves buttons usable',async()=>{
     const read=vi.spyOn(window.localStorage,'getItem').mockImplementation(()=>{throw new Error('unavailable');});
     vi.stubGlobal('fetch',vi.fn(async()=>ok(profile)));render(view());await screen.findByRole('heading',{name:'Personal profile'});
     read.mockRestore(); localStorage.setItem('user-locale','en-US');
     vi.spyOn(window.localStorage,'setItem').mockImplementation(()=>{throw new Error('unavailable');});
-    const reloads=preventReload(); fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));
+    const reloads=preventReload(); fireEvent.click(languageButton('繁體中文'));
     await screen.findByText('Your language preference could not be saved. The current language is retained. Retry later.');
-    expect(screen.getByRole('button',{name:'English'})).toBeEnabled();expect(reloads).toHaveLength(0);
+    expect(languageButton('English')).toBeEnabled();expect(reloads).toHaveLength(0);
     expect(localStorage.getItem('user-locale')).toBe('en-US');
   });
   it('an unsent draft blocks reload without sending or discarding that text',async()=>{
     const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);const reloads=preventReload();render(view());
     const address=await screen.findByLabelText('寄送地址'); fireEvent.change(address,{target:{value:'保留未保存地址'}});
-    fireEvent.click(screen.getByRole('button',{name:'English'}));await screen.findByText(/請先完成保存/);
+    fireEvent.click(languageButton('English'));await screen.findByText(/請先完成保存/);
     expect(address).toHaveValue('保留未保存地址'); expect(localStorage.getItem('user-locale')).toBe('zh-TW'); expect(reloads).toHaveLength(0);
     expect(fetcher.mock.calls.every(call=>call[1]?.method!=='POST')).toBe(true);
   });
@@ -119,10 +121,10 @@ describe('settings language preserves recoverable operations and unsent drafts',
       return ok(url.includes('/profile-operations/')?receipt:profile);
     });vi.stubGlobal('fetch',fetcher);const reloads=preventReload();const mounted=render(view());
     const input=await screen.findByLabelText('暱稱');fireEvent.change(input,{target:{value:'原文暱稱'}});fireEvent.blur(input);
-    await waitFor(()=>expect(persist).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'English'})).toBeDisabled();
+    await waitFor(()=>expect(persist).toBeTypeOf('function'));expect(languageButton('English')).toBeDisabled();
     expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(0);expect(reloads).toHaveLength(0);
     await act(async()=>persist());await screen.findByText(/尚未確認儲存結果/);const raw=[...pending.values()][0];
-    fireEvent.click(screen.getByRole('button',{name:'English'}));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(raw);
+    fireEvent.click(languageButton('English'));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(raw);
     expect(screen.getByLabelText('Nicknames')).toBeDisabled();mounted.unmount();render(view());
     await screen.findByText('The server confirmed the save.');expect(screen.getByLabelText('Nicknames')).toHaveValue('原文暱稱');
     expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);expect(pending.size).toBe(0);
@@ -131,7 +133,7 @@ describe('settings language preserves recoverable operations and unsent drafts',
     vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='POST')throw new Error('lost');return ok(profile);}));
     const reloads=preventReload();render(view());const input=await screen.findByLabelText('暱稱');fireEvent.change(screen.getByLabelText('寄送地址'),{target:{value:'沒有保存的地址'}});
     fireEvent.change(input,{target:{value:'已保存的草稿'}});fireEvent.blur(input);await screen.findByText(/尚未確認儲存結果/);
-    fireEvent.click(screen.getByRole('button',{name:'English'}));await screen.findByText(/請先完成保存/);expect(reloads).toHaveLength(0);expect(pending.size).toBe(1);
+    fireEvent.click(languageButton('English'));await screen.findByText(/請先完成保存/);expect(reloads).toHaveLength(0);expect(pending.size).toBe(1);
     expect(screen.getByLabelText('寄送地址')).toHaveValue('沒有保存的地址');
   });
   it('unexpected pre-persist failure freezes autosave without exposing implementation details',async()=>{
@@ -145,7 +147,7 @@ describe('settings language preserves recoverable operations and unsent drafts',
     localStorage.setItem('user-locale','en-US'); const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok(profile));vi.stubGlobal('fetch',fetcher);
     const reloads=preventReload();render(view());const input=await screen.findByLabelText('Nicknames');
     fireEvent.change(input,{target:{value:'a,b,c,d,e,f'}});fireEvent.blur(input);await screen.findByText('Use up to 5 nicknames, each no longer than 50 characters.');
-    expect(input).toBeEnabled();expect(input).toHaveValue('a,b,c,d,e,f');fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));
+    expect(input).toBeEnabled();expect(input).toHaveValue('a,b,c,d,e,f');fireEvent.click(languageButton('繁體中文'));
     await screen.findByText(/Language switching is paused/);expect(reloads).toHaveLength(0);expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(0);
   });
   it('English avatar upload blocks reload while active and preserves an unknown reminder across language change',async()=>{
@@ -153,23 +155,23 @@ describe('settings language preserves recoverable operations and unsent drafts',
     const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise((_resolve,reject)=>{fail=reject;}):ok(profile));vi.stubGlobal('fetch',fetcher);
     const reloads=preventReload();render(view());const upload=await screen.findByRole('button',{name:'Upload avatar'});
     fireEvent.change(upload.querySelector('input[type=file]')!,{target:{files:[new File(['synthetic image'],'fixture.png',{type:'image/png'})]}});
-    await waitFor(()=>expect(fail).toBeTypeOf('function'));expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(reloads).toHaveLength(0);
+    await waitFor(()=>expect(fail).toBeTypeOf('function'));expect(languageButton('繁體中文')).toBeDisabled();expect(reloads).toHaveLength(0);
     await act(async()=>fail(new Error('lost reply')));await screen.findByText('The avatar upload is unconfirmed; the server may have saved it. Read the current avatar. Nothing is resent automatically.');
-    const journal=[...pending.values()][0];fireEvent.click(screen.getByRole('button',{name:'繁體中文'}));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(journal);
+    const journal=[...pending.values()][0];fireEvent.click(languageButton('繁體中文'));expect(reloads).toHaveLength(1);expect([...pending.values()][0]).toBe(journal);
     expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);
   });
   it('pending security confirmation disables language switching until rejection clears credentials',async()=>{
     localStorage.setItem('user-locale','en-US');let finish!:(value:unknown)=>void;vi.spyOn(window,'confirm').mockReturnValue(true);
     vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>init?.method==='POST'?new Promise(resolve=>{finish=resolve;}):ok(profile)));
-    const reloads=preventReload();render(view());await screen.findByRole('heading',{name:'Personal profile'});fireEvent.click(screen.getByRole('button',{name:'Account security'}));
+    const reloads=preventReload();render(view());await screen.findByRole('heading',{name:'Personal profile'});goSection('Account security');fireEvent.click(screen.getByRole('button',{name:'Manage signed-in devices'}));
     fireEvent.change(screen.getByLabelText('Current password'),{target:{value:'Synthetic123'}});fireEvent.click(screen.getByRole('button',{name:'Revoke all device sessions'}));
-    expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(reloads).toHaveLength(0);
+    expect(languageButton('繁體中文')).toBeDisabled();expect(reloads).toHaveLength(0);
     expect(screen.getByRole('dialog')).toHaveTextContent('including this device');expect(finish).toBeUndefined();
     fireEvent.click(screen.getByRole('button',{name:'Confirm session revocation',exact:true}));
     await waitFor(()=>expect(finish).toBeTypeOf('function'));
-    expect(screen.getByRole('button',{name:'繁體中文'})).toBeDisabled();expect(window.confirm).not.toHaveBeenCalled();
+    expect(languageButton('繁體中文')).toBeDisabled();expect(window.confirm).not.toHaveBeenCalled();
     await act(async()=>finish({ok:false,status:401,json:async()=>({errorCode:'INVALID_CREDENTIALS'})}));await screen.findByText('The current password is incorrect. No changes are confirmed.');
-    expect(screen.getByRole('button',{name:'繁體中文'})).toBeEnabled();expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(languageButton('繁體中文')).toBeEnabled();expect(screen.getByLabelText('Current password')).toHaveValue('');
   });
 });
 describe('settings hub retains web-only functionality while adding app actions', () => {
@@ -183,16 +185,16 @@ describe('settings hub retains web-only functionality while adding app actions',
     contact.setAttribute('open', '');
     expect(screen.getAllByLabelText('生日')).toHaveLength(1);
     for (const label of ['公開生日', '公開手機號碼', '公開真實姓名', '公開電子信箱', '公開寄送地址']) expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /我的商品 · 閱覽與管理/ })).toHaveAttribute('href', '/my-listings');
+    goSection('個人資料');fireEvent.click(screen.getByRole('link',{name:/返回我的設定/}));expect(screen.getByRole('link', { name: /我的商品 · 閱覽與管理/ })).toHaveAttribute('href', '/my-listings');
     expect(screen.getByRole('link', { name: /刊登好物/ })).toHaveAttribute('href', '/sell');
     expect(screen.getByRole('link', { name: /通知設定/ })).toHaveAttribute('href', '/settings/notifications');
-    const advanced = screen.getByText('進階功能').closest('details')!;
+    goSection('權益與進階功能');const advanced = screen.getByText('進階功能').closest('details')!;
     expect(advanced).not.toHaveAttribute('open'); advanced.open = true; fireEvent(advanced, new Event('toggle'));
     expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ })).toHaveAttribute('href', '/purchase-history');
     expect(screen.getByRole('link', { name: /查看贊助與購買紀錄/ }).querySelector('button')).toBeNull();
     expect((await screen.findByRole('link', { name: /查看 API 文件/ })).querySelector('button')).toBeNull();
     expect(await screen.findByRole('button', { name: /一鍵複製 AI 指令/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '上傳大頭照' })).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('button', { name: '上傳大頭照', hidden:true })).toHaveAttribute('tabindex', '0');
   });
   it('keeps a visible camera affordance and opens the photo chooser from Enter and Space, not from focus', async () => {
     const fetcher = vi.fn(async (url: string, _init?: RequestInit) => ok(url.endsWith('/availability') ? { freeMonthlyLimit: 3, freeUsedThisMonth: 1, permanentCreditsRemaining: 0, paidPurchasesAvailable: false } : profile));

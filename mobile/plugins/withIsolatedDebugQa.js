@@ -97,10 +97,23 @@ function isolatedIosQaInput(source) {
     .replace(metro, metro + start + '\n');
 }
 
+// The QA package has its own identity and no production Firebase client.
+// Only the explicit visual-only task skips Firebase initialization resources.
+// A normal build, or any mixed task invocation including Release, keeps FCM.
+function isolatedQaGoogleServices(source){
+ if(source.includes('wishlistOnlyVisualQaTasks'))return source;
+ const plugin=/^apply plugin: ['"]com\.google\.gms\.google-services['"]\s*$/m;
+ if(!plugin.test(source))return source;
+ return source.replace(plugin,`def wishlistOnlyVisualQaTasks = !gradle.startParameter.taskNames.isEmpty() && gradle.startParameter.taskNames.every { it.toLowerCase().contains('visualqa') }
+if (!((findProperty('wishlistVisualQa') ?: 'false').toBoolean() && wishlistOnlyVisualQaTasks)) {
+    apply plugin: 'com.google.gms.google-services'
+}`);
+}
+
 module.exports = config => {
   config = withAppBuildGradle(config, mod => {
     if (mod.modResults.language !== 'groovy') throw new Error('Only the audited Groovy Android layout is supported');
-    mod.modResults.contents = isolatedVisualQa(isolatedDebugQa(mod.modResults.contents));
+    mod.modResults.contents = isolatedQaGoogleServices(isolatedVisualQa(isolatedDebugQa(mod.modResults.contents)));
     return mod;
   });
   config = withDangerousMod(config, ['android', async mod => {
@@ -122,3 +135,5 @@ module.exports.isolatedVisualQa = isolatedVisualQa;
 module.exports.visualQaManifest = visualQaManifest;
 module.exports.isolatedIosQaMetro = isolatedIosQaMetro;
 module.exports.isolatedIosQaInput = isolatedIosQaInput;
+
+module.exports.isolatedQaGoogleServices=isolatedQaGoogleServices;

@@ -19,11 +19,13 @@ export const DELETION_IMPACT_LABELS = {
   reportsAuthored: '本人商品檢舉與證據', reportOperationReceipts: '本人檢舉收件與安全放棄回執', reportsOnOwnedListings: '隨本人刊登移除的檢舉案件', moderationActionsOnOwnedListings: '隨本人刊登移除的審核紀錄', moderationActionsDetachingOwnReports: '保留但解除本人案件關聯的審核紀錄',
   wishlists: '願望清單', wishes: '願望', wishCreateReceipts: '願望建立操作紀錄', listings: '刊登', uploadedPhotos: '商品照片', conversations: '需封存聊天室', messagesAuthored: '本人發送訊息', otherMessagesInSharedConversations: '保留對方自有訊息', meetupAppointments: '移除面交預約', upcomingMeetupAppointments: '其中尚未結束的預約', purchaseRecords: '解除帳號關聯的購買紀錄', giftClaimsInOtherWishlists: '解除他人願望代購占用', originalCreditsInOtherWishlists: '解除他人願望原始關聯', itemWatches: '商品關注', followRelationships: '追蹤關係', blockRelationships: '封鎖關係', feedbackRecords: '意見回報', crawlerRecords: '本人分析錯誤紀錄',
 };
-export type DeletionImpact = { capturedAt: string; counts: Record<keyof typeof DELETION_IMPACT_LABELS, number> };
+export const ADDITIONAL_DELETION_LABELS={productInterests:'喜歡與取消喜歡狀態',productInterestOperations:'喜歡操作回執',notificationPreferences:'交易通知偏好',notificationOperations:'通知偏好回執',pushDevices:'已註冊推播裝置',pushEvents:'待處理推播事件',pushDeliveries:'推播傳送紀錄',sourceInquiries:'外部來源代問紀錄',photoCancellations:'聊天照片安全放棄回執'} as const;
+export function additionalDeletionCounts(value:unknown){if(value===undefined)return undefined;if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!==Object.keys(ADDITIONAL_DELETION_LABELS).sort().join(',')||!Object.values(value).every(v=>Number.isSafeInteger(v)&&typeof v==='number'&&v>=0&&v<=2147483647))throw Error('Invalid extended deletion inventory');return value as Record<keyof typeof ADDITIONAL_DELETION_LABELS,number>;}
+export type DeletionImpact = { additionalCounts?:Record<keyof typeof ADDITIONAL_DELETION_LABELS,number>;capturedAt: string; counts: Record<keyof typeof DELETION_IMPACT_LABELS, number> };
 export function parseDeletionImpact(value: unknown): DeletionImpact {
   const impact = record(value), counts = record(impact.counts);
   if (impact.version !== 2 || impact.previewOnly !== true || impact.accountDeleted !== false || !timestamp(impact.capturedAt) || Object.keys(counts).sort().join(',') !== Object.keys(DELETION_IMPACT_LABELS).sort().join(',') || !Object.values(counts).every(count)) throw new Error('刪除影響盤點資料無效；尚未建立刪除操作。');
-  return { capturedAt: impact.capturedAt, counts: counts as DeletionImpact['counts'] };
+  return { ...(impact.additionalCounts===undefined?{}:{additionalCounts:additionalDeletionCounts(impact.additionalCounts)}),capturedAt: impact.capturedAt, counts: counts as DeletionImpact['counts'] };
 }
 export function encodeDeletionJournal(apiUrl: string, userId: number, originalToken: string, clientActionId: string, local = false) {
   if (!Number.isSafeInteger(userId) || userId < 1 || userId > 2147483647 || !uuid(clientActionId)) throw new Error('刪除操作識別無效。');

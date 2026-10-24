@@ -1,3 +1,6 @@
+import productInterestRoutes from './routes/productInterestRoutes';
+import { startPushWorker } from './lib/pushOutbox';
+import notificationRoutes from './routes/notificationRoutes';
 import {createRetailPriceAdmin} from './routes/retailPriceRoutes';
 import {createSourceManagerRoutes} from './routes/sourceManagerRoutes';
 import { authenticateToken } from './middleware/auth';
@@ -107,6 +110,8 @@ app.use('/api/listing-media', listingMediaRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/internal/marketing', marketingWorkerRoutes);
 app.use('/api/internal/minimax-vision', express.json({ limit: '8kb' }), minimaxRecognitionRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/product-interest',productInterestRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/native-wishes', nativeWishRoutes);
 app.use('/api/listing-reports', listingReportRoutes);
@@ -245,7 +250,8 @@ app.use((err: any, req: Request, res: Response, next: express.NextFunction) => {
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`[server]: Server is running at http://0.0.0.0:${port}`);
 });
+const stopPushWorker = startPushWorker();
 const stopMediaErasureWorker = startMediaErasureWorker();
 const stopEclawRecognitionWorker = startEclawRecognitionWorker();
 const stopExternalCandidateExpiryWorker = startExternalCandidateExpiryWorker();
-server.once('close', () => { stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });
+server.once('close', () => { stopPushWorker(); stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });

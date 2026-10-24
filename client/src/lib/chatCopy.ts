@@ -1,6 +1,9 @@
 import { getDisplayLocale } from '../utils/localization';
 import type { ChatRoomRecord } from './chatData';
 const english = {
+  "檢舉這則訊息": "Report this message",
+  "查看賣場": "View storefront",
+  "商品照片": "Product photo",
   "Wishlist AI 代問": "Wishlist AI inquiries",
   "正在讀取來源對話…": "Reading source conversations…",
   "重新讀取來源對話": "Reload source conversations",

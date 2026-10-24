@@ -16,7 +16,7 @@ export default function MarketplaceDialog({ title, children, onClose, closeLabel
     else if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last!.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }}>
-    <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={'flex max-h-[90dvh] w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-xl outline-none ' + (wide ? 'max-w-4xl' : 'max-w-2xl')}>
+    <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={'flex max-h-[90dvh] w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-white text-stone-900 shadow-xl outline-none ' + (wide ? 'max-w-4xl' : 'max-w-2xl')}>
       <div className="flex flex-none items-center justify-between gap-4 border-b border-stone-100 px-5 py-3"><h2 id={titleId} className="min-w-0 break-words text-xl font-semibold">{title}</h2><button type="button" onClick={onClose} disabled={closeDisabled} aria-label={closeLabel} className="min-h-11 flex-none rounded-xl border px-4 disabled:opacity-50">{closeLabel}</button></div><div className="min-h-0 overflow-y-auto overscroll-contain p-5">{children}</div>{footer && <footer className="flex-none border-t border-stone-100 bg-white px-5 py-3">{footer}</footer>}
     </div>
   </div>;

@@ -1,3 +1,4 @@
+import ProductInterest from './ProductInterest';
 import { MapPin, Info } from 'lucide-react';
 import { ListingPhotoGallery } from './ListingPhoto';
 import OriginalSourceLink from './OriginalSourceLink';
@@ -13,7 +14,7 @@ export default function SourceProductDetail({ item }: { item: SourceLead }) {
       <OriginalSourceLink url={item.canonicalUrl} />
       <div className="rounded-2xl bg-stone-50 p-4"><p className="mb-1 text-xs font-medium text-stone-500">{text('原文價格資訊')}</p><p className="break-words text-xl font-bold leading-relaxed text-green-800">{sourceLeadPrice(item.publicFacts?.priceText)}</p><p className="mt-1 text-xs text-stone-600">{text('價格、現貨與交易條件請以原賣家確認為準。')}</p></div>
     </header>
-    <div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+    <ProductInterest kind="source" id={item.id}/><div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <section className="min-w-0" aria-label={text('商品照片')}><ListingPhotoGallery photos={item.media ?? []} title={item.title} completeness={item.photoCompleteness} /></section>
       <div className="min-w-0 space-y-5">
         <section className="space-y-2"><h4 className="font-semibold text-stone-900">{text('商品說明')}</h4><p className="whitespace-pre-wrap break-words text-sm leading-7 text-stone-700">{item.summary}</p></section>

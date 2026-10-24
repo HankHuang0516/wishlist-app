@@ -53,7 +53,7 @@ describe('Avatar Upload Interaction', () => {
     it('triggers file input click when avatar container is clicked', async () => {
         render(
             <AuthContext.Provider value={mockAuth}>
-                <MemoryRouter>
+                <MemoryRouter initialEntries={['/settings?section=profile']}>
                     <SettingsPage />
                 </MemoryRouter>
             </AuthContext.Provider>

@@ -29,6 +29,10 @@ function SettingsSession() {
     const { token, user, redirectingToLogin } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const sectionParam=new URLSearchParams(location.search).get('section');
+    const section=['profile','security','language','services'].includes(sectionParam??'')?sectionParam:'home';
+    const sectionNames={home:settingsChinese()?'我的設定':'My settings',profile:st('個人資料'),security:settingsChinese()?'帳號安全':'Account security',language:settingsChinese()?'語言與顯示':'Language & display',services:settingsChinese()?'權益與進階功能':'Benefits & advanced services'};
+
     const settings = useSettingsProfile(token, user?.id);
     const installation = useWebAppInstall();
     const { profile, loading, savedField, update: handleUpdate } = settings;
@@ -105,7 +109,8 @@ function SettingsSession() {
                     {feedback.message}
                 </div>
             )}
-            <div><h1 className="text-[22px] font-bold leading-7 text-muji-primary">{st("個人資料")}</h1><p className="mt-1 text-xs text-gray-500">{st("管理你的帳號與偏好設定")}</p></div>
+            <header className="space-y-3">{section!=='home'&&<Link className="inline-flex min-h-11 items-center text-blue-800 aria-disabled:opacity-50" aria-disabled={securityBusy} onClick={event=>{if(securityBusy)event.preventDefault();}} to="/settings">{settingsChinese()?'‹ 返回我的設定':'‹ Back to settings'}</Link>}<h1 className="text-2xl font-bold leading-8 text-muji-primary">{sectionNames[section as keyof typeof sectionNames]}</h1>{section==='home'&&<p className="text-sm text-gray-600">{profile.name||user?.name||st('個人資料')}</p>}</header>
+            {section==='home'&&<nav aria-label={settingsChinese()?'設定目錄':'Settings sections'} className="overflow-hidden rounded-2xl border bg-white">{(['profile','security','language','services'] as const).map(key=><Link key={key} className="flex min-h-14 items-center justify-between gap-3 border-b p-4 last:border-b-0" to={'/settings?section='+key}><span className="font-medium">{sectionNames[key]}</span><ChevronRight size={20} aria-hidden="true"/></Link>)}</nav>}
             {settings.notice && <section aria-label={st("個人資料儲存狀態")} className="rounded-md border bg-white p-3 text-sm"><p role="status">{settingsMessage(settings.notice)}</p>
                 {settings.pending && <div className="mt-2 flex flex-wrap gap-2">
                     <Button disabled={settings.busy} onClick={() => settings.recover('read')}>{st("查核原儲存結果")}</Button>
@@ -115,6 +120,7 @@ function SettingsSession() {
                 {settings.storageError && <Button onClick={settings.retryRead}>{st("重試安全讀取")}</Button>}
             </section>}
 
+            <section hidden={section!=='language'} className="space-y-3">
             {/* Language Section */}
             <Card className="settings-language">
                 <CardHeader className="pb-3">
@@ -143,17 +149,18 @@ function SettingsSession() {
                 </CardContent>
             </Card>
 
+            </section>
             {/* Avatar Section */}
-            <section aria-labelledby="settings-actions" className="rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+            <section hidden={section!=='home'} aria-labelledby="settings-actions" className="rounded-lg border border-muji-border bg-white p-3 shadow-sm">
                 <h2 id="settings-actions" className="mb-3 font-semibold">{st("我的功能")}</h2>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {[{ to: '/wishes', label: st("我的願望"), description: st("拍照與 AI 辨識"), icon: Gift },
+                <div className="grid grid-cols-2 gap-2">
+                    {[{ to: '/', label: settingsChinese()?'首頁':'Home', description: settingsChinese()?'願望與商品總覽':'Overview', icon: Gift },{ to: '/social', label: settingsChinese()?'好友與社群':'Friends', description: settingsChinese()?'公開願望與追蹤':'Public wishes & following', icon: Users },{ to: '/wishes', label: st("我的願望"), description: st("拍照與 AI 辨識"), icon: Gift },
                         { to: '/my-listings', label: st("我的商品"), description: st("閱覽與管理"), icon: Package },
                         { to: '/chat', label: st("聊天與面交"), description: st("訊息與預約"), icon: MessageCircle },
-                        { to: '/sell', label: st("刊登好物"), description: st("連拍或批次上傳"), icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
+                        { to: '/sell', label: st("刊登好物"), description: st("連拍或批次上傳"), icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-1 rounded-md border border-gray-200 px-2 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
                 </div>
             </section>
-            <fieldset disabled={settings.locked || isUploading || changingLang} className="min-w-0 border-0 p-0"><legend className="sr-only">{st("個人資料與隱私設定")}</legend><Card className="settings-avatar">
+            <section hidden={section!=='profile'} className="space-y-3"><fieldset disabled={settings.locked || isUploading || changingLang} className="min-w-0 border-0 p-0"><legend className="sr-only">{st("個人資料與隱私設定")}</legend><Card className="settings-avatar">
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                         <span>{st("大頭照與暱稱")}</span>
@@ -249,6 +256,8 @@ function SettingsSession() {
                 {avatar.storageError && <Button disabled={avatar.busy} onClick={avatar.retryRead}>{st("重試讀取上傳提醒")}</Button>}
             </section>}
 
+            </section>
+            <section hidden={section!=='home'}>
             {/* Notification Settings */}
             <Link to="/settings/notifications" className="block">
                 <Card className="settings-notifications hover:bg-gray-50 transition-colors cursor-pointer">
@@ -263,8 +272,10 @@ function SettingsSession() {
                 </Card>
             </Link>
 
+            </section>
             {/* Private Info Section */}
-            <AccountSecurityPanel key={token} onOperationBusy={onSecurityBusy} reloadPending={changingLang} />
+            {section==='security'&&<AccountSecurityPanel key={token} onOperationBusy={onSecurityBusy} reloadPending={changingLang} />}
+            <section hidden={section!=='profile'} className="space-y-3">
             <fieldset disabled={settings.locked || isUploading || changingLang} className="min-w-0 border-0 p-0"><legend className="sr-only">{st("私人資料與公開權限")}</legend>
             <div className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <h2 className="flex items-center gap-2 text-lg font-semibold"><Truck className="h-5 w-5 shrink-0" aria-hidden="true" />{t('settings.privacyTitle')}</h2>
@@ -446,6 +457,8 @@ function SettingsSession() {
                     </div>
                 </details>
             </div></fieldset>
+            </section>
+            <section hidden={section!=='services'} className="space-y-3">
             <AccountBenefits key={`benefits-${token}`} />
             <details onToggle={event => setAdvancedOpen(event.currentTarget.open)} className="settings-advanced rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 sm:min-h-0"><Settings className="h-5 w-5" aria-hidden="true" /><span><span className="block text-sm font-semibold leading-5">{st("進階功能")}</span><span className="block text-xs leading-4 text-gray-500">{st("AI 整合・交易紀錄・安裝網頁 App・好友與送禮")}</span></span><ChevronRight className="ml-auto h-5 w-5" aria-hidden="true" /></summary>
@@ -551,6 +564,7 @@ function SettingsSession() {
 
             </div>
             </details>
+            </section>
         </div>
 
     );

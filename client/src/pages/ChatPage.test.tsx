@@ -30,7 +30,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
-const roomView = (value = props) => <ChatRoomWeb {...value} />;
+const roomView = (value = props) => <MemoryRouter><ChatRoomWeb {...value} /></MemoryRouter>;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
   it('updates the chat summary immediately after confirmation and cancellation in the open meetup dialog', async () => {
@@ -340,7 +340,7 @@ describe('private chat web parity', () => {
   it('does not inject a delayed old-account conversation after switching session scope', async () => {
     let finish!: (value: unknown) => void; const original = makeRoom();
     api.mockImplementation((token: string, path: string) => token === 'fixture' && path === '/chat/conversations/' + roomId ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(path.endsWith('/meetup') ? { appointment: null } : path.includes('/messages?') ? { items: [], nextBeforeSequence: null, nextAfterSequence: null } : makeRoom({ buyerUserId: 44, buyer: { id: 44, name: '另一個合成買家' }, listing: { ...original.listing, title: '新帳號商品' } })));
-    const view = render(<ChatRoomWeb key="42" {...props} />); await waitFor(() => expect(finish).toBeDefined()); view.rerender(<ChatRoomWeb key="44" {...props} token="next" userId={44} />);
+    const view = render(<MemoryRouter><ChatRoomWeb key="42" {...props} /></MemoryRouter>); await waitFor(() => expect(finish).toBeDefined()); view.rerender(<MemoryRouter><ChatRoomWeb key="44" {...props} token="next" userId={44} /></MemoryRouter>);
     await screen.findByText('新帳號商品'); await act(async () => finish(original)); expect(screen.queryByText(original.listing.title)).not.toBeInTheDocument(); expect(store.get).toHaveBeenCalledWith(`44.message.${roomId}`);
   });
 });

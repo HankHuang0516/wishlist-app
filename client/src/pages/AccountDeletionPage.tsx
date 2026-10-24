@@ -6,7 +6,7 @@ import { erasePrivatePendingData } from '../lib/webPendingStore';
 import { getDisplayLocale } from '../utils/localization';
 import { deletionText as dt } from '../lib/accountDeletionCopy';
 import { recoverDeletionJournal,publishDeletionJournal,verifyDeletionJournal,clearDeletionJournal } from '../lib/deletionRecoveryWeb';
-import { DELETION_IMPACT_LABELS, useDeletionImpact } from '../lib/deletionImpactWeb';
+import { ADDITIONAL_DELETION_LABELS, DELETION_IMPACT_LABELS, useDeletionImpact } from '../lib/deletionImpactWeb';
 import {
   abandonDeletion, createPendingDeletion, lookupDeletion,
   submitDeletion, type DeletionResult, type PendingDeletion,
@@ -175,9 +175,10 @@ function DeletionSession() {
       {impact ? <div className="rounded-xl bg-gray-50 p-4 text-sm">
         <p>{dt("唯讀盤點時間：")}{new Date(impact.capturedAt).toLocaleString(getDisplayLocale().startsWith('zh')?'zh-TW':'en-US')}{dt("；數量可能重疊且會變動，尚未刪除。")}</p>
         <p>{dt("願望清單")} {impact.counts.wishlists}{dt("、願望")} {impact.counts.wishes}{dt("、刊登")} {impact.counts.listings}{dt("、商品照片")} {impact.counts.uploadedPhotos}{dt("、本人訊息")} {impact.counts.messagesAuthored}{dt('。')}</p>
-        <dl aria-label={dt('完整資料影響盤點')} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 font-medium text-blue-800">{getDisplayLocale().startsWith('zh')?'查看完整資料盤點（'+(impact.additionalCounts?32:23)+'項）':'View full inventory ('+(impact.additionalCounts?32:23)+' categories)'}</summary><dl aria-label={dt('完整資料影響盤點')} className="mt-4 grid gap-3 sm:grid-cols-2">
           {Object.entries(DELETION_IMPACT_LABELS).map(([key,label])=><div key={key} className="flex items-start justify-between gap-3 border-t border-gray-200 pt-2"><dt>{dt(label)}</dt><dd className="font-semibold tabular-nums">{impact.counts[key as keyof typeof DELETION_IMPACT_LABELS]}</dd></div>)}
-        </dl>
+          {impact.additionalCounts&&Object.entries(ADDITIONAL_DELETION_LABELS).map(([key,label])=><div key={key} className="flex items-start justify-between gap-3 border-t border-gray-200 pt-2"><dt>{getDisplayLocale().startsWith('zh')?label:({productInterests:'Like and unlike states',productInterestOperations:'Like operation receipts',notificationPreferences:'Transaction notification preferences',notificationOperations:'Notification preference receipts',pushDevices:'Registered push devices',pushEvents:'Queued push events',pushDeliveries:'Push delivery records',sourceInquiries:'Source inquiry records',photoCancellations:'Chat photo abandonment receipts'} as Record<string,string>)[key]}</dt><dd className="font-semibold tabular-nums">{impact.additionalCounts![key as keyof typeof ADDITIONAL_DELETION_LABELS]}</dd></div>)}
+        </dl></details>
       </div> : <p>{dt("尚未取得有效盤點，不可送出刪除。")}</p>}
       {impactRead.state==='loading' && <p role="status">{dt('正在重新盤點本人資料…')}</p>}
       {impactRead.state==='failed' && <p role="alert">{dt('無法取得完整刪除影響盤點；沒有送出刪除。請重新盤點後再確認。')}</p>}

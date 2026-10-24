@@ -13,6 +13,10 @@ async function raw(factory: IDBFactory, name: string, table: string, key: string
 beforeEach(() => { vi.stubGlobal('crypto', crypt); vi.stubGlobal('IDBKeyRange', IDBKeyRange); });
 afterEach(()=>vi.unstubAllGlobals());
 describe('browser encrypted pending operations', () => {
+  it.each(['notification-preferences','product-like.pending','message-photo.11111111-1111-4111-8111-111111111111','chat-report.11111111-1111-4111-8111-111111111111'])('persists and recovers the actual new feature %s key without a plaintext fallback',async feature=>{
+    const {store,factory,name}=fixture(),key=await pendingRequestKey('https://example.com/api',42,feature);await store.save(key,'exact original operation');
+    const reopened=createWebPendingStore(name,factory,crypt);expect(await reopened.get(key)).toBe('exact original operation');expect(await reopened.clear(key,'different operation')).toBe(false);expect(await reopened.get(key)).toBe('exact original operation');expect(await reopened.clear(key,'exact original operation')).toBe(true);
+  });
   it('atomically transfers a reviewed original operation into an encrypted recoverable edit draft', async () => {
     const {store, factory, name} = fixture(), operationKey = scope + '.listing-management', draftKey = scope + '.listing-edit.11111111-1111-4111-8111-111111111111';
     await store.save(operationKey, 'original-proposal'); await store.replaceDraft(draftKey, null, 'reviewed-other-draft');

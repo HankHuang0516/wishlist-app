@@ -1,3 +1,4 @@
+import ProductInterest from '../components/ProductInterest';
 import RetailPriceNote from '../components/RetailPriceNote';
 import DiscoveryProductDetail, { DiscoveryPhoto as Photo, DiscoveryProductActions } from '../components/DiscoveryProductDetail';
 import OriginalSourceLink from '../components/OriginalSourceLink';
@@ -7,7 +8,7 @@ import {Search,SlidersHorizontal,MapPin,LayoutGrid,List,ChevronDown,ArrowUpRight
 import {useAuth} from '../context/AuthContext';
 import {publicApi,api,ApiFailure} from '../lib/marketplaceApi';
 import {marketplaceOrigin} from '../lib/marketplaceUrl';
-import {defaultDiscovery,readDiscovery,discoverySearch,discoveryRequest,parseDiscovery,type DiscoveryPage,type DiscoveryProduct,type DiscoveryFilters,type RetailPriceReference,type RetailConversion} from '../lib/discovery';
+import {defaultDiscovery,readDiscovery,discoverySearch,discoveryRequest,parseDiscovery,type DiscoveryPage,type DiscoveryProduct,type DiscoveryFilters} from '../lib/discovery';
 import ProductWishButton,{ProductWishProvider} from '../components/ProductWishButton';
 import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 import MarketplaceDialog from '../components/MarketplaceDialog';
@@ -16,7 +17,6 @@ import './exploreDiscovery.css';
 const say=(zh:string,en:string)=>getDisplayLocale().startsWith('zh')?zh:en;
 const price=(p:DiscoveryProduct)=>p.price!==null?'NT$ '+new Intl.NumberFormat(getDisplayLocale(),{maximumFractionDigits:2}).format(p.price):say('價格待詢問','Ask for price');
 const condition=(p:DiscoveryProduct)=>p.condition==='NEW'?say('全新','New'):p.condition==='USED'?say('二手','Used'):say('狀況待確認','Condition unconfirmed');
-function Photo({src,title}:{src:string|null;title:string}){const [broken,setBroken]=useState(false);useEffect(()=>setBroken(false),[src]);return src&&!broken?<img src={src} alt={title} loading="lazy" onError={()=>setBroken(true)}/>:<div className="discovery-image-fallback"><ImageIcon size={32}/><small>{say('尚無可用照片','Photo unavailable')}</small></div>;}
 
 export default function ExploreDiscoveryPage(){return <ProductWishProvider><DiscoverySession/></ProductWishProvider>;}
 function DiscoverySession(){
@@ -70,7 +70,7 @@ function DiscoverySession(){
     {!busy&&filters.feed!=='cp'&&page?.total===0&&<div className="discovery-empty"><Search size={30}/><h3>{filters.feed==='for-you'?say('還沒遇到符合願望的商品','No wish matches yet'):say('換個條件，再找找','Try another search')}</h3><p>{filters.feed==='for-you'?say('先選上方感興趣的分類逛逛；加入商品與預算後，個人推薦會依真實願望更新。','Choose a category above to browse your interests. Add wishes and budgets to guide your personal recommendations.'):say('目前沒有符合全部條件的商品，可調整預算或分類。','No products match all filters. Try another budget or category.')}</p>{filters.feed==='for-you'?<Link to="/wishes">{say('編輯我的願望','Edit my wishes')}</Link>:<button onClick={()=>setParams(new URLSearchParams())}>{say('看看全部商品','Browse all products')}</button>}</div>}
     {page&&<div className={'discovery-grid '+(filters.display==='list'?'as-list':'')} data-testid="discovery-products">{page.items.map(p=><article key={p.key} className="discovery-card" data-product-key={p.key}>
       <div className="discovery-photo"><button className="discovery-open-photo" onClick={()=>openProduct(p)} aria-label={say('查看商品：','View product: ')+p.title}><Photo src={p.thumbnailUrl} title={p.title}/></button><ProductWishButton product={p}/>{p.photos.length>1&&<span className="discovery-photo-count">{p.photos.length} {say('張','photos')}</span>}</div>
-      <div className="discovery-card-body"><p className="discovery-card-category">{p.kind==='listing'?say('站內刊登','On-site listing'):say('公開來源','Public reference')}</p><button className="discovery-product-title" onClick={()=>openProduct(p)}>{p.title}</button><strong className="discovery-price">{price(p)}</strong><p className="discovery-card-meta">{condition(p)}{p.county?' · '+p.county:''}</p>{p.cp?.score!==null&&p.cp?.score!==undefined&&<p className="discovery-cp-score"><Sparkles size={11}/>{say('AI CP','AI value')} {p.cp.score}</p>}<RetailPriceNote retail={p.cp?.retail} conversion={p.cp?.conversion}/>{p.match&&<p className="discovery-match"><Sparkles size={12}/>{p.match.reasons.includes('BUDGET')?say('符合你的願望與預算','Matches your wish & budget'):say('符合你的願望','Matches your wish')}</p>}{p.kind!=='listing'&&<><p className="discovery-reference">{say('庫存待確認','Stock unconfirmed')}</p>{p.canonicalUrl&&<div className="mt-2"><OriginalSourceLink url={p.canonicalUrl} compact /></div>}</>}</div>
+      <div className="discovery-card-body"><p className="discovery-card-category">{p.kind==='listing'?say('站內刊登','On-site listing'):say('公開來源','Public reference')}</p><button className="discovery-product-title" onClick={()=>openProduct(p)}>{p.title}</button><strong className="discovery-price">{price(p)}</strong><p className="discovery-card-meta">{condition(p)}{p.county?' · '+p.county:''}</p><ProductInterest kind={p.kind} id={p.id} compact/>{p.cp?.score!==null&&p.cp?.score!==undefined&&<p className="discovery-cp-score"><Sparkles size={11}/>{say('AI CP','AI value')} {p.cp.score}</p>}<RetailPriceNote retail={p.cp?.retail} conversion={p.cp?.conversion}/>{p.match&&<p className="discovery-match"><Sparkles size={12}/>{p.match.reasons.includes('BUDGET')?say('符合你的願望與預算','Matches your wish & budget'):say('符合你的願望','Matches your wish')}</p>}{p.kind!=='listing'&&<><p className="discovery-reference">{say('庫存待確認','Stock unconfirmed')}</p>{p.canonicalUrl&&<div className="mt-2"><OriginalSourceLink url={p.canonicalUrl} compact /></div>}</>}</div>
     </article>)}</div>}
     {page?.nextCursor&&<div className="discovery-load-more"><button disabled={moreBusy} onClick={()=>void more()}>{moreBusy?say('讀取中…','Loading…'):say('探索更多商品','Discover more')}</button><span>{say(`已顯示 ${page.items.length} / ${page.total}`,`${page.items.length} of ${page.total} shown`)}</span></div>}
     {page&&<p className="discovery-footnote">{say('公開來源為商品參考，庫存、商品狀況及交易條件需向原賣家確認。','Public references require seller confirmation of stock, condition and terms.')}{page.unknownPriceExcluded&&say(' 預算篩選僅包含有明確台幣標價的商品。',' Budget filters include explicit TWD prices only.')}</p>}

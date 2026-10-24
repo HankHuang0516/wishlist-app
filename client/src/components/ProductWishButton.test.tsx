@@ -1,64 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { AuthContext } from '../context/AuthContext';
-import { marketplaceOrigin } from '../lib/marketplaceUrl';
-import ProductWishButton, { ProductWishProvider } from './ProductWishButton';
-const { api } = vi.hoisted(() => ({ api: vi.fn() }));
-vi.mock('../lib/marketplaceApi', async original => ({ ...await original<typeof import('../lib/marketplaceApi')>(), api }));
-const product = { kind: 'listing' as const, id: 'ab427730-60af-40c4-b568-37170d93e605', title: '合成商品' };
-const auth = { token: 'fixture', user: { id: 42, phoneNumber: 'synthetic-only' }, isAuthenticated: true, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn() };
-const state = { lists: [{ id: 5, title: '我的私人願望', isPublic: false, remaining: 10 }], saved: [] };
-const scope = `wishlist-product-wish:${marketplaceOrigin()}:42`;
-function view(value = auth) { return <MemoryRouter><AuthContext.Provider value={value}><ProductWishProvider><ProductWishButton product={product} /></ProductWishProvider></AuthContext.Provider></MemoryRouter>; }
-beforeEach(() => { localStorage.clear(); localStorage.setItem('user-locale', 'zh-TW'); api.mockReset().mockResolvedValue(state); });
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
-describe('product heart creates real wishes', () => {
-  it('chooses a destination once, accepts only a bound ACK and shows the actual wishlist link', async () => {
-    api.mockImplementation(async (_token, path, options) => path === '/product-wishes' && options?.method === 'POST'
-      ? { ...JSON.parse(options.body), productKey: 'listing:' + product.id, itemId: 9, deleted: false } : state);
-    render(view()); await waitFor(() => expect(api).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: '加入願望清單：合成商品' }));
-    await screen.findByRole('dialog'); fireEvent.click(screen.getByRole('button', { name: /我的私人願望/ }));
-    expect(await screen.findByRole('link', { name: '查看願望' })).toHaveAttribute('href', '/wishlists/5');
-    expect(screen.getByRole('button', { name: '已加入願望：合成商品' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '已加入願望：合成商品' }));
-    expect(api.mock.calls.filter(c => c[2]?.method === 'POST')).toHaveLength(1);
-    expect(localStorage.getItem(scope + ':destination')).toBe('5');
-  });
-  it('restores an uncertain add using GET only, then keeps the same operation on explicit retry', async () => {
-    const pending = { kind: 'listing', productId: product.id, wishlistId: 5, clientRequestId: 'a2377304-60af-40c4-b568-37170d93e605' };
-    localStorage.setItem(scope + ':pending', JSON.stringify(pending));
-    api.mockImplementation(async (_token, path, options) => {
-      if (path.includes('/receipts/')) throw Error('lost response');
-      if (options?.method === 'POST') return { ...pending, productKey: 'listing:' + product.id, itemId: 9, deleted: false };
-      return state;
-    });
-    render(view()); await screen.findByRole('button', { name: '重試原加入' });
-    await waitFor(() => expect(screen.getByRole('button', { name: '重試原加入' })).toBeEnabled());
-    expect(api.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '重試原加入' })); await screen.findByRole('link', { name: '查看願望' });
-    expect(api.mock.calls.find(c => c[2]?.method === 'POST')?.[2].body).toBe(JSON.stringify(pending));
-  });
-  it('does not show success or mark the heart saved for an ACK naming another product', async () => {
-    localStorage.setItem(scope + ':destination', '5');
-    api.mockImplementation(async (_token, _path, options) => options?.method === 'POST'
-      ? { ...JSON.parse(options.body), productKey: 'listing:a2377304-60af-40c4-b568-37170d93e605', itemId: 9, deleted: false } : state);
-    render(view()); await act(async () => {}); fireEvent.click(screen.getByRole('button', { name: '加入願望清單：合成商品' }));
-    await screen.findByText(/加入結果尚未確認/);
-    expect(screen.queryByRole('link', { name: '查看願望' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '加入願望清單：合成商品' })).toHaveAttribute('aria-pressed', 'false');
-    expect(localStorage.getItem(scope + ':pending')).not.toBeNull();
-  });
-  it('leaves the first account operation under its own scope after switching accounts', async () => {
-    let finish!: (r: unknown) => void;
-    localStorage.setItem(scope + ':destination', '5');
-    api.mockImplementation((_token, _path, options) => options?.method === 'POST' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(state));
-    const mounted = render(view()); await act(async () => {}); fireEvent.click(screen.getByRole('button', { name: '加入願望清單：合成商品' }));
-    const pending = JSON.parse(localStorage.getItem(scope + ':pending')!);
-    mounted.rerender(view({ ...auth, token: 'other', user: { ...auth.user, id: 43 } }));
-    await act(async () => finish({ ...pending, productKey: 'listing:' + product.id, itemId: 9, deleted: false }));
-    expect(screen.queryByRole('link', { name: '查看願望' })).not.toBeInTheDocument();
-    expect(localStorage.getItem(scope + ':pending')).not.toBeNull();
-  });
-});
+import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+import {AuthContext} from '../context/AuthContext';
+import {marketplaceOrigin} from '../lib/marketplaceUrl';
+import ProductWishButton,{ProductWishProvider} from './ProductWishButton';
+const {api}=vi.hoisted(()=>({api:vi.fn()}));vi.mock('../lib/marketplaceApi',async original=>({...await original<typeof import('../lib/marketplaceApi')>(),api}));
+const product={kind:'listing' as const,id:'ab427730-60af-40c4-b568-37170d93e605',title:'合成商品'},key='listing:'+product.id;
+const auth={token:'fixture',user:{id:42,phoneNumber:'synthetic-only'},isAuthenticated:true,login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn()};
+const first={id:5,title:'私人清單',isPublic:false,remaining:10},second={id:6,title:'第二清單',isPublic:true,remaining:10};
+let state:{lists:typeof first[];saved:{productKey:string;itemId:number;wishlistId:number}[]};
+const scope=`wishlist-product-wish:${marketplaceOrigin()}:42`;
+function view(value=auth){return <MemoryRouter><AuthContext.Provider value={value}><ProductWishProvider><ProductWishButton product={product}/></ProductWishProvider></AuthContext.Provider></MemoryRouter>;}
+async function ready(){await waitFor(()=>expect(screen.getByRole('button',{name:/合成商品/})).toBeEnabled());}
+beforeEach(()=>{localStorage.clear();localStorage.setItem('user-locale','zh-TW');state={lists:[first],saved:[]};api.mockReset().mockImplementation(async(_token,path,options)=>{if(options?.method==='POST'){const b=JSON.parse(options.body),removed=b.action==='REMOVE';state.saved=removed?[]:[{productKey:key,itemId:9,wishlistId:b.wishlistId}];return {...b,productKey:key,itemId:removed?null:9,deleted:removed};}return state;});});
+afterEach(()=>{vi.restoreAllMocks();localStorage.clear();});
+it('directly adds and removes when there is exactly one owned wishlist',async()=>{render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'加入願望清單：合成商品'}));await screen.findByText('已加入願望清單。');expect(screen.queryByRole('dialog')).not.toBeInTheDocument();await ready();fireEvent.click(screen.getByRole('button',{name:'已加入願望：合成商品'}));await screen.findByText('已從願望清單移除。');expect(screen.getByRole('button',{name:'加入願望清單：合成商品'})).toHaveAttribute('aria-pressed','false');const posts=api.mock.calls.filter(c=>c[2]?.method==='POST').map(c=>JSON.parse(c[2].body));expect(posts).toHaveLength(2);expect(posts[1]).toMatchObject({action:'REMOVE',wishlistId:5,expectedItemId:9});});
+it('always asks for list selection and confirmation with multiple lists; a remembered destination never bypasses it',async()=>{state.lists=[first,second];localStorage.setItem(scope+':destination','5');render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'加入願望清單：合成商品'}));await screen.findByRole('dialog');fireEvent.click(screen.getByRole('radio',{name:/第二清單/}));expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'確認加入'}));await screen.findByText('已加入願望清單。');await ready();fireEvent.click(screen.getByRole('button',{name:'已加入願望：合成商品'}));await screen.findByRole('dialog');expect(screen.getByRole('radio',{name:/私人清單/})).toBeDisabled();expect(screen.getByRole('radio',{name:/第二清單/})).toBeChecked();expect(api.mock.calls.filter(c=>c[2]?.method==='POST')).toHaveLength(1);fireEvent.click(screen.getByRole('button',{name:'確認移除'}));await screen.findByText('已從願望清單移除。');expect(api.mock.calls.filter(c=>c[2]?.method==='POST')).toHaveLength(2);});
+it('does not mutate when the selection sheet is dismissed',async()=>{state.lists=[first,second];render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'加入願望清單：合成商品'}));fireEvent.click(await screen.findByRole('button',{name:'關閉'}));expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);});
+it('never marks a heart saved for a receipt bound to another product',async()=>{api.mockImplementation(async(_token,_path,o)=>o?.method==='POST'?{...JSON.parse(o.body),productKey:'source:'+product.id,itemId:9,deleted:false}:state);render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'加入願望清單：合成商品'}));await screen.findByText(/操作結果尚未確認/);expect(screen.queryByText('已加入願望清單。')).not.toBeInTheDocument();expect(localStorage.getItem(scope+':pending')).not.toBeNull();});
+it('restores uncertain removals using GET only and explicitly retries the same bound operation',async()=>{const pending={action:'REMOVE',kind:'listing',productId:product.id,wishlistId:5,expectedItemId:9,clientRequestId:'a2377304-60af-40c4-b568-37170d93e605'};localStorage.setItem(scope+':pending',JSON.stringify(pending));api.mockImplementation(async(_token,path,o)=>{if(path.includes('/receipts/'))throw Error('lost');return o?.method==='POST'?{...pending,productKey:key,itemId:null,deleted:true}:state;});render(view());await screen.findByRole('button',{name:'重試原操作'});await ready();expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'重試原操作'}));await screen.findByText('已從願望清單移除。');expect(api.mock.calls.find(c=>c[2]?.method==='POST')?.[2].body).toBe(JSON.stringify(pending));});
+it('does not deliver a prior account ACK into a new account',async()=>{let finish!:(v:unknown)=>void;api.mockImplementation(async(_token,_path,o)=>o?.method==='POST'?new Promise(resolve=>{finish=resolve;}):state);const mounted=render(view());await ready();fireEvent.click(screen.getByRole('button',{name:'加入願望清單：合成商品'}));const pending=JSON.parse(localStorage.getItem(scope+':pending')!);mounted.rerender(view({...auth,token:'other',user:{...auth.user,id:43}}));await act(async()=>finish({...pending,productKey:key,itemId:9,deleted:false}));expect(screen.queryByText('已加入願望清單。')).not.toBeInTheDocument();expect(localStorage.getItem(scope+':pending')).not.toBeNull();});

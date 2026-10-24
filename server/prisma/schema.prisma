@@ -947,6 +947,7 @@ model ProductWishLink {
 }
 
 model ProductWishReceipt {
+  action String @default("ADD")
   id Int @id @default(autoincrement())
   userId Int
   clientRequestId String @db.Uuid

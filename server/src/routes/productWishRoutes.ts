@@ -7,23 +7,26 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { listingCreationGate, ListingCreationError } from '../lib/listingCreation';
 import { isListingId, NON_SALE_QA_PREFIX } from '../lib/listingRules';
 import { leadCurrent, leadDTO } from '../lib/sourceLeadRules';
+import {enqueueWishPhotoErasure} from '../lib/wishPhotoErasure';
 import { getClientUrl } from '../config/constants';
 import { externalCandidateSelect, publicCandidate } from './externalListingRoutes';
 
 class WishError extends Error {
   constructor(public status: number, public code: string) { super(code); }
 }
-const receiptSelect = { clientRequestId: true, productKey: true, itemId: true, wishlistId: true } as const;
+const receiptSelect = { clientRequestId: true, productKey: true, itemId: true, wishlistId: true, action: true } as const;
 const kinds = ['listing', 'source', 'external'] as const;
 const validId = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) > 0 && Number(v) <= 2147483647;
 export function productWishInput(v: unknown) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw new WishError(400, 'INVALID_PRODUCT_WISH');
   const b = v as Record<string, unknown>;
-  if (Object.keys(b).sort().join(',') !== 'clientRequestId,kind,productId,wishlistId' || !isListingId(b.clientRequestId) ||
+  const action=b.action??'ADD';
+  const keys=action==='REMOVE'?'action,clientRequestId,expectedItemId,kind,productId,wishlistId':b.action===undefined?'clientRequestId,kind,productId,wishlistId':'action,clientRequestId,kind,productId,wishlistId';
+  if (!['ADD','REMOVE'].includes(String(action)) || action==='REMOVE'&&!validId(b.expectedItemId) || Object.keys(b).sort().join(',') !== keys || !isListingId(b.clientRequestId) ||
     !isListingId(b.productId) || !kinds.includes(b.kind as any) || !validId(b.wishlistId)) throw new WishError(400, 'INVALID_PRODUCT_WISH');
   const kind = b.kind as typeof kinds[number], productId = (b.productId as string).toLowerCase(), wishlistId = b.wishlistId as number;
-  return { kind, productId, wishlistId, clientRequestId: (b.clientRequestId as string).toLowerCase(), productKey: kind + ':' + productId,
-    requestHash: createHash('sha256').update(JSON.stringify([kind, productId, wishlistId])).digest('hex') };
+  return { action:action as 'ADD'|'REMOVE',expectedItemId:action==='REMOVE'?b.expectedItemId as number:null,kind, productId, wishlistId, clientRequestId: (b.clientRequestId as string).toLowerCase(), productKey: kind + ':' + productId,
+    requestHash: createHash('sha256').update(JSON.stringify(action==='REMOVE'?['REMOVE',kind,productId,wishlistId,b.expectedItemId]:[kind, productId, wishlistId])).digest('hex') };
 }
 async function snapshot(tx: Prisma.TransactionClient, kind: typeof kinds[number], id: string) {
   if (kind === 'listing') {
@@ -74,7 +77,7 @@ export function createProductWishRoutes() {
       return res.json({ ...row, deleted: row.itemId === null });
     } catch { return res.status(503).json({ errorCode: 'PRODUCT_WISH_READ_UNAVAILABLE' }); }
   });
-  router.post('/', rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false }), async (req: AuthRequest, res) => {
+  router.post('/', rateLimit({ windowMs: 60_000, limit: 20, keyGenerator:(req:AuthRequest)=>'wish-owner-'+req.user!.id, standardHeaders: true, legacyHeaders: false }), async (req: AuthRequest, res) => {
     try {
       if (Object.keys(req.query).length) throw new WishError(400, 'INVALID_PRODUCT_WISH');
       const input = productWishInput(req.body), userId = req.user!.id;
@@ -83,13 +86,20 @@ export function createProductWishRoutes() {
         const prior = await tx.productWishReceipt.findUnique({ where: { userId_clientRequestId: { userId, clientRequestId: input.clientRequestId } } });
         if (prior) {
           if (prior.requestHash !== input.requestHash) throw new WishError(409, 'PRODUCT_WISH_REQUEST_CONFLICT');
-          return { clientRequestId: prior.clientRequestId, productKey: prior.productKey, wishlistId: prior.wishlistId, itemId: prior.itemId, deleted: prior.itemId === null };
+          return { clientRequestId: prior.clientRequestId, productKey: prior.productKey, wishlistId: prior.wishlistId, itemId: prior.itemId, deleted: prior.itemId === null,action:prior.action };
         }
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Wishlist" WHERE "id" = ${input.wishlistId} FOR UPDATE`);
         const list = await tx.wishlist.findUnique({ where: { id: input.wishlistId }, select: { userId: true, maxItems: true } });
         if (!list || list.userId !== userId) throw new WishError(404, 'WISHLIST_UNAVAILABLE');
         const existing = await tx.productWishLink.findUnique({ where: { userId_productKey: { userId, productKey: input.productKey } }, include: { item: { select: { id: true, wishlistId: true, wishlist: { select: { userId: true } } } } } });
+        if(input.action==='REMOVE'){
+          if(existing?.item&&(existing.item.wishlist.userId!==userId||existing.item.wishlistId!==input.wishlistId||existing.item.id!==input.expectedItemId))throw new WishError(409,'PRODUCT_WISH_CHANGED');
+          if(existing?.item){await enqueueWishPhotoErasure(tx,[existing.item.id]);await tx.item.delete({where:{id:existing.item.id}});await tx.wishlist.update({where:{id:input.wishlistId},data:{updatedAt:new Date()}});}
+          await tx.productWishReceipt.create({data:{userId,clientRequestId:input.clientRequestId,requestHash:input.requestHash,productKey:input.productKey,wishlistId:input.wishlistId,action:'REMOVE'}});
+          return{clientRequestId:input.clientRequestId,productKey:input.productKey,wishlistId:input.wishlistId,itemId:null,deleted:true,action:'REMOVE'};
+        }
         let itemId: number, wishlistId: number;
+        if(existing?.item?.wishlist.userId===userId&&existing.item.wishlistId!==input.wishlistId)throw new WishError(409,'PRODUCT_WISH_CHANGED');
         if (existing?.item?.wishlist.userId === userId) { itemId = existing.item.id; wishlistId = existing.item.wishlistId; }
         else {
           if (await tx.item.count({ where: { wishlistId: input.wishlistId } }) >= list.maxItems) throw new WishError(409, 'WISHLIST_FULL');
@@ -100,7 +110,7 @@ export function createProductWishRoutes() {
           await tx.wishlist.update({ where: { id: wishlistId }, data: { updatedAt: new Date() } });
         }
         await tx.productWishReceipt.create({ data: { userId, clientRequestId: input.clientRequestId, requestHash: input.requestHash, productKey: input.productKey, wishlistId, itemId } });
-        return { clientRequestId: input.clientRequestId, productKey: input.productKey, itemId, wishlistId, deleted: false };
+        return { clientRequestId: input.clientRequestId, productKey: input.productKey, itemId, wishlistId, deleted: false,action: 'ADD' };
       });
       return res.status(201).json(result);
     } catch (e) {

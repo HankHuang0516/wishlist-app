@@ -34,7 +34,7 @@ function isAccountRequest(req: Request): boolean {
   if (isAccountRead(req)) return true;
   const credentials = typeof req.headers.authorization === 'string' || typeof req.headers['x-api-key'] === 'string';
   return credentials && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
-    /^\/api\/(?:users|wishlists|items|native-wishes|chat|listings|listing-media|listing-reports|feedback|source-leads|partner-inquiries)(?:\/|$)/.test(req.path);
+    /^\/api\/(?:users|wishlists|items|native-wishes|chat|listings|listing-media|listing-reports|feedback|source-leads|partner-inquiries|discovery|product-wishes)(?:\/|$)/.test(req.path);
 }
 
 // These registered account recovery endpoints already enforce their own
@@ -76,7 +76,7 @@ export function accountReadBudget(authenticate: RequestHandler): RequestHandler 
 
 export function websiteRateLimits(buildRoot: string) {
   const assets = publicBuildPaths(buildRoot);
-  const isBuildRead = (req: Request) => (req.method === 'GET' || req.method === 'HEAD') && assets.has(req.path);
+  const isBuildRead = (req: Request) => (req.method === 'GET' || req.method === 'HEAD') && (assets.has(req.path) || assets.has('/index.html') && /^\/(?:explore|wishes|chat|social|settings|login|register|terms|privacy|support|account-deletion|partners|changelog|wishlists(?:\/\d+)?|listings(?:\/[a-f0-9-]{36})?)\/?$/i.test(req.path));
   // Only this public, publication-checked image route has a separate budget.
   const isSourceMediaRead = (req:Request) => req.method === 'GET' && /^\/api\/source-leads\/[a-f0-9-]{36}\/media\/[a-f0-9-]{36}\/(?:image|thumbnail)\/?$/i.test(req.path);
   const create = (skip: (req: Request, res: import('express').Response) => boolean) => rateLimit({

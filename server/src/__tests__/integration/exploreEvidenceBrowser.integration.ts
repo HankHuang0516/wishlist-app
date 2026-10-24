@@ -155,12 +155,13 @@ describe('actual Explore query evidence display and download',()=>{
    expect(new URL(await page.url()).searchParams.get('max')).toBe('99');
    await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length===4);
    if(width===1280){
-    await page.click('.discovery-card .product-wish-heart');await page.waitForSelector('[role="dialog"] .space-y-2 button');await page.click('[role="dialog"] .space-y-2 button');
+    await page.waitForSelector('.discovery-card .product-wish-heart:not(:disabled)');await page.click('.discovery-card .product-wish-heart');
     await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
     expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
     const item=await db.item.findFirst({where:{wishlistId:wishList.id}});expect(item.maxPrice).toBeNull();expect(item.link).toMatch(/\/listings\//);
     await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
-    await page.click('.product-wish-heart[aria-pressed="true"]');expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
+    await page.click('.product-wish-heart[aria-pressed="true"]');await page.waitForFunction(()=>!document.querySelector('.product-wish-heart[aria-pressed="true"]'));expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(0);
+    await page.waitForSelector('.discovery-card .product-wish-heart:not(:disabled)');await page.click('.discovery-card .product-wish-heart');await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
    }
    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
    await page.screenshot({path:webQaEvidence('discovery-built-'+width+'.png')});

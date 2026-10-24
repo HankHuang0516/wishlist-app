@@ -88,3 +88,17 @@ it('copies an eligible public source reference into a real wish without presenti
   expect(item).toMatchObject({ name: lead.title, link: canonicalUrl, price: null, maxPrice: null });
   expect(item.notes).toContain('庫存與交易條件待確認');
 });
+
+it('removes only the selected owned wish, replays removal without deleting a later re-add, and rejects stale item IDs',async()=>{
+ const added=await post(input()),id=added.body.itemId;
+ const removal=input({action:'REMOVE',expectedItemId:id});
+ const removed=await post(removal);expect(removed.status).toBe(201);expect(removed.body).toMatchObject({action:'REMOVE',deleted:true,itemId:null,wishlistId:listId});
+ expect(await prisma.item.findUnique({where:{id}})).toBeNull();
+ const again=await post(input());expect(again.status).toBe(201);expect(again.body.itemId).not.toBe(id);
+ expect((await post(removal)).body).toEqual(removed.body);
+ expect(await prisma.item.findUnique({where:{id:again.body.itemId}})).not.toBeNull();
+ expect((await post(input({action:'REMOVE',expectedItemId:id}))).status).toBe(409);
+ expect((await post(input({action:'REMOVE',expectedItemId:again.body.itemId}),otherKey)).status).toBe(404);
+ const otherList=await prisma.wishlist.create({data:{userId:buyer,title:'Second synthetic list'}});
+ expect((await post(input({action:'REMOVE',expectedItemId:again.body.itemId,wishlistId:otherList.id}))).status).toBe(409);
+});

@@ -1250,7 +1250,8 @@ model PushDevice {
  userId Int
  authVersion Int
  registrationVersion Int @default(0)
- expoPushToken String @unique
+ // Null retains a version fence after opt-out without retaining a provider token.
+ expoPushToken String? @unique
  bindingId String
  platform String
  registeredAt DateTime @default(now())

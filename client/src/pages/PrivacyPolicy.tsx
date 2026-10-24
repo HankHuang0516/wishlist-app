@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">5. 權限與安全</h2>
                         <p>相機、照片選取和定位由您在使用相關功能時選擇授權；拒絕定位後仍可手動選擇地區。我們採取合理的安全措施，但網路傳輸及電子儲存無法保證絕對安全。</p>
-                        <p>若您啟用裝置推播，我們會保存與帳號連結的 App 安裝識別碼、推播權杖、平台及通知偏好，經 Expo、Apple APNs 或 Google FCM 傳送聊天、面交與代問回覆通知。訊息內容預覽預設關閉；您可在通知設定調整分類、預覽或停用此裝置推播，也可在系統設定撤銷通知權限。此識別資料用於服務通知，不用於跨 App 廣告追蹤。</p>
+                        <p>若您啟用裝置推播，我們會保存與帳號連結的 App 安裝識別碼、推播權杖、平台及通知偏好，經 Expo、Apple APNs 或 Google FCM 傳送聊天、面交與代問回覆通知。訊息內容預覽預設關閉；您可在通知設定調整分類、預覽或停用此裝置推播，也可在系統設定撤銷通知權限。此識別資料用於服務通知，不用於跨 App 廣告追蹤。停用要求經伺服器確認後，會移除推播權杖，保留裝置停用版本紀錄，以防延遲的舊請求重新啟用；此紀錄會隨帳號刪除，或在確認舊登入失效後清理。已交由通知服務傳送的通知可能稍後才抵達。</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">6. 保存、刪除與您的選擇</h2>
@@ -85,7 +85,7 @@ export default function PrivacyPolicy() {
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">5. Permissions and security</h2>
                         <p>You choose whether to allow camera, photo selection, and location access when using those features. If you decline location access, you can still select an area manually. We use reasonable safeguards, but no online transmission or electronic storage is completely secure.</p>
-                        <p>If you enable device push notifications, we store an app-installation identifier, push token, platform and notification preferences linked to your account. Expo, Apple APNs or Google FCM deliver chat, meetup and inquiry-reply notifications. Message previews are off by default. Notification settings let you adjust categories and previews or disable push on this device; you can also revoke notification permission in system settings. These identifiers are used for service notifications, not cross-app advertising tracking.</p>
+                        <p>If you enable device push notifications, we store an app-installation identifier, push token, platform and notification preferences linked to your account. Expo, Apple APNs or Google FCM deliver chat, meetup and inquiry-reply notifications. Message previews are off by default. Notification settings let you adjust categories and previews or disable push on this device; you can also revoke notification permission in system settings. These identifiers are used for service notifications, not cross-app advertising tracking. After the server confirms a disable request, we remove the push token and retain an installation revocation record to reject delayed old registration requests. This record is erased with the account or cleaned up after older login sessions are confirmed invalid. Notifications already handed to the delivery service may still arrive later.</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">6. Retention, deletion, and your choices</h2>

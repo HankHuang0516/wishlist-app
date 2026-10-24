@@ -6,6 +6,7 @@ import {AuthRequest} from '../middleware/auth';
 import {decodeUserSessionJwt} from '../lib/jwtConfig';
 import {chatIdentity,chatObject,chatSequence,ChatInputError} from '../lib/chatRules';
 import {defaultNotificationPreferences,notificationDeviceInput,notificationPreferenceInput} from '../lib/notificationRules';
+import {lockPushDeviceRegistry,revokePushBinding,pruneExpiredPushSessions,MAX_PUSH_INSTALLATION_HISTORY} from '../lib/pushDeviceRegistry';
 class NotificationAccessError extends Error{constructor(public status=401){super();}}
 async function gate(tx:Prisma.TransactionClient,req:AuthRequest,userId:number){
  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${4294967296+userId}::bigint)`;
@@ -44,20 +45,26 @@ export const abandonNotificationOperation=endpoint(async(req,userId)=>{
 export const registerPushDevice=endpoint(async(req,userId)=>{
  const input=notificationDeviceInput(req.body);
  return prisma.$transaction(async tx=>{const user=await gate(tx,req,userId);
- // Serialize ownership transfer of the same provider token across accounts.
- await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.expoPushToken},0))`;
+ await lockPushDeviceRegistry(tx);
+ await pruneExpiredPushSessions(tx,userId,user.authVersion);
  const existing=await tx.pushDevice.findUnique({where:{id:input.deviceId}});
  if(existing&&(input.registrationVersion<existing.registrationVersion||input.registrationVersion===existing.registrationVersion&&(existing.userId!==userId||existing.expoPushToken!==input.expoPushToken)))throw new ChatInputError('舊裝置註冊已失效，請重新連線');
  const same=existing?.userId===userId&&existing.authVersion===user.authVersion&&existing.expoPushToken===input.expoPushToken;
- if(!existing&&await tx.pushDevice.count({where:{userId}})>=10)throw new ChatInputError('裝置數量已達上限');
- await tx.pushDevice.deleteMany({where:{expoPushToken:input.expoPushToken,id:{not:input.deviceId}}});
+ if(!existing&&await tx.pushDevice.count({where:{userId}})>=MAX_PUSH_INSTALLATION_HISTORY)throw new ChatInputError('裝置歷程已達上限，請登出所有裝置後重新登入');
+ if((!existing||existing.userId!==userId||existing.expoPushToken===null)&&await tx.pushDevice.count({where:{userId,expoPushToken:{not:null}}})>=10)throw new ChatInputError('裝置數量已達上限');
+ const replaced=await tx.pushDevice.findMany({where:{expoPushToken:input.expoPushToken,id:{not:input.deviceId}},select:{id:true,bindingId:true}});
+ for(const prior of replaced)await revokePushBinding(tx,prior.id,prior.bindingId);
  await tx.pushDevice.upsert({where:{id:input.deviceId},create:{id:input.deviceId,userId,registrationVersion:input.registrationVersion,authVersion:user.authVersion,expoPushToken:input.expoPushToken,platform:input.platform,bindingId:randomUUID()},update:{userId,registrationVersion:input.registrationVersion,authVersion:user.authVersion,expoPushToken:input.expoPushToken,platform:input.platform,...(!same?{bindingId:randomUUID(),registeredAt:new Date()}:{} )}});
  return {registered:true,deviceId:input.deviceId,registrationVersion:input.registrationVersion};
  });
 });
 export const removePushDevice=endpoint(async(req,userId)=>{
- const b=chatObject(req.body,['deviceId','registrationVersion']),deviceId=chatIdentity(b.deviceId);if(Object.keys(b).length!==2||!Number.isSafeInteger(b.registrationVersion)||Number(b.registrationVersion)<0)throw new ChatInputError();
- return prisma.$transaction(async tx=>{await gate(tx,req,userId);await tx.pushDevice.deleteMany({where:{id:deviceId,userId,registrationVersion:Number(b.registrationVersion)}});return {removed:true,deviceId};});
+ const b=chatObject(req.body,['deviceId','registrationVersion']),deviceId=chatIdentity(b.deviceId);if(Object.keys(b).length!==2||!Number.isSafeInteger(b.registrationVersion)||Number(b.registrationVersion)<0||Number(b.registrationVersion)>=2147483647)throw new ChatInputError();
+ return prisma.$transaction(async tx=>{const user=await gate(tx,req,userId);await lockPushDeviceRegistry(tx);await pruneExpiredPushSessions(tx,userId,user.authVersion);
+ const current=await tx.pushDevice.findUnique({where:{id:deviceId}}),version=Number(b.registrationVersion);
+ if(!current){if(await tx.pushDevice.count({where:{userId}})>=MAX_PUSH_INSTALLATION_HISTORY)throw new ChatInputError('裝置歷程已達上限，請登出所有裝置後重新登入');await tx.pushDevice.create({data:{id:deviceId,userId,authVersion:user.authVersion,registrationVersion:version,expoPushToken:null,bindingId:randomUUID(),platform:'revoked'}});}
+ else if(current.userId===userId&&version>=current.registrationVersion){await revokePushBinding(tx,deviceId,current.bindingId);if(version>current.registrationVersion)await tx.pushDevice.update({where:{id:deviceId},data:{registrationVersion:version}});}
+ return {removed:true,deviceId};});
 });
 
 export const getSourceNotificationTarget=endpoint(async(req,userId)=>{

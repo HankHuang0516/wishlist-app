@@ -13,7 +13,7 @@ export const DELETION_IMPACT_LABELS = {
   originalCreditsInOtherWishlists: '解除他人願望原始關聯', itemWatches: '商品關注', followRelationships: '追蹤關係',
   blockRelationships: '封鎖關係', feedbackRecords: '意見回報', crawlerRecords: '本人分析錯誤紀錄',
 } as const;
-export const ADDITIONAL_DELETION_LABELS={productInterests:'喜歡與取消喜歡狀態',productInterestOperations:'喜歡操作回執',notificationPreferences:'交易通知偏好',notificationOperations:'通知偏好回執',pushDevices:'已註冊推播裝置',pushEvents:'待處理推播事件',pushDeliveries:'推播傳送紀錄',sourceInquiries:'外部來源代問紀錄',photoCancellations:'聊天照片安全放棄回執'} as const;
+export const ADDITIONAL_DELETION_LABELS={productInterests:'喜歡與取消喜歡狀態',productInterestOperations:'喜歡操作回執',notificationPreferences:'交易通知偏好',notificationOperations:'通知偏好回執',pushDevices:'推播裝置與停用紀錄',pushEvents:'待處理推播事件',pushDeliveries:'推播傳送紀錄',sourceInquiries:'外部來源代問紀錄',photoCancellations:'聊天照片安全放棄回執'} as const;
 export function additionalDeletionCounts(value:unknown){if(value===undefined)return undefined;if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!==Object.keys(ADDITIONAL_DELETION_LABELS).sort().join(',')||!Object.values(value).every(v=>Number.isSafeInteger(v)&&typeof v==='number'&&v>=0&&v<=2147483647))throw Error('Invalid extended deletion inventory');return value as Record<keyof typeof ADDITIONAL_DELETION_LABELS,number>;}
 export type DeletionImpact = { additionalCounts?:Record<keyof typeof ADDITIONAL_DELETION_LABELS,number>;capturedAt: string; counts: Record<keyof typeof DELETION_IMPACT_LABELS, number> };
 export function parseDeletionImpact(value: unknown): DeletionImpact {

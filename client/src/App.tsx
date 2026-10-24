@@ -40,7 +40,7 @@ const ManualListingPage = createLazyPage(() => import('./pages/ManualListingPage
 const PublicListingPage = createLazyPage(() => import('./pages/PublicListingPage'));
 const AccountDeletionPage = createLazyPage(() => import('./pages/AccountDeletionPage'));
 const MyListingsPage = createLazyPage(() => import('./pages/MyListingsPage'));
-const ExplorePage = createLazyPage(() => import('./pages/ExplorePage'));
+const ExplorePage = createLazyPage(() => import('./pages/ExploreRoute'));
 const ListingReportsPage = createLazyPage(() => import('./pages/ListingReportsPage'));
 const ChatPage = createLazyPage(() => import('./pages/ChatPage'));
 const WishesPage = createLazyPage(() => import('./pages/WishesPage'));

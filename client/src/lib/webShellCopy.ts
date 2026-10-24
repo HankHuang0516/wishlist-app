@@ -1,7 +1,7 @@
 import { getUserLocale } from '../utils/localization';
 
 const copy = {
-  home: ['首頁', 'Home'], gifts: ['禮物', 'Gifts'], explore: ['探索', 'Explore'],
+  home: ['首頁', 'Home'], gifts: ['禮物', 'Gifts'], wishes: ['願望清單','Wishes'], explore: ['探索', 'Explore'],
   chat: ['聊天', 'Chat'], friends: ['朋友', 'Friends'], settings: ['設定', 'Settings'],
   navigation: ['主要功能', 'Main navigation'],
   wishesDescription: ['我的願望與照片辨識', 'My wishes and photo recognition'],

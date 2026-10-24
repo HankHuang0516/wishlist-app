@@ -33,7 +33,7 @@ export default function PrivacyPolicy() {
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">3. 使用目的與 AI 處理</h2>
-                        <p>我們使用上述資料提供帳號、願望比對、商品搜尋與地圖、刊登管理、聊天與面交安排、客服、安全防濫用及服務維運。當您使用圖片辨識或商品文案等 AI 功能時，相關照片與您提供的商品資訊可能交由 AI 處理服務分析，以產生建議；AI 結果可能有誤，刊登前請自行核對。</p>
+                        <p>探索頁的 CP 評估只傳送公開商品名稱、規格、明示狀況與價格給 AI 服務供應商；不傳送私人願望、帳號、聊天或精確位置。評分僅比較當時本站公開參考資料，並保留依據與有效時間。　我們使用上述資料提供帳號、願望比對、商品搜尋與地圖、刊登管理、聊天與面交安排、客服、安全防濫用及服務維運。當您使用圖片辨識或商品文案等 AI 功能時，相關照片與您提供的商品資訊可能交由 AI 處理服務分析，以產生建議；AI 結果可能有誤，刊登前請自行核對。</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. 公開範圍與服務供應商</h2>
@@ -71,7 +71,7 @@ export default function PrivacyPolicy() {
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">3. Purposes and AI processing</h2>
-                        <p>We use this data to provide accounts, wish matching, product search and maps, listing management, chat and meetup coordination, support, abuse prevention, and service operations. If you use image recognition or AI listing-copy features, relevant photos and product information you submit may be processed by AI service providers to generate suggestions. AI results can be wrong; please review them before publishing a listing.</p>
+                        <p>Explore value assessments send only public product names, specifications, stated condition and prices to the AI provider, excluding private wishes, accounts, chats and precise locations. Scores compare the public catalog at the time and retain their evidence and validity period. We use this data to provide accounts, wish matching, product search and maps, listing management, chat and meetup coordination, support, abuse prevention, and service operations. If you use image recognition or AI listing-copy features, relevant photos and product information you submit may be processed by AI service providers to generate suggestions. AI results can be wrong; please review them before publishing a listing.</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. Visibility and service providers</h2>

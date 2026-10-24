@@ -59,6 +59,7 @@ module.exports = {
       }],
       ['expo-secure-store', { configureAndroidBackup: false, faceIDPermission: false }],
       'expo-notifications',
+      './plugins/withOptInPush',
       '@react-native-community/datetimepicker',
     ],
     updates: { enabled: false },

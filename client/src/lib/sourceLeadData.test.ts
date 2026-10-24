@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {parseLead,isLocatedLead,sourceLocationLabel} from './sourceLeadData';
+import {parseLead,parseLeadRoom,isLocatedLead,sourceLocationLabel} from './sourceLeadData';
 const id='11111111-1111-4111-8111-111111111111',now=()=>new Date().toISOString();
 const sample=(count=1)=>({id,kind:'SOURCE_LEAD',title:'合成測試來源商品',summary:'僅供本地測試',canonicalUrl:'https://example.invalid/source/one',county:'臺南市',district:'永康區',publicPlaceName:'公共面交點',publicAddress:'臺南市永康區合成路1號',latitude:23,longitude:120.2,postedEarliestAt:now(),postedLatestAt:now(),checkedAt:now(),stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false,notice:'待確認',publicFacts:null,coordinateSourceUrl:'https://www.openstreetmap.org/node/1',coordinateAttribution:null,media:Array.from({length:count},(_,i)=>{const mid=`22222222-2222-4222-8222-${String(i).padStart(12,'0')}`,path=`https://example.invalid/api/source-leads/${id}/media/${mid}/`;return{id:mid,sourceUrl:'https://example.invalid/source/one',imageUrl:path+'image',thumbnailUrl:path+'thumbnail',alt:'合成角度'+i};})});
 describe('source multi-photo contract',()=>{
@@ -21,4 +21,10 @@ describe('source location precision',()=>{
   const lead=parseLead({...sample(0),media:undefined,locationPrecision:'COUNTY_ILLUSTRATION',county:'臺中市',district:'行政區未明示',publicPlaceName:'臺中市概略示意位置',publicAddress:'臺中市（概略位置，非取貨點）'});
   expect(isLocatedLead(lead)).toBe(true);expect(()=>parseLead({...sample(0),media:undefined,locationPrecision:'COUNTY_ILLUSTRATION',county:'不是縣市',district:'行政區未明示',publicPlaceName:'不是縣市概略示意位置',publicAddress:'不是縣市（概略位置，非取貨點）'})).toThrow();
  });
+});
+
+const progressRoom=()=>({id,leadId:id,state:'DELIVERY_REQUIRES_REVIEW',available:true,events:[],transferHash:'a'.repeat(64),routeVerified:true,delivered:false,delivery:null,checkoutEnabled:false,orderCreated:false,notice:'待核查',transferIssue:{code:'FACEBOOK_COMMENT_REJECTED',checkedAt:now(),originalPostUrl:'https://www.facebook.com/groups/123/posts/456'}});
+it('rejected progress cannot claim successful delivery or introduce an untrusted source link',()=>{
+ const r=progressRoom();expect(parseLeadRoom(r,id).transferIssue?.code).toBe('FACEBOOK_COMMENT_REJECTED');
+ for(const patch of [{delivered:true},{state:'DELIVERED'},{transferIssue:{...r.transferIssue,originalPostUrl:'javascript:alert(1)'}},{transferIssue:{...r.transferIssue,originalPostUrl:'https://attacker.invalid/source'}},{transferIssue:{...r.transferIssue,checkedAt:'invalid'}},{transferIssue:{...r.transferIssue,extra:'private'}}])expect(()=>parseLeadRoom({...r,...patch},id)).toThrow();
 });

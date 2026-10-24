@@ -74,6 +74,7 @@ export function parseLeadPage(v: unknown) { const r = obj(v); if (typeof r.enabl
     throw new Error('線索分頁錯誤'); const items = r.items.map(parseLead); if (new Set(items.map((r: SourceLead) => r.id)).size !== items.length)
     throw new Error('線索重複'); return { items: items as SourceLead[], nextCursor: r.nextCursor as string | null, enabled: r.enabled as boolean }; }
 export type LeadRoom = {
+    transferIssue?: { code: 'FACEBOOK_COMMENT_REJECTED'; checkedAt: string; originalPostUrl: string };
     id: string;
     leadId: string;
     state: string;
@@ -97,11 +98,15 @@ export type LeadRoom = {
     orderCreated: false;
     notice: string;
 };
-export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = obj(v); if (Object.keys(r).some(k => !['id', 'leadId', 'state', 'available', 'events', 'transferHash', 'routeVerified', 'delivered', 'delivery', 'checkoutEnabled', 'orderCreated', 'notice'].includes(k)) || !uuid(r.id) || r.leadId !== leadId || !['INQUIRY', 'WAITING_ROUTE', 'TRANSFER_RESERVED', 'CANCEL_REQUESTED', 'CANCELLED', 'DELIVERED', 'DELIVERY_REQUIRES_REVIEW'].includes(r.state) || typeof r.available !== 'boolean' || typeof r.routeVerified !== 'boolean' || typeof r.delivered !== 'boolean' || r.checkoutEnabled !== false || r.orderCreated !== false || !/^[a-f0-9]{64}$/.test(r.transferHash) || !Array.isArray(r.events) || r.events.length > 201 || r.events.length===201&&r.events[200]?.action!=='CANCEL' || r.events.some((e: any) => e.reservationId!==undefined&&!uuid(e.reservationId) || !uuid(e.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'SELLER_REPLY', 'REVISE', 'REOPEN'].includes(e.action) || !Number.isFinite(Date.parse(e.at)) || (e.text !== undefined && (typeof e.text !== 'string' || e.text.length > 1500))))
+export function parseLeadRoom(v: unknown, leadId: string): LeadRoom { const r = obj(v); if (Object.keys(r).some(k => !['id', 'leadId', 'state', 'available', 'events', 'transferHash', 'routeVerified', 'delivered', 'delivery', 'transferIssue', 'checkoutEnabled', 'orderCreated', 'notice'].includes(k)) || !uuid(r.id) || r.leadId !== leadId || !['INQUIRY', 'WAITING_ROUTE', 'TRANSFER_RESERVED', 'CANCEL_REQUESTED', 'CANCELLED', 'DELIVERED', 'DELIVERY_REQUIRES_REVIEW'].includes(r.state) || typeof r.available !== 'boolean' || typeof r.routeVerified !== 'boolean' || typeof r.delivered !== 'boolean' || r.checkoutEnabled !== false || r.orderCreated !== false || !/^[a-f0-9]{64}$/.test(r.transferHash) || !Array.isArray(r.events) || r.events.length > 201 || r.events.length===201&&r.events[200]?.action!=='CANCEL' || r.events.some((e: any) => e.reservationId!==undefined&&!uuid(e.reservationId) || !uuid(e.requestId) || !['ASK', 'CONSENT', 'CANCEL', 'SELLER_REPLY', 'REVISE', 'REOPEN'].includes(e.action) || !Number.isFinite(Date.parse(e.at)) || (e.text !== undefined && (typeof e.text !== 'string' || e.text.length > 1500))))
     throw new Error('線索收件錯誤'); if (r.delivery !== null) {
     const d = obj(r.delivery);
     if (Object.keys(d).some(k => !['at', 'channel', 'verification'].includes(k)) || !Number.isFinite(Date.parse(d.at)) || !['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(d.channel) || d.verification !== 'MANUAL_UI_RECEIPT')
         throw new Error('回執格式錯誤');
+} if (r.transferIssue !== undefined) {
+    const issue = obj(r.transferIssue); let safe = false;
+    try { const url = new URL(issue.originalPostUrl); safe = url.protocol === 'https:' && url.hostname === 'www.facebook.com' && !url.username && !url.password && !url.port && !url.search && !url.hash && /^\/groups\/\d+\/posts\/\d+\/?$/.test(url.pathname); } catch { /* Invalid original source stays unreadable. */ }
+    if (Object.keys(issue).some(k => !['code', 'checkedAt', 'originalPostUrl'].includes(k)) || issue.code !== 'FACEBOOK_COMMENT_REJECTED' || !Number.isFinite(Date.parse(issue.checkedAt)) || !safe || r.state !== 'DELIVERY_REQUIRES_REVIEW' || r.delivered || r.delivery !== null) throw new Error('代問未送達紀錄錯誤');
 } return r as LeadRoom; }
 
 export const sourceLocationLabel=(lead:Pick<SourceLead,'locationPrecision'>)=>lead.locationPrecision==='COUNTY_ILLUSTRATION'?'概略位置，非取貨點':lead.locationPrecision==='CONTACT_FOR_LOCATION'?'未提供地區，面交地點需聯絡賣家；寄送不受影響':'公共面交點';

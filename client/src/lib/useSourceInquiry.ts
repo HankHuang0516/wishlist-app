@@ -52,7 +52,7 @@ export function useSourceInquiry(id: string) {
   async function receipt(journal: SourceJournal, active: LeadRoom | null) {
    const rid = journal.operation.version === 1 ? journal.operation.roomId : active?.id; if (!rid) return null;
    const identity = sourcePendingIdentity(journal.operation);
-   return parseSourceReceipt(await request(`/source-leads/${id}/inquiry/${rid}/actions/${identity.requestId}`), journal.operation, rid);
+   return parseSourceReceipt(await request(`/source-leads/${id}/inquiry/${rid}/actions/${identity.requestId}?progress=1`), journal.operation, rid);
   }
   publish({ error: '', notice: '' }); let storageReady = false;
   try {
@@ -60,7 +60,7 @@ export function useSourceInquiry(id: string) {
    try { recovery = await bounded(readSourceRecovery(privatePendingStore, API_URL, owner, id, sessionStorage)); storageReady = true; } catch { if (controller.signal.aborted) throw new Error(); storageFailure = true; }
    if (!current()) return;
    if (!storageFailure) publish({ recovery, ready: true });
-   const roomPath = `/source-leads/${id}/inquiry?presentation=1`, raw = await request(roomPath);
+   const roomPath = `/source-leads/${id}/inquiry?presentation=1&progress=1`, raw = await request(roomPath);
    let active = raw === null ? null : parseLeadRoom(raw, id); if (!current()) return; publish({ room: active });
    if (storageFailure) throw new PendingStoreError();
    let stopped = false;
@@ -103,7 +103,7 @@ export function useSourceInquiry(id: string) {
    }
    if (journal.operation.version !== 1) throw new PendingStoreError();
    const operation = journal.operation;
-   const result = parseLeadRoom(await request(`/source-leads/${id}/inquiry/${operation.roomId}/actions?presentation=1`, operation.payload), id); if (!current()) return;
+   const result = parseLeadRoom(await request(`/source-leads/${id}/inquiry/${operation.roomId}/actions?presentation=1&progress=1`, operation.payload), id); if (!current()) return;
    if (result.id !== operation.roomId || !result.events.some(e => e.requestId === operation.payload.requestId && e.action === operation.payload.action && e.text === operation.payload.text)) throw new PendingStoreError();
    publish({ room: result }); const found = await receipt(journal, result); if (!current()) return;
    if (!found) { publish({ error: text('failure') }); return; }

@@ -24,7 +24,7 @@ function DiscoverySession(){
   const page=result?.key===queryKey?result.page:null;
   function apply(patch:Partial<DiscoveryFilters>){setParams(discoverySearch({...filters,...patch}));}
   useEffect(()=>setSearch(filters.q),[filters.q]);
-  useEffect(()=>{if(retryAt<=Date.now())return;const timer=window.setInterval(()=>{setClock(Date.now());if(Date.now()>=retryAt)setRetryAt(0);},1000);return()=>window.clearInterval(timer);},[retryAt]);
+  useEffect(()=>{if(!retryAt)return;if(retryAt<=Date.now()){setRetryAt(0);setClock(Date.now());return;}const timer=window.setInterval(()=>{setClock(Date.now());if(Date.now()>=retryAt)setRetryAt(0);},1000);return()=>window.clearInterval(timer);},[retryAt]);
   const retrySeconds=Math.max(0,Math.ceil((retryAt-clock)/1000));
   useEffect(()=>{
     const c=new AbortController();readAbort.current?.abort();moreAbort.current?.abort();readAbort.current=c;moreGate.current=false;setMoreBusy(false);setCpBusy(false);setBusy(true);setError('');

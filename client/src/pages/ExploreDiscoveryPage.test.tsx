@@ -15,7 +15,7 @@ const page={items:[p],categories,nextCursor:null,snapshot:'fixed',total:1,counts
 function Location(){return <output data-testid="location">{useLocation().search}</output>;}
 function view(path='/explore'){return <MemoryRouter initialEntries={[path]}><AuthContext.Provider value={auth}><ExploreDiscoveryPage/><Location/></AuthContext.Provider></MemoryRouter>;}
 beforeEach(()=>{localStorage.clear();localStorage.setItem('user-locale','zh-TW');publicApi.mockReset().mockResolvedValue(page);api.mockReset().mockImplementation(async(_token,path,options)=>path.startsWith('/discovery')?publicApi(path,options):{lists:[],saved:[]});});
-afterEach(()=>{vi.restoreAllMocks();localStorage.clear();});
+afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();localStorage.clear();});
 it('applies a subcategory, closes the picker, records recents, and restores URL filters',async()=>{
  render(view('/explore?max=1500&sort=price-asc'));await screen.findByText('BenQ 合成螢幕');
  fireEvent.click(screen.getByRole('button',{name:'所有分類'}));await screen.findByRole('dialog');
@@ -86,7 +86,10 @@ it('lets a first-time user browse an interest category when no wishes match, wit
 });
 
 it('keeps a 429 inside the page, disables repeated retries, then allows one explicit retry',async()=>{
- publicApi.mockRejectedValueOnce(new ApiFailure('limited',429,'RATE_LIMIT_EXCEEDED',50));render(view('/explore?main=electronics'));
- const button=await screen.findByRole('button',{name:/請等候/});expect(button).toBeDisabled();fireEvent.click(button);expect(publicApi).toHaveBeenCalledTimes(1);
- const retry=await screen.findByRole('button',{name:'重新讀取'},{timeout:2000});fireEvent.click(retry);await screen.findByText('1 筆公開來源');expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');expect(publicApi).toHaveBeenCalledTimes(2);
+ vi.useFakeTimers();publicApi.mockRejectedValueOnce(new ApiFailure('limited',429,'RATE_LIMIT_EXCEEDED',50));
+ await act(async()=>{render(view('/explore?main=electronics'));});
+ const button=screen.getByRole('button',{name:/請等候/});expect(button).toBeDisabled();fireEvent.click(button);expect(publicApi).toHaveBeenCalledTimes(1);
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+ const retry=screen.getByRole('button',{name:'重新讀取'});await act(async()=>{fireEvent.click(retry);});
+ expect(screen.getByText('1 筆公開來源')).toBeInTheDocument();expect(screen.getByTestId('location')).toHaveTextContent('main=electronics');expect(publicApi).toHaveBeenCalledTimes(2);
 });

@@ -57,10 +57,12 @@ describe('published build and data request budgets', () => {
 });
 
 it('public source thumbnails retain their own 500-read protection without exhausting public queries or writes',async()=>{
- const instance=app(),media='/api/source-leads/11111111-1111-4111-8111-111111111111/media/22222222-2222-4222-8222-222222222222/thumbnail';
+ const server=app().listen(0,'127.0.0.1');await once(server,'listening');try{
+ const instance=server,media='/api/source-leads/11111111-1111-4111-8111-111111111111/media/22222222-2222-4222-8222-222222222222/thumbnail';
  for(let i=0;i<500;i++)expect((await request(instance).get(media)).status).toBe(200);
  expect((await request(instance).get(media)).status).toBe(429);
  expect((await request(instance).get('/api/source-leads?cursor=next')).headers['ratelimit-remaining']).toBe('499');
  expect((await request(instance).post(media)).headers['ratelimit-remaining']).toBe('498');
  expect((await request(instance).get('/api/source-leads/not-a-uuid/media/private/thumbnail')).headers['ratelimit-remaining']).toBe('497');
-});
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+},15000);

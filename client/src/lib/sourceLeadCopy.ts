@@ -2,6 +2,18 @@ import { getDisplayLocale } from '../utils/localization';
 import type { ContactRouting } from './sourceLeadData';
 
 const english = {
+  '查看 Facebook 原文': 'View original Facebook post',
+  '外部來源商品': 'External-source item',
+  '庫存待確認': 'Stock unconfirmed',
+  '原文價格資訊': 'Price from the original post',
+  '價格、現貨與交易條件請以原賣家確認為準。': 'Confirm the price, availability and transaction terms with the original seller.',
+  '商品照片': 'Item photos',
+  '地點資訊': 'Location information',
+  '不是商品或賣家所在地。': 'Not the item or seller location.',
+  '來源資訊': 'Source information',
+  '透過 Wishlist AI 詢問': 'Ask through Wishlist AI',
+  '請 Wishlist AI 代問': 'Ask Wishlist AI to inquire',
+  '代問不會下訂或付款。': 'An inquiry does not place an order or make a payment.',
   '目前沒有可顯示的商品圖片': 'No item image is available',
   '圖片暫時無法載入': 'The image could not be loaded',
   '圖片載入中…': 'Loading image…',

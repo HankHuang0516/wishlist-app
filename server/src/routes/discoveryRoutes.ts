@@ -13,10 +13,10 @@ export function createDiscoveryRoutes() {
       const query=discoveryQuery(req.query), recommended=req.path==='/for-you',cp=req.path==='/cp';
       if(query.sort==='cp'&&!cp)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
       let products=await loadDiscovery();
-      if(recommended){ products=await recommendDiscovery(products,req.user!.id);query.sort='recommended'; }
+      if(recommended){ products=await recommendDiscovery(products,req.user!.id);if(req.query.sort===undefined)query.sort='recommended'; }
       if(cp){
         const evaluated=await attachCp(products),scoped=discoveryPage(evaluated,{...query,cursor:'',limit:60}),scopeProducts=filterDiscovery(evaluated,query);
-        const ready=evaluated.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined&&p.cp.score>=75&&p.cp.confidence==='MEDIUM');query.sort='cp';
+        const ready=evaluated.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined&&p.cp.score>=75&&p.cp.confidence==='MEDIUM');if(req.query.sort===undefined)query.sort='cp';
         const page=discoveryPage(ready,query);
         return res.json({...page,categories:scoped.categories,counties:scoped.counties,cpStatus:{evaluated:scopeProducts.filter(p=>p.cp).length,scored:scopeProducts.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined).length,pending:cpTargets(scopeProducts,new Set(scopeProducts.filter(p=>p.cp).map(p=>p.key))).length,providerConfigured:!!process.env.GEMINI_API_KEY,threshold:75,assessments:scopeProducts.filter(p=>p.cp).slice(0,12).map(p=>({key:p.key,title:p.title,score:p.cp!.score,reasons:p.cp!.reasons,evaluatedAt:p.cp!.evaluatedAt}))}});
       }

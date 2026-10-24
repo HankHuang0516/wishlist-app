@@ -17,7 +17,8 @@ export function readDiscovery(search:string):DiscoveryFilters{
   for(const k of Object.keys(r) as (keyof DiscoveryFilters)[])if(p.has(k))r[k]=p.get(k)!;
   if(!['latest','for-you','cp'].includes(r.feed))r.feed='latest';
   if(!['grid','list'].includes(r.display))r.display='grid';
-  if(!['newest','price-asc','price-desc'].includes(r.sort))r.sort='newest';
+  if(!p.has('sort'))r.sort=r.feed==='for-you'?'recommended':r.feed==='cp'?'cp':'newest';
+  if(!['newest','price-asc','price-desc','recommended','cp'].includes(r.sort)||r.sort==='recommended'&&r.feed!=='for-you'||r.sort==='cp'&&r.feed!=='cp')r.sort='newest';
   return r;
 }
 export function discoverySearch(f:DiscoveryFilters){const p=new URLSearchParams();for(const k of Object.keys(f) as (keyof DiscoveryFilters)[])if(f[k]&&f[k]!==defaultDiscovery[k])p.set(k,f[k]);return p;}

@@ -126,7 +126,18 @@ jobs:
 
     - name: Install Traditional Chinese fonts for query evidence review
       if: always()
-      run: sudo apt-get update -qq && sudo apt-get install -y fonts-noto-cjk
+      timeout-minutes: 5
+      run: |
+        # Runner package lists are pre-populated. Avoid refreshing unrelated
+        # third-party repositories unless the required package cannot install.
+        install_fonts() {
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends fonts-noto-cjk
+        }
+        if ! install_fonts; then
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          install_fonts
+        fi
+        fc-list :lang=zh-tw family | grep -q 'Noto.*CJK'
 
     - name: Real marketplace HTTP and database tests
       run: npm test -- --config jest.marketplace.config.js --runInBand

@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {ChevronDown,ChevronRight,ArrowLeft,Search,X,Image as ImageIcon} from 'lucide-react';
 import type {DiscoveryCategory} from '../lib/discovery';
 import {getDisplayLocale} from '../utils/localization';
+import {matchesCategorySearch} from '../lib/discoveryCategorySearch';
 const say=(zh:string,en:string)=>getDisplayLocale().startsWith('zh')?zh:en;
 const label=(c:{label:string;en:string})=>say(c.label,c.en);
 type Recent={main:string;sub:string};
@@ -21,7 +22,7 @@ export default function DiscoveryCategoryPicker({categories,main,sub,onChange,st
   useEffect(()=>{if(!open)return;panel.current?.querySelector<HTMLInputElement>('input')?.focus();},[open]);
   useEffect(()=>()=>cancelHover(),[]);
   useEffect(()=>{if(!open)return;const fit=()=>panel.current?.style.setProperty('--category-space',Math.max(100,window.innerHeight-(trigger.current?.getBoundingClientRect().bottom??0)-22)+'px');fit();window.addEventListener('resize',fit);return()=>window.removeEventListener('resize',fit);},[open]);
-  const results=categories.flatMap(c=>[{main:c.id,sub:'',label:label(c),count:c.count,thumbnailUrl:null as string|null},...c.children.map(s=>({main:c.id,sub:s.id,label:label(c)+' › '+label(s),count:s.count,thumbnailUrl:s.thumbnailUrl}))]).filter(c=>c.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const results=categories.flatMap(c=>[...(matchesCategorySearch(search,c)?[{main:c.id,sub:'',label:label(c),count:c.count}]:[]),...c.children.filter(s=>matchesCategorySearch(search,c,s)).map(s=>({main:c.id,sub:s.id,label:label(c)+' › '+label(s),count:s.count}))]);
   return <div className="discovery-category">
     <button ref={trigger} type="button" className={'discovery-filter category-trigger '+(parent?'is-selected':'')} aria-expanded={open} aria-haspopup="dialog" onClick={()=>{setPreview(main||categories.find(c=>c.count>0)?.id||'electronics');setOpen(!open);setStep(false);}}>
       <span>{parent?label(parent)+(child?' › '+label(child):''):say('所有分類','All categories')}</span><ChevronDown size={15}/>

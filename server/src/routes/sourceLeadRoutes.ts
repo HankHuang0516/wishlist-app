@@ -286,6 +286,17 @@ export function createSourceLeadRoutes() {
             return fail(res, e);
         }
     });
+    // Whole-site public references, including approximate and contact-only locations.
+    // Never count private/pending rows or infer confirmed stock from publication.
+    router.get('/summary', async (req, res) => {
+        try {
+            if (Object.keys(req.query).length) throw new LeadError('INVALID_QUERY');
+            const now = new Date();
+            if (!enabled()) return res.json({ count: 0, enabled: false });
+            const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED' } });
+            return res.json({ count: rows.filter(row => leadCurrent(row, now)).length, enabled: true });
+        } catch (e) { return fail(res, e); }
+    });
     router.get('/coordinate-layer', async (_req, res) => { try {
         if (!enabled())
             return res.json({ items: [], enabled: false });

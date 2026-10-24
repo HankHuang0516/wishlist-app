@@ -1,3 +1,4 @@
+import PublicSourceCount from '../components/PublicSourceCount';
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Link } from "react-router-dom";
@@ -14,6 +15,7 @@ export default function Home() {
     if (isAuthenticated) {
         return (
             <div className="mx-auto max-w-6xl">
+                <PublicSourceCount />
                 {token && user && <WishHomeWeb key={`${user.id}:${token}`} token={token} userId={user.id}>
                 <div className="flex flex-wrap justify-center gap-3">
                     <Link to="/wishes" className="inline-flex min-h-11 items-center justify-center rounded-md bg-muji-primary px-12 py-2 text-sm font-medium text-white shadow-sm hover:bg-opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-muji-primary">{homeText('wishes')}</Link>
@@ -66,6 +68,8 @@ export default function Home() {
                     </Button>
                 </div>
             </section>
+
+            <PublicSourceCount />
 
             {/* Feature Preview */}
             <div id="features" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">

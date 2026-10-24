@@ -3,6 +3,7 @@ import {MemoryRouter,useLocation} from 'react-router-dom';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {AuthContext} from '../context/AuthContext';
 import ExploreDiscoveryPage from './ExploreDiscoveryPage';
+import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 const {publicApi,api}=vi.hoisted(()=>({publicApi:vi.fn(),api:vi.fn()}));
 vi.mock('../lib/marketplaceApi',async original=>({...await original<typeof import('../lib/marketplaceApi')>(),publicApi,api}));
 const auth={token:'fixture',user:{id:42,phoneNumber:'synthetic'},isAuthenticated:true,login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn()};
@@ -50,4 +51,15 @@ it('reads CP results without triggering AI and evaluates only after an explicit 
  await screen.findByRole('button',{name:'評估這批商品的 CP 值'});expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
  fireEvent.click(screen.getByRole('button',{name:'評估這批商品的 CP 值'}));await screen.findByText('已完成 3 件商品的比較，資料不足的商品保留未評分。');
  const post=api.mock.calls.find(c=>c[2]?.method==='POST');expect(post?.[1]).toBe('/discovery/cp-evaluations');expect(JSON.parse(post?.[2].body)).toMatchObject({main:'electronics'});expect(post?.[2].body).not.toMatch(/user|token|wish|display|feed/);
+});
+
+it('does not change the submenu when the pointer only crosses another parent on its way to a child',()=>{
+ vi.useFakeTimers();
+ const home={id:'home',label:'家具家居',en:'Home',icon:'home',count:1,children:[{id:'storage',label:'收納整理',en:'Storage',count:1,thumbnailUrl:null}]};
+ render(<DiscoveryCategoryPicker categories={[...categories,home]} main="" sub="" onChange={vi.fn()} storageKey="synthetic-recents"/>);
+ fireEvent.click(screen.getByRole('button',{name:'所有分類'}));
+ const parent=screen.getByRole('button',{name:'家具家居',exact:true});fireEvent.mouseEnter(parent);fireEvent.mouseLeave(parent);act(()=>vi.advanceTimersByTime(250));
+ expect(screen.getByText('電腦螢幕')).toBeInTheDocument();expect(screen.queryByText('收納整理')).not.toBeInTheDocument();
+ fireEvent.mouseEnter(parent);act(()=>vi.advanceTimersByTime(250));expect(screen.getByText('收納整理')).toBeInTheDocument();
+ vi.useRealTimers();
 });

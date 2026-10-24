@@ -22,3 +22,5 @@
 .category-popover{max-height:min(72dvh,var(--category-space,72dvh))}.category-search:focus-within,.discovery-search:focus-within{outline:2px solid #68839e;outline-offset:2px}.explore-discovery .category-search input:focus-visible,.explore-discovery .discovery-search input:focus-visible{outline:none}@media(max-width:700px){.category-popover{max-height:86dvh}}
 
 .discovery-cp-records{margin-top:15px;border-top:1px solid #e4e9e0;padding-top:10px}.discovery-cp-records summary{cursor:pointer;min-height:35px}.discovery-cp-records>div{padding:12px 0;border-top:1px solid #e9eee5}.discovery-cp-records strong,.discovery-cp-records span{display:block}.discovery-cp-records span{font-size:11px;color:#8c9985}
+
+@media(max-width:700px){.discovery-photo .product-wish-heart{height:44px;width:44px;right:1px;top:1px;background:transparent;isolation:isolate}.discovery-photo .product-wish-heart:before{content:"";position:absolute;inset:4px;border-radius:50%;background:#ffffffe0;z-index:-1}.category-mobile-title button,.category-child-heading>button{min-height:44px}.category-recents button{min-height:44px}}

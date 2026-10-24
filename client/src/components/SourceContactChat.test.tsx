@@ -192,3 +192,14 @@ describe('correcting and restarting a withdrawn source inquiry',()=>{
  });
 });
 async function enterLockedEnglish(){render(<MemoryRouter><SourceContactChat source={source()} onBack={()=>{}}/></MemoryRouter>);await screen.findByRole('button',{name:'Read saved inquiry'});await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh'})).not.toBeDisabled());}
+
+it.each(['zh-TW','en-US'])('shows rejected forwarding as system progress with this original Facebook link in %s, without sending',async locale=>{
+ localStorage.setItem('user-locale',locale);const f=fixture(),originalPostUrl='https://www.facebook.com/groups/123/posts/456';
+ f.setRoom({...emptyRoom(),state:'DELIVERY_REQUIRES_REVIEW',transferIssue:{code:'FACEBOOK_COMMENT_REJECTED',checkedAt:now(),originalPostUrl}});
+ const view=render(<MemoryRouter><SourceContactChat source={{...source(),canonicalUrl:originalPostUrl}} onBack={()=>{}}/></MemoryRouter>);
+ const label=locale==='zh-TW'?'前往 Facebook 原文自行詢問':'Open original Facebook post to ask yourself';
+ const link=await screen.findByRole('link',{name:label});expect(link).toHaveAttribute('href',originalPostUrl);expect(link).toHaveAttribute('target','_blank');expect(link).toHaveAttribute('rel','noreferrer noopener');
+ expect(screen.getByText(locale==='zh-TW'?'這次代問留言未能通過 Facebook 發布，尚未成功送達賣家；不代表賣家已收到或同意價格。':'Facebook did not accept the inquiry comment. It was not successfully delivered to the seller and does not mean the seller received it or agreed to a price.')).toBeTruthy();
+ expect(screen.queryByRole('textbox')).toBeNull();expect(f.getActions()).toBe(0);expect(f.fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(0);
+ view.unmount();render(<MemoryRouter><SourceContactChat source={{...source(),canonicalUrl:originalPostUrl}} onBack={()=>{}}/></MemoryRouter>);expect(await screen.findByRole('link',{name:label})).toHaveAttribute('href',originalPostUrl);expect(f.getActions()).toBe(0);
+});

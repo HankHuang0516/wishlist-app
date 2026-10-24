@@ -5,7 +5,7 @@ import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {isContactLocation} from '../lib/sourceContactLocation';
-import {publicCommentRoute,publicCommentPayload} from '../lib/sourcePublicComment';
+import {activePublicCommentRoute,publicCommentRoute,publicCommentPayload,relayIdentity} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
 import { ListingFlickrStorage } from '../lib/listingFlickrStorage';
@@ -22,12 +22,13 @@ const enabled = () => process.env.SOURCE_LEADS_PUBLIC_ENABLED === '1';
 const fail = (res: Response, e: unknown) => res.status(e instanceof LeadError ? 409 : 503).json({ errorCode: e instanceof LeadError ? e.message : 'SOURCE_LEAD_UNAVAILABLE' });
 // Preserve seller identity across renewed route checks without rewriting the original send receipt.
 const sellerBindingHash=(value:unknown)=>{const r=object(value);return digest(Object.fromEntries(['leadId','contentHash','sourceUrl','channel','publicRouteUrl','identityEvidenceRef'].map(k=>[k,r[k]])));};
-const dto = (r: any, l: any, presentation = false) => ({ id: r.id, leadId: r.leadId, state: r.state, available: enabled() && leadCurrent(l) && r.leadContentHash === l.contentHash, events: (r.events as LeadEvent[]).filter(e => presentation || e.action !== 'SELLER_REPLY').map(({ requestId, action, text, at, reservationId }) => ({ requestId, action, text, at, ...(presentation&&reservationId?{reservationId}:{}) })), transferHash: digest(transferSnapshot(l, r.events as LeadEvent[])), routeVerified: routeCurrent(l), delivered: !!r.delivery?.receipt, delivery: r.delivery?.receipt ? { at: r.delivery.receipt.sentAt, channel: r.delivery.receipt.channel, verification: 'MANUAL_UI_RECEIPT' } : null, checkoutEnabled: false, orderCreated: false, notice: 'Agent 只協助收件；未核原賣家路由前不發送，不代表在售或成交。' });
+const dto = (r: any, l: any, presentation = false, progress = false) => ({ ...(progress && r.delivery?.transferIssue?.code === 'FACEBOOK_COMMENT_REJECTED' ? { transferIssue: { code: 'FACEBOOK_COMMENT_REJECTED', checkedAt: r.delivery.transferIssue.checkedAt, originalPostUrl: l.canonicalUrl } } : {}), id: r.id, leadId: r.leadId, state: r.state, available: enabled() && leadCurrent(l) && r.leadContentHash === l.contentHash, events: (r.events as LeadEvent[]).filter(e => presentation || e.action !== 'SELLER_REPLY').map(({ requestId, action, text, at, reservationId }) => ({ requestId, action, text, at, ...(presentation&&reservationId?{reservationId}:{}) })), transferHash: digest(transferSnapshot(l, r.events as LeadEvent[])), routeVerified: routeCurrent(l), delivered: !!r.delivery?.receipt, delivery: r.delivery?.receipt ? { at: r.delivery.receipt.sentAt, channel: r.delivery.receipt.channel, verification: 'MANUAL_UI_RECEIPT' } : null, checkoutEnabled: false, orderCreated: false, notice: 'Agent 只協助收件；未核原賣家路由前不發送，不代表在售或成交。' });
 export function createSourceLeadAdmin(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const router = Router();
     router.use(marketplaceAdmin(getCredential));
     router.use((_q, r, n) => { r.set('Cache-Control', 'private, no-store'); n(); });
     router.use(rateLimit({ windowMs: 60000, limit: 30 }));
+    router.get('/relay-identity', (_req, res) => res.json(relayIdentity()));
     router.use('/records',createSourceLeadRecordRoutes());
     router.use('/reference-evidence',createSourceReferenceEvidenceRoutes());
     router.use('/pending-imports', createSemiAutoImportRoutes(getCredential));
@@ -98,7 +99,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             if (!isListingId(req.params.id) || b.leadId !== req.params.id || b.confirmOriginalSeller !== true || !['FACEBOOK_UI', 'ECLAW', 'EMAIL'].includes(b.channel) || !ref(b.identityEvidenceRef) || !ref(b.routeEvidenceRef))
                 throw new LeadError('VERIFIED_ORIGINAL_SELLER_REQUIRED');
             const url = publicUrl(b.publicRouteUrl), host = new URL(url).hostname;
-            if (b.routeKind !== undefined && !publicCommentRoute({...b,publicRouteUrl:url},b.sourceUrl)) throw new LeadError('BOUND_PAGE_POST_REQUIRED');
+            if (b.routeKind !== undefined && !activePublicCommentRoute({...b,publicRouteUrl:url},b.sourceUrl)) throw new LeadError('BOUND_PAGE_POST_REQUIRED');
             if (b.channel === 'FACEBOOK_UI' && b.routeKind !== 'PUBLIC_COMMENT' && (!['www.facebook.com', 'm.me'].includes(host) || new URL(url).pathname.startsWith('/groups/')))
                 throw new LeadError('GROUP_AUTHOR_IS_NOT_MESSAGING_ROUTE');
             if (b.channel === 'ECLAW' && host !== 'eclawbot.com')
@@ -140,6 +141,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${first.leadId} FOR UPDATE`;
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
                 const r = await tx.sourceLeadInquiry.findUniqueOrThrow({ where: { id: first.id }, include: { lead: true } });
+                if (object(r.lead.sellerRoute).routeKind === 'PUBLIC_COMMENT' && !activePublicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)) throw new LeadError('PUBLIC_COMMENT_IDENTITY_RECHECK_REQUIRED');
                 if (!publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl) && transferSnapshot(r.lead,r.events as unknown as LeadEvent[]).questions.some(e=>privateContactField({title:e.text??''}))) throw new LeadError('PRIVATE_CONTACT_NOT_FORWARDED');
                 const snapshot = transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), payloadHash = digest(snapshot), prior = r.delivery ? object(r.delivery) : null, outboundQuestions=pendingRoundQuestions(snapshot,r.delivery);
                 if(!outboundQuestions.length)throw new LeadError('NO_NEW_QUESTION_FOR_ROUND');
@@ -166,6 +168,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             if (!enabled() || !isListingId(req.params.id))
                 throw new LeadError('TRANSFER_DISABLED');
             const r = await prisma.sourceLeadInquiry.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: { lead: true } }), saved = r.delivery ? object(r.delivery) : {}, v = saved.reservation;
+            if (object(r.lead.sellerRoute).routeKind === 'PUBLIC_COMMENT' && !activePublicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)) throw new LeadError('PUBLIC_COMMENT_IDENTITY_RECHECK_REQUIRED');
             if (r.state !== 'TRANSFER_RESERVED' || !v || Date.parse(v.expiresAt) <= Date.now() || !leadCurrent(r.lead) || !routeCurrent(r.lead) || r.consentHash !== v.payloadHash || r.consentHash !== digest(transferSnapshot(r.lead, r.events as unknown as LeadEvent[])) || v.routeHash !== digest(r.lead.sellerRoute))
                 throw new LeadError('TRANSFER_STOP_REQUIRED');
             return res.json({ reservation: v, snapshot: transferSnapshot(r.lead, r.events as unknown as LeadEvent[]), outboundQuestions:pendingRoundQuestions(transferSnapshot(r.lead,r.events as unknown as LeadEvent[]),r.delivery), route: r.lead.sellerRoute, ...(publicCommentRoute(r.lead.sellerRoute,r.lead.canonicalUrl)?{publicComment:publicCommentPayload(r.lead.sellerRoute,r.lead.canonicalUrl,r.lead.title)}:{}), preflightAt: new Date().toISOString(), outboundSent: false, notice: 'Immediately recheck before the normal UI send; cancellation and external UI cannot be atomic. If uncertain stop, never retry send.' });
@@ -188,6 +191,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${first.leadId} FOR UPDATE`;
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
                 const r = await tx.sourceLeadInquiry.findUniqueOrThrow({ where: { id: first.id }, include: { lead: true } }), saved = r.delivery ? object(r.delivery) : {}, v = saved.reservation;
+                if (saved.transferIssue) throw new LeadError('TRANSFER_ISSUE_REQUIRES_REVIEW');
                 const priorRound=findDeliveredRound(saved,b.reservationId);
                 if(priorRound){if(digest(priorRound.receipt)!==digest(b))throw new LeadError('DELIVERY_ALREADY_RECORDED');return dto(r,r.lead);}
                 if (saved.receipt) {
@@ -210,6 +214,23 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
             return fail(res, e);
         }
     });
+    // Record an observed external rejection as progress, never as a seller reply or send receipt.
+    router.post('/inquiries/:id/transfer-issue', async (req,res)=>{try{
+        const b=object(req.body);
+        exact(b,['requestId','reservationId','leadId','sourceUrl','actingPageId','commentId','checkedAt','code']);
+        const at=date(b.checkedAt);
+        if(!isListingId(req.params.id)||!isListingId(b.requestId)||!isListingId(b.reservationId)||!isListingId(b.leadId)||b.code!=='FACEBOOK_COMMENT_REJECTED'||typeof b.commentId!=='string'||!/^\d+$/.test(b.commentId)||at>new Date()||Date.now()-at.getTime()>48*3600000)throw new LeadError('BOUND_TRANSFER_ISSUE_REQUIRED');
+        const result=await prisma.$transaction(async tx=>{
+            const first=await tx.sourceLeadInquiry.findUniqueOrThrow({where:{id:String(req.params.id)}});
+            await tx.$executeRaw`SELECT id FROM "ExternalSourceLead" WHERE id=${first.leadId} FOR UPDATE`;
+            await tx.$executeRaw`SELECT id FROM "SourceLeadInquiry" WHERE id=${first.id} FOR UPDATE`;
+            const r=await tx.sourceLeadInquiry.findUniqueOrThrow({where:{id:first.id},include:{lead:true}}),saved=r.delivery?object(r.delivery):{},v=saved.reservation,route=object(r.lead.sellerRoute);
+            if(saved.transferIssue){if(digest(saved.transferIssue)!==digest(b))throw new LeadError('TRANSFER_ISSUE_ALREADY_RECORDED');return dto(r,r.lead,true,true);}
+            if(saved.receipt||!v||!['TRANSFER_RESERVED','CANCEL_REQUESTED'].includes(r.state)||v.id!==b.reservationId||r.leadId!==b.leadId||v.leadId!==b.leadId||v.sourceUrl!==b.sourceUrl||r.lead.canonicalUrl!==b.sourceUrl||v.routeHash!==digest(route)||!publicCommentRoute(route,b.sourceUrl)||route.actingPageId!==b.actingPageId||at<date(v.preparedAt))throw new LeadError('TRANSFER_ISSUE_BINDING_MISMATCH');
+            const next=await tx.sourceLeadInquiry.update({where:{id:r.id},data:{state:'DELIVERY_REQUIRES_REVIEW',delivery:{...saved,transferIssue:b,reviewRequired:true}}});
+            return dto(next,r.lead,true,true);
+        });return res.json(result);
+    }catch(e){return fail(res,e);}});
     router.post('/inquiries/:id/seller-reply', async (req,res)=>{try{
         const b=object(req.body); exact(b,['requestId','leadId','sourceUrl','routeHash','reservationId','text','receiptRef','receivedAt']);
         if (!isListingId(req.params.id)||!isListingId(b.requestId)||!isListingId(b.leadId)||!isListingId(b.reservationId)||!ref(b.receiptRef)||typeof b.text!=='string'||!b.text.trim()||b.text.length>1500||privateContactField({title:b.text})||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(b.text)) throw new LeadError('BOUND_SAFE_SELLER_REPLY_REQUIRED');
@@ -350,13 +371,13 @@ export function createSourceLeadRoutes() {
             where: { leadId_buyerUserId: { leadId: String(req.params.id), buyerUserId: req.user.id } },
             include: { lead: true }
         });
-        return res.json(row ? dto(row, row.lead, req.query.presentation === '1') : null);
+        return res.json(row ? dto(row, row.lead, req.query.presentation === '1', req.query.progress === '1') : null);
     } catch (e) { return fail(res, e); } });
     // A private receipt proves the original action, including its consent
     // snapshot. Current room state alone is not an action acknowledgement.
     router.get('/:id/inquiry/:roomId/actions/:requestId', authenticateToken, async (req: AuthRequest, res) => { try {
         res.set('Cache-Control', 'private, no-store');
-        if (!req.user || ![req.params.id, req.params.roomId, req.params.requestId].every(isListingId) || Object.keys(req.query).length) return res.sendStatus(404);
+        if (!req.user || ![req.params.id, req.params.roomId, req.params.requestId].every(isListingId) || Object.keys(req.query).some(k=>k!=='progress') || req.query.progress!==undefined&&req.query.progress!=='1') return res.sendStatus(404);
         const row = await prisma.sourceLeadInquiry.findFirst({
             where: { id: String(req.params.roomId), leadId: String(req.params.id), buyerUserId: req.user.id }, include: { lead: true }
         });
@@ -365,7 +386,7 @@ export function createSourceLeadRoutes() {
         return res.json(event ? {
             leadId: row.leadId, roomId: row.id,
             operation: { requestId: event.requestId, action: event.action, ...(event.text !== undefined ? { text: event.text } : {}), ...(event.consent !== undefined ? { consent: event.consent } : {}), ...(event.payloadHash !== undefined ? { transferHash: event.payloadHash } : {}) },
-            room: dto(row, row.lead, true)
+            room: dto(row, row.lead, true, req.query.progress === '1')
         } : null);
     } catch (e) { return fail(res, e); } });
     router.post('/:id/inquiry', authenticateToken, async (req: AuthRequest, res) => { try {
@@ -374,8 +395,8 @@ export function createSourceLeadRoutes() {
         if (req.body && Object.keys(req.body).length)
             throw new LeadError('INVALID_INPUT');
         const r = await prisma.$transaction(async (tx) => { await tx.$executeRaw `SELECT pg_advisory_xact_lock(${7300000000 + req.user!.id}::bigint)`; await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${req.params.id} FOR UPDATE`; const l = await tx.externalSourceLead.findUniqueOrThrow({ where: { id: String(req.params.id) } }); const old = await tx.sourceLeadInquiry.findUnique({ where: { leadId_buyerUserId: { leadId: l.id, buyerUserId: req.user!.id } } }); if (old)
-            return dto(old, l, req.query.presentation === '1'); if (!enabled() || !leadCurrent(l))
-            throw new LeadError('LEAD_UNAVAILABLE'); return dto(await tx.sourceLeadInquiry.create({ data: { leadId: l.id, buyerUserId: req.user!.id, leadContentHash: l.contentHash } }), l, req.query.presentation === '1'); });
+            return dto(old, l, req.query.presentation === '1', req.query.progress === '1'); if (!enabled() || !leadCurrent(l))
+            throw new LeadError('LEAD_UNAVAILABLE'); return dto(await tx.sourceLeadInquiry.create({ data: { leadId: l.id, buyerUserId: req.user!.id, leadContentHash: l.contentHash } }), l, req.query.presentation === '1', req.query.progress === '1'); });
         return res.json(r);
     }
     catch (e) {
@@ -400,7 +421,7 @@ export function createSourceLeadRoutes() {
                 if (old) {
                     if (old.action !== b.action || old.text !== b.text || old.consent !== b.consent || old.payloadHash !== b.transferHash)
                         throw new LeadError('REQUEST_CONFLICT');
-                    return dto(room, room.lead, req.query.presentation === '1');
+                    return dto(room, room.lead, req.query.presentation === '1', req.query.progress === '1');
                 }
                 if (b.action !== 'CANCEL' && (!enabled() || !leadCurrent(room.lead) || room.leadContentHash !== room.lead.contentHash))
                     throw new LeadError('LEAD_UNAVAILABLE');
@@ -437,7 +458,7 @@ export function createSourceLeadRoutes() {
                 }
                 const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(questionAction && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: transferSnapshot(room.lead,events).questions.map(e => e.requestId), payloadHash: b.transferHash } : {}) };
                 const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(followupDelivery?{delivery:followupDelivery}:{}), ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });
-                return dto(saved, room.lead, req.query.presentation === '1');
+                return dto(saved, room.lead, req.query.presentation === '1', req.query.progress === '1');
             });
             return res.json(r);
         }

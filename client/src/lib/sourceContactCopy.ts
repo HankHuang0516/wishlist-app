@@ -1,5 +1,8 @@
 import { getDisplayLocale } from '../utils/localization';
 const copy = {
+ facebookRejected: ['這次代問留言未能通過 Facebook 發布，尚未成功送達賣家；不代表賣家已收到或同意價格。', 'Facebook did not accept the inquiry comment. It was not successfully delivered to the seller and does not mean the seller received it or agreed to a price.'],
+ selfAskNotice: ['你可以開啟這件商品的 Facebook 原始貼文，自行向賣家詢問。商品狀態與交易條件仍待確認；不會自動替你傳訊。', 'You can open this item’s original Facebook post and ask the seller yourself. Availability and terms are unconfirmed; no message is sent automatically.'],
+ selfAskOriginal: ['前往 Facebook 原文自行詢問', 'Open original Facebook post to ask yourself'],
  revise: ['更正詢問','Correct question'], reopen: ['再次發問','Ask again'],
  revisionDraft: ['修改後送出才會取代尚未轉交的問題；原詢問紀錄會保留。','Only sending the correction replaces questions that have not been forwarded. The original history is retained.'],
  reopenDraft: ['先前詢問已撤回。請確認或修改問題後重新送出；不會自動重送舊問題。','The previous inquiry was withdrawn. Review or edit the question, then send again. Old questions are not resent automatically.'],

@@ -53,6 +53,8 @@ test.each([
  ['iPhone 16 保護殼（附保護貼）','accessories'],
  ['Acer Aspire 5741ZG 筆電（零件機）＋24吋電視螢幕打包','laptops'],
  ['Samsung Galaxy Tab S9 平板','tablets'],
+ ['Samsung Galaxy Buds3 全新未拆','audio'],
+ ['二手筆電變壓器（電源轉接器，含電源線）','accessories'],
  ['BenQ GW2270-T 22 吋液晶螢幕（21.5 吋 Full HD VA 面板）','monitors'],
  ['Samsung 43 吋 FollowMe Pro 4K 移動式智慧聯網螢幕組 S43FM703UC（全新）','monitors']
 ])('classifies the actual product subject rather than its condition or included parts: %s',(title,subId)=>{

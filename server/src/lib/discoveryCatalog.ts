@@ -28,7 +28,7 @@ export const discoveryCatalog: Category[] = [
 ];
 type Rule = [string, string, RegExp];
 const rules: Rule[] = [
-  ['electronics','accessories',/手機殼|保護殼|保護貼|充電線|充電器|轉接|鍵盤|滑鼠|記憶卡|硬碟|ssd|router|路由器|防潮櫃/i],
+  ['electronics','accessories',/手機殼|保護殼|保護貼|充電線|充電器|變壓器|電源供應器|轉接|鍵盤|滑鼠|記憶卡|硬碟|ssd|router|路由器|防潮櫃/i],
   ['books','children',/童書|繪本|來自北極的禮物|學習書|幼兒讀本/i],
   ['books','comics',/漫畫|comic|manga/i],
   ['books','stationery',/原子筆|中性筆|筆芯|文具|影印紙|辦公用品|自動鉛筆/i],
@@ -46,7 +46,7 @@ const rules: Rule[] = [
   ['collectibles','music',/吉他|小提琴|鋼琴|烏克麗麗|樂器|電子琴/i],
   ['kids','toys',/洗澡玩具|教具|啟蒙|兒童玩具/i],
   ['other','vehicle',/車用|安全帽|機車.*配件|汽車.*配件|車載/i],
-  ['electronics','audio',/耳機|喇叭|音響|等化器|擴大機|airpods|headphone|speaker/i],
+  ['electronics','audio',/耳機|喇叭|音響|等化器|擴大機|airpods|galaxy\s*buds|headphone|speaker/i],
   ['electronics','cameras',/相機|攝影機|鏡頭|拍立得|camera|polaroid/i],
   ['electronics','tablets',/ipad|平板|tablet/i],
   ['electronics','laptops',/macbook|筆記型電腦|筆電|laptop|notebook/i],

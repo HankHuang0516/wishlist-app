@@ -5,11 +5,12 @@ import { externalSearchPath, externalWishSearchPath, parseExternalListingPage } 
 import { ApiFailure } from './marketplaceApi';
 import type { MarketplaceRead } from './homeMatches';
 
-export type ExploreQuery = { filters: SearchFilters; bounds: Bounds; wishId: number | null; radius: string; serial: number };
+export type ExploreQuery = { filters: SearchFilters; bounds: Bounds; wishId: number | null; radius: string; serial: number; scope?: 'map' | 'all' };
 export function parseExploreIntent(search: string) {
   const params = new URLSearchParams(search), keys = [...params.keys()];
-  if (keys.some(key => !['wish', 'listing', 'source', 'q', 'view', 'brand', 'category', 'condition', 'delivery', 'minPrice', 'maxPrice', 'bbox', 'radius'].includes(key)) || new Set(keys).size !== keys.length)
+  if (keys.some(key => !['wish', 'listing', 'source', 'q', 'view', 'brand', 'category', 'condition', 'delivery', 'minPrice', 'maxPrice', 'bbox', 'radius', 'scope'].includes(key)) || new Set(keys).size !== keys.length)
     throw new Error('探索連結參數不正確。');
+  if (params.has('scope') && !['map','all'].includes(params.get('scope')!)) throw new Error('搜尋範圍不正確。');
   const sourceId=params.get('source');if(sourceId!==null&&!isUuid(sourceId))throw new Error('來源連結參數不正確。');
   const rawWish = params.get('wish'), listingId = params.get('listing'), q = (params.get('q') ?? '').trim();
   if (params.has('view') && !['list', 'map'].includes(params.get('view')!)) throw new Error('探索顯示模式不正確。');
@@ -21,11 +22,12 @@ export function parseExploreIntent(search: string) {
 }
 
 /** Save public search context only. No account, token, or precise location. */
-export function exploreSearchLocation(query: { q: string; wishId: number | null; listMode: boolean; filters?: SearchFilters; bounds?: Bounds; radius?: string }) {
+export function exploreSearchLocation(query: { q: string; wishId: number | null; listMode: boolean; filters?: SearchFilters; bounds?: Bounds; radius?: string; scope?: 'map' | 'all' }) {
   const params = new URLSearchParams();
   if (query.q.trim()) params.set('q', query.q.trim());
   if (query.wishId !== null) params.set('wish', String(query.wishId));
   if (query.listMode) params.set('view', 'list');
+  if (query.scope) params.set('scope',query.scope);
   for (const name of ['brand','category','condition','delivery','minPrice','maxPrice'] as const) if (query.filters?.[name]) params.set(name, query.filters[name].trim());
   if (query.bounds) {
     const b=clipBounds(query.bounds); if (!b) throw new Error('搜尋範圍不正確。');
@@ -46,12 +48,15 @@ export function parseExploreSearchState(search: string) {
   const radius=params.get('radius')??'';
   if(radius&&intent.wishId===null)throw new Error('距離條件需要願望。');
   if(intent.wishId)wishMatchPath(intent.wishId,filters,bounds,radius);else listingSearchPath(filters,bounds);
-  return {intent,filters,bounds,radius,listMode:params.get('view')==='list'};
+  const defaultList = !intent.wishId && !intent.listingId && !intent.sourceId && !params.has('bbox');
+  const listMode = params.get('view') === 'list' || (!params.has('view') && defaultList);
+  const scope = params.get('scope') === 'all' || (!params.has('scope') && listMode && defaultList) ? 'all' as const : 'map' as const;
+  return {intent,filters,bounds,radius,listMode,scope:intent.wishId?'map' as const:scope};
 }
 export function exploreSellerPath(query: ExploreQuery, cursor?: string) {
   if (cursor && !isUuid(cursor)) throw new Error('商品分頁識別碼不正確。');
   return query.wishId ? wishMatchPath(query.wishId, query.filters, query.bounds, query.radius, true) + (cursor ? '&cursor=' + cursor : '')
-    : listingSearchPath(query.filters, query.bounds, cursor);
+    : listingSearchPath(query.filters, query.bounds, cursor, query.scope ?? 'map');
 }
 export async function readExploreSeller(query: ExploreQuery, read: MarketplaceRead, origin: string, local = false, cursor?: string) {
   const response = await read(exploreSellerPath(query, cursor));

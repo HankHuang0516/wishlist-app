@@ -4,6 +4,15 @@ import { externalPrice, type ExternalListing } from './externalListingSearch';
 import type { WishMatch } from './wishData';
 
 const english = {
+"全站列表已載入：{results}。":"Loaded in the site-wide list: {results}.",
+"目前範圍已載入：{results}。":"Loaded in this map area: {results}.",
+"至少 {count} 筆外部來源（尚可載入或結果未完整）":"At least {count} external references loaded (more available or incomplete)",
+"列表包含目前公開的站內刊登；商品未在地圖顯示時仍可查看，不會自動開啟定位。":"The list includes current public in-app listings even when they are not shown on the map. Location sharing is never enabled automatically.",
+"尚有公開來源可載入，以下保留已讀取的結果。":"More public references are available. Results already read remain visible.",
+"載入更多來源":"Load more sources",
+"目前列表沒有符合條件的商品，可清除條件重新搜尋。":"No matching items in this list. Clear filters and search again.",
+"目前地圖範圍沒有符合條件的商品，不代表全站沒有商品。可切換商品列表、擴大範圍或清除條件。":"No matching items in this map area. Try the item list, a wider area or fewer filters.",
+
 "外部來源 · 庫存未知 · 非站內賣家 · 行政區中心":"External source · stock unknown · external seller · district centre",
 "外部來源 · 庫存未知 · 非站內賣家":"External source · stock unknown · external seller",
 "至少 {count} 筆外部來源（結果未完整）":"At least {count} external references loaded (incomplete results)",

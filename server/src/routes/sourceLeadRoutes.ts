@@ -10,6 +10,7 @@ import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
 import { ListingFlickrStorage } from '../lib/listingFlickrStorage';
 import { Router, Response } from 'express';
+import {sourceLeadLimits} from '../middleware/sourceLeadLimits';
 import rateLimit from 'express-rate-limit';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -233,7 +234,7 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
 }
 export function createSourceLeadRoutes() {
     const router = Router();
-    router.use(rateLimit({ windowMs: 60000, limit: 120 }));
+    router.use(...sourceLeadLimits());
     router.use((_q, r, n) => { r.set('Cache-Control', 'no-store'); n(); });
     router.get('/', async (req, res) => {
         try {

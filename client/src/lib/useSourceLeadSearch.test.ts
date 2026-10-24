@@ -64,3 +64,21 @@ describe('source search rows without an area', () => {
     expect(result.current.contactItems.map(i => i.id)).toEqual([contact.id]);
   });
 });
+
+describe('incremental public-source pages past the old 500-record boundary',()=>{
+ it('keeps every completed batch, continues explicitly beyond 500 and completes without an error or duplicate IDs',async()=>{
+  const rows=Array.from({length:564},(_,i)=>({...lead(),id:'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0')}));
+  fetchMock.mockImplementation(async(url:string)=>{const cursor=new URL(url).searchParams.get('cursor'),start=cursor?rows.findIndex(r=>r.id===cursor)+1:0,items=rows.slice(start,start+25);return new Response(JSON.stringify({enabled:true,items,nextCursor:start+items.length<rows.length?items.at(-1)!.id:null}));});
+  const request=query();const {result}=renderHook(()=>useSourceLeadSearch('synthetic',request));await settle();
+  expect(result.current.items).toHaveLength(100);expect(result.current.hasMore).toBe(true);expect(result.current.error).toBe('');
+  for(let i=0;i<5;i++){await act(async()=>{await result.current.loadMore();});expect(result.current.error).toBe('');}
+  expect(result.current.items).toHaveLength(564);expect(new Set(result.current.items.map(r=>r.id)).size).toBe(564);expect(result.current.hasMore).toBe(false);expect(fetchMock).toHaveBeenCalledTimes(23);
+ });
+ it('retains the first batch if a later page fails and does not silently retry it',async()=>{
+  const rows=Array.from({length:125},(_,i)=>({...lead(),id:'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0')}));
+  fetchMock.mockImplementation(async(url:string)=>{const c=new URL(url).searchParams.get('cursor'),start=c?rows.findIndex(r=>r.id===c)+1:0;if(start===100)throw Error('synthetic network failure');return new Response(JSON.stringify({enabled:true,items:rows.slice(start,start+25),nextCursor:rows[start+24].id}));});
+  const request=query();const {result}=renderHook(()=>useSourceLeadSearch('synthetic',request));await settle();expect(result.current.items).toHaveLength(100);
+  await act(async()=>{await result.current.loadMore();});expect(result.current.error).toBeTruthy();expect(result.current.items).toHaveLength(100);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(60_000);});expect(fetchMock).toHaveBeenCalledTimes(5);
+ });
+});

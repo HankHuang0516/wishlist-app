@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.739',date:'2026-10-24',title:'探索公開商品與來源分頁修正',type:'Frontend',items:[{type:'Fix',content:'探索預設列表可查看目前公開的站內刊登，未在地圖顯示的商品不再被誤隱藏；地圖仍遵守原顯示同意與期限。'},{type:'Fix',content:'公開來源採分頁載入，超過500筆也保留已讀結果並可繼續載入，不再整批報錯歸零。'}]},
  {version:'2.0.738',date:'2026-10-24',title:'公開來源數量',type:'Fullstack',items:[{type:'New',content:'首頁與探索顯示目前實際公開可讀的來源筆數；數量為 0 或尚未確認時不顯示，並註明庫存待確認。'}]},
  {version:'2.0.737',date:'2026-10-22',title:'未提供地區的外部來源可搜尋',type:'Fullstack',items:[{type:'New',content:'探索搜尋新增「未提供地區的商品」清單：沒有地區的外部來源不放上地圖，但搜得到，並註明面交地點需聯絡賣家後才知道，寄送不受影響。'},{type:'Fix',content:'只知道縣市的外部來源，各縣市都能以概略位置顯示，不再限於臺北市。'},{type:'New',content:'資料庫來源商品可顯示原貼文照片：照片備份到 Flickr 後依商品逐張對應，詳情頁顯示照片與數量核對。'},{type:'Enhancement',content:'資料庫來源商品不再因 48 小時或發文超過兩個月而自動下架，只在重查發現已售出或已刪文時撤下。'}]},
  {version:'2.0.733',date:'2026-10-12',title:'探索查詢證據',type:'Frontend',items:[{type:'New',content:'既有探索查詢可唯讀檢視與匯出分頁、公開識別、終頁及去重證據，不新增請求。'},{type:'Fix',content:'未開放、404、失敗或未完成明確區分，不當成功零件；逐件權利與現貨仍待核實。'}]},

@@ -11,3 +11,10 @@ describe('same-query read evidence',()=>{
  it('later source refresh is not the original three-source snapshot',()=>{const e=new ExploreEvidence(q);e.begin('source',true);for(const k of ['seller','external','source'] as const)e.finish(k,[],null);e.begin('source',true);e.finish('source',[],null);expect(e.snapshot(visible).comparable).toBe(false);});
  it('never copies raw private fields, headers or tokens',()=>{const e=new ExploreEvidence(q);e.page('seller',e.startedAt,200,{items:[{id:'00000000-0000-4000-8000-000000000001',owner:{email:'private@example.invalid'}}],nextCursor:null,token:'SECRET'});expect(JSON.stringify(e.snapshot(visible))).not.toMatch(/SECRET|private@example/);});
 });
+
+it('explicit source pagination can reach the real terminal page beyond 500 without falsifying other-source availability',()=>{
+ const e=new ExploreEvidence(q);e.begin('source',true);const ids=Array.from({length:564},(_,i)=>String(i));
+ e.finish('source',ids.slice(0,100),'next');expect(e.layers.source.phase).toBe('partial');expect(e.layers.source.cap).toBe(false);
+ e.resume('source');e.finish('source',ids,null);expect(e.layers.source.phase).toBe('complete');expect(e.layers.source.terminal).toBe(true);expect(e.sourceReadCycles).toBe(1);
+ e.finish('seller',[],null);e.finish('external',[],null,false);expect(e.snapshot(visible).comparable).toBe(false);
+});

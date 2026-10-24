@@ -39,7 +39,7 @@ const blankExternal: ExternalState = { items: [], cursor: null, busy: true, erro
 const errorText = exploreFailureKey;
 
 function SellerCard({ item, match, own, onMap, onDetail, readBlocked }: { item: PublicListing; match?: WishMatch; own: boolean; onMap: () => void; onDetail: () => void; readBlocked: boolean }) {
-  return <article className="min-w-0 rounded-2xl border bg-white p-4 shadow-sm">
+  return <article data-source-type="ON_SITE" data-original-id={item.id} className="min-w-0 rounded-2xl border bg-white p-4 shadow-sm">
     <button type="button" disabled={readBlocked} onClick={onDetail} aria-label={text('查看{title}商品詳情', { title: item.title })} className="flex w-full items-start gap-3 text-left disabled:opacity-60">
       <ListingPhoto src={item.media[0].thumbnailUrl} alt={item.media[0].capturePurpose === 'AI_MARKETING' ? publicListingPhotoLabel(item.title,1,true) : item.title} marketing={item.media[0].capturePurpose === 'AI_MARKETING'} />
       <span className="min-w-0"><span className="block break-words font-semibold">{item.title}</span><span className="mt-1 block font-semibold text-green-800">{listingPrice(item)}</span>
@@ -48,7 +48,7 @@ function SellerCard({ item, match, own, onMap, onDetail, readBlocked }: { item: 
       </span></button>
     {match && <div className="mt-3 text-sm text-gray-600"><p>{text('吻合 {score} 分', { score: match.score })}{match.distanceKm !== null ? text(' · 約 {distance} 公里', { distance: match.distanceKm.toFixed(1) }) : ''}</p>
       <p>{match.reasons.map(reason => exploreReason(reason, match.distanceKm)).join(' · ')}</p></div>}
-    <button type="button" onClick={onMap} className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm"><MapPin className="h-4 w-4" aria-hidden="true" />{text('在地圖查看{title}', { title: item.title })}</button>
+    {!!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil)>Date.now() && <button type="button" onClick={onMap} className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm"><MapPin className="h-4 w-4" aria-hidden="true" />{text('在地圖查看{title}', { title: item.title })}</button>}
   </article>;
 }
 function ExternalCard({ item, onMap, onDetail, readBlocked }: { item: ExternalListing; onMap: () => void; onDetail: () => void; readBlocked: boolean }) {
@@ -77,7 +77,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const source=useSourceLeadSearch(token,query,evidence);
   const sourceFrameCycle=useRef(0);
   const [sellerSerial,setSellerSerial]=useState(0),[externalSerial,setExternalSerial]=useState(0);
-  const [listMode, setListMode] = useState(new URLSearchParams(search).get('view') === 'list'), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
+  const [listMode, setListMode] = useState(false), [cluster, setCluster] = useState<{ kind: MapSelection['kind']; ids: string[] } | null>(null);
   const [selection, setSelection] = useState<MapSelection | null>(null), [frame, setFrame] = useState<MapFrame | null>(null);
   const [locationMessage, setLocationMessage] = useState(''), [clock, setClock] = useState(Date.now()), [queryError, setQueryError] = useState('');
   const [detail, setDetail] = useState<{ kind: MapSelection['kind']; id: string; seller?: PublicListing; external?: ExternalListing; source?:SourceLead; loading: boolean; error: string } | null>(null);
@@ -95,10 +95,16 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
   const readBlocked = retryUntil > clock;
   const explicitView = useRef(new URLSearchParams(search).has('view'));
   function rememberSearch(q: string, selectedWish: number | null, asList: boolean, state=currentQuery.current) {
-    if (window.location.pathname === '/explore') window.history.replaceState(window.history.state, '', exploreSearchLocation({ q, wishId: selectedWish, listMode: asList, filters:state?.filters,bounds:state?.bounds,radius:state?.radius }));
+    if (window.location.pathname === '/explore') window.history.replaceState(window.history.state, '', exploreSearchLocation({ q, wishId: selectedWish, listMode: asList, filters:state?.filters,bounds:state?.bounds,radius:state?.radius,scope:state?.scope }));
   }
-  function switchList(asList: boolean) {
+  function switchList(asList: boolean, changeScope=false) {
     explicitView.current=true; setListMode(asList);
+    if(changeScope && currentQuery.current && !waiting()){
+      const old=currentQuery.current,desired=asList&&!old.wishId?'all' as const:'map' as const;
+      if(desired===old.scope){rememberSearch(old.filters.q,old.wishId,asList,old);return;}
+      const next={...old,bounds:asList&&!old.wishId?[...TAIWAN_BOUNDS] as Bounds:viewport.current,scope:asList&&!old.wishId?'all' as const:'map' as const,serial:old.serial+1};
+      viewport.current=next.bounds;currentQuery.current=next;setQuery(next);rememberSearch(next.filters.q,next.wishId,asList,next);return;
+    }
     if(window.location.pathname!=='/explore')return;
     // A visual change must preserve an in-flight deep-link/search bootstrap.
     const params=new URLSearchParams(window.location.search);
@@ -162,7 +168,7 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
           initialTarget.current = item;
           bounds = clipBounds([item.location.publicLongitude - 0.06, item.location.publicLatitude - 0.06, item.location.publicLongitude + 0.06, item.location.publicLatitude + 0.06])!;
         }
-        if (active.current && !controller.signal.aborted) { const initialFilters = restored.filters; viewport.current = bounds; setFilters(initialFilters); setRadius(restored.radius); setQuery({ filters: initialFilters, bounds, wishId: intent.wishId, radius: restored.radius, serial: 1 }); }
+        if (active.current && !controller.signal.aborted) { const initialFilters = restored.filters; viewport.current = bounds; setFilters(initialFilters); setRadius(restored.radius);setListMode(restored.listMode); setQuery({ filters: initialFilters, bounds, wishId: intent.wishId, radius: restored.radius, serial: 1,scope:restored.scope }); }
       } catch (error) { if (active.current && !controller.signal.aborted) setInitError(noteFailure(error)); }
     })();
     void loadWishes(controller.signal);
@@ -195,16 +201,18 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     void Promise.all([sellers,externals]);
     return () => { valid = false; controller.abort();evidence?.cancel(); };
   }, [query, token, origin,evidence]);
-  const liveItems = useMemo(() => seller.items.filter(item => Date.parse(item.expiresAt) > clock && !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > clock), [seller.items, clock]);
+  const publicItems=useMemo(()=>seller.items.filter(item=>Date.parse(item.expiresAt)>clock),[seller.items,clock]);
+  const liveItems=useMemo(()=>publicItems.filter(item=>!!item.mapVisibleUntil&&Date.parse(item.mapVisibleUntil)>clock),[publicItems,clock]);
+  const displayItems=listMode&&query?.scope==='all'?publicItems:liveItems;
   const liveExternal = useMemo(() => external.items.filter(item => externalIndexCurrent(item,clock)), [external.items, clock]);
-  const allExternalReferences=useMemo(()=>unifiedExternalReferences(liveExternal,source.items),[liveExternal,source.items]);
-  const externalIncomplete=!!external.error||!!source.error||source.hidden||external.skipped||!external.enabled||evidence?.layers.source.phase==='disabled';
-  const queryComplete=evidence?.snapshot({seller:liveItems.map(i=>i.id),external:liveExternal.map(i=>i.id),source:source.items.map(i=>i.id)}).comparable===true;
+  const allExternalReferences=useMemo(()=>unifiedExternalReferences(liveExternal,[...source.items,...source.contactItems]),[liveExternal,source.items,source.contactItems]);
+  const externalIncomplete=!!external.error||!!source.error||source.hidden||external.skipped;
+  const queryComplete=!seller.busy&&!external.busy&&!source.busy&&!seller.error&&!external.error&&!source.error&&!source.hasMore&&!source.hidden&&!external.skipped;
   const selectedSeller = selection?.kind === 'seller' ? liveItems.find(item => item.id === selection.id) : undefined;
   const selectedSource=selection?.kind==='source'?source.items.find(r=>r.id===selection.id):undefined;
   const selectedExternal = selection?.kind === 'external' ? liveExternal.find(item => item.id === selection.id) : undefined;
   const byMatch = new Map(seller.matches.map(match => [match.listing.id, match]));
-  const visibleItems = cluster ? cluster.kind === 'seller' ? liveItems.filter(item => cluster.ids.includes(item.id)) : [] : liveItems;
+  const visibleItems = cluster ? cluster.kind === 'seller' ? displayItems.filter(item => cluster.ids.includes(item.id)) : [] : displayItems;
   const visibleExternal = cluster ? cluster.kind === 'external' ? liveExternal.filter(item => cluster.ids.includes(item.id)) : [] : liveExternal;
   const busy = query !== null && (seller.busy || external.busy || source.busy || sellerSerial!==query.serial || externalSerial!==query.serial);
   async function loadMore(kind: 'seller' | 'external') {
@@ -242,11 +250,11 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
       if (valid()) { const message = noteFailure(error); if (kind === 'seller') setSeller(old => ({ ...old, error: message })); else setExternal(old => ({ ...old, error: message })); }
     } finally { if (valid()) { gate.current[kind] = false; if (kind === 'seller') setSeller(old => ({ ...old, busy: false })); else setExternal(old => ({ ...old, busy: false })); } }
   }
-  function commit(bounds = viewport.current, nextFilters = filters, nextWish = wishId, nextRadius = radius) {
+  function commit(bounds = viewport.current, nextFilters = filters, nextWish = wishId, nextRadius = radius, nextScope: 'map'|'all'=currentQuery.current?.scope??'all') {
     if (waiting()) return;
     try {
       const clipped = clipBounds(bounds); if (!clipped) throw new Error('請將地圖移回台灣範圍，或擴大搜尋。');
-      const next = { bounds: clipped, filters: { ...nextFilters }, wishId: nextWish, radius: nextRadius, serial: (currentQuery.current?.serial ?? 0) + 1 };
+      const next = { bounds: clipped, filters: { ...nextFilters }, wishId: nextWish, radius: nextRadius, serial: (currentQuery.current?.serial ?? 0) + 1,scope:nextWish?'map' as const:nextScope };
       exploreSellerPath(next); rememberSearch(next.filters.q, next.wishId, listMode,next); clearElapsedWait(); initialTarget.current = null; currentQuery.current = next; setQueryError(''); setCluster(null); setQuery(next);
     } catch (error) { setQueryError(errorText(error)); }
   }
@@ -333,19 +341,21 @@ function ExploreSession({ token, userId, search }: { token: string; userId: numb
     </form>
     {queryError && <p role="alert" className="text-red-700">{exploreMessage(queryError)}</p>}{wishError && <div role="status" className="text-amber-800"><p>{exploreMessage(wishError)}</p><button type="button" disabled={wishBusy || readBlocked} onClick={() => void loadWishes()} className="min-h-11 underline disabled:opacity-50">{text('重新讀取願望選單')}</button></div>}
     {query?.wishId && <div className="rounded-xl bg-green-50 p-4 text-sm text-green-900"><p className="font-semibold">{text('正在交叉比對：{name}', { name: chosenWish?.name ?? text('所選願望') })}</p><p className="mt-1">{text("含自己刊登的配對預覽，不能向自己購買。依文字、型號、條件與預算比對，圖片不直接比對；分數不保證同一型號或真偽。")}</p>{seller.notice && <p className="mt-1">{exploreNotice(seller.notice)}</p>}</div>}
-    <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={!listMode} onClick={() => { switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("地圖")}</button><button type="button" aria-pressed={listMode} onClick={() => { switchList(true); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("商品列表")}</button>
+    <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={!listMode} onClick={() => { switchList(false,true); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("地圖")}</button><button type="button" aria-pressed={listMode} onClick={() => { switchList(true,true); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("商品列表")}</button>
       <button type="button" onClick={locate} className="flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4"><LocateFixed className="h-4 w-4" aria-hidden="true" />{text("移至我的位置")}</button>
-      <button type="button" disabled={!query || readBlocked} onClick={() => commit()} className="min-h-11 rounded-xl bg-green-800 px-4 text-white disabled:opacity-50">{text("搜尋此範圍")}</button>
-      <button type="button" disabled={!query || readBlocked} onClick={() => commit(expandedSearchBounds(query?.bounds ?? TAIWAN_BOUNDS))} className="min-h-11 rounded-xl border bg-white px-4">{text("擴大搜尋範圍")}</button>
+      <button type="button" disabled={!query || readBlocked} onClick={() => commit(viewport.current,filters,wishId,radius,'map')} className="min-h-11 rounded-xl bg-green-800 px-4 text-white disabled:opacity-50">{text("搜尋此範圍")}</button>
+      <button type="button" disabled={!query || readBlocked} onClick={() => commit(expandedSearchBounds(query?.bounds ?? TAIWAN_BOUNDS),filters,wishId,radius,'map')} className="min-h-11 rounded-xl border bg-white px-4">{text("擴大搜尋範圍")}</button>
       {resultsFrame.current && <button type="button" onClick={() => { const saved = resultsFrame.current!; viewport.current = saved.bounds; showFrame(saved.camera); switchList(false); setCluster(null); }} className="min-h-11 rounded-xl border bg-white px-4">{text("返回目前結果")}</button>}
     </div>{locationMessage && <p role="status" className="text-sm text-gray-600">{exploreMessage(locationMessage)}</p>}
     {query && <MapFallbackBoundary fallback={<p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">{text('互動地圖暫時無法使用，請切換「商品列表」繼續搜尋與閱覽。')}</p>}><ExploreMapWeb items={liveItems} external={liveExternal} sourceLeads={source.items} frame={frame} visible={!listMode} onViewport={bounds => { viewport.current = bounds; }} onSelect={item => { setSelection(item); setCluster(null); }} onCluster={(kind, ids) => { setCluster({ kind, ids }); switchList(true); }} /></MapFallbackBoundary>}
-    {evidence&&<ExploreEvidencePanel evidence={evidence} loaded={{seller:seller.items.map(i=>i.id),external:external.items.map(i=>i.id),source:evidence.layers.source.ids}} visible={{seller:liveItems.map(i=>i.id),external:liveExternal.map(i=>i.id),source:[...source.items,...source.contactItems].map(i=>i.id)}}/>}
-    <div aria-live="polite" className="space-y-2 text-sm text-gray-600">{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && <p>{text('目前範圍已載入：{sellerResult}、{externalResult}。這不是全站商品總數。',{sellerResult:seller.error?text('站內商品未核實'):text('{count} 件站內商品{own}',{count:liveItems.length,own:query.wishId?text('（含 {count} 件自有預覽）',{count:liveItems.filter(i=>i.owner.id===userId).length}):''}),externalResult:externalIncomplete?(allExternalReferences.length?text('至少 {count} 筆外部來源（結果未完整）',{count:allExternalReferences.length}):text('外部來源未核實／未完整量測')):text('{count} 筆外部來源（資料參考）',{count:allExternalReferences.length})})}</p>}{!busy&&query&&!queryComplete&&<p role="status">{text('本次查詢尚未建立完整基準；請查看查詢證據。')}</p>}
-      <p>{text('外部來源是資料參考，庫存與交易待確認；不計已確認在售商品。')}</p>{source.error&&<p role="alert" className="text-red-700">{text('部分外部來源未完成讀取，已暫停更新；請明確重新搜尋。')} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}{source.hidden&&<p>{text('部分外部來源不能驗證目前條件，未列入結果。')}</p>}{external.skipped && <p>{text("目前條件無法由外部來源驗證，外部商品未列入。")}</p>}{!external.enabled && !external.skipped && !external.busy && !external.error && <p>{text('部分外部索引目前未開放；已載入的其他外部來源參考仍保留。')}</p>}
+    {evidence&&<ExploreEvidencePanel evidence={evidence} loaded={{seller:seller.items.map(i=>i.id),external:external.items.map(i=>i.id),source:evidence.layers.source.ids}} visible={{seller:displayItems.map(i=>i.id),external:liveExternal.map(i=>i.id),source:[...source.items,...source.contactItems].map(i=>i.id)}}/>}
+    <div aria-live="polite" className="space-y-2 text-sm text-gray-600">{busy ? <p role="status">{text("正在讀取目前範圍的商品…")}</p> : query && (displayItems.length>0||allExternalReferences.length>0) && <p data-testid="explore-loaded-count">{text(query.scope==='all'&&listMode?'全站列表已載入：{results}。':'目前範圍已載入：{results}。',{results:[displayItems.length>0?text('{count} 件站內商品{own}',{count:displayItems.length,own:query.wishId?text('（含 {count} 件自有預覽）',{count:displayItems.filter(i=>i.owner.id===userId).length}):''}):'',allExternalReferences.length>0?text(source.hasMore||external.cursor||externalIncomplete?'至少 {count} 筆外部來源（尚可載入或結果未完整）':'{count} 筆外部來源（資料參考）',{count:allExternalReferences.length}):''].filter(Boolean).join('、')})}</p>}
+      {listMode&&query?.scope==='all'&&<p>{text('列表包含目前公開的站內刊登；商品未在地圖顯示時仍可查看，不會自動開啟定位。')}</p>}
+      {source.hasMore&&!source.error&&<div><p>{text('尚有公開來源可載入，以下保留已讀取的結果。')}</p><button type="button" onClick={()=>void source.loadMore()} disabled={source.busy||readBlocked} className="min-h-11 rounded-xl border bg-white px-4">{text('載入更多來源')}</button></div>}
+      <p>{text('外部來源是資料參考，庫存與交易待確認；不計已確認在售商品。')}</p>{source.error&&<p role="alert" className="text-red-700">{text('部分外部來源未完成讀取，已暫停更新；請明確重新搜尋。')} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}{source.hidden&&<p>{text('部分外部來源不能驗證目前條件，未列入結果。')}</p>}{external.skipped && <p>{text("目前條件無法由外部來源驗證，外部商品未列入。")}</p>}
       {seller.error && <p role="alert" className="text-red-700">{text('站內商品查詢未完成：')}{exploreMessage(seller.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}
       {external.error && <p role="alert" className="text-red-700">{text('部分外部來源查詢未完成：')}{exploreMessage(external.error)} <button type="button" disabled={readBlocked} onClick={() => commit(query?.bounds)} className="min-h-11 underline disabled:opacity-50">{text("重新搜尋")}</button></p>}
-      {!busy && queryComplete && query && !seller.error && !external.error && !liveItems.length && !liveExternal.length && !source.items.length && !source.contactItems.length && !source.error && <p>{text("目前地圖範圍沒有符合條件的商品，不代表全站沒有商品。可擴大範圍或清除條件。")}</p>}
+      {!busy && queryComplete && query && !seller.error && !external.error && !displayItems.length && !liveExternal.length && !source.items.length && !source.contactItems.length && !source.error && <p>{text(query.scope==='all'&&listMode?'目前列表沒有符合條件的商品，可清除條件重新搜尋。':'目前地圖範圍沒有符合條件的商品，不代表全站沒有商品。可切換商品列表、擴大範圍或清除條件。')}</p>}
     </div>
     {listMode ? <><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{text(cluster ? '此群聚的商品' : '商品列表')}</h2>{cluster && <button type="button" onClick={() => setCluster(null)} className="min-h-11 rounded-xl border px-3">{text("顯示全部已載入結果")}</button>}</div><div className="grid gap-4 md:grid-cols-2">{visibleItems.map(renderSeller)}{unifiedExternalReferences(visibleExternal,visibleSource).map(row=>row.kind==='source'?renderSource(row.item):<ExternalCard key={row.key} item={row.item} readBlocked={readBlocked} onMap={()=>focus('external',row.originalId)} onDetail={()=>void showDetail('external',row.originalId)}/>)}</div></>
       : <div className="max-w-2xl">{selectedSeller ? renderSeller(selectedSeller) : selectedExternal ? renderExternal(selectedExternal) : selectedSource ? renderSource(selectedSource) : null}</div>}

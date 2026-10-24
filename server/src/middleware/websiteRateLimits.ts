@@ -77,6 +77,8 @@ export function accountReadBudget(authenticate: RequestHandler): RequestHandler 
 export function websiteRateLimits(buildRoot: string) {
   const assets = publicBuildPaths(buildRoot);
   const isBuildRead = (req: Request) => (req.method === 'GET' || req.method === 'HEAD') && assets.has(req.path);
+  // Only this public, publication-checked image route has a separate budget.
+  const isSourceMediaRead = (req:Request) => req.method === 'GET' && /^\/api\/source-leads\/[a-f0-9-]{36}\/media\/[a-f0-9-]{36}\/(?:image|thumbnail)\/?$/i.test(req.path);
   const create = (skip: (req: Request, res: import('express').Response) => boolean) => rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 500,
@@ -88,5 +90,5 @@ export function websiteRateLimits(buildRoot: string) {
   // Separate process-local stores, each retaining the original500/IP/15min.
   // Downloading a new shell cannot exhaust account/chat reads, and saturated
   // data requests cannot stop downloading the recovery/update interface.
-  return [create((req, res) => isBuildRead(req) || res.locals.verifiedAccountRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req))];
+  return [create((req, res) => isBuildRead(req) || isSourceMediaRead(req) || res.locals.verifiedAccountRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req)), create(req => !isSourceMediaRead(req))];
 }

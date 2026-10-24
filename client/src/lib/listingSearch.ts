@@ -30,10 +30,10 @@ export function clipBounds(value: unknown): Bounds | null {
   return clipped[0] < clipped[2] && clipped[1] < clipped[3] ? clipped : null;
 }
 
-export function listingSearchPath(filters: SearchFilters, bounds: Bounds, cursor?: string) {
+export function listingSearchPath(filters: SearchFilters, bounds: Bounds, cursor?: string, scope: 'map' | 'all' = 'map') {
   const bbox = clipBounds(bounds);
   if (!bbox) throw new ListingSearchError('請將地圖移回台灣範圍');
-  const params = new URLSearchParams({ limit: '100', bbox: bbox.map(v => String(v)).join(',') });
+  const params = new URLSearchParams({ limit: '100', ...(scope === 'map' ? { bbox: bbox.map(v => String(v)).join(',') } : {}) });
   const q = filters.q.trim(); const brand = filters.brand.trim();
   if (q.length > 100 || brand.length > 60) throw new ListingSearchError('搜尋文字或品牌過長');
   if (q) params.set('q', q); if (brand) params.set('brand', brand);

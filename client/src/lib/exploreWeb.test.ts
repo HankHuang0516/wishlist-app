@@ -54,3 +54,11 @@ describe('web map query parity and public response contracts', () => {
     await expect(readExploreSeller(scope(), async () => ({ items: [{ ...makeListing(), media: [{ id: uuid(), imageUrl: 'https://evil.invalid/x', thumbnailUrl: 'https://evil.invalid/x' }] }], nextCursor: null }), marketplaceOrigin(), true)).rejects.toThrow();
   });
 });
+
+it('restores a public list by default while preserving explicit map/bounds links and privacy filters',()=>{
+ const initial=parseExploreSearchState('');expect(initial).toMatchObject({scope:'all',listMode:true});
+ const q={...scope(),scope:'all' as const};expect(new URL('https://example.invalid'+exploreSellerPath(q)).searchParams.has('bbox')).toBe(false);
+ for(const link of ['?view=map','?bbox=117,20,123.8,26.6','?wish=814'])expect(parseExploreSearchState(link).scope).toBe('map');
+ expect(parseExploreSearchState('?view=list&scope=all&bbox=117,20,123.8,26.6').scope).toBe('all');
+ expect(()=>parseExploreSearchState('?scope=private')).toThrow();
+});

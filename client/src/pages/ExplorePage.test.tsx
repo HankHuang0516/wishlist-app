@@ -51,7 +51,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     const fetch=vi.fn(async(url:string)=>responseOk(url.includes('/source-leads/')?item:url.includes('/source-leads?')?{enabled:true,items:[item],nextCursor:null}:url.includes('/external-listings?')?{enabled:false,items:[],nextCursor:null}:{items:[],nextCursor:null}));
     vi.stubGlobal('fetch',fetch);render(view());fireEvent.click(screen.getByRole('button',{name:'Item list'}));
     const card=await screen.findByRole('button',{name:`View item details: ${item.title}`});
-    expect(screen.getByText(/At least 1 external references loaded/)).toBeTruthy();expect(screen.getByText('External sources are references. Stock and transactions are unconfirmed; these are not verified available goods.')).toBeTruthy();expect(screen.getByRole('button',{name:`View on the map: ${item.title}`})).toBeTruthy();
+    expect(screen.getByText(/1 external references/)).toBeTruthy();expect(screen.getByText('External sources are references. Stock and transactions are unconfirmed; these are not verified available goods.')).toBeTruthy();expect(screen.getByRole('button',{name:`View on the map: ${item.title}`})).toBeTruthy();
     fireEvent.click(card);const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText(item.summary)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.priceText)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.originalDateLabel)).toBeTruthy();
     expect(within(dialog).getByText(/nothing has been forwarded/)).toBeTruthy();expect(within(dialog).getByText('All source item images have been imported (Source: 2; imported: 2)')).toBeTruthy();
@@ -128,7 +128,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
   it('translates invalid price and radius feedback before dispatch and leaves the original inputs intact', async () => {
     english(); const wish=makeWish(814), fetch=vi.fn(async (url:string) => responseOk(url.includes('match-wishes') ? {items:[wish],nextCursor:null}
       : url.includes('external-listings') ? {enabled:false,items:[],nextCursor:null} : makeMatchPage([])));
-    stubFetch(fetch); render(view('/explore?wish=814')); await screen.findByText(/Loaded in this area/);
+    stubFetch(fetch); render(view('/explore?wish=814')); await waitFor(() => expect(screen.queryByText('Reading items in the current area…')).not.toBeInTheDocument());
     fireEvent.click(screen.getByText('Filters and wish comparison (optional)'));
     fireEvent.change(screen.getByLabelText('Minimum price (NT$)'),{target:{value:'500'}});
     fireEvent.change(screen.getByLabelText('Maximum price (NT$)'),{target:{value:'100'}}); const before=fetch.mock.calls.length;
@@ -180,7 +180,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     english();let success!:PositionCallback,deny!:PositionErrorCallback;
     const locate=vi.fn((ready:PositionCallback,failed:PositionErrorCallback) => {success=ready;deny=failed;});
     vi.stubGlobal('navigator',{language:'en-US',geolocation:{getCurrentPosition:locate}});
-    const fetch=sellerFetch();stubFetch(fetch);render(view());await screen.findByText(/Loaded in this area/);const before=fetch.mock.calls.length;
+    const fetch=sellerFetch();stubFetch(fetch);render(view());await waitFor(() => expect(screen.queryByText('Reading items in the current area…')).not.toBeInTheDocument());const before=fetch.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'Move to my location'}));
     expect(screen.getByText(/Reading location; it is not sent directly/)).toBeInTheDocument();
     act(() => deny({message:'private location failure'} as GeolocationPositionError));
@@ -283,12 +283,12 @@ describe('APP-equivalent map and list exploration', () => {
     stubFetch(vi.fn((url: string, init: RequestInit) => url.includes('/listings?') && (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
       ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null }))));
     const mounted = render(view()); await waitFor(() => expect(resolve).toBeDefined()); mounted.rerender(view('/explore', { ...auth, token: 'next', user: { id: 20, phoneNumber: 'next' } }));
-    await screen.findByText(/外部來源未核實／未完整量測/); await act(async () => resolve(responseOk({ items: [item], nextCursor: null })));
+    await waitFor(() => expect(screen.queryByText('正在讀取目前範圍的商品…')).not.toBeInTheDocument()); await act(async () => resolve(responseOk({ items: [item], nextCursor: null })));
     expect(screen.queryByRole('button', { name: `查看${item.title}商品詳情` })).not.toBeInTheDocument();
   });
   it('rejects invalid price bounds before sending a new search', async () => {
     const fetch = vi.fn(async (url: string) => responseOk(url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [], nextCursor: null })); stubFetch(fetch);
-    render(view()); await screen.findByText(/外部來源未核實／未完整量測/); fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
+    render(view()); await waitFor(() => expect(screen.queryByText('正在讀取目前範圍的商品…')).not.toBeInTheDocument()); fireEvent.click(screen.getByText('過濾與願望交叉比對（選用）'));
     fireEvent.change(screen.getByLabelText('最低售價（NT$）'), { target: { value: '500' } }); fireEvent.change(screen.getByLabelText('最高售價（NT$）'), { target: { value: '100' } });
     const before = fetch.mock.calls.length; fireEvent.click(screen.getByRole('button', { name: '套用條件' })); expect(await screen.findByRole('alert')).toHaveTextContent('最高價不可小於最低價'); expect(fetch.mock.calls.length).toBe(before);
   });
@@ -300,4 +300,22 @@ describe('APP-equivalent map and list exploration', () => {
     const source = within(dialog).getByRole('link', { name: /前往來源網站/ }); expect(source).toHaveAttribute('href', item.canonicalUrl); expect(source).toHaveAttribute('rel', 'noopener noreferrer');
     expect(within(dialog).queryByRole('button', { name: /聯絡賣家/ })).not.toBeInTheDocument();
   });
+});
+
+
+describe('public listing browse is independent of map consent',()=>{
+ it('defaults to actual public listings, keeps inactive map items visible as cards, and never changes map presence',async()=>{
+  const item={...makeListing('仍公開但未開啟地圖的實際測試商品'),mapVisibleUntil:null};
+  const fetch=vi.fn(async(url:string)=>responseOk(url.includes('match-wishes')?{items:[],nextCursor:null}:url.includes('external-listings')?{enabled:false,items:[],nextCursor:null}:url.includes('/listings?')?(new URL(url).searchParams.has('bbox')?{items:[],nextCursor:null}:{items:[item],nextCursor:null}):item));
+  stubFetch(fetch);render(view());
+  expect(await screen.findByRole('button',{name:`查看${item.title}商品詳情`})).toBeVisible();
+  expect(await screen.findByTestId('explore-loaded-count')).toHaveTextContent('全站列表已載入：1 件站內商品');
+  expect(screen.queryByRole('button',{name:`在地圖查看${item.title}`})).not.toBeInTheDocument();
+  expect(new URL(fetch.mock.calls.find(([u])=>u.includes('/listings?'))![0]).searchParams.has('bbox')).toBe(false);
+  fireEvent.click(screen.getByRole('button',{name:'地圖',exact:true}));
+  await waitFor(()=>expect(screen.queryByRole('button',{name:`查看${item.title}商品詳情`})).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button',{name:'商品列表',exact:true}));
+  expect(await screen.findByRole('button',{name:`查看${item.title}商品詳情`})).toBeVisible();
+  expect(fetch.mock.calls.some(call=>(call[1] as RequestInit|undefined)?.method==='POST')).toBe(false);
+ });
 });

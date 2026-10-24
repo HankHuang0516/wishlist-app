@@ -1,0 +1,31 @@
+{
+  "version": "2.0.739",
+  "status": "passed",
+  "actualBuildInspected": true,
+  "inputHashes": {
+    "original": "d825c9cecea10d9b2b70b7c38c6a0b663eba3dead5190052900dc66ce6a33b55",
+    "H": "29bb4c6f54024441b675d9f04233dc0283dcc3dff2b78fbb08cd61581d61b9fa"
+  },
+  "outputHashes": {
+    "logo.png": "65a61ffa303408bda3ae0a85f466077d1b718c935bf5eee48369e63f7a93692b",
+    "pwa-icon-512.png": "97d1f1dca8e7eac1b30a8acbd0d191d34e49494594e6084fd9b216d6e83fd0f1",
+    "pwa-icon-192.png": "5bee6f2b9858c852fb6dcdc69449038ca2f0510b4d9ab6d96faf8757343afe47",
+    "apple-touch-icon.png": "d4c5578b3b13b463059bf5be91835a53db8d5003d5cf2fa0e463609d86b668bd"
+  },
+  "reviewedAt": "2026-10-24T04:59:03.585090+00:00",
+  "reviewer": "Codex visual review of actual 2.0.739 build bytes",
+  "actualArtifacts": [
+    "dist/logo.png",
+    "dist/pwa-icon-512.png",
+    "dist/pwa-icon-192.png",
+    "dist/apple-touch-icon.png"
+  ],
+  "evidence": [
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/explore-e2e-739-20261024/actual-build-icons.png",
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/explore-e2e-739-20261024/original-H-actual.png",
+    "/Volumes/codex_2T/codex_project/Wishlist/QA/explore-e2e-739-20261024/icon-pixel-proof.json"
+  ],
+  "visualConclusion": "浮水印存在／樣式正確。Original gift canvas/composition preserved; exact selected metallic cyan/orange H in upper-left background, no separate row/band or main-subject obstruction. At 32/48/64px and rounded/circular masks the watermark remains in-frame, with no small-size legibility requirement. No icon, input, color or alpha change.",
+  "unfinishedItems": [],
+  "automatedIntegrityIsNotVisualAcceptance": true
+}

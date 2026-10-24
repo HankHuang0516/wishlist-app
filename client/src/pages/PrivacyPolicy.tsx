@@ -26,7 +26,7 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">2. 我們處理的資料</h2>
                         <ul className="list-disc pl-5 mt-2 space-y-1">
                             <li><strong>帳號與個人資料：</strong>註冊及使用服務所需的手機號碼、密碼，以及您選填的姓名、電子郵件、地址、生日、頭像與個人資料可見性設定。密碼以雜湊方式儲存，不以明文保存。</li>
-                            <li><strong>您建立的內容：</strong>願望、商品名稱與價格、描述、連結、上傳或拍攝的照片、刊登地點、聊天訊息、面交安排，以及檢舉或客服內容。</li>
+                            <li><strong>您建立的內容：</strong>願望、商品名稱與價格、描述、連結、上傳或拍攝的照片、刊登地點、聊天訊息、面交安排，以及檢舉或客服內容。您主動操作的喜歡與賣家追蹤也會連結至帳號保存。</li>
                             <li><strong>位置：</strong>您可手動設定地區，或選擇授予使用期間的定位權限來找附近商品。公開地圖上的商品位置採概略座標；面交地點僅提供相關對話參與者查看，不作為公開地圖標記。</li>
                             <li><strong>技術與分析資料：</strong>為登入、安全、除錯與維運所需的 IP 位址、裝置／瀏覽器資訊、使用時間及服務日誌。網頁使用 Cookie 或本機儲存空間保持登入與設定。Google Analytics 透過隔離框架取得頁面功能分類與彙總使用事件，不傳送網址查詢參數、驗證碼、願望名稱、商品連結或帳號識別碼；瀏覽器要求 Do Not Track 或 Global Privacy Control 時不載入分析框架。</li>
                         </ul>
@@ -34,14 +34,17 @@ export default function PrivacyPolicy() {
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">3. 使用目的與 AI 處理</h2>
                         <p>探索頁的 CP 評估只傳送公開商品名稱、規格、明示狀況、標價及經查核的站外新品原價資料給 AI 服務供應商；不傳送私人願望、帳號、聊天或精確位置。評分以站外同型號／規格新品原價為基準，保留原價來源與查核時間；上市建議售價不代表目前最低新機價。　我們使用上述資料提供帳號、願望比對、商品搜尋與地圖、刊登管理、聊天與面交安排、客服、安全防濫用及服務維運。當您使用圖片辨識或商品文案等 AI 功能時，相關照片與您提供的商品資訊可能交由 AI 處理服務分析，以產生建議；AI 結果可能有誤，刊登前請自行核對。</p>
+                        <p>聊天補傳的商品照片依對話成員權限提供存取，不會因補傳照片而自動送交 AI 辨識；伺服器會重新編碼並移除 EXIF 中繼資料。照片畫面本身仍可能包含個人資訊，請在傳送前自行檢查。</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. 公開範圍與服務供應商</h2>
                         <p>您刊登的商品資訊、照片及概略地圖位置會提供其他使用者瀏覽或分享。願望及個人資料依服務功能與您的可見性設定顯示；聊天與面交詳情不會作為公開刊登內容。我們不出售個人資料。為營運服務，必要資料可能由雲端託管、照片儲存（包括 Flickr）、AI 處理及其他技術供應商處理；依法要求或保護服務安全時亦可能揭露必要資料。請勿上傳不願分享或未取得權利的照片與個人資訊。</p>
+                        <p>公開賣場會顯示公開名稱、頭像、加入日期、Email 驗證狀態與在售商品；Email 驗證狀態不代表公開您的 Email 地址或身分認證。商品人氣只公開詢問中與喜歡的總人數，不公開名單。詢問中依近七天實際傳訊且對話未結束的不同買家計算；外部來源只表示 Wishlist 內代問。喜歡與私人願望分開，不會將既有私人願望轉為人氣，您可取消喜歡。</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">5. 權限與安全</h2>
                         <p>相機、照片選取和定位由您在使用相關功能時選擇授權；拒絕定位後仍可手動選擇地區。我們採取合理的安全措施，但網路傳輸及電子儲存無法保證絕對安全。</p>
+                        <p>若您啟用裝置推播，我們會保存與帳號連結的 App 安裝識別碼、推播權杖、平台及通知偏好，經 Expo、Apple APNs 或 Google FCM 傳送聊天、面交與代問回覆通知。訊息內容預覽預設關閉；您可在通知設定調整分類、預覽或停用此裝置推播，也可在系統設定撤銷通知權限。此識別資料用於服務通知，不用於跨 App 廣告追蹤。</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">6. 保存、刪除與您的選擇</h2>
@@ -52,7 +55,7 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">7. 聯絡與政策更新</h2>
                         <p>若對資料處理、存取、更正或刪除有疑問，請透過<Link to="/support" className="underline">支援頁面</Link>聯絡我們。政策更新會公布於本頁，請定期查看。</p>
                     </section>
-                    <div className="pt-6 text-sm text-gray-500">最後更新日期：2026-10-02</div>
+                    <div className="pt-6 text-sm text-gray-500">最後更新日期：2026-10-25</div>
                 </div>
             ) : (
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
@@ -64,22 +67,25 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">2. Data we process</h2>
                         <ul className="list-disc pl-5 mt-2 space-y-1">
                             <li><strong>Account and profile:</strong> Your phone number and password for registration and use, plus any name, email address, address, birthday, avatar, and profile visibility settings you choose to provide. Passwords are stored as hashes, not plaintext.</li>
-                            <li><strong>Content you create:</strong> Wishes, listing titles and prices, descriptions, links, uploaded or captured photos, listing locations, chat messages, meetup arrangements, reports, and support requests.</li>
+                            <li><strong>Content you create:</strong> Wishes, listing titles and prices, descriptions, links, uploaded or captured photos, listing locations, chat messages, meetup arrangements, reports, and support requests. Likes and seller follows you explicitly choose are also stored with your account.</li>
                             <li><strong>Location:</strong> You may select an area manually or optionally allow location access while using the app to find nearby items. Public map listings use approximate coordinates. Meetup locations are visible only to the relevant conversation participants, not as public map markers.</li>
                             <li><strong>Technical and analytics data:</strong> IP address, device/browser information, access times, and service logs needed for sign-in, security, troubleshooting, and operations. The website uses cookies or local storage for sign-in and preferences. Google Analytics receives page categories and aggregate usage events through an isolated frame. URL query parameters, verification tokens, wish names, product links and account identifiers are not sent. The analytics frame is not loaded when the browser requests Do Not Track or Global Privacy Control.</li>
                         </ul>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">3. Purposes and AI processing</h2>
-                        <p>Explore value assessments send only public product names, specifications, stated condition and prices to the AI provider, excluding private wishes, accounts, chats and precise locations. Scores compare the public catalog at the time and retain their evidence and validity period. We use this data to provide accounts, wish matching, product search and maps, listing management, chat and meetup coordination, support, abuse prevention, and service operations. If you use image recognition or AI listing-copy features, relevant photos and product information you submit may be processed by AI service providers to generate suggestions. AI results can be wrong; please review them before publishing a listing.</p>
+                        <p>Explore value assessments send only public product names, specifications, stated condition and prices to the AI provider, excluding private wishes, accounts, chats and precise locations. Scores use researched new-product prices for the same model and specifications, with original-price sources and check times retained. Launch MSRP does not represent the current lowest new-product price. We use this data to provide accounts, wish matching, product search and maps, listing management, chat and meetup coordination, support, abuse prevention, and service operations. If you use image recognition or AI listing-copy features, relevant photos and product information you submit may be processed by AI service providers to generate suggestions. AI results can be wrong; please review them before publishing a listing.</p>
+                        <p>Additional product photos in chat are served according to conversation membership and are not automatically sent to AI recognition. The server re-encodes them and removes EXIF metadata. Visible image content may still contain personal information; review it before sending.</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">4. Visibility and service providers</h2>
                         <p>Your published listings, photos, and approximate map locations may be viewed or shared by other users. Wishes and profile details appear according to service features and your visibility settings; chats and meetup details are not public listings. We do not sell personal data. Necessary data may be processed by cloud hosting, photo storage (including Flickr), AI processing, and other technical service providers. We may also disclose necessary data when required by law or to protect the service. Do not upload photos or personal information you lack the right to share.</p>
+                        <p>Public stores display public names, avatars, join dates, email-verification status and available listings. Email-verification status does not reveal your email address or verify identity. Product interest exposes only totals of inquiring buyers and likes, never lists of people. Inquiring means distinct buyers who messaged in the past seven days in an ongoing conversation; external sources refer only to inquiries via Wishlist. Likes are separate from private wishes, existing private wishes are never converted into popularity, and you can unlike an item.</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">5. Permissions and security</h2>
                         <p>You choose whether to allow camera, photo selection, and location access when using those features. If you decline location access, you can still select an area manually. We use reasonable safeguards, but no online transmission or electronic storage is completely secure.</p>
+                        <p>If you enable device push notifications, we store an app-installation identifier, push token, platform and notification preferences linked to your account. Expo, Apple APNs or Google FCM deliver chat, meetup and inquiry-reply notifications. Message previews are off by default. Notification settings let you adjust categories and previews or disable push on this device; you can also revoke notification permission in system settings. These identifiers are used for service notifications, not cross-app advertising tracking.</p>
                     </section>
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">6. Retention, deletion, and your choices</h2>
@@ -90,7 +96,7 @@ export default function PrivacyPolicy() {
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">7. Contact and updates</h2>
                         <p>For questions about processing, access, correction, or deletion, contact us through the <Link to="/support" className="underline">support page</Link>. Updates to this policy will be posted here; please review it periodically.</p>
                     </section>
-                    <div className="pt-6 text-sm text-gray-500">Last updated: 2026-10-02</div>
+                    <div className="pt-6 text-sm text-gray-500">Last updated: 2026-10-25</div>
                 </div>
             )}
         </div>

@@ -50,3 +50,18 @@ test('CLI identity only reads its protected endpoint and never allocates a room,
     assert.deepEqual(fs.readdirSync(dir), ['tools']);
   } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(dir, { recursive: true }); }
 });
+
+test('a lost issue response retries the exact saved progress operation, never a send or seller reply', async () => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'relay-cli-issue-'));fs.mkdirSync(path.join(dir,'tools'));
+ for(const file of ['relay.cjs','relay-identity.cjs','inquiry-questions.cjs'])fs.copyFileSync(path.join(__dirname,file),path.join(dir,'tools',file));
+ const roomId='11111111-1111-4111-8111-111111111111',reservation={id:'22222222-2222-4222-8222-222222222222',leadId:'33333333-3333-4333-8333-333333333333',sourceUrl:url},checkedAt='2026-10-24T11:24:30Z';
+ const posts=[];let first=true;
+ const server=createServer((req,res)=>{res.setHeader('content-type','application/json');if(req.method==='GET'&&req.url==='/api/source-lead-admin/inquiries'){res.end(JSON.stringify({items:[{id:roomId,state:'TRANSFER_RESERVED',source:{id:reservation.leadId,canonicalUrl:url,sellerRoute:{actingPageId:'61595150241978'}}}],nextCursor:null}));return;}
+  if(req.method!=='POST'||req.url!=='/api/source-lead-admin/inquiries/'+roomId+'/transfer-issue'){res.statusCode=500;res.end('{}');return;}
+  let text='';req.on('data',b=>text+=b);req.on('end',()=>{posts.push(JSON.parse(text));if(first){first=false;req.socket.destroy();return;}res.end(JSON.stringify({state:'DELIVERY_REQUIRES_REVIEW',transferIssue:{code:'FACEBOOK_COMMENT_REJECTED',checkedAt,originalPostUrl:url},delivered:false}));});
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const queueDir=path.join(dir,'relay','127.0.0.1');fs.mkdirSync(queueDir,{recursive:true});const queue=path.join(queueDir,'queue.json');fs.writeFileSync(queue,JSON.stringify({[roomId]:{status:'RESERVED',reservation}}));
+ const run=()=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,[path.join(dir,'tools/relay.cjs'),'issue',roomId,checkedAt,'123456789','--origin','http://127.0.0.1:'+server.address().port],{env:{...process.env,ADMIN_API_KEY:'synthetic-only'}});let output='';child.stdout.on('data',b=>output+=b);child.on('error',reject);child.on('exit',code=>resolve({code,json:JSON.parse(output)}));});
+ try{const lost=await run();assert.equal(lost.code,1);const pending=JSON.parse(fs.readFileSync(queue))[roomId].issueAttempt;assert.equal(pending.requestId,posts[0].requestId);const recovered=await run();assert.equal(recovered.code,0);assert.equal(recovered.json.delivered,false);assert.equal(recovered.json.outboundSent,false);assert.deepEqual(posts[1],posts[0]);const saved=JSON.parse(fs.readFileSync(queue))[roomId];assert.equal(saved.status,'NEEDS_REVIEW');assert.equal(saved.issueAttempt,undefined);assert.equal(saved.delivery,undefined);assert.deepEqual(saved.reservation,reservation);}
+ finally{await new Promise(resolve=>server.close(resolve));fs.rmSync(dir,{recursive:true});}
+});

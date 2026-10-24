@@ -43,6 +43,8 @@ describe('actual Explore query evidence display and download',()=>{
   app.use('/api/listings',require('../../../dist/routes/listingRoutes').default);
   app.use('/api/external-listings',require('../../../dist/routes/externalListingRoutes').default);
   app.use('/api/source-leads',require('../../../dist/routes/sourceLeadRoutes').createSourceLeadRoutes());
+  app.use('/api/discovery',require('../../../dist/routes/discoveryRoutes').createDiscoveryRoutes());
+  app.use('/api/product-wishes',require('../../../dist/routes/productWishRoutes').createProductWishRoutes());
   server=createServer(app);await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run','--disable-background-networking']});
  },60000);
@@ -123,7 +125,7 @@ describe('actual Explore query evidence display and download',()=>{
   mode='public-browse';const actualIds:string[]=[];
   for(let i=0;i<4;i++){const mediaId=require('crypto').randomUUID();actualIds.push((await db.listing.create({data:{ownerUserId:buyer,clientListingId:'query-public-'+i,requestHash:'synthetic-public-'+i,title:'公開商品 '+i,description:'公開二手用品，合成隔離資料庫測試',category:'other',status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000),mapVisibleUntil:null,price:100,currency:'TWD',condition:'USED',deliveryMethods:['MEETUP'],media:{create:{id:mediaId,ownerUserId:buyer,imageUrl:origin+'/api/listing-media/'+mediaId+'/image',thumbnailUrl:origin+'/api/listing-media/'+mediaId+'/thumbnail',contentHash:'synthetic-image-'+i}},location:{create:{county:'臺南市',district:'永康區',publicLatitude:23,publicLongitude:120.2}}}})).id);}
   for(const width of [1280,390]){
-   await page.setViewport({width,height:900});await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});
+   await page.setViewport({width,height:900});await page.goto(origin+'/explore?view=list&scope=all',{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.querySelector('[data-testid="explore-loaded-count"]')?.textContent?.includes('4 件站內商品')&&document.querySelectorAll('[data-source-type="SOURCE_REFERENCE"]').length===100);
    expect((await page.$$eval('[data-source-type="ON_SITE"]',(rows:Element[])=>rows.map(r=>r.getAttribute('data-original-id')))).sort()).toEqual([...actualIds].sort());
    for(let next=200;next<=600;next+=100){await page.evaluate(()=>{const b=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='載入更多來源');if(!b)throw Error('Load more control missing');b.click();});await page.waitForFunction((count:number)=>document.querySelectorAll('[data-source-type="SOURCE_REFERENCE"]').length===Math.min(count,564),{},next);}
@@ -134,6 +136,35 @@ describe('actual Explore query evidence display and download',()=>{
    expect(await db.listing.count({where:{id:{in:actualIds},mapVisibleUntil:null}})).toBe(4);
    await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:webQaEvidence('query-public-products-'+width+'.png')});
    reports.push({width,scenario:mode,actualDatabaseListingIds:actualIds,sourceFixtures:564,receipt:result,productionWrites:0});
+  }
+  // The new default engine has its own built-browser coverage. The legacy
+  // evidence/pagination contract above remains exercised through its explicit URL.
+  mode='discovery';const wishList=await db.wishlist.create({data:{userId:buyer,title:'新版探索私人願望'}});
+  for(const width of [1280,390]){
+   await page.setViewport({width,height:900});await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length===4);
+   expect(await page.$eval('.discovery-results-heading',(el:Element)=>el.textContent)).toContain('4 件站內商品');
+   expect(await page.$eval('body',(el:Element)=>el.textContent)).not.toMatch(/0 件站內商品|0 筆公開來源/);
+   await page.click('.category-trigger');await page.waitForSelector('.category-popover');await page.click('.category-parents button:last-child');await page.click('.category-child-grid button:last-child');
+   await page.waitForFunction(()=>new URLSearchParams(location.search).get('main')==='other'&&new URLSearchParams(location.search).get('sub')==='misc'&&!document.querySelector('.category-popover'));
+   await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length===4);
+   expect(await page.$eval('.category-trigger',(el:Element)=>el.textContent)).toContain('尚未細分類');
+   await page.click('.discovery-toolbar-filters>button');await page.waitForSelector('[role="dialog"] input[type="number"]');
+   const priceFields=await page.$$('[role="dialog"] input[type="number"]');await priceFields[1].type('99');await page.click('.discovery-filter-form button[type="submit"]');
+   await page.waitForFunction(()=>document.querySelector('.discovery-empty h3')?.textContent==='換個條件，再找找');
+   expect(new URL(await page.url()).searchParams.get('max')).toBe('99');
+   await page.goto(origin+'/explore',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelectorAll('[data-testid="discovery-products"] article').length===4);
+   if(width===1280){
+    await page.click('.discovery-card .product-wish-heart');await page.waitForSelector('[role="dialog"] .space-y-2 button');await page.click('[role="dialog"] .space-y-2 button');
+    await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
+    expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
+    const item=await db.item.findFirst({where:{wishlistId:wishList.id}});expect(item.maxPrice).toBeNull();expect(item.link).toMatch(/\/listings\//);
+    await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!document.querySelector('.product-wish-heart[aria-pressed="true"]'));
+    await page.click('.product-wish-heart[aria-pressed="true"]');expect(await db.item.count({where:{wishlistId:wishList.id}})).toBe(1);
+   }
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+   await page.screenshot({path:webQaEvidence('discovery-built-'+width+'.png')});
+   reports.push({width,scenario:'new-discovery-built',actualDatabaseListingIds:actualIds,wishlistId:wishList.id,actualWishlistItemCount:await db.item.count({where:{wishlistId:wishList.id}}),productionWrites:0});
   }
   expect(errors).toEqual([]);
   // Built assets must retain the existing public icon bytes; no redesign or H editing.

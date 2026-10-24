@@ -141,7 +141,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
         <View style={s.actions}><View style={{flex:1}}>{cardAction(detailId === item.id ? '收合詳情' : '查看詳情', () => setDetailId(current => current === item.id ? null : item.id))}</View>{(()=>{
           const state=managementTab(item,now);
           const primary=state==='已保留'?{label:'恢復在售',run:()=>askStatus(item,'release','ACTIVE')}:state==='在售'?{label:'標記保留',run:()=>askStatus(item,'reserve','RESERVED')}:state==='已失效'?{label:'延長期限',run:()=>setExpiryId(item.id)}:item.status==='DRAFT'?{label:'編輯資訊',run:()=>{setEditing(item.id);setTitle(item.title);setDescription(item.description??'');setPrice(item.price===null?'':String(item.price));}}:null;
-          return primary&&<Pressable accessibilityRole="button" disabled={loading} onPress={primary.run} style={[s.action,s.primaryAction,loading&&s.disabled]}><Text style={[s.actionText,s.primaryText]}>{primary.label}</Text></Pressable>;
+          return primary&&<View style={{flex:1}}><Pressable accessibilityRole="button" disabled={loading} onPress={primary.run} style={[s.action,s.primaryAction,loading&&s.disabled]}><Text style={[s.actionText,s.primaryText]}>{primary.label}</Text></Pressable></View>;
         })()}<Pressable accessibilityRole="button" accessibilityLabel={item.title+'的更多操作'} disabled={loading} onPress={()=>setMenuId(item.id)} style={s.moreButton}><Text style={s.actionText}>•••</Text></Pressable></View>
         {managementTab(item, now) === '已失效' && <Text style={s.muted}>此商品已失效；請先延長期限，再編輯或繼續刊登。</Text>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <Text style={s.muted}>分享連結仍可複製，但其他人只會看到「已停止刊登」。</Text>}
@@ -189,7 +189,7 @@ const s = StyleSheet.create({
   muted: { ...iosType.footnote, color: iosColors.secondaryLabel }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs },
   action: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, borderRadius: iosRadius.control, justifyContent: 'center', alignItems: 'center', backgroundColor: iosColors.tintSoft },
   actionText: { ...iosType.subheadline, color: iosColors.tint, fontWeight: '700' }, dangerAction: { backgroundColor: iosColors.dangerSoft },
-  primaryAction: { flex:1, alignItems:'center', backgroundColor:iosColors.tint }, primaryText: { color:iosColors.white },
+  primaryAction: { alignSelf:'stretch', alignItems:'center', backgroundColor:iosColors.tint }, primaryText: { color:iosColors.white },
   moreButton: { minHeight:minimumTapSize,minWidth:minimumTapSize,alignItems:'center',justifyContent:'center',borderRadius:iosRadius.control },
   compactAction: { paddingHorizontal: iosSpacing.xs }, compactActionText: { ...iosType.footnote, fontWeight: '700' },
   dangerText: { color: iosColors.danger }, disabled: { opacity: 0.45 },

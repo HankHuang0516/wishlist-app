@@ -1,7 +1,7 @@
 import { ListingLocationPicker } from './ListingLocationPicker';
 import { approximateListingPoint } from './listingLocation';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,6 +20,8 @@ import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } 
 type Photo = { key: string; uri: string; record?: PhotoRecord; failed?: boolean };
 export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onClose: () => void; onSaved: (status: string) => void }) {
   const [step,setStep]=useState(0);
+  const { width, fontScale } = useWindowDimensions();
+  const compactSteps = width < 360 || fontScale >= 1.3;
   const [form, setForm] = useState<ListingForm>({ ...emptyListingForm });
   const [clientId] = useState(() => Crypto.randomUUID());
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -159,7 +161,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
   const toggle = (key: 'meetup' | 'shipping' | 'negotiable' | 'consent', label: string) => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: form[key], disabled: locked }} disabled={locked} onPress={() => change(key, !form[key])} style={s.option}><Text style={s.text}>{form[key] ? '☑' : '☐'} {label}</Text></Pressable>;
   return <Modal visible animationType="slide" onRequestClose={() => void close()}><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text style={s.title}>刊登好物</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void close()} style={s.option}><Text style={s.text}>{pending || !ready ? '稍後確認' : '取消'}</Text></Pressable></View>
-    <View style={s.wrap}>{['商品資料','交易與地點','確認刊登'].map((label,index)=><Pressable key={label} accessibilityRole="tab" accessibilityState={{selected:step===index,disabled:locked}} disabled={locked} style={[s.chip,step===index&&s.selected]} onPress={()=>setStep(index)}><Text style={s.text}>{index+1} {label}</Text></Pressable>)}</View>
+    <View style={s.progress}>{['商品資料','交易與地點','確認刊登'].map((label,index)=><Pressable key={label} accessibilityLabel={`${index+1} ${label}`} accessibilityRole="tab" accessibilityState={{selected:step===index,disabled:locked}} disabled={locked} style={[s.chip,s.progressStep,step===index&&s.selected]} onPress={()=>setStep(index)}><Text style={s.stepText}>{index+1} {compactSteps ? ['商品','地點','確認'][index] : label}</Text></Pressable>)}</View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
       <Text style={s.text}>個人二手與新品。不處理付款，請以站內聯絡預約面交。</Text>
       {pending && <Text style={s.text}>已恢復上次待確認刊登。重試使用原識別碼與完整資料；也可稍後返回確認，不會重新建立商品。</Text>}
@@ -188,5 +190,8 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, content: { padding: iosSpacing.lg, gap: iosSpacing.md, paddingBottom: 48 },
   title: { ...iosType.title, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, section: { ...iosType.headline, color: iosColors.label, marginTop: iosSpacing.sm }, fieldGroup: { gap: iosSpacing.xs }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, padding: iosSpacing.md, borderRadius: iosRadius.control, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, multiline: { minHeight: 116, textAlignVertical: 'top' },
+  progress: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  progressStep: { flex: 1, minWidth: 0, paddingHorizontal: 6, alignItems: 'center' },
+  stepText: { ...iosType.footnote, color: iosColors.label, textAlign: 'center', fontWeight: '600' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, justifyContent: 'center' }, selected: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint }, option: { minHeight: minimumTapSize, padding: iosSpacing.sm, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: 52, padding: iosSpacing.md, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm }, photo: { width: 124, gap: iosSpacing.xs }, preview: { width: 124, height: 104, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary },
 });

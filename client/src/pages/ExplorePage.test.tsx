@@ -55,7 +55,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     fireEvent.click(card);const dialog=await screen.findByRole('dialog',{name:'External-source item'});await within(dialog).findByRole('heading',{name:item.title});
     expect(within(dialog).getByText(item.summary)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.priceText)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.originalDateLabel)).toBeTruthy();
     expect(within(dialog).getByText(/nothing has been forwarded/)).toBeTruthy();expect(within(dialog).getByText('All source item images have been imported (Source: 2; imported: 2)')).toBeTruthy();
-    expect(within(dialog).getByRole('link',{name:'Contact seller'})).toHaveAttribute('href','/chat?source='+item.id);expect(within(dialog).getByRole('link',{name:'Original source'})).toHaveAttribute('href',item.canonicalUrl);
+    expect(within(dialog).getByRole('link',{name:'Ask Wishlist AI to inquire'})).toHaveAttribute('href','/chat?source='+item.id);expect(within(dialog).getByRole('link',{name:'Original source'})).toHaveAttribute('href',item.canonicalUrl);
     fireEvent.click(within(dialog).getByRole('button',{name:'Next source image'}));expect(within(dialog).getByText('Image 2 of 2 imported images')).toBeTruthy();noWrites(fetch);
   });
 

@@ -59,6 +59,27 @@ async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?
 beforeEach(() => {localStorage.setItem('user-locale','zh-TW');journals.clear();vi.clearAllMocks();vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
 afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('native-equivalent owner management', () => {
+  it.each(['Escape','cancel'])('does not save or send a status operation before confirmation and restores focus on %s',async choice=>{
+    const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await ready();
+    const opener=screen.getByRole('button',{name:'標記保留',exact:true});opener.focus();fireEvent.click(opener);
+    const dialog=screen.getByRole('dialog',{name:'確認商品狀態'});expect(dialog).toHaveFocus();expect(dialog).toHaveTextContent(row.title);
+    expect(journals.size).toBe(0);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+    if(choice==='Escape')fireEvent.keyDown(dialog,{key:'Escape'});else fireEvent.click(within(dialog).getByRole('button',{name:'取消',exact:true}));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(opener).toHaveFocus();expect(window.confirm).not.toHaveBeenCalled();expect(journals.size).toBe(0);
+  });
+  it('submits the confirmed snapshot once in English',async()=>{
+    localStorage.setItem('user-locale','en');const fetcher=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith('/listings/'+id)?ok({...row,status:'RESERVED',version:2}):ok({items:[row],nextCursor:null}));
+    vi.stubGlobal('fetch',fetcher);render(view());await openActions();await waitFor(()=>expect(screen.getByRole('button',{name:'Mark reserved'})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:'Mark reserved'}));const confirm=within(screen.getByRole('dialog',{name:'Confirm listing status'})).getByRole('button',{name:'Confirm this status change'});fireEvent.click(confirm);fireEvent.click(confirm);
+    await screen.findByText('Version: 2');const writes=fetcher.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'STATUS',listingId:id,expectedVersion:1,changes:{action:'reserve'}});
+  });
+
+  it('removes the old session status confirmation before any journal or write',async()=>{
+    const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);const mounted=render(view());await ready();
+    fireEvent.click(screen.getByRole('button',{name:'標記保留',exact:true}));expect(screen.getByRole('dialog',{name:'確認商品狀態'})).toBeInTheDocument();
+    mounted.rerender(view({...auth,token:'another-session'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await screen.findByRole('heading',{name:row.title});expect(journals.size).toBe(0);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
+  });
   it('keeps secondary controls folded while exposing the state action and keyboard return', async () => {
     const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());
     await screen.findByRole('heading',{name:row.title});
@@ -117,7 +138,7 @@ describe('native-equivalent owner management', () => {
       if (url.endsWith(`/listings/${id}`)) return ok({ ...row, status: 'SOLD', version: 2 });
       return ok({ items: [row], nextCursor: null });
     }); vi.stubGlobal('fetch', fetch);
-    render(view()); await screen.findByRole('heading', { name: row.title }); await ready();fireEvent.click(screen.getByRole('button', { name: '標記售出' }));
+    render(view()); await screen.findByRole('heading', { name: row.title }); await ready();fireEvent.click(screen.getByRole('button', { name: '標記售出' }));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));
     await screen.findByRole('button', { name: '只查核原操作回執與最新商品' });
     expect(screen.getByRole('button', { name: '標記售出' })).toBeDisabled();
     await waitFor(()=>expect(screen.getByRole('button',{name:'只查核原操作回執與最新商品'})).toBeEnabled());fireEvent.click(screen.getByRole('button', { name: '只查核原操作回執與最新商品' }));
@@ -127,7 +148,7 @@ describe('native-equivalent owner management', () => {
   });
   it('blocks stale version responses until authoritative state is reloaded', async () => {
     const fetch = vi.fn(async (url: string, init?: RequestInit) => init?.method === 'POST' ? proof(url,init,'APPLIED',1) : ok({ items: [row], nextCursor: null })); vi.stubGlobal('fetch', fetch);
-    render(view()); await screen.findByRole('heading', { name: row.title }); await ready();fireEvent.click(screen.getByRole('button', { name: '標記售出' }));
+    render(view()); await screen.findByRole('heading', { name: row.title }); await ready();fireEvent.click(screen.getByRole('button', { name: '標記售出' }));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));
     await screen.findByRole('region',{name:'原商品操作與最新資料比較'});expect(screen.getByRole('button', { name: '編輯資訊' })).toBeDisabled();
     await waitFor(()=>expect(screen.getByRole('button',{name:'只查核原操作回執與最新商品'})).toBeEnabled());
     expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);expect(journals.size).toBe(1);
@@ -253,7 +274,7 @@ describe('native-equivalent owner management', () => {
       if(init?.method==='POST'){receipt=await(await proof(url,init)).json();throw Error('lost after commit');}
       if(url.includes('/management-operations/'))return ok(receipt);
       return url.endsWith(`/listings/${id}`)?ok({...row,status:'SOLD',version:2}):ok({items:[row],nextCursor:null});
-    });vi.stubGlobal('fetch',fetch);const first=render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));
+    });vi.stubGlobal('fetch',fetch);const first=render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));
     await waitFor(()=>expect(screen.getByRole('button',{name:'只查核原操作回執與最新商品'})).toBeEnabled());expect(journals.size).toBe(1);first.unmount();
     render(view());await screen.findByText('版本：2');expect(screen.getByText(/原商品操作已確認完成/)).toBeInTheDocument();expect(fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(1);expect(fetch.mock.calls.filter(([url])=>url.includes('/management-operations/')&&!url.endsWith('/abandon'))).toHaveLength(2);expect(journals.size).toBe(1);
   });
@@ -270,11 +291,11 @@ describe('native-equivalent owner management', () => {
   });
   it('retains proof and blocks writing when the same applied version has contradictory current data',async()=>{
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith(`/listings/${id}`)?ok({...row,status:'ACTIVE',version:2}):ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);
-    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));await screen.findByText(/目前商品資料仍無法安全核對/);expect(screen.getByRole('button',{name:'標記售出'})).toBeDisabled();expect(journals.size).toBe(1);expect(screen.getByText(/尚未核對/)).toBeInTheDocument();
+    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));await screen.findByText(/目前商品資料仍無法安全核對/);expect(screen.getByRole('button',{name:'標記售出'})).toBeDisabled();expect(journals.size).toBe(1);expect(screen.getByText(/尚未核對/)).toBeInTheDocument();
   });
   it('does not submit without durable storage, and reports that nothing was sent',async()=>{
     const fetch=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);vi.mocked(privatePendingStore.save).mockRejectedValueOnce(Error('storage unavailable'));
-    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));await screen.findByText(/無法安全保存原操作；未送出/);expect(fetch).toHaveBeenCalledTimes(1);expect(journals.size).toBe(0);
+    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));await screen.findByText(/無法安全保存原操作；未送出/);expect(fetch).toHaveBeenCalledTimes(1);expect(journals.size).toBe(0);
   });
   it('missing receipt is read-only and explicit cancellation retains an immutable terminal result',async()=>{
     const missing={ok:false,status:404,json:async()=>({errorCode:'MANAGEMENT_NOT_FOUND'})};let receipt:unknown;
@@ -282,13 +303,13 @@ describe('native-equivalent owner management', () => {
       if(init?.method==='POST'&&url.endsWith('/abandon')){const raw=[...journals.values()][0],j=JSON.parse(raw);return ok({receipt:{clientActionId:j.clientActionId,listingId:id,kind:'STATUS',expectedVersion:1,requestHash:j.requestHash,state:'ABANDONED',reason:null,appliedVersion:null,createdAt:'2026-10-01T12:00:00.000Z'}});}
       if(init?.method==='POST')throw Error('not known');if(url.includes('/management-operations/'))return receipt?ok(receipt):missing;
       return url.endsWith(`/listings/${id}`)?ok(row):ok({items:[row],nextCursor:null});
-    });vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));
+    });vi.stubGlobal('fetch',fetch);render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));
     await waitFor(()=>expect(screen.getByRole('button',{name:'只查核原操作回執與最新商品'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'只查核原操作回執與最新商品'}));await screen.findByText(/仍無法核對最新商品/);expect(fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button',{name:'取消原操作…'}));expect(fetch.mock.calls.filter(([,i])=>i?.method==='POST')).toHaveLength(1);fireEvent.click(screen.getByRole('button',{name:'確認取消此原操作'}));await screen.findByText(/原商品操作已取消/);await screen.findByText('版本：1');expect(journals.size).toBe(1);expect(screen.queryByRole('button',{name:'明確重試同一原操作'})).not.toBeInTheDocument();
   });
   it('failed CAS cleanup stays blocked rather than clearing a newer operation',async()=>{
     const fetch=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith(`/listings/${id}`)?ok({...row,status:'SOLD',version:2}):ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetch);
-    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));await screen.findByText('版本：2');vi.mocked(privatePendingStore.clear).mockResolvedValueOnce(false);fireEvent.click(screen.getByRole('button',{name:'已讀結果，清理本機紀錄'}));await screen.findByText(/紀錄已被另一分頁更新或清理/);expect(journals.size).toBe(1);expect(screen.getByRole('button',{name:'已讀結果，清理本機紀錄'})).toBeDisabled();
+    render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));await screen.findByText('版本：2');vi.mocked(privatePendingStore.clear).mockResolvedValueOnce(false);fireEvent.click(screen.getByRole('button',{name:'已讀結果，清理本機紀錄'}));await screen.findByText(/紀錄已被另一分頁更新或清理/);expect(journals.size).toBe(1);expect(screen.getByRole('button',{name:'已讀結果，清理本機紀錄'})).toBeDisabled();
   });
   it('restores incomplete unsent edits after remount without POST or silently rebasing them', async () => {
     const fetch = vi.fn(async (_url: string, _init?: RequestInit) => ok({ items: [row], nextCursor: null })); vi.stubGlobal('fetch', fetch);
@@ -407,7 +428,7 @@ describe('native-equivalent owner management', () => {
       const owner=(init?.headers as Record<string,string>).Authorization.includes('fixture-session');
       if(owner&&init?.method==='POST')return new Promise(resolve=>{finish=async()=>resolve(await proof(url,init));});
       return ok({items:owner?[row]:[],nextCursor:null});
-    });vi.stubGlobal('fetch',fetch);const mounted=render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));
+    });vi.stubGlobal('fetch',fetch);const mounted=render(view());await screen.findByRole('heading',{name:row.title});await ready();fireEvent.click(screen.getByRole('button',{name:'標記售出'}));fireEvent.click(screen.getByRole('button',{name:'確認這次狀態變更'}));
     await waitFor(()=>expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1));expect(journals.size).toBe(1);
     mounted.rerender(view({...auth,user:{id:20,phoneNumber:'other'},token:'other-session'}));await screen.findByText('這個狀態目前沒有已載入商品。');
     await act(async()=>finish());expect(screen.queryByRole('region',{name:'原商品操作與最新資料比較'})).not.toBeInTheDocument();expect(screen.queryByText(/原商品操作已確認完成/)).not.toBeInTheDocument();expect(privatePendingStore.clear).not.toHaveBeenCalled();expect(journals.size).toBe(1);

@@ -466,8 +466,8 @@ public class MarketplaceGoldenTest {
         for(int i=0;i<mapTitles.length();i++){checkpoint("map-select-item-"+(i+1));selectMapTitle(mapTitles.getString(i));}
         capture("map-thirty-six-canvas-selected");
         checkpoint("map-single-wishlist-add");String title=mapTitles.getString(35),add="加入願望清單："+title,remove="已加入願望，移除："+title;
-        reveal(add);click(add);await(remove);capture("map-single-wishlist-saved");
-        checkpoint("map-single-wishlist-remove");click(remove);await(add);
+        reveal(add);click(add);reveal(remove);await(remove);capture("map-single-wishlist-saved");
+        checkpoint("map-single-wishlist-remove");click(remove);reveal(add);await(add);
         checkpoint("map-create-second-fixture-list");
         String port=InstrumentationRegistry.getArguments().getString("inputPort","");
         HttpURLConnection create=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/map/second-list").openConnection();create.setRequestMethod("POST");create.setRequestProperty("X-Wishlist-Golden-Phase",phase);create.setConnectTimeout(5000);create.setReadTimeout(15000);create.setInstanceFollowRedirects(false);assertEquals(200,create.getResponseCode());create.disconnect();

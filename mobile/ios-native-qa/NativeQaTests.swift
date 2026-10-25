@@ -22,7 +22,7 @@ final class NativeQaTests: XCTestCase {
         app.descendants(matching: kind).matching(identifier: label).firstMatch
     }
     private func scrollToward(_ control: XCUIElement, in scroller: XCUIElement) {
-        let target = control.frame
+        let target = control.exists ? control.frame : CGRect.null
         let viewport = scroller.frame
         // Dismissing the keyboard can expand the viewport while keeping the
         // old content offset. An offscreen field may then be above us; blindly
@@ -48,8 +48,8 @@ final class NativeQaTests: XCTestCase {
             .filter { $0.exists && $0.isHittable && $0.frame.height >= 120 }
             .max { $0.frame.height < $1.frame.height }
     }
-    @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any) throws -> XCUIElement {
-        let deadline = Date().addingTimeInterval(12)
+    @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any, timeout: TimeInterval = 12) throws -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
         repeat {
             let control = element(label, kind: kind)
             if control.exists && (!scroll || control.isHittable) { return control }
@@ -103,6 +103,21 @@ final class NativeQaTests: XCTestCase {
             }
             checkpoint("my-listings-marketing-not-visible")
         }
+        throw Failure.missingControl
+    }
+    private func selectWishlistChoice(_ title: String) throws {
+        // RN radio rows combine the list title and privacy/capacity text into
+        // one public AX label. Match the known synthetic title prefix rather
+        // than assuming its nested Text is an independent UIKit button.
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        let deadline = Date().addingTimeInterval(20)
+        repeat {
+            if row.exists && row.isEnabled && row.isHittable && row.frame.height >= 44 {
+                row.tap(); return
+            }
+            if let scroller = visibleVerticalScroller() { scrollToward(row, in: scroller) }
+            Thread.sleep(forTimeInterval: 0.12)
+        } while Date() < deadline
         throw Failure.missingControl
     }
     private func publicInputControl(_ label: String) throws -> XCUIElement {
@@ -451,7 +466,14 @@ final class NativeQaTests: XCTestCase {
         // never manufacture a stored acceptance or bypass the auth UI.
         if element("使用條款與社群安全").waitForExistence(timeout: 3) {
             checkpoint("synthetic-terms-visible-confirmation")
+            // System accessibility sizes make the complete policy much longer.
+            // Read through the real scroll view before requiring the checkbox;
+            // keep the ordinary control deadline unchanged everywhere else.
+            try required("☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。", scroll: true, timeout: 45)
+            checkpoint("synthetic-terms-checkbox-visible")
             try tap("☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。", kind: .any)
+            checkpoint("synthetic-terms-checked")
+            try required("同意並繼續", scroll: true)
             try tap("同意並繼續")
         }
         checkpoint("real-login-native-input")
@@ -1149,7 +1171,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("map-wishlist-add-remove")
             let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
             try required(add,scroll:true,kind:.button);try tap(add)
-            try required("第二份地圖願望",scroll:true);try tap("第二份地圖願望");try safeScreenshot("qa-map-wishlist-choice");try tap("確認加入")
+            try selectWishlistChoice("第二份地圖願望");try safeScreenshot("qa-map-wishlist-choice");try tap("確認加入")
             guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
             try required(remove,scroll:true,kind:.button)
             checkpoint("map-wishlist-server-readback")

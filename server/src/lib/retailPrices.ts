@@ -26,6 +26,12 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
         const name = (quoted?.[1] ?? t.split(/…|\.\.\.|市售價|建議售價|新品原價|定價|原價|NT\$|TWD/i)[0]).replace(/[（(][^）)]*[）)]/g, '').replace(/二手|精裝|平裝|童書|繪本|四大名著|漫畫版|漫畫|硬殼/g, '').replace(/[^\p{L}\p{N}]/gu, '').replace(/0+(\d+)$/, '$1');
         return name.length >= 2 ? 'book:title:' + name + (p.subId === 'comics' ? ':comics' : '') : null;
     }
+    // Only the standard white OLED console set: never a display-only unit,
+    // a Switch 2/Lite, or a limited-edition/game bundle.
+    if (/nintendo|任天堂/.test(t) && /switch/.test(t) && /oled/.test(t)) {
+        if (/switch\s*2|lite|特仕|限定|薩爾達|zelda|漆彈|斯普拉遁|朱紫|瑪利歐|mario|單螢幕|單主機|不含|遊戲組|遊戲套|紅藍|電光藍/.test(t)) return null;
+        return /白色|white/.test(t) ? 'nintendo:switch:oled:white:standard-console' : null;
+    }
     const iphone = t.match(/iphone\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini)?/);
     if (iphone)
         return capacity ? 'iphone:' + iphone[1] + ':' + (iphone[2] ?? 'base').replace(/\s/g, '') + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
@@ -63,7 +69,7 @@ export type RetailReference = {
     sourcePeriod: string | null;
     checkedAt: string;
 };
-const manufacturerHosts: Record<string, RegExp> = { 'casio.com': /casio|卡西歐/i, 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
+const manufacturerHosts: Record<string, RegExp> = { 'nintendo.com': /nintendo|任天堂/i, 'nintendo.tw': /nintendo|任天堂/i, 'casio.com': /casio|卡西歐/i, 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
 const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw', 'onitsukatiger.com.tw', 'jyes.com.tw'];
 function originalUrl(value: unknown, kind: string, product: DiscoveryProduct) { if (typeof value !== 'string' || value.length > 1800)
     throw new DiscoveryError(400, 'RETAIL_INVALID_SOURCE'); let u: URL; try {

@@ -6,6 +6,16 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
         return null;
     const t = p.title.normalize('NFKC').toLowerCase(), capacity = t.match(/(\d{2,4})\s*(gb|g|tb)(?![a-z])/);
     if (/手機殼|保護殼|保護貼|玻璃貼|鏡頭框|phone case|screen protector/.test(t)) return null;
+    // Keep exact size/color distinctions for numeric-leading footwear SKUs and named models.
+    if (/onitsuka\s*tiger|鬼塚虎/.test(t)) {
+        const sku = t.match(/\b(118[234][a-z]\d{3})[-.](\d{3})\b/), size = t.match(/\b(2\d(?:\.5)?)(?=\s|cm|公分|$|[（(])/);
+        return sku && size ? 'onitsuka:' + sku[1] + ':' + sku[2] + ':' + size[1] : null;
+    }
+    if (/nespresso/.test(t) && /essenza\s*mini/.test(t)) {
+        if (/奶泡機|aeroccino|組合|套組|plus/.test(t)) return null;
+        const color = ['純潔白', '鋼琴黑', '優雅灰', '寶石紅', '柔霧白'].find(c => t.includes(c));
+        return color ? 'nespresso:essenza-mini:' + color : null;
+    }
     const lego = t.match(/(?:lego|樂高)[^\d]{0,24}(\d{4,6})\b/);
     if (lego) return 'lego:set:' + lego[1];
     if (p.mainId === 'books') {
@@ -42,8 +52,8 @@ export type RetailReference = {
     sourcePeriod: string | null;
     checkedAt: string;
 };
-const manufacturerHosts: Record<string, RegExp> = { 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
-const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw'];
+const manufacturerHosts: Record<string, RegExp> = { 'casio.com': /casio|卡西歐/i, 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
+const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw', 'onitsukatiger.com.tw'];
 function originalUrl(value: unknown, kind: string, product: DiscoveryProduct) { if (typeof value !== 'string' || value.length > 1800)
     throw new DiscoveryError(400, 'RETAIL_INVALID_SOURCE'); let u: URL; try {
     u = new URL(value);
@@ -96,6 +106,11 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
         const amounts = [...normalized.matchAll(amountPattern)]
             .filter(x => !x[0].startsWith('網路價') || !/(?:促銷|優惠|限時|特價|折扣|折後|券後)\s*[:：-]?\s*$/.test(normalized.slice(0, x.index)))
             .map(x => Number(x[1] ?? x[2]));
+        // This official store displays a single normal price without a label. Keep it
+        // RETAIL_REGULAR (not MSRP), exact-model/size bound, and refuse promotion context.
+        if (priceType === 'RETAIL_REGULAR' && sourceHost === 'www.onitsukatiger.com.tw' && /^\/SalePage\/Index\/\d+$/.test(new URL(sourceUrl).pathname) && identity?.startsWith('onitsuka:') && !/促銷|優惠|限時|特價|折扣|折後|券後|運費|滿額/.test(normalized)) {
+            amounts.push(...[...normalized.matchAll(/NT\$\s*(\d+(?:\.\d{1,2})?)/g)].map(x => Number(x[1])));
+        }
         if (/人民幣|RMB|CNY|HKD|港幣|日圓|JPY|SGD|USD/i.test(normalized)) throw new DiscoveryError(400, 'RETAIL_INVALID_PRICE');
         if (!amounts.includes(Number(b.originalPrice)))
             throw new DiscoveryError(400, 'RETAIL_PRICE_NOT_IN_EVIDENCE');

@@ -30,6 +30,24 @@ test('does not invent prices when no exact reference was found and binds immutab
  });
 
 const calculator = {...p,title:'CASIO fx-991CW 工程計算機（二手、功能正常）',mainId:'other',subId:'misc'} as DiscoveryProduct;
+test('recognizes exact Dcard footwear size/color and named coffee-machine variant',()=>{
+ const shoe={...p,title:'Onitsuka Tiger GYMNARINA 1182A754-020 22.5公分（二手）'};
+ expect(retailIdentity(shoe)).toBe('onitsuka:1182a754:020:22.5');
+ expect(retailIdentity({...shoe,title:'Onitsuka Tiger 1182A754-020 23cm'})).not.toBe(retailIdentity(shoe));
+ expect(retailIdentity({...shoe,title:'Onitsuka Tiger 1182A754-700 22.5cm'})).not.toBe(retailIdentity(shoe));
+ expect(retailIdentity({...shoe,title:'Onitsuka Tiger 1182A754-020'})).toBeNull();
+ const coffee={...p,title:'NESPRESSO Essenza Mini 純潔白咖啡機（二手）'};
+ expect(retailIdentity(coffee)).toBe('nespresso:essenza-mini:純潔白');
+ expect(retailIdentity({...coffee,title:'Nespresso Essenza Mini 柔霧白'})).not.toBe(retailIdentity(coffee));
+ expect(retailIdentity({...coffee,title:'Nespresso Essenza Mini 純潔白 奶泡機組合'})).toBeNull();
+ expect(retailIdentity({...coffee,title:'Nespresso Essenza Mini'})).toBeNull();
+});
+test('accepts exact official single normal shoe price without inventing an MSRP label',()=>{
+ const shoe={...p,title:'Onitsuka Tiger GYMNARINA 1182A754-020 22.5公分（二手）'};
+ const body={...input(),productKey:shoe.key,bindingHash:retailBinding(shoe),originalPrice:'4280',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.onitsukatiger.com.tw/SalePage/Index/11775317',sourceProductTitle:'Onitsuka Tiger GYMNARINA 1182A754-020 22.5',evidenceQuote:'Onitsuka Tiger GYMNARINA 1182A754-020 22.5 NT$4,280'};
+ expect(Number(retailObservation(body,shoe).originalPrice)).toBe(4280);
+ for(const patch of [{originalPrice:'80'},{evidenceQuote:body.evidenceQuote+' 運費 NT$80'},{evidenceQuote:body.evidenceQuote+' 限時優惠'},{sourceUrl:'https://www.momoshop.com.tw/product/1'},{sourceUrl:'https://www.onitsukatiger.com.tw.attacker.invalid/SalePage/Index/11775317'},{priceType:'MANUFACTURER_MSRP'},{sourceProductTitle:'Onitsuka Tiger 1182A754-020 23'}])expect(()=>retailObservation({...body,...patch},shoe)).toThrow();
+});
 const pchomeCalculatorInput = () => ({...input(),productKey:calculator.key,bindingHash:retailBinding(calculator),originalPrice:'1190',priceType:'RETAIL_REGULAR',sourceUrl:'https://24h.pchome.com.tw/prod/DCBAJI-A900G6O6T',sourceTitle:'CASIO 卡西歐 工程計算機/fX-991CW - PChome 24h購物',sourceProductTitle:'CASIO 卡西歐 工程計算機/fX-991CW',sourcePeriod:null,evidenceQuote:'CASIO 卡西歐 工程計算機/fX-991CW 網路價 $1,190'});
 test('accepts exact PChome regular network price and preserves immutable replay',()=>{
  const body=pchomeCalculatorInput();const result=retailObservation(body,calculator);

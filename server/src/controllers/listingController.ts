@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { NON_SALE_QA_PREFIX, isExplicitNonSaleFixture, isDiscoverable, isListingId, ListingInputError, parseListingCreate, parseListingSearch, publicationExpiry } from '../lib/listingRules';
+import { privateReviewListingIds, canViewPrivateReviewListing, privateReviewTitleAllowed, isPrivateReviewRoom } from '../lib/privateReviewDemo';
 import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 import { ListingCreationError, listingCreationGate, listingCreationId, listingCreationReceiptSelect } from '../lib/listingCreation';
 import { mapPresenceBody, mapPresenceUntil } from '../lib/mapPresence';
@@ -157,7 +158,7 @@ export async function searchListings(req: AuthRequest, res: Response) {
         const search = parseListingSearch(req.query);
         const where: Prisma.ListingWhereInput = {
             status: { in: ['ACTIVE', 'RESERVED'] }, expiresAt: { gt: new Date() },
-            NOT: { title: { startsWith: NON_SALE_QA_PREFIX } },
+            NOT: { OR: [{ title: { startsWith: NON_SALE_QA_PREFIX } }, { id: { in: privateReviewListingIds() } }] },
             ...(search.q ? { OR: ['title', 'description', 'brand'].map(field => ({ [field]: { contains: search.q, mode: 'insensitive' } })) } : {}),
             ...(search.category ? { category: search.category } : {}),
             ...(search.brand ? { brand: { equals: search.brand, mode: 'insensitive' } } : {}),
@@ -201,11 +202,23 @@ export async function myListings(req: AuthRequest, res: Response) {
 }
 
 export async function getListing(req: AuthRequest, res: Response) {
+    res.set('Cache-Control', 'private, no-store');
+    res.vary('Authorization');
     try {
         const id = req.params.id;
         if (!isListingId(id)) throw new ListingInputError('id');
         const listing = await prisma.listing.findUnique({ where: { id }, select: publicListingSelect });
-        if (!listing || ((!isDiscoverable(listing.status, listing.expiresAt, new Date()) || isExplicitNonSaleFixture(listing.title)) && listing.ownerUserId !== req.user?.id)) return res.status(404).json({ error: '商品不存在或已停止刊登' });
+        const owns = !!listing && listing.ownerUserId === req.user?.id;
+        let demoAccess = false;
+        if (listing && !owns && canViewPrivateReviewListing(listing, req.user?.id)) {
+            const room = await prisma.conversation.findFirst({ where: { listingId: id, buyerUserId: req.user!.id,
+                sellerUserId: listing.ownerUserId, participants: { some: { userId: req.user!.id } } },
+                select: { id: true, listingId: true, buyerUserId: true, sellerUserId: true, archivedAt: true } });
+            demoAccess = !!room && isPrivateReviewRoom(room, listing);
+        }
+        if (!listing || (privateReviewListingIds().includes(id) && !owns && !demoAccess) ||
+            ((!isDiscoverable(listing.status, listing.expiresAt, new Date()) || (isExplicitNonSaleFixture(listing.title) && !demoAccess)) && !owns))
+            return res.status(404).json({ error: '商品不存在或已停止刊登' });
         return res.json(listing);
     } catch (error) { return fail(res, error); }
 }
@@ -292,6 +305,7 @@ export async function applyListingEdit(tx: Prisma.TransactionClient, ownerUserId
         if (!listing) throw new ListingMissing();
         if (!['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(listing.status)) throw new ListingConflict();
         const { expectedVersion, ...changes } = body;
+        if (typeof changes.title === 'string' && !privateReviewTitleAllowed(id, changes.title)) throw new ListingInputError('title', '審查示範商品須保留非販售標示');
         const parsed = parseListingCreate({ ...editablePayload(listing), ...changes,
             publish: listing.status !== 'DRAFT', consentToMap: true,
             ...(listing.expiryMode === 'CUSTOM_DATE' && listing.expiresAt ? { expiryDate: listing.expiresAt.toISOString().slice(0, 10) } : {}),

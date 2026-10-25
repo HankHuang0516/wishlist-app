@@ -2,6 +2,7 @@ import {createHash} from 'crypto';
 import {Prisma} from '@prisma/client';
 import {chatIdentity,chatObject,chatSequence,ChatInputError} from './chatRules';
 import {NON_SALE_QA_PREFIX} from './listingRules';
+import {privateReviewListingIds} from './privateReviewDemo';
 import {leadCurrent} from './sourceLeadRules';
 import {externalCandidateSelect,publicCandidate} from '../routes/externalListingRoutes';
 export type ProductKind='listing'|'source'|'external';
@@ -14,7 +15,7 @@ export function interestInput(value:unknown){const b=chatObject(value,['productK
 export async function visibleInterestTargets(tx:Prisma.TransactionClient,targets:InterestTarget[],viewerId?:number){
  const listingIds=targets.filter(t=>t.kind==='listing').map(t=>t.id),sourceIds=targets.filter(t=>t.kind==='source').map(t=>t.id),externalIds=targets.filter(t=>t.kind==='external').map(t=>t.id),now=new Date();
  const [listings,sources,externals]=await Promise.all([
- listingIds.length?tx.listing.findMany({where:{id:{in:listingIds},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}},OR:[{status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now}},...(viewerId?[{ownerUserId:viewerId}]:[])]},select:{id:true,ownerUserId:true,status:true,expiresAt:true}}):[],
+ listingIds.length?tx.listing.findMany({where:{id:{in:listingIds,notIn:privateReviewListingIds()},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}},OR:[{status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now}},...(viewerId?[{ownerUserId:viewerId}]:[])]},select:{id:true,ownerUserId:true,status:true,expiresAt:true}}):[],
  sourceIds.length&&process.env.SOURCE_LEADS_PUBLIC_ENABLED==='1'?tx.externalSourceLead.findMany({where:{id:{in:sourceIds}}}):[],
  externalIds.length&&process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED==='1'?tx.externalListingCandidate.findMany({where:{id:{in:externalIds}},select:externalCandidateSelect}):[]]);
  const valid=new Map<string,{ownerUserId:number|null;open:boolean}>();

@@ -40,4 +40,4 @@ Google package沿用原`com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1
 
 官方依據：[Apple Server Library](https://github.com/apple/app-store-server-library-node)、[Google Billing permission](https://support.google.com/googleplay/android-developer/answer/1153481)、[Google實際訂單金額](https://developers.google.com/android-publisher/api-ref/rest/v3/orders)。
 
-H圖層與構圖未修改；網站2.0.814沿用2.0.754既有驗收，沒有重新目視驗收。
+H圖層與構圖未修改；網站2.0.817沿用2.0.754既有驗收，沒有重新目視驗收。

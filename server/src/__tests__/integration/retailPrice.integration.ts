@@ -15,6 +15,17 @@ const post=(b:object,key='synthetic-retail-admin')=>http.post('/retail/observati
 beforeAll(async()=>{userId=(await prisma.user.create({data:{phoneNumber:'retail-test-'+run,password:'synthetic-only'}})).id;listingId=(await prisma.listing.create({data:{ownerUserId:userId,clientListingId:randomUUID(),requestHash:'synthetic-retail-test',title:'Samsung Galaxy Buds3 全新未拆',category:'electronics',condition:'NEW',price:2500,currency:'TWD',status:'ACTIVE',publishedAt:new Date(),expiresAt:new Date(Date.now()+86400000)}})).id;});
 afterAll(async()=>{await prisma.retailPriceObservation.deleteMany({where:{id:{in:ids}}});await prisma.listing.deleteMany({where:{ownerUserId:userId}});await prisma.user.delete({where:{id:userId}});await prisma.$disconnect();});
 it('requires the existing admin credential and never opens a public write path',async()=>{expect((await http.get('/retail/candidates')).status).toBe(401);expect((await post({},'forged')).status).toBe(401);});
+it('exposes bounded backfill capacity and exact public statuses only behind admin auth',async()=>{
+ const key='listing:'+listingId;
+ expect((await http.get('/retail/capacity')).status).toBe(401);
+ expect((await http.get('/retail/evaluations?productKeys='+key)).status).toBe(401);
+ const cap=await http.get('/retail/capacity').set('X-Admin-Key','synthetic-retail-admin');
+ expect(cap.body).toMatchObject({dailyBatchCap:1000,batchSize:6,queueReadLimit:100});
+ const queue=await http.get('/retail/candidates?limit=100').set('X-Admin-Key','synthetic-retail-admin');expect(queue.status).toBe(200);
+ const status=await http.get('/retail/evaluations?productKeys='+key).set('X-Admin-Key','synthetic-retail-admin');
+ expect(status.status).toBe(200);expect(status.body.items[0]).toMatchObject({productKey:key,score:null,ready:false});
+ expect((await http.get('/retail/pending-evaluations?limit=101').set('X-Admin-Key','synthetic-retail-admin')).status).toBe(400);
+});
 it('returns the exact public product binding without waiting behind older candidates',async()=>{
  const key='listing:'+listingId;
  expect((await http.get('/retail/candidates?productKey='+key)).status).toBe(401);

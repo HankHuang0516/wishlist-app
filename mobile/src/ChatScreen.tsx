@@ -70,6 +70,7 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose, onOpenRoom }: {
   const [room, setRoom] = useState<ChatRoomRecord | null>(null); const [messages, setMessages] = useState<ChatMessage[]>([]); const [before, setBefore] = useState<number | null>(null);
   const [text, setText] = useState(''); const [pending, setPending] = useState<string | null>(null); const [ready, setReady] = useState(false); const [busy, setBusy] = useState(false); const [manualRefreshing, setManualRefreshing] = useState(false); const [error, setError] = useState('');
   const alive = useRef(true); const loading = useRef(false); const sending = useRef(false); const pendingRef = useRef<string | null>(null); const key = useRef<string | null>(null); const messagesRef = useRef<ChatMessage[]>([]); const roomRef = useRef<ChatRoomRecord | null>(null);
+  const initialHistoryRead = useRef(false);
   const viewSequence = useRef(0); const meetupSequence = useRef(0); const readTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const reading = useRef(false);
   const read = useRef<() => Promise<void>>(async () => undefined);
   read.current = async () => {
@@ -116,11 +117,13 @@ function ChatRoom({ api, apiUrl, token, userId, roomId, onClose, onOpenRoom }: {
     try {
       const current = parseChatRoom(await api<unknown>('/chat/conversations/' + roomId), userId);
       if (!alive.current) return; admitRoom(current); if (!older) void refreshMeetup(current);
-      const last = messagesRef.current.at(-1)?.sequence;
+      // An early send/photo acknowledgment is not a baseline history cursor.
+      const last = initialHistoryRead.current ? messagesRef.current.at(-1)?.sequence : undefined;
       const query = older ? '&beforeSequence=' + older : last !== undefined ? '&afterSequence=' + last : '';
       let page = parseMessagePage(await api<unknown>('/chat/conversations/' + roomId + '/messages?limit=50' + query), current);
       if (!alive.current) return; append(page.items); for (const m of page.items) await acknowledge(m);
       if (older || last === undefined) setBefore(page.nextBeforeSequence);
+      initialHistoryRead.current = true;
       // Bounded catch-up pages; the next foreground poll continues if >250
       // unseen messages accumulated rather than loading an unbounded history.
       for (let count = 0; !older && page.nextAfterSequence !== null && count < 4; count++) {

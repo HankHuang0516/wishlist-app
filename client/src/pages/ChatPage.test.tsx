@@ -33,6 +33,36 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 const roomView = (value = props) => <MemoryRouter><ChatRoomWeb {...value} /></MemoryRouter>;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('loads initial history after an early send cancels the first history response', async () => {
+    const old = makeMessage(1, { text: '先前已存在的詢問' }); rows = [old];
+    room = makeRoom({ lastMessageSequence: 1, lastMessageText: old.text });
+    const base = api.getMockImplementation()!;
+    let release!: () => void, firstHistory = true;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    api.mockImplementation(async (...args) => {
+      if (args[1].includes('/messages?') && firstHistory) {
+        firstHistory = false; await held;
+      }
+      return base(...args);
+    });
+    render(roomView());
+    const field = await screen.findByRole('textbox', { name: '商品聊天訊息（最多2000字元）' });
+    await waitFor(() => expect(field).toBeEnabled());
+    await waitFor(() => expect(firstHistory).toBe(false));
+    fireEvent.change(field, { target: { value: '歷史載入前的新詢問' } });
+    fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    await screen.findByText('歷史載入前的新詢問');
+    await waitFor(() => expect(field).toBeEnabled());
+    await act(async () => { release(); await held; });
+    // A manual refresh after the superseded read must hydrate the baseline,
+    // rather than skipping everything before the newly acknowledged sequence2.
+    await waitFor(() => expect(screen.getByRole('button', { name: '只更新聊天' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' }));
+    expect(await screen.findByText(old.text)).toBeInTheDocument();
+    expect(screen.getAllByText('歷史載入前的新詢問')).toHaveLength(1);
+    expect(rows.map(row => row.sequence)).toEqual([1, 2]);
+  });
+
   it('updates the chat summary immediately after confirmation and cancellation in the open meetup dialog', async () => {
     const base = api.getMockImplementation()!;
     let appointment = makeMeetup();

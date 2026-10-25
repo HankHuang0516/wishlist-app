@@ -131,6 +131,7 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
   const [meetup, setMeetup] = useState<MeetupRecord | null>(null), [meetupIssue, setMeetupIssue] = useState(''), [showMeetup, setShowMeetup] = useState(false), [blockUnknown, setBlockUnknown] = useState(false);
   const active = useRef(true), mutation = useRef(false), reading = useRef(false), restoring = useRef(false), sequence = useRef(0), meetupSequence = useRef(0);
   const autoPause = useChatReadPause();
+  const initialHistoryRead = useRef(false);
   const roomRef = useRef<ChatRoomRecord | null>(null), messageRef = useRef<ChatMessage[]>([]), saved = useRef<string | null>(null), key = useRef<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null), viewed = useRef(0), marking = useRef(false), readTimer = useRef<number | undefined>(undefined), shownMeetup = useRef(showMeetup); shownMeetup.current = showMeetup;
   const following = useRef(true), scrollBefore = useRef<{ height: number; top: number } | null>(null);
@@ -166,14 +167,16 @@ export function ChatRoomWeb({ token, userId, roomId, onBack }: { token: string; 
     try {
       const next = parseChatRoom(await read('/chat/conversations/' + roomId), userId);
       if (!active.current || seq !== sequence.current) return; admit(next); setBlockUnknown(false); if (!older && !shownMeetup.current) void refreshMeetup(next);
-      const last = messageRef.current.at(-1)?.sequence;
+      // A send can acknowledge sequence N before the first history read finishes.
+      // Until that baseline succeeds, N is not a safe forward-read cursor.
+      const last = initialHistoryRead.current ? messageRef.current.at(-1)?.sequence : undefined;
       const anchor = older ? '&beforeSequence=' + older : last !== undefined ? '&afterSequence=' + last : '';
       let page = parseMessagePage(await read(`/chat/conversations/${roomId}/messages?limit=50${anchor}`), next);
       if (!active.current || seq !== sequence.current) return;
       if (older && page.items.some(m => m.sequence >= older) || !older && last !== undefined && page.items.some(m => m.sequence <= last)) throw new ChatDataError('聊天分頁方向不正確。');
       if (older && scroll.current) scrollBefore.current = { height: scroll.current.scrollHeight, top: scroll.current.scrollTop };
       await admitMessages(page.items); if (!active.current || seq !== sequence.current) return;
-      if (older || last === undefined) setBefore(page.nextBeforeSequence); setHistoryLoaded(true);
+      if (older || last === undefined) setBefore(page.nextBeforeSequence); initialHistoryRead.current = true; setHistoryLoaded(true);
       for (let count = 0; !older && page.nextAfterSequence !== null && count < 4; count++) {
         const after = page.nextAfterSequence; page = parseMessagePage(await read(`/chat/conversations/${roomId}/messages?limit=50&afterSequence=${after}`), next);
         if (!active.current || seq !== sequence.current) return;

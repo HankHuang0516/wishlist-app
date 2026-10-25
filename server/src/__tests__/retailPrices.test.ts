@@ -30,6 +30,20 @@ test('does not invent prices when no exact reference was found and binds immutab
  });
 
 const calculator = {...p,title:'CASIO fx-991CW 工程計算機（二手、功能正常）',mainId:'other',subId:'misc'} as DiscoveryProduct;
+test('accepts real short Panasonic EH models while retaining exact variants and price evidence',()=>{
+ const beauty={...p,title:'Panasonic EH-SR86 日本製美容儀（二手，賣家稱功能正常）',mainId:'beauty',subId:'devices'} as DiscoveryProduct;
+ expect(retailIdentity(beauty)).toBe('panasonic:eh-model:ehsr86');
+ const body={...input(),productKey:beauty.key,bindingHash:retailBinding(beauty),originalPrice:'26000',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.momoshop.com.tw/TP/TP0009010/goodsDetail/TP00090100000199',sourceTitle:'Panasonic VITALIFT EH-SR86',sourceProductTitle:'Panasonic 國際牌VITALIFT EH-SR86 2024款 終極一隻 附凝膠',evidenceQuote:'Panasonic VITALIFT EH-SR86 附凝膠 市售價26,000元',sourcePeriod:null};
+ expect(Number(retailObservation(body,beauty).originalPrice)).toBe(26000);
+ expect(retailIdentity({...beauty,title:'國際牌 eh-sr86 美容儀'})).toBe(retailIdentity(beauty));
+ for(const title of ['Panasonic EH-SR85','Panasonic EH-SR86-T','Panasonic EH-SR86K','Panasonic EH-SR860']) {
+  expect(retailIdentity({...beauty,title})).not.toBe(retailIdentity(beauty));
+  expect(()=>retailObservation({...body,sourceProductTitle:title},beauty)).toThrow();
+ }
+ expect(retailIdentity({...beauty,title:'無品牌 EH-SR86'})).toBeNull();
+ expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR85 市售價26,000元'},beauty)).toThrow();
+ expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR86 促銷價17,577元',originalPrice:'17577'},beauty)).toThrow();
+});
 test('recognizes exact Dcard footwear size/color and named coffee-machine variant',()=>{
  const shoe={...p,title:'Onitsuka Tiger GYMNARINA 1182A754-020 22.5公分（二手）'};
  expect(retailIdentity(shoe)).toBe('onitsuka:1182a754:020:22.5');
@@ -85,17 +99,4 @@ test('accepts the reviewed retailer original price and refuses promotion or look
  for(const patch of [{originalPrice:'12990'},{evidenceQuote:'Apple iPad 10.2 7代 wifi (128G) 網購優惠價 $13,900'},{sourceProductTitle:'Apple iPad 7 32GB Wi-Fi'},{sourceUrl:'https://www.jyes.com.tw.attacker.invalid/product/ipad'},{priceType:'MANUFACTURER_MSRP'}])expect(()=>retailObservation({...ipadInput(),...patch},ipad)).toThrow();
 });
 
-test('accepts real short Panasonic EH models while retaining exact variants and price evidence',()=>{
- const beauty={...p,title:'Panasonic EH-SR86 日本製美容儀（二手，賣家稱功能正常）',mainId:'beauty',subId:'devices'} as DiscoveryProduct;
- expect(retailIdentity(beauty)).toBe('panasonic:eh-model:ehsr86');
- const body={...input(),productKey:beauty.key,bindingHash:retailBinding(beauty),originalPrice:'26000',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.momoshop.com.tw/TP/TP0009010/goodsDetail/TP00090100000199',sourceTitle:'Panasonic VITALIFT EH-SR86',sourceProductTitle:'Panasonic 國際牌VITALIFT EH-SR86 2024款 終極一隻 附凝膠',evidenceQuote:'Panasonic VITALIFT EH-SR86 附凝膠 市售價26,000元',sourcePeriod:null};
- expect(Number(retailObservation(body,beauty).originalPrice)).toBe(26000);
- expect(retailIdentity({...beauty,title:'國際牌 eh-sr86 美容儀'})).toBe(retailIdentity(beauty));
- for(const title of ['Panasonic EH-SR85','Panasonic EH-SR86-T','Panasonic EH-SR86K','Panasonic EH-SR860']) {
-  expect(retailIdentity({...beauty,title})).not.toBe(retailIdentity(beauty));
-  expect(()=>retailObservation({...body,sourceProductTitle:title},beauty)).toThrow();
- }
- expect(retailIdentity({...beauty,title:'無品牌 EH-SR86'})).toBeNull();
- expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR85 市售價26,000元'},beauty)).toThrow();
- expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR86 促銷價17,577元',originalPrice:'17577'},beauty)).toThrow();
-});
+

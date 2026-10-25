@@ -490,7 +490,11 @@ public class MarketplaceGoldenTest {
         checkpoint("batch-removal-my-entry");click("我的");new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(15);capture("batch-removal-my-entry");reveal("刊登好物");click("刊登好物");checkpoint("batch-removal-private-drafts");batchCount(3);
         checkpoint("batch-removal-cancel");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");await("移除這件草稿？");click("保留草稿");batchCount(3);
         checkpoint("batch-removal-lost-ack");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");
-        revealBackwards("查核原草稿移除");assertFalse("Photo-removal recovery must not offer a publication-recovery action",has("確認先前未完成的刊登"));capture("batch-removal-unknown-result");click("查核原草稿移除");batchCount(2);
+        // Enlarged-text reflow can place the new result notice below the
+        // prior offset. Search from a known top, rather than assuming it is above.
+        if(!visible("查核原草稿移除",44))new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(15);
+        for(int attempt=0;attempt<24&&!visible("查核原草稿移除",44);attempt++)scrollOnPadding(true);
+        assertTrue("Removal lookup must remain fully reachable",visible("查核原草稿移除",44));assertFalse("Photo-removal recovery must not offer a publication-recovery action",has("確認先前未完成的刊登"));capture("batch-removal-unknown-result");click("查核原草稿移除");batchCount(2);
         checkpoint("batch-removal-remaining-drafts");for(int remaining=1;remaining>=0;remaining--){reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");batchCount(remaining);}
         capture("batch-removal-empty");click("稍後繼續");await("首頁");click("刊登好物");batchCount(0);capture("batch-removal-reopened-empty");checkpoint("batch-removal-checks-complete");
     }

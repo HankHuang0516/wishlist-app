@@ -37,8 +37,21 @@ run('built source inquiry correction and restart',()=>{
   const item=fixture().lead;item.archiveItemId='SYNTHETIC-INQUIRY-CORRECTION-BROWSER';leadId=(await prisma.externalSourceLead.create({data:item})).id;
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({headless:true,executablePath:qa.executablePath,args:['--disable-background-networking']});
   const page=await browser.newPage();await page.setViewport({width:1280,height:1000});
-  await page.evaluateOnNewDocument((host:string)=>{if(window===window.top&&location.origin===host&&!localStorage.getItem('user-locale'))localStorage.setItem('user-locale','zh-TW');},origin);
-  const dist=path.resolve(__dirname,'../../../../client/dist'),traffic:any[]=[],errors:string[]=[];let loseCorrection=false;
+  await page.evaluateOnNewDocument((host:string)=>{
+   if(window!==window.top||location.origin!==host)return;
+   if(!localStorage.getItem('user-locale'))localStorage.setItem('user-locale','zh-TW');
+   // Counts only: no storage keys, crypto input, credential or pending body is read.
+   const metrics={digestStarted:0,digestDone:0,digestFailed:0,dbOpen:0,dbOpened:0,dbBlocked:0,dbError:0,txStarted:0,txDone:0,txAborted:0};
+   Object.defineProperty(window,'__qaRestoreCounts',{value:metrics});
+   const digest=crypto.subtle.digest.bind(crypto.subtle);
+   crypto.subtle.digest=(...args:Parameters<SubtleCrypto['digest']>)=>{metrics.digestStarted++;return digest(...args).then(value=>{metrics.digestDone++;return value;},error=>{metrics.digestFailed++;throw error;});};
+   const open=indexedDB.open.bind(indexedDB);
+   indexedDB.open=(name:string,version?:number)=>{const request=open(name,version);if(name==='wishlist-private-pending-v1'){metrics.dbOpen++;request.addEventListener('success',()=>metrics.dbOpened++);request.addEventListener('blocked',()=>metrics.dbBlocked++);request.addEventListener('error',()=>metrics.dbError++);}return request;};
+   const transaction=IDBDatabase.prototype.transaction;
+   IDBDatabase.prototype.transaction=function(this:IDBDatabase,...args:Parameters<IDBDatabase['transaction']>){const tx=Reflect.apply(transaction,this,args) as IDBTransaction;if(this.name==='wishlist-private-pending-v1'){metrics.txStarted++;tx.addEventListener('complete',()=>metrics.txDone++);tx.addEventListener('abort',()=>metrics.txAborted++);}return tx;};
+  },origin);
+  const dist=path.resolve(__dirname,'../../../../client/dist'),traffic:any[]=[],errors:string[]=[],failedReads:{path:string;kind:string}[]=[];let loseCorrection=false;
+  page.on('requestfailed',(request:any)=>{const url=new URL(request.url());if(url.origin===origin&&request.method()==='GET'&&url.pathname.startsWith('/api/')){const failure=String(request.failure()?.errorText??'');failedReads.push({path:url.pathname,kind:failure.includes('ABORT')?'aborted':failure.includes('TIMED_OUT')?'timeout':'network'});}});
   page.on('pageerror',(e:Error)=>errors.push(e.message));await page.setRequestInterception(true);
   page.on('request',async(req:any)=>{try{
    const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}
@@ -57,7 +70,7 @@ run('built source inquiry correction and restart',()=>{
    for(const button of await page.$$('button'))if(await button.evaluate((b:Element,value:string)=>b.textContent===value,label)){await button.evaluate((element:Element)=>element.scrollIntoView({block:'center',inline:'nearest'}));await button.click();return;}
    throw Error('Missing visible control '+label);
   };
-  const write=async(value:string)=>{const field='textarea[aria-label="詢問內容"]';await page.waitForSelector(field);try{await page.waitForFunction((selector:string)=>{const field=document.querySelector(selector) as HTMLTextAreaElement|null;return !!field&&!field.disabled;},{},field);}catch{throw Error('Synthetic inquiry editor locked: '+JSON.stringify({step:value,traffic:traffic.slice(-12),ui:await page.evaluate(()=>({buttons:Array.from(document.querySelectorAll('button')).map(b=>({text:b.textContent,disabled:b.disabled})),alerts:Array.from(document.querySelectorAll('[role=alert]')).map(e=>e.textContent)}))}));}await page.click(field,{clickCount:3});await page.type(field,value);expect(await page.$eval(field,(e:HTMLTextAreaElement)=>e.value)).toBe(value);};
+  const write=async(value:string)=>{const field='textarea[aria-label="詢問內容"]';await page.waitForSelector(field);try{await page.waitForFunction((selector:string)=>{const field=document.querySelector(selector) as HTMLTextAreaElement|null;return !!field&&!field.disabled;},{},field);}catch{throw Error('Synthetic inquiry editor locked: '+JSON.stringify({step:value,traffic:traffic.slice(-60),failedReads,restoreCounts:await page.evaluate(()=>Reflect.get(window,'__qaRestoreCounts')),ui:await page.evaluate(()=>({buttons:Array.from(document.querySelectorAll('button')).map(b=>({text:b.textContent,disabled:b.disabled})),alerts:Array.from(document.querySelectorAll('[role=alert]')).map(e=>e.textContent)}))}));}await page.click(field,{clickCount:3});await page.type(field,value);expect(await page.$eval(field,(e:HTMLTextAreaElement)=>e.value)).toBe(value);};
   const own=()=>prisma.sourceLeadInquiry.findUniqueOrThrow({where:{leadId_buyerUserId:{leadId,buyerUserId:buyer}},include:{lead:true}});
   const save=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:webQaEvidence(name),fullPage:true});};
   await page.goto(origin+'/login');await page.waitForSelector('#identifier');await page.type('#identifier',phone);await page.type('#password',password);await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');

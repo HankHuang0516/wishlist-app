@@ -86,9 +86,16 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
         if (retailIdentity({ ...p, title: sourceProductTitle! }) !== identity || retailIdentity({ ...p, title: evidenceQuote! }) !== identity)
             throw new DiscoveryError(400, 'RETAIL_VARIANT_MISMATCH');
         const normalized = evidenceQuote!.normalize('NFKC').replace(/,/g, '');
-        const label = priceType === 'MANUFACTURER_MSRP' ? '建議售價|建議零售價|新品原價|原價|定價|MSRP|RRP' : '建議售價|建議零售價|新品原價|原價|定價|一般售價|市售價|MSRP|RRP|regular price';
+        // PChome separates its regular 網路價 from 折扣價. Keep that label
+        // retailer-specific, and never accept a promotional prefix as regular.
+        const sourceHost = new URL(sourceUrl).hostname;
+        const pchomeRegularLabel = priceType === 'RETAIL_REGULAR' && (sourceHost === 'pchome.com.tw' || sourceHost.endsWith('.pchome.com.tw'))
+            ? '|網路價' : '';
+        const label = priceType === 'MANUFACTURER_MSRP' ? '建議售價|建議零售價|新品原價|原價|定價|MSRP|RRP' : '建議售價|建議零售價|新品原價|原價|定價|一般售價|市售價|MSRP|RRP|regular price' + pchomeRegularLabel;
         const amountPattern = new RegExp('(?:' + label + ')\\s*[:：]?\\s*(?:(?:NT\\$?|NTD|TWD|新台幣|新臺幣|\\$)\\s*(\\d+(?:\\.\\d{1,2})?)|(\\d+(?:\\.\\d{1,2})?)\\s*元)', 'gi');
-        const amounts = [...normalized.matchAll(amountPattern)].map(x => Number(x[1] ?? x[2]));
+        const amounts = [...normalized.matchAll(amountPattern)]
+            .filter(x => !x[0].startsWith('網路價') || !/(?:促銷|優惠|限時|特價|折扣|折後|券後)\s*[:：-]?\s*$/.test(normalized.slice(0, x.index)))
+            .map(x => Number(x[1] ?? x[2]));
         if (/人民幣|RMB|CNY|HKD|港幣|日圓|JPY|SGD|USD/i.test(normalized)) throw new DiscoveryError(400, 'RETAIL_INVALID_PRICE');
         if (!amounts.includes(Number(b.originalPrice)))
             throw new DiscoveryError(400, 'RETAIL_PRICE_NOT_IN_EVIDENCE');

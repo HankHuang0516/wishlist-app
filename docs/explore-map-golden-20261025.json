@@ -3,7 +3,7 @@
   "name": "探索地圖全縮圖分類排位",
   "approvedOn": "2026-10-25",
   "timezone": "Asia/Taipei",
-  "status": "IMPLEMENTED_LOCAL_ACCEPTANCE_PASSED_SIGNED_RELEASE_PENDING",
+  "status": "IMPLEMENTED_LOCAL_ACCEPTANCE_PASSED_SIGNED_ARTIFACT_MATCHED_SUBMITTED_REVIEW_PENDING",
   "userInstruction": "判斷合理性再設為golden目標；功能與UIUX匹配度都至少85%後交給wishlist en/fix上傳更新版與內部測試版",
   "releaseOwner": {
     "title": "wishlist en/fix",
@@ -127,7 +127,7 @@
         "uiux": 87
       }
     },
-    "currentReleaseGate": "LOCAL_PASSED_PENDING_SIGNED_ARTIFACT_AND_STORE_CHECKS",
+    "currentReleaseGate": "PASSED_SIGNED_ARTIFACT_AND_STORE_SUBMISSION_CHECKS_EXTERNAL_REVIEW_PENDING",
     "mandatoryCases": [
       "1、2、6、36及較密集結果；穩定唯一ID、不漏商品、不靜默截斷；36件預設情境需逐件可選。",
       "正常／部分／空結果／無位置／照片失敗／查詢失敗／429等待與明確重試；讀取失敗不產生假0件。",
@@ -151,7 +151,20 @@
       "ciRun": 40223424764,
       "allThreeChecks": "SUCCESS",
       "method": "逐平台工程評分，不是像素相似度；未驗子條件不給分，保留扣分與限制，不平均兩指標或平台。",
-      "limitations": "9張合成核准杯圖與27缺圖驗證密度／失效狀態，不是真實庫存。沒有本輪iOS／Android實機、完整讀屏或平板橫向驗收。舊37／19不含14；新簽章包仍待核對。"
+      "limitations": "9張合成核准杯圖與27缺圖驗證密度／失效狀態，不是真實庫存。沒有本輪iOS／Android實機、完整讀屏或平板橫向驗收。舊37／19不含14；38／20已核對同一原生源碼與實際簽章包；詳見releaseVerification，並不宣稱所有舊畫面在商店包逐一重跑。"
+    },
+    "releaseVerification": {
+      "at": "2026-10-25T20:16:34.788072+00:00",
+      "applicationSource": "213578452f619b7e53713ad240caf59845203c23",
+      "sameApplicationTreesAsDeployedWeb820": true,
+      "nativeTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+      "ciRun": 40228414315,
+      "ci": "ALL3PASS",
+      "android": "2.0.17(38) internal available; production committed, Google quick checks/review pending",
+      "ios": "2.0.17(20) WAITING_FOR_REVIEW, AFTER_APPROVAL",
+      "web": "2.0.820 LIVE; actual public icon/worker/entry bytes match reviewed output",
+      "receiptIndex": "release-delivery-20261026.md",
+      "limitations": "No current physical iOS footage; original same-release historical-video authorization preserved with explicit20 disclosure. Actual Play38 cold terms entry is not a claim of signed-package login or every feature rerun."
     }
   },
   "releaseSequence": [

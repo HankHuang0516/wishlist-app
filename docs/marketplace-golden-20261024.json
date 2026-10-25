@@ -1,7 +1,7 @@
 {
   "createdAt": "2026-10-24T15:09:04.691361+00:00",
   "sourceBase": "c281541",
-  "status": "14_GOLDEN_DESIGN_TARGETS_APPROVED_IMPLEMENTATION_AND_ACCEPTANCE_IN_PROGRESS",
+  "status": "14_GOLDEN_LOCAL_ACCEPTANCE_PASSED_SIGNED_ARTIFACT_MATCHED_UPLOADED_STORE_REVIEW_PENDING",
   "userApproval": "2026-10-24 本對話明確要求設為golden及實作發布",
   "assets": [
     {
@@ -142,11 +142,171 @@
       "Golden14在Web桌面／手機、iOS、Android各自驗收；功能與UIUX分別至少85且無阻擋項。示意測試及舊版包體不算新地圖達標；保留既有探索直向列表Golden。未改H沿用既有紀錄。"
     ]
   },
-  "currentScores": null,
+  "currentScores": {
+    "method": "Separate functionality/UIUX engineering rubric, minimum85 each; not pixel similarity, test coverage or review probability.",
+    "scope": "Screens1–13 retain the named prior individual review with source comparison and changed-flow regressions; not every old screen/platform freshly rerun.14 has separate platform scores. Exact signed38/20 mobile source matched; limitations retained.",
+    "screens1to13": [
+      {
+        "id": 1,
+        "function": 95,
+        "uiux": 89
+      },
+      {
+        "id": 2,
+        "function": 94,
+        "uiux": 89
+      },
+      {
+        "id": 3,
+        "function": 93,
+        "uiux": 87
+      },
+      {
+        "id": 4,
+        "function": 94,
+        "uiux": 90
+      },
+      {
+        "id": 5,
+        "function": 94,
+        "uiux": 93
+      },
+      {
+        "id": 6,
+        "function": 94,
+        "uiux": 90
+      },
+      {
+        "id": 7,
+        "function": 93,
+        "uiux": 88
+      },
+      {
+        "id": 8,
+        "function": 95,
+        "uiux": 90
+      },
+      {
+        "id": 9,
+        "function": 95,
+        "uiux": 90
+      },
+      {
+        "id": 10,
+        "function": 93,
+        "uiux": 88
+      },
+      {
+        "id": 11,
+        "function": 95,
+        "uiux": 88
+      },
+      {
+        "id": 12,
+        "function": 96,
+        "uiux": 89
+      },
+      {
+        "id": 13,
+        "function": 96,
+        "uiux": 90
+      }
+    ],
+    "target14PerPlatform": [
+      {
+        "platform": "Web desktop",
+        "functionPoints": [
+          24,
+          27,
+          24,
+          18
+        ],
+        "functionScore": 93,
+        "uiuxPoints": [
+          35,
+          23,
+          19,
+          12
+        ],
+        "uiuxScore": 89,
+        "evidence": "web-map14-compact-loading-bilingual-20261026",
+        "deductionsAndUnverified": "未逐項進行1440英文／讀屏與全部鍵盤互動；多清單與失聯恢復採現有控制器及HTTP/DB測試，沒有冒稱這輪Web多清單UI。",
+        "localMapCriteriaPassed": true,
+        "finalStoreArtifactMatch": false
+      },
+      {
+        "platform": "Web mobile",
+        "functionPoints": [
+          24,
+          27,
+          24,
+          18
+        ],
+        "functionScore": 93,
+        "uiuxPoints": [
+          35,
+          23,
+          19,
+          13
+        ],
+        "uiuxScore": 90,
+        "evidence": "web-map14-compact-loading-bilingual-20261026",
+        "deductionsAndUnverified": "390中英文、320大字深色減少動態均操作；沒有完整行動讀屏及每語言每主題交叉實測。",
+        "localMapCriteriaPassed": true,
+        "finalStoreArtifactMatch": false
+      },
+      {
+        "platform": "iOS",
+        "functionPoints": [
+          24,
+          29,
+          24,
+          18
+        ],
+        "functionScore": 95,
+        "uiuxPoints": [
+          35,
+          21,
+          18,
+          12
+        ],
+        "uiuxScore": 86,
+        "evidence": "ios-map14-large-0152-pass",
+        "deductionsAndUnverified": "正常字體0051及系統大字0152；未做當前iOS實機、VoiceOver完整遍歷、iPad／橫向全組合或原生慢速／減少動態的完整裝置操作。QA警告浮層仍在部分截圖，正式Release包待另外核對。",
+        "localMapCriteriaPassed": true,
+        "finalStoreArtifactMatch": false
+      },
+      {
+        "platform": "Android",
+        "functionPoints": [
+          24,
+          29,
+          24,
+          18
+        ],
+        "functionScore": 95,
+        "uiuxPoints": [
+          35,
+          22,
+          18,
+          12
+        ],
+        "uiuxScore": 87,
+        "evidence": "android-map14-0150-0130-large-pass",
+        "deductionsAndUnverified": "當前1.5字體、36節點及單／多清單操作；本輪沒有Android實體裝置、TalkBack完整遍歷、平板／橫向及慢速／減少動態的完整裝置操作。",
+        "localMapCriteriaPassed": true,
+        "finalStoreArtifactMatch": false
+      }
+    ],
+    "allLocalThresholdsMet": true,
+    "reviewedAt": "2026-10-25T18:56:03.409951+00:00",
+    "report": "golden-integrated-local-review-20261026.json"
+  },
   "release": {
-    "iosProduction": "PENDING",
-    "androidProduction": "PENDING",
-    "androidInternal": "PENDING"
+    "iosProduction": "2.0.17(20) WAITING_FOR_REVIEW; AFTER_APPROVAL",
+    "androidProduction": "2.0.17(38) COMMITTED; GOOGLE_QUICK_CHECKS_REVIEW_PENDING",
+    "androidInternal": "2.0.17(38) PUBLISHED",
+    "web": "2.0.820 LIVE"
   },
   "supersededAssets": [
     {
@@ -195,5 +355,7 @@
       ],
       "status": "IMPLEMENTATION_IN_PROGRESS_NATIVE_VISUAL_ACCEPTANCE_AND_NEW_RELEASE_PENDING"
     }
-  ]
+  ],
+  "releaseReceiptIndex": "release-delivery-20261026.md",
+  "releaseStatusObservedAt": "2026-10-25T20:16:34.788072+00:00"
 }

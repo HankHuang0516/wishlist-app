@@ -232,7 +232,11 @@
         "evidence": "web-map14-compact-loading-bilingual-20261026",
         "deductionsAndUnverified": "未逐項進行1440英文／讀屏與全部鍵盤互動；多清單與失聯恢復採現有控制器及HTTP/DB測試，沒有冒稱這輪Web多清單UI。",
         "localMapCriteriaPassed": true,
-        "finalStoreArtifactMatch": false
+        "finalStoreArtifactMatch": true,
+        "finalStoreArtifactMatchScope": "Exact source/artifact binding only; no fresh per-screen signed-Release UI or iOS physical-device recording claim.",
+        "finalStoreArtifactMatchEvidence": "golden14-final-artifact-binding-20261026.json",
+        "freshEveryScreenSignedReleaseUi": false,
+        "supplementalMotionEvidence": "web-map-motion-supplement-20261026.json"
       },
       {
         "platform": "Web mobile",
@@ -253,7 +257,10 @@
         "evidence": "web-map14-compact-loading-bilingual-20261026",
         "deductionsAndUnverified": "390中英文、320大字深色減少動態均操作；沒有完整行動讀屏及每語言每主題交叉實測。",
         "localMapCriteriaPassed": true,
-        "finalStoreArtifactMatch": false
+        "finalStoreArtifactMatch": true,
+        "finalStoreArtifactMatchScope": "Exact source/artifact binding only; no fresh per-screen signed-Release UI or iOS physical-device recording claim.",
+        "finalStoreArtifactMatchEvidence": "golden14-final-artifact-binding-20261026.json",
+        "freshEveryScreenSignedReleaseUi": false
       },
       {
         "platform": "iOS",
@@ -274,7 +281,10 @@
         "evidence": "ios-map14-large-0152-pass",
         "deductionsAndUnverified": "正常字體0051及系統大字0152；未做當前iOS實機、VoiceOver完整遍歷、iPad／橫向全組合或原生慢速／減少動態的完整裝置操作。QA警告浮層仍在部分截圖，正式Release包待另外核對。",
         "localMapCriteriaPassed": true,
-        "finalStoreArtifactMatch": false
+        "finalStoreArtifactMatch": true,
+        "finalStoreArtifactMatchScope": "Exact source/artifact binding only; no fresh per-screen signed-Release UI or iOS physical-device recording claim.",
+        "finalStoreArtifactMatchEvidence": "golden14-final-artifact-binding-20261026.json",
+        "freshEveryScreenSignedReleaseUi": false
       },
       {
         "platform": "Android",
@@ -295,18 +305,27 @@
         "evidence": "android-map14-0150-0130-large-pass",
         "deductionsAndUnverified": "當前1.5字體、36節點及單／多清單操作；本輪沒有Android實體裝置、TalkBack完整遍歷、平板／橫向及慢速／減少動態的完整裝置操作。",
         "localMapCriteriaPassed": true,
-        "finalStoreArtifactMatch": false
+        "finalStoreArtifactMatch": true,
+        "finalStoreArtifactMatchScope": "Exact source/artifact binding only; no fresh per-screen signed-Release UI or iOS physical-device recording claim.",
+        "finalStoreArtifactMatchEvidence": "golden14-final-artifact-binding-20261026.json",
+        "freshEveryScreenSignedReleaseUi": false
       }
     ],
     "allLocalThresholdsMet": true,
     "reviewedAt": "2026-10-25T18:56:03.409951+00:00",
-    "report": "golden-integrated-local-review-20261026.json"
+    "report": "golden-integrated-local-review-20261026.json",
+    "postSubmissionArtifactBindingAudit": {
+      "passed": true,
+      "evidence": "golden14-post-submission-audit-20261026.json",
+      "scoreChanges": false,
+      "scope": "Exact source/artifact binding; no fresh per-screen signed-Release UI claim."
+    }
   },
   "release": {
     "iosProduction": "2.0.17(20) WAITING_FOR_REVIEW; AFTER_APPROVAL",
-    "androidProduction": "2.0.17(38) COMMITTED; GOOGLE_QUICK_CHECKS_REVIEW_PENDING",
+    "androidProduction": "2.0.17(38) LIVE_ON_GOOGLE_PLAY; fresh Console observation2026-10-25T21:50:02Z",
     "androidInternal": "2.0.17(38) PUBLISHED",
-    "web": "2.0.820 LIVE"
+    "web": "2.0.820 LIVE snapshot;2.0.821 local candidate pending CI/publication (see post-submission audit)"
   },
   "supersededAssets": [
     {

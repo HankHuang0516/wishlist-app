@@ -1,0 +1,137 @@
+{
+  "at": "2026-10-25T21:26:50.103185+00:00",
+  "purpose": "Correct stale target14 finalStoreArtifactMatch=false flags using concrete signed-source and published-byte evidence; preserve scores and unverified coverage deductions.",
+  "sourceArtifactBinding": {
+    "at": "2026-10-25T21:11:02.558817+00:00",
+    "kind": "golden14-final-artifact-source-binding",
+    "passed": true,
+    "sourceHead": "e6e488fcb34e45e097a80d93230b81986e68e470",
+    "meaning": "Exact reviewed map sources are bound to delivered signed38/20 packages and liveWeb820 runtime assets. This is source/artifact equivalence, not a new per-screen signed-Release UI run or iOS hardware recording.",
+    "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+    "clientTree": "265c175904706cc76ccf83516e484a50f7a58066",
+    "nativeArtifacts": {
+      "Android38": {
+        "buildId": "9f3c6cc7-3780-40f2-9f06-9412f0d89638",
+        "sha256": "e7a2f9e2f42b8b127245786203cc1f6add4f18204152796e7ee53717e222000f",
+        "source": "0a3674a8ba11a0b217b056c406a61ad6ceba2e68",
+        "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+        "receipt": "android38-signed-artifact-receipt.json",
+        "statusReceipt": "eas-android38-status-current.json",
+        "actualFileRehashed": true
+      },
+      "iOS20": {
+        "buildId": "2445d055-22a7-4a3d-b4fa-3b1ae70e8030",
+        "sha256": "c78f1bb7ba25c117ac18dfbc0d387d52f61951781a3c1319d22229f5af0aefa6",
+        "source": "0a3674a8ba11a0b217b056c406a61ad6ceba2e68",
+        "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+        "receipt": "ios20-signed-artifact-receipt.json",
+        "statusReceipt": "eas-ios20-status-current.json",
+        "actualFileRehashed": true
+      }
+    },
+    "qaMapSourceIdentity": "golden14-weighted-local-review-20261026.json.currentMapComponentIdentity",
+    "webRuntimeBinding": {
+      "evidence": "web820-all-runtime-chunks-audit-20261026.json",
+      "all102JsCssByteMatched": true
+    },
+    "androidActualPlayJsBinding": "android38-play-apk-verified.json",
+    "freshEveryScreenStoreReleaseUi": false,
+    "currentIosPhysicalRecording": false,
+    "scoreChanges": false,
+    "historicalWeb820Binding": true,
+    "preWeb821TestOnlyDifference": {
+      "path": "client/src/pages/ChatPage.test.tsx",
+      "basis": "git diff e6e488fcb34e45e097a80d93230b81986e68e470 -- client mobile; no runtime client/mobile source changes"
+    }
+  },
+  "webSupplement": {
+    "evidence": "web-map-motion-supplement-20261026.json",
+    "passed": true,
+    "scope": "Web desktop actual compiled client/MapLibre with bounded forwarding of live provider GET bytes;54responses all200 with byte hashes, no tile/image replacement. Direct-browser network failures retained separately.",
+    "normalDurationMs": 800,
+    "slowDurationMs": 3600,
+    "shared36Timeline": true,
+    "pauseResumeInterruptionReducedMotion": true,
+    "all36RealClicksAndWishAndListAndReference": true,
+    "extraDiscoveryReadsDuringMotion": 0,
+    "productionWrites": 0,
+    "cleanupRemaining": 0,
+    "settledScreenshot": "web-map-motion-audit-20261026-v7/map-1440-1-zh-TW-selected.png",
+    "transientOverviewNotCreditedAsSettledLayout": true
+  },
+  "nativeMotionSupplement": {
+    "evidence": "ios-map-motion-supplement-20261026.json",
+    "deviceTests": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "privacyConsoleActionAuditPassed": true,
+    "originalControllerPassed": false,
+    "offlineClosedArtifactAuditPassed": true,
+    "acceptedSafeAttachments": 15,
+    "automaticDebugTextsNotCredited": 8,
+    "scope": "Source-matched assigned iOS Simulator App0232/testhost0552; actual paused pixels unchanged for300ms, normal/interrupted motion, real OS reduce motion+acknowledged restoration, wishlist receipts and3draft removals. Reused-app scope has no fresh first-run-notice, hardware or per-screen signed-Release claim.",
+    "scoreChanges": false
+  },
+  "ci": {
+    "previousMainFailure": 40230918784,
+    "fixPR": 208,
+    "fixHead": "e6e488fcb34e45e097a80d93230b81986e68e470",
+    "allThreePrChecksPassed": 40234219733,
+    "merged": "f6a345b2135c83d29cd08b0c9a579367b0582327",
+    "mainRun": 40234877135,
+    "mainStatus": "ALL_THREE_PASSED",
+    "mainObservedAt": "2026-10-25T21:27:05Z"
+  },
+  "scoreChanges": false,
+  "externalStoreReviewStillPending": true,
+  "goalComplete": false,
+  "clientReadinessAudit": {
+    "earlierRun": 40236310199,
+    "failure": "Lost-ACK unit test could click Send before private pending-message recovery completed.",
+    "change": "Wait for observable enabled input and Send before the single click; original persistence/body/explicit-retry assertions retained.",
+    "runtimeApplicationCodeChanged": false
+  },
+  "androidMotionSupplement": {
+    "passed": true,
+    "sourceEvidence": "android-map-motion-0230-0550-result/result.json",
+    "scope": "Assigned Android emulator, exact reviewed QA App0230+separate signed test host0550. Not an Android physical-device or per-screen Play signed-Release UI claim.",
+    "cases": [
+      "36individual selections",
+      "reference original price and source",
+      "slow replay",
+      "pause/frozen visible native bounds",
+      "resume completion",
+      "normal replay completion",
+      "user mode-change interruption",
+      "actualOS reduce-motion disables replay",
+      "singlewishlistadd/remove",
+      "multiplewishlistconfirm",
+      "serverreadbackafterreentry"
+    ],
+    "osSettingRestored": true,
+    "scoreChanges": false
+  },
+  "web821Followup": {
+    "version": "2.0.821",
+    "status": "LOCAL_BUILD_AND_REGRESSION_PASSED_CI_PUBLICATION_PENDING",
+    "problem": "An IndexedDB open that never emitted a result left an indefinitely cached promise; explicit recovery could wait for it again.",
+    "behavior": "Bound opening to8seconds; preserve journals/keys/erasure markers, close late handles and abort late upgrades, guard connection generations. Recovery remains explicit and never sends a remote operation before durable local storage.",
+    "unitAndComponentTests": 117,
+    "fullWebTests": 2242,
+    "normalSourceInquiryBrowser": "PASS",
+    "forcedRealBrowserStorageTimeoutAndLateReply": "PASS; one explicit recovery before firstPOST; ASK/REVISE/CANCEL/REOPEN/REVISE exactlyonce each, lostACK recovered withoutresend",
+    "actualCompiledMapBrowser": "PASS36 realclicks/motion/wish/list/reference; live provider bytes through declared QA forwarding transport; no production writes, cleanup0",
+    "freshLocalIconVisualReview": "client/icon-source/reviews/2.0.821.json",
+    "reviewedBuildManifest": "web821-reviewed-build-manifest.json",
+    "publicationByteBinding": "PENDING; priorWeb820 binding does not claim821 is live or byte-matched.",
+    "nativeMobileTreeUnchanged": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc"
+  },
+  "androidProductionObserved": {
+    "state": "LIVE_ON_GOOGLE_PLAY",
+    "version": "2.0.17(38)",
+    "publishedLocalTime": "2026-10-26 04:41 Asia/Taipei",
+    "evidence": "android38-production-live-observed-20261026.json"
+  }
+}

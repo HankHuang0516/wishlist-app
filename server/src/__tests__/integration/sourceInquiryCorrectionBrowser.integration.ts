@@ -37,20 +37,37 @@ run('built source inquiry correction and restart',()=>{
   const item=fixture().lead;item.archiveItemId='SYNTHETIC-INQUIRY-CORRECTION-BROWSER';leadId=(await prisma.externalSourceLead.create({data:item})).id;
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({headless:true,executablePath:qa.executablePath,args:['--disable-background-networking']});
   const page=await browser.newPage();await page.setViewport({width:1280,height:1000});
-  await page.evaluateOnNewDocument((host:string)=>{
+  await page.evaluateOnNewDocument((host:string,forceColdStorage:boolean)=>{
    if(window!==window.top||location.origin!==host)return;
    if(!localStorage.getItem('user-locale'))localStorage.setItem('user-locale','zh-TW');
    // Counts only: no storage keys, crypto input, credential or pending body is read.
-   const metrics={digestStarted:0,digestDone:0,digestFailed:0,dbOpen:0,dbOpened:0,dbBlocked:0,dbError:0,txStarted:0,txDone:0,txAborted:0};
+   const metrics={digestStarted:0,digestDone:0,digestFailed:0,dbOpen:0,dbOpened:0,dbBlocked:0,dbError:0,txStarted:0,txDone:0,txAborted:0,deferredSuccess:0,deferredReleased:0,dbClosed:0};
    Object.defineProperty(window,'__qaRestoreCounts',{value:metrics});
    const digest=crypto.subtle.digest.bind(crypto.subtle);
    crypto.subtle.digest=(...args:Parameters<SubtleCrypto['digest']>)=>{metrics.digestStarted++;return digest(...args).then(value=>{metrics.digestDone++;return value;},error=>{metrics.digestFailed++;throw error;});};
    const open=indexedDB.open.bind(indexedDB);
-   indexedDB.open=(name:string,version?:number)=>{const request=open(name,version);if(name==='wishlist-private-pending-v1'){metrics.dbOpen++;request.addEventListener('success',()=>metrics.dbOpened++);request.addEventListener('blocked',()=>metrics.dbBlocked++);request.addEventListener('error',()=>metrics.dbError++);}return request;};
+   indexedDB.open=(name:string,version?:number)=>{
+    const request=open(name,version);
+    if(name==='wishlist-private-pending-v1'){
+     metrics.dbOpen++;request.addEventListener('success',()=>metrics.dbOpened++);request.addEventListener('blocked',()=>metrics.dbBlocked++);request.addEventListener('error',()=>metrics.dbError++);
+     // A narrow test-only fault delays the application's first success callback;
+     // schema creation and all data operations still use actual browser IDB.
+     if(forceColdStorage&&location.pathname==='/chat'&&location.search.startsWith('?source=')&&!sessionStorage.getItem('qa-cold-storage-injected')){
+      sessionStorage.setItem('qa-cold-storage-injected','1');metrics.deferredSuccess++;
+      return new Proxy(request,{
+       get(target,property){const value=Reflect.get(target,property,target);return typeof value==='function'?value.bind(target):value;},
+       set(target,property,value){if(property==='onsuccess'&&typeof value==='function')return Reflect.set(target,property,(event:Event)=>{setTimeout(()=>{metrics.deferredReleased++;value.call(target,event);},9000);},target);return Reflect.set(target,property,value,target);},
+      });
+     }
+    }
+    return request;
+   };
+   const close=IDBDatabase.prototype.close;
+   IDBDatabase.prototype.close=function(this:IDBDatabase){if(this.name==='wishlist-private-pending-v1')metrics.dbClosed++;return close.call(this);};
    const transaction=IDBDatabase.prototype.transaction;
    IDBDatabase.prototype.transaction=function(this:IDBDatabase,...args:Parameters<IDBDatabase['transaction']>){const tx=Reflect.apply(transaction,this,args) as IDBTransaction;if(this.name==='wishlist-private-pending-v1'){metrics.txStarted++;tx.addEventListener('complete',()=>metrics.txDone++);tx.addEventListener('abort',()=>metrics.txAborted++);}return tx;};
-  },origin);
-  const dist=path.resolve(__dirname,'../../../../client/dist'),traffic:any[]=[],errors:string[]=[],failedReads:{path:string;kind:string}[]=[];let loseCorrection=false;
+  },origin,process.env.SOURCE_INQUIRY_STORAGE_COLD_FAULT==='1');
+  const dist=path.resolve(__dirname,'../../../../client/dist'),traffic:any[]=[],errors:string[]=[],failedReads:{path:string;kind:string}[]=[];let loseCorrection=false,initialStorageRecoveryClicks=0;
   page.on('requestfailed',(request:any)=>{const url=new URL(request.url());if(url.origin===origin&&request.method()==='GET'&&url.pathname.startsWith('/api/')){const failure=String(request.failure()?.errorText??'');failedReads.push({path:url.pathname,kind:failure.includes('ABORT')?'aborted':failure.includes('TIMED_OUT')?'timeout':'network'});}});
   page.on('pageerror',(e:Error)=>errors.push(e.message));await page.setRequestInterception(true);
   page.on('request',async(req:any)=>{try{
@@ -74,7 +91,23 @@ run('built source inquiry correction and restart',()=>{
   const own=()=>prisma.sourceLeadInquiry.findUniqueOrThrow({where:{leadId_buyerUserId:{leadId,buyerUserId:buyer}},include:{lead:true}});
   const save=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:webQaEvidence(name),fullPage:true});};
   await page.goto(origin+'/login');await page.waitForSelector('#identifier');await page.type('#identifier',phone);await page.type('#password',password);await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
-  await page.goto(origin+'/chat?source='+leadId);await page.waitForFunction(()=>document.body.innerText.includes('本週免費代問剩 2／3 次'));await write('合成詢問：3000元可以嗎？');await click('送出並委託聯絡賣家');await page.waitForFunction(()=>document.body.innerText.includes('WAITING_ROUTE'));await save('inquiry-before-correction-desktop.png');
+  await page.goto(origin+'/chat?source='+leadId);await page.waitForFunction(()=>document.body.innerText.includes('本週免費代問剩 2／3 次'));
+  // A real browser storage service can fail before any inquiry was sent. Use
+  // one existing, explicit recovery control only after that visible failure;
+  // never clear storage, reload an uncertain write, or replace an operation ID.
+  await page.waitForFunction(()=>{const field=document.querySelector('textarea[aria-label="詢問內容"]') as HTMLTextAreaElement|null;return field&&(!field.disabled||document.querySelector('[role="alert"]')&&Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='重試恢復已存操作'&&!b.disabled));});
+  if(await page.$eval('textarea[aria-label="詢問內容"]',(e:HTMLTextAreaElement)=>e.disabled)){
+   const counts=await page.evaluate(()=>Reflect.get(window,'__qaRestoreCounts'));
+   expect(counts.dbOpen).toBeGreaterThan(0);expect(counts.dbOpened).toBe(counts.deferredSuccess?1:0);expect(counts.txStarted).toBe(0);
+   expect(traffic.filter(r=>r.method==='POST'&&r.action)).toHaveLength(0);expect(traffic.some(r=>r.method==='GET'&&r.status>=400)).toBe(false);
+   await save('query-inquiry-initial-storage-recovery.png');await click('重試恢復已存操作');initialStorageRecoveryClicks++;
+  }
+  await write('合成詢問：3000元可以嗎？');await click('送出並委託聯絡賣家');await page.waitForFunction(()=>document.body.innerText.includes('WAITING_ROUTE'));
+  if(process.env.SOURCE_INQUIRY_STORAGE_COLD_FAULT==='1'){
+   expect(initialStorageRecoveryClicks).toBe(1);await page.waitForFunction(()=>{const counts=Reflect.get(window,'__qaRestoreCounts');return counts.deferredReleased===1&&counts.dbClosed>=1;});
+   expect(traffic.filter(r=>r.method==='POST'&&r.action)).toHaveLength(1);
+  }
+  await save('inquiry-before-correction-desktop.png');
   const before=(await own()).events;
   await click('更正詢問');expect(await page.$eval('textarea',(e:HTMLTextAreaElement)=>e.value)).toBe('合成詢問：3000元可以嗎？');
   await write('合成更正：3500元可面交嗎？');await click('送出更正並重新委託');await page.waitForFunction(()=>document.body.innerText.includes('更正詢問：合成更正：3500元可面交嗎？'));await click('更新');
@@ -89,6 +122,6 @@ run('built source inquiry correction and restart',()=>{
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect((await prisma.user.findUniqueOrThrow({where:{id:buyer}})).inquiryFreeUsed).toBe(3);await save('inquiry-mobile-recovered.png');
   await page.evaluate(()=>localStorage.setItem('user-locale','en-US'));await page.reload();await click('Correct question');expect(await page.$eval('textarea',(e:HTMLTextAreaElement)=>e.value)).toBe('合成手機更正：星期六面交可以嗎？');await save('inquiry-mobile-english.png');await click('Cancel editing');
   expect(errors).toEqual([]);expect(traffic.filter(r=>r.method==='POST'&&r.action).map(r=>r.action)).toEqual(['ASK','REVISE','CANCEL','REOPEN','REVISE']);
-  console.log(JSON.stringify({inquiryCorrectionBrowser:'PASS',normalLogin:true,desktopAndMobile:true,locales:['zh-TW','en-US'],actionSequence:['ASK','REVISE','CANCEL','REOPEN','REVISE'],lostCorrectionRecoveredWithoutResend:true,historyPreserved:true,onlyNewQuestionInSnapshot:true,externalSellerActions:0,productionWrites:0}));
+  console.log(JSON.stringify({inquiryCorrectionBrowser:'PASS',initialStorageRecoveryClicks,normalLogin:true,desktopAndMobile:true,locales:['zh-TW','en-US'],actionSequence:['ASK','REVISE','CANCEL','REOPEN','REVISE'],lostCorrectionRecoveredWithoutResend:true,historyPreserved:true,onlyNewQuestionInSnapshot:true,externalSellerActions:0,productionWrites:0}));
  },60000);
 });

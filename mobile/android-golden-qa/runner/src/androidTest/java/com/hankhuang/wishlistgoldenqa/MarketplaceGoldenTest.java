@@ -261,7 +261,7 @@ public class MarketplaceGoldenTest {
         long installedBuild = android.os.Build.VERSION.SDK_INT >= 28 ? installed.getLongVersionCode() : installed.versionCode;
         String installedVersion = "版本 " + installed.versionName + "（" + installedBuild + "）";
         await(installedVersion);capture("my-native-version");
-        click("通知設定");await(installedVersion);await("開啟／重新連線裝置通知");capture("notification-native-version");click("返回我的設定");
+        reveal("通知設定");click("通知設定");await(installedVersion);await("開啟／重新連線裝置通知");capture("notification-native-version");click("返回我的設定");
         reveal("帳號安全");click("帳號安全");
         reveal("更改密碼");reveal("登出所有裝置");capture("golden-06-security-directory");
         reveal("刪除帳號");click("刪除帳號");await("刪除影響盤點");
@@ -419,7 +419,7 @@ public class MarketplaceGoldenTest {
         checkpoint("native-version-settings");click("我的");
         android.content.pm.PackageInfo installed=InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
         long build=android.os.Build.VERSION.SDK_INT>=28?installed.getLongVersionCode():installed.versionCode;
-        String version="版本 "+installed.versionName+"（"+build+"）";await(version);click("通知設定");await(version);capture("notification-native-version");click("返回我的設定");
+        String version="版本 "+installed.versionName+"（"+build+"）";await(version);reveal("通知設定");click("通知設定");await(version);capture("notification-native-version");click("返回我的設定");
         checkpoint("discovery-checks-complete");
     }
     private void source() throws Exception {

@@ -52,7 +52,7 @@ async function prepareCompetingEdit(strict = false) {
   const competingRaw = JSON.stringify(competing); journals.set(draftKey, competingRaw);
   return { fetcher, proposal, draftKey, managementKey, originalRaw, competingRaw, competing };
 }
-async function openEditor() { fireEvent.click(screen.getByRole('button', { name: '編輯資訊' })); await waitFor(() => expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
+async function openEditor() { await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());fireEvent.click(screen.getByRole('button', { name: '編輯資訊' })); await waitFor(() => expect(screen.getByLabelText('商品名稱')).toBeEnabled()); }
 async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?:number){
   const body=JSON.parse(String(init.body));return ok({receipt:{clientActionId:url.split('/').at(-1),listingId:body.listingId,kind:body.kind,expectedVersion:body.expectedVersion,requestHash:await sha256(JSON.stringify(body)),state,reason:state==='CONFLICT'?'LISTING_CONFLICT':null,appliedVersion:state==='APPLIED'?appliedVersion??body.expectedVersion+1:null,createdAt:'2026-10-01T12:00:00.000Z'}});
 }
@@ -73,7 +73,7 @@ describe('native-equivalent owner management', () => {
   it('uses the existing fenced remove operation once from the English editor',async()=>{
     localStorage.setItem('user-locale','en');
     const fetcher=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith('/listings/'+id)?ok({...row,status:'REMOVED',version:2}):ok({items:[row],nextCursor:null}));
-    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('heading',{name:row.title});fireEvent.click(screen.getByRole('button',{name:'Edit details'}));
+    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('heading',{name:row.title});await waitFor(()=>expect(screen.getByRole('button',{name:'Edit details'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit details'}));
     const danger=await screen.findByRole('region',{name:'Listing danger zone'});await waitFor(()=>expect(within(danger).getByRole('button',{name:'Remove listing'})).toBeEnabled());fireEvent.click(within(danger).getByRole('button',{name:'Remove listing'}));
     fireEvent.click(within(screen.getByRole('dialog',{name:'Confirm listing status'})).getByRole('button',{name:'Confirm this status change'}));
     await screen.findByText('Version: 2');const writes=fetcher.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'STATUS',listingId:id,expectedVersion:1,changes:{action:'remove'}});

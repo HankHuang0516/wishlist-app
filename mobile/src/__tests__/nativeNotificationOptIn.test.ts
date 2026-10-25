@@ -2,14 +2,17 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 
 const state=vi.hoisted(()=>({
  storage:new Map<string,string>(),randomUUID:vi.fn(),get:vi.fn(),set:vi.fn(),
- permissions:vi.fn(),request:vi.fn(),token:vi.fn(),unregister:vi.fn(),dismiss:vi.fn(),badge:vi.fn(),
+ permissions:vi.fn(),request:vi.fn(),token:vi.fn(),nativeToken:vi.fn(),unregister:vi.fn(),dismiss:vi.fn(),badge:vi.fn(),
+ effects:[] as Array<()=>void>,tokenListener:null as null|((token:{type:'android';data:string})=>void),
 }));
-vi.mock('react',()=>({useEffect:()=>undefined,useRef:(value:unknown)=>({current:value}),useState:(value:unknown)=>[value,vi.fn()]}));
-vi.mock('react-native',()=>({Platform:{OS:'android'},AppState:{currentState:'active'},DeviceEventEmitter:{emit:vi.fn()}}));
+vi.mock('react',()=>({useEffect:(effect:()=>void)=>state.effects.push(effect),useRef:(value:unknown)=>({current:value}),useState:(value:unknown)=>[value,vi.fn()]}));
+vi.mock('react-native',()=>({Platform:{OS:'android'},AppState:{currentState:'active',addEventListener:()=>({remove:vi.fn()})},DeviceEventEmitter:{emit:vi.fn()}}));
 vi.mock('expo-crypto',()=>({CryptoDigestAlgorithm:{SHA256:'SHA256'},digestStringAsync:async()=>'synthetic-scope',randomUUID:state.randomUUID}));
 vi.mock('expo-secure-store',()=>({WHEN_UNLOCKED_THIS_DEVICE_ONLY:'device-only',getItemAsync:state.get,setItemAsync:state.set,deleteItemAsync:vi.fn()}));
 vi.mock('expo-constants',()=>({default:{expoConfig:{extra:{eas:{projectId:'36cff414-22d4-4c30-9c34-9cd5788d0452'}}}}}));
-vi.mock('expo-notifications',()=>({getPermissionsAsync:state.permissions,requestPermissionsAsync:state.request,getExpoPushTokenAsync:state.token,
+vi.mock('expo-notifications',()=>({getPermissionsAsync:state.permissions,requestPermissionsAsync:state.request,getExpoPushTokenAsync:state.token,getDevicePushTokenAsync:state.nativeToken,
+ setNotificationHandler:vi.fn(),addNotificationReceivedListener:()=>({remove:vi.fn()}),addNotificationResponseReceivedListener:()=>({remove:vi.fn()}),getLastNotificationResponse:()=>null,
+ addPushTokenListener:(listener:typeof state.tokenListener)=>{state.tokenListener=listener;return {remove:vi.fn()};},
  unregisterForNotificationsAsync:state.unregister,dismissAllNotificationsAsync:state.dismiss,setBadgeCountAsync:state.badge,
  setNotificationChannelAsync:vi.fn(),AndroidImportance:{DEFAULT:3},AndroidNotificationVisibility:{PRIVATE:0}}));
 import {useNativeNotifications} from '../nativeNotifications';
@@ -23,14 +26,15 @@ function setup(){
  return {api,runtime:useNativeNotifications(api as unknown as ReturnType<typeof createApi>,'https://owned.example.invalid/api',42,null,vi.fn())};
 }
 beforeEach(()=>{
- vi.stubGlobal('__DEV__',false);vi.clearAllMocks();state.storage.clear();
+ vi.stubGlobal('__DEV__',false);vi.resetAllMocks();state.storage.clear();state.effects=[];state.tokenListener=null;
  state.get.mockImplementation(async(key:string)=>state.storage.get(key)??null);
  state.set.mockImplementation(async(key:string,value:string)=>{state.storage.set(key,value);});
  state.randomUUID.mockReturnValue(id);state.permissions.mockResolvedValue({granted:false,canAskAgain:false,status:'denied'});
  state.token.mockResolvedValue({data:'ExponentPushToken[synthetic]'});
+ state.nativeToken.mockResolvedValue({type:'android',data:'synthetic-native-token'});
  state.unregister.mockResolvedValue(undefined);state.dismiss.mockResolvedValue(undefined);state.badge.mockResolvedValue(undefined);
 });
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 
 describe('optional push identity and disconnect lifecycle',()=>{
  it('logs out a never-enabled account without generating, storing or sending an installation ID',async()=>{
@@ -105,5 +109,38 @@ describe('optional push identity and disconnect lifecycle',()=>{
  it('still dismisses account notifications and clears the badge if provider unregistration fails',async()=>{
   state.unregister.mockRejectedValueOnce(new Error('provider unavailable'));const {api,runtime}=setup();
   await expect(runtime.disconnect()).rejects.toThrow('provider unavailable');expect(api).not.toHaveBeenCalled();expect(state.dismiss).toHaveBeenCalledOnce();expect(state.badge).toHaveBeenCalledWith(0);
+ });
+ it('registers only once when Android emits a token event from the explicit native-token read',async()=>{
+  state.permissions.mockResolvedValue({granted:true,status:'granted'});const {api,runtime}=setup();state.effects.forEach(effect=>effect());
+  // Reproduce PushTokenModule.kt: getDevicePushTokenAsync also emits onNewToken.
+  const token={type:'android' as const,data:'synthetic-native-token'};
+  state.nativeToken.mockImplementation(async()=>{state.tokenListener?.(token);return token;});
+  await runtime.enable();await Promise.resolve();
+  expect(state.nativeToken).toHaveBeenCalledOnce();expect(state.token).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({devicePushToken:token}));expect(api).toHaveBeenCalledOnce();
+  state.tokenListener?.({...token});await Promise.resolve();expect(api).toHaveBeenCalledOnce();
+ });
+ it('coalesces concurrent reconnect requests instead of queueing registrations',async()=>{
+  state.permissions.mockResolvedValue({granted:true,status:'granted'});const {api,runtime}=setup();
+  await Promise.all([runtime.enable(),runtime.enable(),runtime.enable(false)]);
+  expect(state.nativeToken).toHaveBeenCalledOnce();expect(state.token).toHaveBeenCalledOnce();expect(api).toHaveBeenCalledOnce();
+ });
+ it('uses a genuinely rotated token without reading native token again',async()=>{
+  state.permissions.mockResolvedValue({granted:true,status:'granted'});const {api,runtime}=setup();state.effects.forEach(effect=>effect());await runtime.enable();
+  const rotated={type:'android' as const,data:'synthetic-rotated-native-token'};state.tokenListener?.(rotated);await runtime.enable(false);
+  expect(state.nativeToken).toHaveBeenCalledOnce();expect(state.token).toHaveBeenLastCalledWith(expect.objectContaining({devicePushToken:rotated}));expect(api).toHaveBeenCalledTimes(2);
+ });
+ it('keeps a real token rotation that arrives while registration is still in flight',async()=>{
+  state.permissions.mockResolvedValue({granted:true,status:'granted'});const {api,runtime}=setup();state.effects.forEach(effect=>effect());
+  const rotated={type:'android' as const,data:'synthetic-rotation-during-registration'};
+  state.token.mockImplementationOnce(async()=>{state.tokenListener?.(rotated);return {data:'ExponentPushToken[synthetic]'};});
+  await runtime.enable();await runtime.enable(false);
+  expect(api).toHaveBeenCalledTimes(2);expect(state.nativeToken).toHaveBeenCalledOnce();expect(state.token).toHaveBeenLastCalledWith(expect.objectContaining({devicePushToken:rotated}));
+ });
+ it('bounds a stuck token request, ignores its late result, and permits an explicit retry',async()=>{
+  vi.useFakeTimers();state.permissions.mockResolvedValue({granted:true,status:'granted'});const {api,runtime}=setup();
+  let late!:(value:{data:string})=>void;state.token.mockImplementationOnce(()=>new Promise(resolve=>{late=resolve;}));
+  const first=runtime.enable();await vi.advanceTimersByTimeAsync(20001);await first;expect(api).not.toHaveBeenCalled();
+  late({data:'ExponentPushToken[late]'});await Promise.resolve();expect(api).not.toHaveBeenCalled();
+  await runtime.enable();expect(api).toHaveBeenCalledOnce();expect(state.token).toHaveBeenCalledTimes(2);
  });
 });

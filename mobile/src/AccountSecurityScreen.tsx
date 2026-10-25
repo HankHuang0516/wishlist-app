@@ -1,4 +1,5 @@
 import { SafeAreaModal } from './SafeAreaModal';
+import { AppVersionLabel } from './AppVersionLabel';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +48,7 @@ export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRe
   }
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <Text style={styles.title}>我的</Text>
+    <AppVersionLabel />
     <View style={styles.actionGroup}>
       <Pressable accessibilityRole="button" accessibilityLabel="刊登好物" accessibilityHint="連續拍照或批次選照片，由 AI 建議商品資訊" disabled={busy} style={styles.actionRow} onPress={onPublish}><View style={styles.actionIcon}><Ionicons name="camera-outline" size={24} color={iosColors.white} /></View><View style={styles.actionCopy}><Text style={styles.actionTitle}>刊登好物</Text><Text style={styles.note}>連續拍照或批次選照片，由 AI 建議商品資訊</Text></View><Ionicons name="chevron-forward" size={19} color={iosColors.tertiaryLabel} /></Pressable>
       <View style={styles.rowSeparator} />

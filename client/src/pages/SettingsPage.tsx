@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/Card";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, User as UserIcon, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Camera, Loader2, Gift, Package, MessageCircle, Users, ChevronRight, Settings, Bell, Truck, Heart, PlusCircle, ShieldCheck, Languages, Crown } from "lucide-react";
 import { API_URL, API_BASE_URL } from '../config';
 import { t } from "../utils/localization";
 import AccountSecurityPanel from '../components/AccountSecurityPanel';
@@ -36,6 +36,11 @@ function SettingsSession() {
     const settings = useSettingsProfile(token, user?.id);
     const installation = useWebAppInstall();
     const { profile, loading, savedField, update: handleUpdate } = settings;
+    useEffect(() => {
+        if (!loading && section === 'profile' && location.hash === '#settings-private-information') {
+            document.getElementById('settings-private-information')?.scrollIntoView({ block: 'start' });
+        }
+    }, [section, location.hash, loading]);
     const [aiUsage, setAiUsage] = useState<{ used: number; limit: number; isUnlimited: boolean } | null>(null);
     const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,8 +114,8 @@ function SettingsSession() {
                     {feedback.message}
                 </div>
             )}
-            <header className="space-y-3">{section!=='home'&&<Link className="inline-flex min-h-11 items-center text-blue-800 aria-disabled:opacity-50" aria-disabled={securityBusy} onClick={event=>{if(securityBusy)event.preventDefault();}} to="/settings">{settingsChinese()?'‹ 返回我的設定':'‹ Back to settings'}</Link>}<h1 className="text-2xl font-bold leading-8 text-muji-primary">{sectionNames[section as keyof typeof sectionNames]}</h1>{section==='home'&&<p className="text-sm text-gray-600">{profile.name||user?.name||st('個人資料')}</p>}</header>
-            {section==='home'&&<nav aria-label={settingsChinese()?'設定目錄':'Settings sections'} className="overflow-hidden rounded-2xl border bg-white">{(['profile','security','language','services'] as const).map(key=><Link key={key} className="flex min-h-14 items-center justify-between gap-3 border-b p-4 last:border-b-0" to={'/settings?section='+key}><span className="font-medium">{sectionNames[key]}</span><ChevronRight size={20} aria-hidden="true"/></Link>)}</nav>}
+            <header className="space-y-3">{section!=='home'&&<Link className="inline-flex min-h-11 items-center text-blue-800 aria-disabled:opacity-50" aria-disabled={securityBusy} onClick={event=>{if(securityBusy)event.preventDefault();}} to="/settings">{settingsChinese()?'‹ 返回我的設定':'‹ Back to settings'}</Link>}<h1 className="text-2xl font-bold leading-8 text-muji-primary">{sectionNames[section as keyof typeof sectionNames]}</h1></header>
+
             {settings.notice && <section aria-label={st("個人資料儲存狀態")} className="rounded-md border bg-white p-3 text-sm"><p role="status">{settingsMessage(settings.notice)}</p>
                 {settings.pending && <div className="mt-2 flex flex-wrap gap-2">
                     <Button disabled={settings.busy} onClick={() => settings.recover('read')}>{st("查核原儲存結果")}</Button>
@@ -150,16 +155,39 @@ function SettingsSession() {
             </Card>
 
             </section>
-            {/* Avatar Section */}
-            <section hidden={section!=='home'} aria-labelledby="settings-actions" className="rounded-lg border border-muji-border bg-white p-3 shadow-sm">
-                <h2 id="settings-actions" className="mb-3 font-semibold">{st("我的功能")}</h2>
-                <div className="grid grid-cols-2 gap-2">
-                    {[{ to: '/', label: settingsChinese()?'首頁':'Home', description: settingsChinese()?'願望與商品總覽':'Overview', icon: Gift },{ to: '/social', label: settingsChinese()?'好友與社群':'Friends', description: settingsChinese()?'公開願望與追蹤':'Public wishes & following', icon: Users },{ to: '/wishes', label: st("我的願望"), description: st("拍照與 AI 辨識"), icon: Gift },
-                        { to: '/my-listings', label: st("我的商品"), description: st("閱覽與管理"), icon: Package },
-                        { to: '/chat', label: st("聊天與面交"), description: st("訊息與預約"), icon: MessageCircle },
-                        { to: '/sell', label: st("刊登好物"), description: st("連拍或批次上傳"), icon: Camera }].map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} aria-label={`${label} · ${description}`} className="flex min-h-11 min-w-0 items-center gap-1 rounded-md border border-gray-200 px-2 py-2 text-sm hover:bg-gray-50"><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="text-blue-700">{label}</span><ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" /></Link>)}
-                </div>
-            </section>
+            <nav hidden={section!=='home'} aria-label={settingsChinese()?'設定目錄':'Settings sections'} className="settings-directory">
+                <Link to="/settings?section=profile" aria-label={sectionNames.profile} className="settings-profile-entry">
+                    <span className="settings-profile-symbol" aria-hidden="true"><UserIcon size={32}/></span>
+                    <span className="settings-row-copy"><strong>{profile.name||user?.name||st('個人資料')}</strong><span>{settingsChinese()?'個人資料與公開範圍':'Personal profile & visibility'}</span></span>
+                    <ChevronRight size={20} aria-hidden="true"/>
+                </Link>
+                <section aria-labelledby="settings-actions" className="settings-directory-group">
+                    <h2 id="settings-actions">{st("我的功能")}</h2>
+                    <div className="settings-directory-rows">{[
+                        {to:'/wishes',label:st("我的願望"),description:st("拍照與 AI 辨識"),icon:Heart,tone:'rose'},
+                        {to:'/my-listings',label:st("我的商品"),description:st("閱覽與管理"),icon:Package,tone:'green'},
+                        {to:'/sell',label:st("刊登好物"),description:st("連拍或批次上傳"),icon:PlusCircle,tone:'blue'},
+                        {to:'/chat',label:st("聊天與面交"),description:st("訊息與預約"),icon:MessageCircle,tone:'purple'},
+                        {to:'/',label:settingsChinese()?'首頁':'Home',description:settingsChinese()?'願望與商品總覽':'Overview',icon:Gift,tone:'gray'},
+                        {to:'/social',label:settingsChinese()?'好友與社群':'Friends',description:settingsChinese()?'公開願望與追蹤':'Public wishes & following',icon:Users,tone:'blue'}
+                    ].map(({to,label,description,icon:Icon,tone})=><Link key={to} to={to} aria-label={`${label} · ${description}`} className="settings-directory-row"><Icon className={'settings-row-icon '+tone} size={23} aria-hidden="true"/><span className="settings-row-label">{label}</span><ChevronRight size={19} aria-hidden="true"/></Link>)}</div>
+                </section>
+                <section aria-labelledby="settings-preferences" className="settings-directory-group">
+                    <h2 id="settings-preferences">{settingsChinese()?'偏好與安全':'Preferences & security'}</h2>
+                    <div className="settings-directory-rows">
+                        <Link to="/settings?section=language" aria-label={sectionNames.language} className="settings-directory-row"><Languages className="settings-row-icon gray" size={23} aria-hidden="true"/><span className="settings-row-label">{sectionNames.language}</span><span className="settings-row-value">{settingsChinese()?'繁體中文':'English'}</span><ChevronRight size={19} aria-hidden="true"/></Link>
+                        <Link to="/settings/notifications" aria-label={t('settings.notifications')} className="settings-directory-row"><Bell className="settings-row-icon amber" size={23} aria-hidden="true"/><span className="settings-row-copy"><span>{t('settings.notifications')}</span><small>{t('settings.emailNotifs')}</small></span><ChevronRight size={19} aria-hidden="true"/></Link>
+                        <Link to="/settings?section=security" aria-label={sectionNames.security} className="settings-directory-row"><ShieldCheck className="settings-row-icon blue" size={23} aria-hidden="true"/><span className="settings-row-label">{sectionNames.security}</span><ChevronRight size={19} aria-hidden="true"/></Link>
+                    </div>
+                </section>
+                <section aria-labelledby="settings-services" className="settings-directory-group">
+                    <h2 id="settings-services">{settingsChinese()?'送禮與服務':'Gifts & services'}</h2>
+                    <div className="settings-directory-rows">
+                        <Link to="/settings?section=profile#settings-private-information" className="settings-directory-row"><Truck className="settings-row-icon rose" size={23} aria-hidden="true"/><span className="settings-row-copy"><span>{settingsChinese()?'送禮寄送資料':'Gift delivery details'}</span><small>{settingsChinese()?'私人資料與公開權限':'Private information & visibility'}</small></span><ChevronRight size={19} aria-hidden="true"/></Link>
+                        <Link to="/settings?section=services" aria-label={sectionNames.services} className="settings-directory-row"><Crown className="settings-row-icon amber" size={23} aria-hidden="true"/><span className="settings-row-label">{sectionNames.services}</span><ChevronRight size={19} aria-hidden="true"/></Link>
+                    </div>
+                </section>
+            </nav>
             <section hidden={section!=='profile'} className="space-y-3"><fieldset disabled={settings.locked || isUploading || changingLang} className="min-w-0 border-0 p-0"><legend className="sr-only">{st("個人資料與隱私設定")}</legend><Card className="settings-avatar">
                 <CardHeader>
                     <CardTitle className="flex items-center justify-between">
@@ -257,27 +285,11 @@ function SettingsSession() {
             </section>}
 
             </section>
-            <section hidden={section!=='home'}>
-            {/* Notification Settings */}
-            <Link to="/settings/notifications" className="block">
-                <Card className="settings-notifications hover:bg-gray-50 transition-colors cursor-pointer">
-                    <CardHeader className="flex flex-row items-center gap-3 space-y-0 py-3">
-                        <Bell className="h-5 w-5 shrink-0" aria-hidden="true" />
-                        <div className="space-y-1">
-                            <CardTitle className="text-lg">{t('settings.notifications')}</CardTitle>
-                            <CardDescription>{t('settings.emailNotifs')}</CardDescription>
-                        </div>
-                        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muji-secondary" aria-hidden="true" />
-                    </CardHeader>
-                </Card>
-            </Link>
-
-            </section>
             {/* Private Info Section */}
             {section==='security'&&<AccountSecurityPanel key={token} onOperationBusy={onSecurityBusy} reloadPending={changingLang} />}
             <section hidden={section!=='profile'} className="space-y-3">
             <fieldset disabled={settings.locked || isUploading || changingLang} className="min-w-0 border-0 p-0"><legend className="sr-only">{st("私人資料與公開權限")}</legend>
-            <div className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
+            <div id="settings-private-information" className="settings-private rounded-lg border border-muji-border bg-white p-5 shadow-sm">
                 <h2 className="flex items-center gap-2 text-lg font-semibold"><Truck className="h-5 w-5 shrink-0" aria-hidden="true" />{t('settings.privacyTitle')}</h2>
 
                 {/* Real Name */}

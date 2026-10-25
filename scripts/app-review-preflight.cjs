@@ -55,6 +55,42 @@ function assertReviewRemediationEvidence(receipt, native, ageRating) {
         assert.equal(receipt.checks?.[check], true, `Missing actual review remediation check ${check}`);
 }
 
+// Hank explicitly approved reuse for this exact build on Oct 25. Keep the
+// ordinary fresh-recording gate for every other release; never relabel footage.
+function assertApprovedHistoricalRecording(receipt, native, ageRating, approval, acceptedVersion, notes) {
+    assert.equal(ageRating.ageRatingOverrideV2, 'EIGHTEEN_PLUS');
+    const scope = {
+        versionId: '00d4ab78-c004-4d89-a537-2399e54ae16f',
+        buildId: '496d770a-b640-434b-a887-cdceb1233459',
+        buildNumber: '19',
+        nativeGitTree: 'b699abd83d9c6c0ead7800bb4931a53eab87b60e',
+        artifactSha256: 'b9a86bc946ff69c0a471c561b47242aebb2b7f794bb4e200b9983e4732765baf',
+    };
+    assert.equal(receipt.appId, '6468950847');
+    assert.equal(receipt.mode, 'approved-historical-recording');
+    assert.equal(receipt.deviceKind, 'physical');
+    assert.equal(receipt.currentBuildPhysicalRecording, false);
+    assert.equal(receipt.recordedVersion, '2.0.16');
+    assert.equal(approval?.approved, true, 'Require explicit human approval for historical footage');
+    assert.equal(approval?.questionRef, 'call_958c08f13f2e4d74ac306241a9540c2f');
+    for (const [key, value] of Object.entries(scope)) {
+        assert.equal(native[key], value, `Historical exception does not cover native ${key}`);
+        assert.equal(approval[key], value, `Human approval does not cover ${key}`);
+        assert.equal(receipt[key], value, `Historical evidence does not cover ${key}`);
+    }
+    assert.equal(selectedBuildId(acceptedVersion), 'a79db7d4-f26a-475e-9ba3-986a9e5e4e30');
+    const prior = acceptedVersion.data?.attributes ?? acceptedVersion;
+    assert.equal(prior.versionString, '2.0.16');
+    assert.equal(prior.appStoreState ?? prior.state, 'READY_FOR_SALE');
+    assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Reverify the existing recording and delivery');
+    assert(receipt.videoPath && /^[a-f0-9]{64}$/.test(receipt.videoSha256));
+    assert(receipt.videoAttachment?.id && receipt.videoAttachment?.fileName);
+    assert.equal(receipt.disclosureText, 'This is the previously accepted2.0.16 physical footage, not a recording of19.');
+    assert(notes.includes(receipt.disclosureText), 'Disclose historical footage in current review notes');
+    for (const check of ['termsBeforeLogin', 'termsBeforeRegister', 'chatReportReceipt', 'blockPreventsNewMessages', 'mapDecline', 'manualMapCheckIn', 'mapStop', 'noAutomaticMapRenewal'])
+        assert.equal(receipt.checks?.[check], true, `Missing historical remediation evidence ${check}`);
+}
+
 function assertRecordingDelivery(receipt, notes, attachment, reviewDetailId, videoMd5) {
     if (receipt.videoAttachment) {
         const claimed = receipt.videoAttachment;
@@ -146,9 +182,14 @@ async function main() {
         assert(args.includes('--remediation-receipt'), 'The Oct 3 rejection requires inspected physical-device evidence');
         const remediation = JSON.parse(fs.readFileSync(get('--remediation-receipt'), 'utf8'));
         const age = asc('age-rating', 'view', '--version-id', result.versionId).data.attributes;
-        assertReviewRemediationEvidence(remediation, receipt, age);
-        assert.equal(hashFile(remediation.videoPath), remediation.videoSha256, 'Physical-device recording changed');
         const detail = asc('review', 'details-for-version', '--version-id', result.versionId).data;
+        if (remediation.mode === 'approved-historical-recording') {
+            assert(args.includes('--historical-recording-approval'), 'Provide the build-scoped human approval');
+            const approval = JSON.parse(fs.readFileSync(get('--historical-recording-approval'), 'utf8'));
+            const prior = asc('versions', 'view', '--version-id', '6589d4aa-4cf8-41c2-ae0f-f67a52a83b65', '--include-build');
+            assertApprovedHistoricalRecording(remediation, receipt, age, approval, prior, detail.attributes.notes || '');
+        } else assertReviewRemediationEvidence(remediation, receipt, age);
+        assert.equal(hashFile(remediation.videoPath), remediation.videoSha256, 'Physical-device recording changed');
         const attachment = remediation.videoAttachment ? asc('review', 'attachments-get', '--id', remediation.videoAttachment.id, '--include', 'appStoreReviewDetail').data : null;
         assertRecordingDelivery(remediation, detail.attributes.notes || '', attachment, detail.id, createHash('md5').update(fs.readFileSync(remediation.videoPath)).digest('hex'));
         for (const proof of receipt.appleScreenshotProofs || []) assert.equal(hashFile(proof.path), proof.sha256, 'Review baseline changed');
@@ -166,7 +207,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
+module.exports = { assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

@@ -103,7 +103,8 @@ export function sourcePrice(facts: unknown): { price: number | null; text: strin
     unitVerified: f.priceUnitStatus === 'SOURCE_STATED' };
 }
 export function statedCondition(title:string):'NEW'|'USED'|'UNKNOWN'{
-  const used=/二手|[五六七八九](?:五|九|點五)?成新|[5-9](?:\.5)?成新|使用過|用過/.test(title)&&!/非二手|不是二手/.test(title);
+  const usage = title.replace(/未(?:曾)?使用過|未(?:曾)?用過|沒有使用過|非二手|不是二手/g,'');
+  const used=/二手|[五六七八九](?:五|九|點五)?成新|[5-9](?:\.5)?成新|使用過|用過|已組(?:裝)?|近全新|有使用痕跡|僅用|用(?:了)?半年/.test(usage);
   const fresh=/(?:^|[（(，,\s])全新/.test(title)&&!/非全新|不是全新/.test(title);
   if(used&&fresh)return 'UNKNOWN';
   return used?'USED':fresh?'NEW':'UNKNOWN';

@@ -34,7 +34,7 @@ type EvaluatedProduct = Omit<DiscoveryProduct, 'cp'> & {
 };
 export const cpIdentity = retailIdentity;
 export const cpFacts = (p: DiscoveryProduct) => ({ key: p.key, title: p.title, description: p.description.slice(0, 1200), price: p.price, currency: p.currency, priceUnitVerified: p.priceUnitVerified, condition: p.condition, mainId: p.mainId, subId: p.subId, comparableIdentity: cpIdentity(p) });
-const eligible = (p: DiscoveryProduct) => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified && ['NEW', 'USED'].includes(p.condition) && !!cpIdentity(p) && p.subId !== 'unclassified' && p.mainId !== 'other' && (!/合售|打包|組合|套組/.test(p.title) || p.retail?.identity.endsWith(':followme-bundle') === true) && !/零件機|故障|不能開機|無法開機|無法使用|螢幕有.*(?:線|裂)|副廠螢幕|副廠電池|非正品|仿品/i.test(p.title + ' ' + p.description);
+export const eligible = (p: DiscoveryProduct) => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified && ['NEW', 'USED'].includes(p.condition) && !!cpIdentity(p) && (!/合售|打包|組合|套組/.test(p.title) || p.retail?.identity.endsWith(':followme-bundle') === true) && !/零件機|故障|不能開機|無法開機|無法使用|螢幕有.*(?:線|裂)|副廠螢幕|副廠電池|非正品|仿品/i.test(p.title + ' ' + p.description);
 export type CpTarget = {
     product: ReturnType<typeof cpFacts>;
     comparables: RetailReference[];

@@ -1,3 +1,4 @@
+import { cpCoverage } from '../lib/cpCoverage';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import prisma from '../lib/prisma';
@@ -12,20 +13,23 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
     r.use(rateLimit({ windowMs: 60000, limit: 30, standardHeaders: true, legacyHeaders: false }));
     const fail = (s: any, e: unknown) => s.status(e instanceof DiscoveryError ? e.status : 503).json({ errorCode: e instanceof DiscoveryError ? e.code : 'RETAIL_PRICE_UNAVAILABLE' });
     r.get('/candidates', async (q, s) => { try {
-        if (Object.keys(q.query).some(k => k !== 'limit'))
+        if (Object.keys(q.query).some(k => !['limit','source'].includes(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const limit = Number(q.query.limit ?? 3);
         if (!Number.isInteger(limit) || limit < 1 || limit > 20)
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
+        const source = String(q.query.source ?? 'all');
+        if (!['all','listing','source','external'].includes(source)) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const all = (await loadDiscovery()).filter(p => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified);
         const attempts = await prisma.retailPriceObservation.findMany({ where: { expiresAt: { gt: new Date() } }, select: { productKey: true, bindingHash: true }, take: 10000 });
         const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash));
-        const waiting = all.filter(p => !covered.has(p.key + ':' + retailBinding(p))).sort((a, b) => Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || b.date.localeCompare(a.date));
+        const waiting = all.filter(p => (source === 'all' || p.kind === source) && !covered.has(p.key + ':' + retailBinding(p))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
         return s.json({ baseline: 'ORIGINAL_NEW_RETAIL', policyVersion: 3, items: waiting.slice(0, limit).map(p => ({ productKey: p.key, title: p.title, description: p.description, price: p.price, currency: p.currency, condition: p.condition, identity: retailIdentity(p), bindingHash: retailBinding(p), canonicalUrl: p.canonicalUrl })), remaining: waiting.length });
     }
     catch (e) {
         return fail(s, e);
     } });
+    r.get('/coverage', async (_q, s) => { try { return s.json(cpCoverage(await attachCp(await loadDiscovery()))); } catch (e) { return fail(s,e); } });
     r.get('/pending-evaluations', async (q, s) => { try {
         if (Object.keys(q.query).some(k => k !== 'limit'))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');

@@ -10,7 +10,18 @@ function verifyWebIcons(client, dist) {
   const version = JSON.parse(fs.readFileSync(path.join(client, 'package.json'))).version;
   const inputs = path.join(client, 'icon-source');
   const recipe = JSON.parse(fs.readFileSync(path.join(inputs, 'recipe.json')));
-  const review = JSON.parse(fs.readFileSync(path.join(inputs, 'reviews', version + '.json')));
+  let review = JSON.parse(fs.readFileSync(path.join(inputs, 'reviews', version + '.json')));
+  assert.equal(review.version, version);
+  if (review.reusedFrom) {
+    assert.match(review.reusedFrom, /^\d+\.\d+\.\d+$/);
+    assert.equal(review.actualBuildInspected, false, 'Reuse is not a new visual inspection.');
+    const prior = JSON.parse(fs.readFileSync(path.join(inputs, 'reviews', review.reusedFrom + '.json')));
+    assert.equal(prior.status, 'passed');
+    assert.equal(prior.actualBuildInspected, true);
+    assert.deepEqual(review.inputHashes, prior.inputHashes);
+    assert.deepEqual(review.outputHashes, prior.outputHashes);
+    review = { ...prior, version };
+  }
   assert.equal(review.version, version, 'This release requires its own icon review.');
   assert.equal(review.status, 'passed', 'Unfinished visual inspection blocks publication.');
   assert.equal(review.actualBuildInspected, true, 'Source previews cannot replace actual build inspection.');

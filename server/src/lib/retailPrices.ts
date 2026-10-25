@@ -5,6 +5,17 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
     if (/非正品|仿品|仿冒|造型款|replica|knockoff/i.test(p.title))
         return null;
     const t = p.title.normalize('NFKC').toLowerCase(), capacity = t.match(/(\d{2,4})\s*(gb|g|tb)(?![a-z])/);
+    if (/手機殼|保護殼|保護貼|玻璃貼|鏡頭框|phone case|screen protector/.test(t)) return null;
+    const lego = t.match(/(?:lego|樂高)[^\d]{0,24}(\d{4,6})\b/);
+    if (lego) return 'lego:set:' + lego[1];
+    if (p.mainId === 'books') {
+        if (p.subId === 'comics' && !/漫畫|漫画|comic/.test(t)) return null;
+        const isbn = t.match(/(?:isbn[:： ]*)?(97[89][\d-]{10,16})/);
+        if (isbn) return 'book:isbn:' + isbn[1].replace(/-/g, '');
+        const quoted = t.match(/[《〈]([^》〉]+)[》〉]/);
+        const name = (quoted?.[1] ?? t.split(/…|\.\.\.|市售價|建議售價|新品原價|定價|原價|NT\$|TWD/i)[0]).replace(/[（(][^）)]*[）)]/g, '').replace(/二手|精裝|平裝|童書|繪本|四大名著|漫畫版|漫畫|硬殼/g, '').replace(/[^\p{L}\p{N}]/gu, '').replace(/0+(\d+)$/, '$1');
+        return name.length >= 2 ? 'book:title:' + name + (p.subId === 'comics' ? ':comics' : '') : null;
+    }
     const iphone = t.match(/iphone\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini)?/);
     if (iphone)
         return capacity ? 'iphone:' + iphone[1] + ':' + (iphone[2] ?? 'base').replace(/\s/g, '') + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
@@ -12,7 +23,7 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
     if (buds)
         return 'samsung:galaxy-buds:' + buds[1] + ':' + (buds[2] ?? 'base');
     const model = t.match(/\b[a-z][a-z0-9-]*\d[a-z0-9-]{3,}\b/g)?.find(x => !/^hdmi|^usb|^wifi|^bluetooth|^fullhd|^ddr|^twd|^ntd/.test(x));
-    return model ? p.mainId + ':' + p.subId + ':' + model + (/follow\s*me|移動式.*螢幕組/.test(t) ? ':followme-bundle' : '') : null;
+    return model ? p.mainId + ':' + p.subId + ':' + model.replace(/-/g, '') + (/follow\s*me|移動式.*螢幕組/.test(t) ? ':followme-bundle' : '') : null;
 }
 export const retailBinding = (p: DiscoveryProduct) => discoveryHash({ key: p.key, title: p.title, description: p.description.slice(0, 1200), identity: retailIdentity(p) });
 export type RetailReference = {
@@ -31,8 +42,8 @@ export type RetailReference = {
     sourcePeriod: string | null;
     checkedAt: string;
 };
-const manufacturerHosts: Record<string, RegExp> = { 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i };
-const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com'];
+const manufacturerHosts: Record<string, RegExp> = { 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
+const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw'];
 function originalUrl(value: unknown, kind: string, product: DiscoveryProduct) { if (typeof value !== 'string' || value.length > 1800)
     throw new DiscoveryError(400, 'RETAIL_INVALID_SOURCE'); let u: URL; try {
     u = new URL(value);
@@ -75,7 +86,10 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
         if (retailIdentity({ ...p, title: sourceProductTitle! }) !== identity || retailIdentity({ ...p, title: evidenceQuote! }) !== identity)
             throw new DiscoveryError(400, 'RETAIL_VARIANT_MISMATCH');
         const normalized = evidenceQuote!.normalize('NFKC').replace(/,/g, '');
-        const amounts = [...normalized.matchAll(/(?:建議售價|建議零售價|新品原價|原價|定價|一般售價|MSRP|RRP|regular price)\s*[:：]?\s*(?:NT\$?|NTD|TWD|新台幣|新臺幣|\$)\s*(\d+(?:\.\d{1,2})?)/gi)].map(x => Number(x[1]));
+        const label = priceType === 'MANUFACTURER_MSRP' ? '建議售價|建議零售價|定價|MSRP|RRP' : '建議售價|建議零售價|新品原價|原價|定價|一般售價|市售價|MSRP|RRP|regular price';
+        const amountPattern = new RegExp('(?:' + label + ')\\s*[:：]?\\s*(?:(?:NT\\$?|NTD|TWD|新台幣|新臺幣|\\$)\\s*(\\d+(?:\\.\\d{1,2})?)|(\\d+(?:\\.\\d{1,2})?)\\s*元)', 'gi');
+        const amounts = [...normalized.matchAll(amountPattern)].map(x => Number(x[1] ?? x[2]));
+        if (/人民幣|RMB|CNY|HKD|港幣|日圓|JPY|SGD|USD/i.test(normalized)) throw new DiscoveryError(400, 'RETAIL_INVALID_PRICE');
         if (!amounts.includes(Number(b.originalPrice)))
             throw new DiscoveryError(400, 'RETAIL_PRICE_NOT_IN_EVIDENCE');
         originalPrice = new Prisma.Decimal(b.originalPrice);

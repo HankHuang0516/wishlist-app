@@ -1,0 +1,71 @@
+{
+  "at": "2026-10-25T21:26:50.103185+00:00",
+  "purpose": "Correct stale target14 finalStoreArtifactMatch=false flags using concrete signed-source and published-byte evidence; preserve scores and unverified coverage deductions.",
+  "sourceArtifactBinding": {
+    "at": "2026-10-25T21:11:02.558817+00:00",
+    "kind": "golden14-final-artifact-source-binding",
+    "passed": true,
+    "sourceHead": "e6e488fcb34e45e097a80d93230b81986e68e470",
+    "meaning": "Exact reviewed map sources are bound to delivered signed38/20 packages and liveWeb820 runtime assets. This is source/artifact equivalence, not a new per-screen signed-Release UI run or iOS hardware recording.",
+    "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+    "clientTree": "265c175904706cc76ccf83516e484a50f7a58066",
+    "nativeArtifacts": {
+      "Android38": {
+        "buildId": "9f3c6cc7-3780-40f2-9f06-9412f0d89638",
+        "sha256": "e7a2f9e2f42b8b127245786203cc1f6add4f18204152796e7ee53717e222000f",
+        "source": "0a3674a8ba11a0b217b056c406a61ad6ceba2e68",
+        "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+        "receipt": "android38-signed-artifact-receipt.json",
+        "statusReceipt": "eas-android38-status-current.json",
+        "actualFileRehashed": true
+      },
+      "iOS20": {
+        "buildId": "2445d055-22a7-4a3d-b4fa-3b1ae70e8030",
+        "sha256": "c78f1bb7ba25c117ac18dfbc0d387d52f61951781a3c1319d22229f5af0aefa6",
+        "source": "0a3674a8ba11a0b217b056c406a61ad6ceba2e68",
+        "mobileTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+        "receipt": "ios20-signed-artifact-receipt.json",
+        "statusReceipt": "eas-ios20-status-current.json",
+        "actualFileRehashed": true
+      }
+    },
+    "qaMapSourceIdentity": "golden14-weighted-local-review-20261026.json.currentMapComponentIdentity",
+    "webRuntimeBinding": {
+      "evidence": "web820-all-runtime-chunks-audit-20261026.json",
+      "all102JsCssByteMatched": true
+    },
+    "androidActualPlayJsBinding": "android38-play-apk-verified.json",
+    "freshEveryScreenStoreReleaseUi": false,
+    "currentIosPhysicalRecording": false,
+    "scoreChanges": false
+  },
+  "webSupplement": {
+    "evidence": "web-map-motion-supplement-20261026.json",
+    "passed": true,
+    "scope": "Web desktop actual compiled client/MapLibre with bounded forwarding of live provider GET bytes;54responses all200 with byte hashes, no tile/image replacement. Direct-browser network failures retained separately.",
+    "normalDurationMs": 800,
+    "slowDurationMs": 3600,
+    "shared36Timeline": true,
+    "pauseResumeInterruptionReducedMotion": true,
+    "all36RealClicksAndWishAndListAndReference": true,
+    "extraDiscoveryReadsDuringMotion": 0,
+    "productionWrites": 0,
+    "cleanupRemaining": 0,
+    "settledScreenshot": "web-map-motion-audit-20261026-v7/map-1440-1-zh-TW-selected.png",
+    "transientOverviewNotCreditedAsSettledLayout": true
+  },
+  "nativeMotionSupplement": "Separate assigned-device supplemental runs are retained in QA evidence; they do not increase these scores. Original native hardware, accessibility and per-screen Release coverage limits remain.",
+  "ci": {
+    "previousMainFailure": 40230918784,
+    "fixPR": 208,
+    "fixHead": "e6e488fcb34e45e097a80d93230b81986e68e470",
+    "allThreePrChecksPassed": 40234219733,
+    "merged": "f6a345b2135c83d29cd08b0c9a579367b0582327",
+    "mainRun": 40234877135,
+    "mainStatus": "ALL_THREE_PASSED",
+    "mainObservedAt": "2026-10-25T21:27:05Z"
+  },
+  "scoreChanges": false,
+  "externalStoreReviewStillPending": true,
+  "goalComplete": false
+}

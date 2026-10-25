@@ -37,7 +37,11 @@
     "androidActualPlayJsBinding": "android38-play-apk-verified.json",
     "freshEveryScreenStoreReleaseUi": false,
     "currentIosPhysicalRecording": false,
-    "scoreChanges": false
+    "scoreChanges": false,
+    "postAuditTestOnlyDifference": {
+      "path": "client/src/pages/ChatPage.test.tsx",
+      "basis": "git diff e6e488fcb34e45e097a80d93230b81986e68e470 -- client mobile; no runtime client/mobile source changes"
+    }
   },
   "webSupplement": {
     "evidence": "web-map-motion-supplement-20261026.json",
@@ -67,5 +71,31 @@
   },
   "scoreChanges": false,
   "externalStoreReviewStillPending": true,
-  "goalComplete": false
+  "goalComplete": false,
+  "clientReadinessAudit": {
+    "earlierRun": 40236310199,
+    "failure": "Lost-ACK unit test could click Send before private pending-message recovery completed.",
+    "change": "Wait for observable enabled input and Send before the single click; original persistence/body/explicit-retry assertions retained.",
+    "runtimeApplicationCodeChanged": false
+  },
+  "androidMotionSupplement": {
+    "passed": true,
+    "sourceEvidence": "android-map-motion-0230-0550-result/result.json",
+    "scope": "Assigned Android emulator, exact reviewed QA App0230+separate signed test host0550. Not an Android physical-device or per-screen Play signed-Release UI claim.",
+    "cases": [
+      "36individual selections",
+      "reference original price and source",
+      "slow replay",
+      "pause/frozen visible native bounds",
+      "resume completion",
+      "normal replay completion",
+      "user mode-change interruption",
+      "actualOS reduce-motion disables replay",
+      "singlewishlistadd/remove",
+      "multiplewishlistconfirm",
+      "serverreadbackafterreentry"
+    ],
+    "osSettingRestored": true,
+    "scoreChanges": false
+  }
 }

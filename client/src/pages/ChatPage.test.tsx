@@ -324,7 +324,14 @@ describe('private chat web parity', () => {
   it('freezes uncertain text and retries the same body only after an explicit click', async () => {
     const base = api.getMockImplementation()!; let lost = true;
     api.mockImplementation(async (...args) => { if (args[1].endsWith('/messages') && args[2]?.method === 'POST' && lost) { lost = false; throw new Error('lost ACK'); } return base(...args); });
-    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: '合成待確認訊息' } }); fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const field = screen.getByRole('textbox', { name: /商品聊天訊息/ });
+    // History can settle before private pending-message recovery. Exercise the
+    // lost ACK only after the actual input and Send control are ready.
+    await waitFor(() => expect(field).toBeEnabled());
+    fireEvent.change(field, { target: { value: '合成待確認訊息' } });
+    const send = screen.getByRole('button', { name: '傳送訊息' });
+    await waitFor(() => expect(send).toBeEnabled()); fireEvent.click(send);
     await screen.findByText(/尚未確認訊息送出/); const body = data.get(key); expect(body).toBeTruthy(); expect(screen.getByRole('textbox', { name: /商品聊天訊息/ })).toBeDisabled(); expect(posts()).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '明確重試相同訊息' })); await screen.findByText('原訊息已確認送出。'); expect(posts().map(call => call[2].body)).toEqual([body, body]); expect(data.has(key)).toBe(false);
   });

@@ -114,7 +114,7 @@ export function useSourceInquiry(id: string) {
    // its full journal and never display untrusted exception/response text.
    if (currentScope.current === requestScope && running.current === ticket) {
     const storage = failure instanceof PendingStoreError;
-    setView(old => ({ ...old, scope: requestScope, ready: storageReady && !storage, error: text(storage ? 'storage' : failure instanceof ApiFailure && failure.status === 401 ? 'auth' : failure instanceof ApiFailure && failure.status === 429 ? 'limited' : 'failure') }));
+    setView(old => ({ ...old, scope: requestScope, ready: storageReady && !storage, error: text(failure instanceof ApiFailure && failure.code === 'INQUIRY_WEEKLY_LIMIT' ? 'weeklyLimit' : storage ? 'storage' : failure instanceof ApiFailure && failure.status === 401 ? 'auth' : failure instanceof ApiFailure && failure.status === 429 ? 'limited' : 'failure') }));
     if (failure instanceof ApiFailure && failure.retryAfterMs) { setRetryUntil(Date.now() + failure.retryAfterMs); setNow(Date.now()); }
    }
   } finally { clearTimeout(deadline); if (running.current === ticket) { running.current = null; if (currentScope.current === requestScope) setBusyScope(''); } }

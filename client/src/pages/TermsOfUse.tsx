@@ -21,6 +21,7 @@ export default function TermsOfUse() {
         return (
             <div className="container mx-auto px-4 py-8 pb-24">
                 <Header title="使用者條款 (Terms of Use)" />
+                <section className="mb-6 space-y-2"><h2 className="text-xl font-semibold">贊助、訂閱、行銷額度與代問</h2><p>方案依付款平台實際開放狀態提供。純贊助只有 NT$90 一檔，不包含尊榮或行銷權益。尊榮訂閱基準 NT$90／月，按月自動續訂，包含尊榮代問與每月 100 次行銷額度；行銷加值基準 US$1／10 次，不限期。其他地區以原付款平台顯示的金額為準。</p><p>未訂閱者每週一台灣時間 00:00 重新取得 3 次免費代問，不累積。明確授權的新一輪委託收件才計次；查看、更正同輪與同筆重試不重複計次。收件不保證已送達賣家、在售或成交。</p><p>請於原付款平台管理訂閱或申請退款。刪除 Wishlist 帳號不會取消平台訂閱；單次贊助不會轉為訂閱。權益須完成後端核實，付款結果不明時請查核原交易。</p></section>
                 <div className="prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. 同意條款</h2>
@@ -104,6 +105,7 @@ export default function TermsOfUse() {
         return (
             <div className="max-w-4xl mx-auto pb-8">
                 <Header title="Terms of Use" />
+                <section className="mb-6 space-y-2"><h2 className="text-xl font-semibold">Support, subscriptions, credits and inquiries</h2><p>Offers depend on availability through the payment platform. The only support option is NT$90, with no Premium or marketing benefits. Premium has a base price of NT$90/month, renews monthly and includes Premium inquiries and 100 marketing uses per month. A non-expiring 10-use marketing pack has a US$1 base price. Other regions use the price shown by the original platform.</p><p>Non-subscribers receive 3 free inquiries every Monday at 00:00 Taiwan time, without carryover. Accepting a newly authorized inquiry round counts once. Reads, corrections in the same round and exact retries do not count again. Acceptance does not guarantee seller delivery, availability or a transaction.</p><p>Manage subscriptions and request refunds through the original platform. Deleting your Wishlist account does not cancel platform subscriptions. One-time support never becomes a subscription. Benefits require server verification; verify the original transaction if its outcome is unknown.</p></section>
                 <div className="px-4 prose prose-slate max-w-none text-muji-secondary space-y-6">
                     <section>
                         <h2 className="text-xl font-semibold mb-3 text-muji-primary">1. Acceptance of Terms</h2>

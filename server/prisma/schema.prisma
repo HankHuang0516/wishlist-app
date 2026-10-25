@@ -49,6 +49,9 @@ model User {
   subscriptionStatus      String?   // 'ACTIVE', 'CANCELED', 'EXPIRED'
   subscriptionExpiresAt   DateTime?
   autoRenew               Boolean   @default(false)
+  billingAccountToken     String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inquiryWeekStart        DateTime?
+  inquiryFreeUsed         Int       @default(0)
 
   lastFeedbackAt  DateTime?
   aiUsageCount    Int          @default(0)
@@ -732,7 +735,29 @@ model Purchase {
   currency  String   @default("TWD")
   status    String   @default("COMPLETED")
   createdAt DateTime @default(now())
+  provider String?
+  providerReference String? @unique
+  productId String?
+  environment String?
+  accountBinding String?
+  expiresAt DateTime?
+  verifiedAt DateTime?
+  creditUnits Int @default(0)
+  creditRemaining Int @default(0)
+  verificationData Json?
+  creditReservations MarketingCreditReservation[]
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// A job can reserve a permanent credit once. FAILED jobs are refunded by the
+// allowance reconciliation under the owner lock; retries cannot double-debit.
+model MarketingCreditReservation {
+  jobId String @id @db.Uuid
+  purchaseId Int
+  refundedAt DateTime?
+  createdAt DateTime @default(now())
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  @@index([purchaseId])
 }
 
 // A durable, identity-free work queue survives User and media-row erasure.

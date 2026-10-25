@@ -7,6 +7,7 @@ import { getAiUsageInfo } from '../lib/usageService';
 import { ownProfileSelect } from '../lib/ownProfile';
 import { updateLegacyProfile } from './profileUpdateController';
 import { followUserId } from '../lib/followOperation';
+import { refreshBilling, verifiedPremium } from '../lib/billingService';
 
 // import { API_ERROR_CODES } from '../lib/errorCodes'; // Reverting to likely correct path if it exists, or checking list_dir result first.
 // Actually, let's wait for list_dir. But I can fix the content based on what I see.
@@ -25,11 +26,13 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         });
 
         if (!user) return res.status(404).json({ error: 'User not found', errorCode: API_ERROR_CODES.USER_NOT_FOUND });
+        await refreshBilling(userId);
+        const premium = await prisma.$transaction(tx => verifiedPremium(tx,userId));
 
         // Settings may see own profile, never password hashes, OTP/reset/email
         // bearer links or API keys. API-key management has its separate route.
         res.setHeader('Cache-Control', 'private, no-store');
-        res.json(user);
+        res.json({...user,isPremium:user.isPremium||premium});
     } catch (error) {
         console.error('Profile read unavailable; request and database details withheld');
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

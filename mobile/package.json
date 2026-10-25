@@ -16,10 +16,12 @@
     "@maplibre/maplibre-react-native": "^11.3.6",
     "@react-native-community/datetimepicker": "9.1.0",
     "expo": "~57.0.31",
+    "expo-application": "~57.0.3",
     "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.22",
     "expo-crypto": "~57.0.4",
     "expo-file-system": "~57.0.7",
+    "expo-iap": "6.3.0",
     "expo-image-manipulator": "~57.0.21",
     "expo-image-picker": "~57.0.20",
     "expo-location": "~57.0.22",
@@ -29,8 +31,7 @@
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0",
-    "expo-application": "~57.0.3"
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",

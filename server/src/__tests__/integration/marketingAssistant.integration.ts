@@ -109,8 +109,8 @@ describe('marketing four-image workflow / isolated PostgreSQL', () => {
             permanentCreditsRemaining: 0, paidPurchasesAvailable: false });
         const { listingId, mediaId } = await listingPhoto();
         const denied = await post('/jobs', { clientRequestId: randomUUID(), listingId, sourceMediaId: mediaId });
-        expect(denied.status).toBe(429); expect(denied.body.errorCode).toBe('MONTHLY_LIMIT');
-        expect(denied.body.error).toContain('3 次');
+        expect(denied.status).toBe(429); expect(denied.body.errorCode).toBe('MARKETING_CREDITS_EXHAUSTED');
+        expect(denied.body.error).toContain('額度');
     });
     it('allows exactly one free seven-day revision and keeps unchecked images', async () => {
         const { listingId, mediaId } = await listingPhoto();

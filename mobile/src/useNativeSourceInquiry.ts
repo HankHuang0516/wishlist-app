@@ -115,7 +115,7 @@ export function useNativeSourceInquiry(api:ReturnType<typeof createApi>,API_URL:
    // its full journal and never display untrusted exception/response text.
    if (currentScope.current === requestScope && running.current === ticket) {
     const storage = failure instanceof PendingStoreError;
-    setView(old => ({ ...old, scope: requestScope, ready: storageReady && !storage, error: text(storage ? 'storage' : failure instanceof ApiError && failure.status === 401 ? 'auth' : failure instanceof ApiError && failure.status === 429 ? 'limited' : 'failure') }));
+    setView(old => ({ ...old, scope: requestScope, ready: storageReady && !storage, error: text(failure instanceof ApiError && failure.code === 'INQUIRY_WEEKLY_LIMIT' ? 'weeklyLimit' : storage ? 'storage' : failure instanceof ApiError && failure.status === 401 ? 'auth' : failure instanceof ApiError && failure.status === 429 ? 'limited' : 'failure') }));
     if (failure instanceof ApiError && failure.retryAfterSeconds) { setRetryUntil(Date.now() + failure.retryAfterSeconds * 1000); setNow(Date.now()); }
    }
   } finally { clearTimeout(deadline); if (running.current === ticket) { running.current = null; if (currentScope.current === requestScope) setBusyScope(''); } }

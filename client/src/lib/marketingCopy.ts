@@ -1,6 +1,8 @@
 import { getUserLocale } from '../utils/localization';
 
 const english = {
+  '本期行銷額度與永久加值已用完，請到贊助與升級核對權益。': 'Your current marketing allowance and permanent credits are exhausted. Check Support and upgrade.',
+  '本期行銷額度與永久加值已用完，請到贊助與升級核對權益。原操作仍保留，可查核或取消。': 'Your marketing allowance and permanent credits are exhausted. Check Support and upgrade. The original operation is retained for verification or stopping.',
   '原確認回執已核對，商品畫面仍需讀取；不會再次套用。': 'The original approval receipt is verified. The listing still needs refreshing; approval will not be applied again.',
   '原套用結果仍待確認；保留原選圖與文案，不會再次套用。': 'The original approval is unconfirmed. Your selected images and copy are retained without applying again.',
   '原行銷排隊結果仍待查核；不會自動重送。': 'The original marketing request needs verification. It will not be resent automatically.',

@@ -65,6 +65,10 @@ export async function eraseAccountData(userId: number, authVersion: number, pass
                 await tx.crawlerLog.deleteMany({ where: { userId } });
                 await tx.follow.deleteMany({ where: { OR: [{ followerId: userId }, { followingId: userId }] } });
                 await tx.wishlist.deleteMany({ where: { userId } });
+                // A transaction tombstone prevents a deleted account's receipt
+                // from being claimed again. Erase encrypted bearer receipts and
+                // account binding; the retained financial row is detached below.
+                await tx.purchase.updateMany({where:{userId},data:{verificationData:Prisma.DbNull,accountBinding:null,creditRemaining:0}});
                 // Cascades erase own media, listings, participants, watches,
                 // blocks and request tombstones; nullable FK detaches ledger.
                 await tx.user.delete({ where: { id: userId } });

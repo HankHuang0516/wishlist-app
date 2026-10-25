@@ -146,9 +146,9 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
         {managementTab(item, now) === '已失效' && <Text style={s.muted}>此商品已失效；請先延長期限，再編輯或繼續刊登。</Text>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <Text style={s.muted}>分享連結仍可複製，但其他人只會看到「已停止刊登」。</Text>}
         {editing === item.id && <View style={s.editor}><Text style={s.subheading}>編輯商品資訊</Text>
-          <Text style={s.fieldLabel}>商品名稱</Text><TextInput accessibilityLabel="編輯商品名稱" value={title} onChangeText={setTitle} maxLength={100} style={s.input} />
-          <Text style={s.fieldLabel}>商品說明</Text><TextInput accessibilityLabel="編輯商品說明" value={description} onChangeText={setDescription} multiline scrollEnabled maxLength={3000} style={[s.input, s.description]} />
-          <Text style={s.fieldLabel}>售價（NT$，0 代表免費贈送）</Text><TextInput accessibilityLabel="編輯商品售價，新臺幣" value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={s.input} />
+          <Text style={s.fieldLabel}>商品名稱</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品名稱" value={title} onChangeText={setTitle} maxLength={100} style={s.input} />
+          <Text style={s.fieldLabel}>商品說明</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品說明" value={description} onChangeText={setDescription} multiline scrollEnabled maxLength={3000} style={[s.input, s.description]} />
+          <Text style={s.fieldLabel}>售價（NT$，0 代表免費贈送）</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品售價，新臺幣" value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={s.input} />
           <View style={s.actions}>{action('取消編輯', () => setEditing(null))}{action('儲存修改', () => save(item))}</View>
           <Text style={s.subheading}>額外選項</Text>
           {item.media.find(media => media.capturePurpose !== 'AI_MARKETING') && ['ACTIVE', 'RESERVED'].includes(item.status) &&

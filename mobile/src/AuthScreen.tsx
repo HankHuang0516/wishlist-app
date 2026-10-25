@@ -85,7 +85,7 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
     } finally { release(); if (active.current) setBusy(false); }
   }
   const input = (label: string, value: string, change: (value: string) => void, options: Partial<React.ComponentProps<typeof TextInput>> = {}) =>
-    <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} /></View>;
+    <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} /></View>;
   const button = (label: string, action: () => void, primary = false) => <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={action} style={[primary ? styles.button : styles.link, disabled && styles.disabled]}><Text style={primary ? styles.buttonText : styles.linkText}>{label}</Text></Pressable>;
   if ((mode === 'login' || mode === 'register') && !termsAccepted) return <View style={styles.flex}>{!!externalIssue?.trim() && <Text accessibilityRole="alert" style={styles.error}>{externalIssue.trim()}</Text>}<TermsAgreement apiUrl={apiUrl} onAccept={() => { setTermsAccepted(true); onTermsAccepted?.(); }} /></View>;
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>

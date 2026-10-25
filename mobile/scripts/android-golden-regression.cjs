@@ -9,6 +9,8 @@ const {seedUiuxHomeQa}=require('./seed-uiux-home-qa.cjs');
 const mobile=path.resolve(__dirname,'..'),[appLabel,hostLabel,phase]=process.argv.slice(2);
 qaLabel(appLabel);qaLabel(hostLabel);if(process.argv.length!==5||!['buyer','seller','logout','market','chat','photo','photo-recovery'].includes(phase))throw Error('Exact app/host labels and bounded buyer/seller/logout/market/chat/photo phase required');
 const isPhoto=['photo','photo-recovery'].includes(phase),recovery=phase==='photo-recovery';
+const requestedFontScale=process.env.WISHLIST_GOLDEN_FONT_SCALE;
+if(requestedFontScale!==undefined&&requestedFontScale!=='1.5')throw Error('Only the bounded enlarged-font scenario is supported');
 const serial=assignedSerial(process.env),database=process.env.TEST_DATABASE_URL;
 assertTestDatabase(database);if(database!==process.env.DATABASE_URL)throw Error('QA DB bindings must agree');
 const appBuild=path.join(mobile,'build','android-visual-qa-'+appLabel),hostBuild=path.join(mobile,'build','android-golden-tests-'+hostLabel);
@@ -21,7 +23,7 @@ for(const[k,v]of Object.entries(host.sourceHashes))if(hash(path.join(mobile,k))!
 for(const k of ['host','test'])if(hash(path.join(hostBuild,k+'.apk'))!==host.hashes[k])throw Error('Test APK changed');
 const evidence=path.join(mobile,'build','android-golden-regression-'+randomUUID());fs.mkdirSync(evidence,{mode:0o700});
 const report={kind:'actual-android-golden-regression',phase,appLabel,hostLabel,serial,package:app.package,apkSha256:app.apkSha256,passed:false,checkpoints:[],screenshots:[],storeDeliverable:false};
-const adbPath='/Users/hank/Library/Android/sdk/platform-tools/adb';let child,stopping=false,qa,broker,observer,brokerUsed=false,counterpartUsed=false,installedHost=false,installedTest=false,stage='preflight',ownedPhoto=null;const reverses=[],observedCalls=[];const photoRecovery={posts:0,lookups:0,checkpoint:false,dropped:false};let recoveryPath='',uploadObservation=Promise.resolve();
+const adbPath='/Users/hank/Library/Android/sdk/platform-tools/adb';let child,stopping=false,qa,broker,observer,brokerUsed=false,counterpartUsed=false,installedHost=false,installedTest=false,stage='preflight',ownedPhoto=null,originalFontScale=null,fontScaleChanged=false;const reverses=[],observedCalls=[];const photoRecovery={posts:0,lookups:0,checkpoint:false,dropped:false};let recoveryPath='',uploadObservation=Promise.resolve();
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;child?.kill('SIGTERM');});
 function adb(args,timeout=30000,cleanup=false){return new Promise((resolve,reject)=>{
  if(stopping&&!cleanup)return reject(Error('Interrupted'));
@@ -74,9 +76,14 @@ async function cleanupPhoto(){
 async function main(){
  for(const pkg of [host.package,host.package+'.test'])if((await adb(['shell','pm','list','packages','-u',pkg])).split(/\r?\n/).includes('package:'+pkg))throw Error('Test host already installed; preserve it');
  const installed=(await adb(['shell','pm','list','packages','-u',app.package])).split(/\r?\n/).includes('package:'+app.package);
- const owner=path.join(mobile,'..','android-golden-review-'+appLabel.slice(-4)+'-current.json');
- if(installed){const old=JSON.parse(fs.readFileSync(owner));if(old.serial!==serial||old.package!==app.package||old.apkSha256!==app.apkSha256||old.productionWrites!==0)throw Error('Existing QA app not owned by this workflow');}
- else {await adb(['install',path.join(appBuild,'app.apk')],90000);fs.writeFileSync(owner,JSON.stringify({serial,package:app.package,apkSha256:app.apkSha256,productionWrites:0,purpose:'isolated Golden regression'}));}
+ const ownerDirectory=path.join(mobile,'..','android-golden-owners',appLabel),owner=path.join(ownerDirectory,serial+'.json');
+ const legacyOwner=path.join(mobile,'..','android-golden-review-'+appLabel.slice(-4)+'-current.json');
+ const validateOwner=record=>{if(record.serial!==serial||record.package!==app.package||record.apkSha256!==app.apkSha256||record.productionWrites!==0)throw Error('Existing QA app not owned by this workflow');};
+ let priorOwner=fs.existsSync(owner)?JSON.parse(fs.readFileSync(owner)):null;
+ if(priorOwner)validateOwner(priorOwner);
+ if(installed){if(!priorOwner){priorOwner=JSON.parse(fs.readFileSync(legacyOwner));validateOwner(priorOwner);}}
+ else await adb(['install',path.join(appBuild,'app.apk')],90000);
+ if(!fs.existsSync(owner)){fs.mkdirSync(ownerDirectory,{recursive:true,mode:0o700});fs.writeFileSync(owner,JSON.stringify(priorOwner??{serial,package:app.package,apkSha256:app.apkSha256,productionWrites:0,purpose:'isolated Golden regression'}),{flag:'wx',mode:0o600});}
  const apkPath=(await adb(['shell','pm','path',app.package])).trim();
  if(!/^package:\/data\/app\/[A-Za-z0-9_./+=~-]+\/base\.apk$/.test(apkPath))throw Error('Exact installed QA APK path unavailable');
  report.installedApkSha256=(await adb(['shell','sha256sum',apkPath.slice('package:'.length)])).trim().split(/\s+/)[0];
@@ -148,7 +155,14 @@ async function main(){
  await reverse(18889,apiPort);await reverse(broker.address().port);
  stage='test-host-install';await adb(['install',path.join(hostBuild,'host.apk')]);installedHost=true;await adb(['install',path.join(hostBuild,'test.apk')]);installedTest=true;
  // Terminate only this workflow's exact proven QA package; retain all app data.
- await adb(['shell','am','force-stop',app.package]);stage='native-instrumentation';
+ await adb(['shell','am','force-stop',app.package]);
+ originalFontScale=(await adb(['shell','settings','get','system','font_scale'])).trim();
+ report.fontScaleBefore=originalFontScale;
+ if(!/^(null|[0-9]+(?:\.[0-9]+)?)$/.test(originalFontScale))throw Error('Font-scale metadata unavailable');
+ if(requestedFontScale&&originalFontScale!==requestedFontScale){fontScaleChanged=true;await adb(['shell','settings','put','system','font_scale',requestedFontScale]);}
+ report.fontScale=(await adb(['shell','settings','get','system','font_scale'])).trim();
+ if(requestedFontScale&&report.fontScale!==requestedFontScale)throw Error('Enlarged-font setup failed');
+ stage='native-instrumentation';
  const output=await adb(['shell','am','instrument','-w','-e','class','com.hankhuang.wishlistgoldenqa.MarketplaceGoldenTest#approvedMarketplaceRegression','-e','phase',phase,'-e','inputPort',String(broker.address().port),host.package+'.test/androidx.test.runner.AndroidJUnitRunner'],240000);
  let safeOutput=output;
  for(const fixtureActor of Object.values(qa.actors))for(const value of [fixtureActor.email,fixtureActor.phoneNumber,fixtureActor.password])if(typeof value==='string'&&value.length>0)safeOutput=safeOutput.split(value).join('[synthetic credential redacted]');
@@ -184,13 +198,14 @@ async function main(){
    const local=path.join(evidence,'captures');try{await adb(['pull','/sdcard/Android/data/'+host.package+'/files/golden-'+phase,local],15000,true);report.screenshots=fs.readdirSync(local).filter(n=>n.endsWith('.png'));}catch{report.captureCopyIncomplete=true;}
    try{await adb(['shell','am','force-stop',host.package+'.test'],10000,true);await adb(['shell','am','force-stop',app.package],10000,true);}catch{report.nativeStopIncomplete=true;}
   }
+  if(fontScaleChanged)try{const actual=(await adb(['shell','settings','get','system','font_scale'],10000,true)).trim();if(actual!==requestedFontScale)throw Error('Font scale changed outside this test; preserve it');await adb(['shell','settings',originalFontScale==='null'?'delete':'put','system','font_scale',...(originalFontScale==='null'?[]:[originalFontScale])],10000,true);report.fontScaleAfterRestore=(await adb(['shell','settings','get','system','font_scale'],10000,true)).trim();report.fontScaleRestored=report.fontScaleAfterRestore===originalFontScale||(originalFontScale!=='null'&&report.fontScaleAfterRestore!=='null'&&Number(report.fontScaleAfterRestore)===Number(originalFontScale));if(!report.fontScaleRestored)throw Error('Font restoration not confirmed');}catch{report.fontScaleCleanupIncomplete=true;}
   for(const endpoint of reverses.reverse())try{await adb(['reverse','--remove',endpoint],10000,true);}catch{report.reverseCleanupIncomplete=true;}
   if(broker)await new Promise(resolve=>{broker.close(resolve);broker.closeAllConnections();});
   if(observer)await new Promise(resolve=>{observer.close(resolve);observer.closeAllConnections();});
   if(ownedPhoto)try{await cleanupPhoto();}catch{report.photoFixtureCleanupIncomplete=true;}
   if(qa)try{report.fixtureCleanup=await qa.stop();}catch{report.fixtureCleanupFailed=true;}
   for(const [pkg,owned]of [[host.package+'.test',installedTest],[host.package,installedHost]])if(owned)try{await adb(['uninstall',pkg],20000,true);}catch{report.testHostCleanupIncomplete=true;}
-  report.interrupted=stopping;if(stopping||report.photoFixtureCleanupIncomplete||report.captureCopyIncomplete||report.reverseCleanupIncomplete||report.fixtureCleanupFailed||report.nativeStopIncomplete||report.testHostCleanupIncomplete)report.passed=false;
+  report.interrupted=stopping;if(stopping||report.fontScaleCleanupIncomplete||report.photoFixtureCleanupIncomplete||report.captureCopyIncomplete||report.reverseCleanupIncomplete||report.fixtureCleanupFailed||report.nativeStopIncomplete||report.testHostCleanupIncomplete)report.passed=false;
   fs.writeFileSync(path.join(evidence,'result.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});console.log(JSON.stringify({kind:report.kind,passed:report.passed,stage,phase,evidence,checkpoints:report.checkpoints,failure:report.failure,cleanup:report.fixtureCleanup}));if(!report.passed)process.exitCode=1;
  }
 })();

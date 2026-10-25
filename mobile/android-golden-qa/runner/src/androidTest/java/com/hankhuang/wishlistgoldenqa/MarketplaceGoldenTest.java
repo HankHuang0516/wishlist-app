@@ -10,11 +10,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.*;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.FileOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -53,13 +55,20 @@ public class MarketplaceGoldenTest {
     private void click(String label) {
         Rect prior=null;int stable=0;long end=SystemClock.elapsedRealtime()+10000;
         while(SystemClock.elapsedRealtime()<end){
-            foreground();UiObject2 found=await(label);
+            foreground();UiObject2 found;Rect bounds;
+            try {
+            found=await(label);
             for(int depth=0;!found.isClickable()&&depth<5;depth++){
                 found=found.getParent();assertNotNull("Expected actionable ancestor at "+stage,found);
             }
             assertTrue("Expected clickable control at "+stage,found.isClickable());
             assertTrue("Expected enabled control at "+stage,found.isEnabled());
-            Rect bounds=new Rect(found.getVisibleBounds());
+            bounds=new Rect(found.getVisibleBounds());
+            } catch(StaleObjectException refreshedTree) {
+                // A modal closing or list layout can replace native nodes.
+                // Re-resolve only before input; never replay an issued click.
+                stable=0;prior=null;SystemClock.sleep(100);continue;
+            }
             stable=!bounds.isEmpty()&&bounds.equals(prior)?stable+1:0;prior=bounds;
             // Scroll/fling can keep a CSS/accessibility-visible control moving.
             // Wait for its actual native bounds; never retry a submitted action.
@@ -68,14 +77,30 @@ public class MarketplaceGoldenTest {
         }
         throw new AssertionError("Unstable click target at "+stage);
     }
+    private void scrollForwardOnPadding() {
+        foreground();UiObject2 form=device.findObject(By.clazz("android.widget.ScrollView"));assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
+        assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
+        assertTrue("Padding swipe must be delivered",device.swipe(area.left+12,area.bottom-32,area.left+12,area.top+48,35));
+        device.waitForIdle(1000);SystemClock.sleep(100);
+    }
     private void reveal(String label) throws Exception {
         for (int attempt=0; attempt<10 && !has(label); attempt++) {
             foreground();
-            UiScrollable view = new UiScrollable(new UiSelector().scrollable(true));
-            assertTrue("Expected scroll container at " + stage, view.exists());
-            view.scrollForward(35); device.waitForIdle(1000);
+            scrollForwardOnPadding();
         }
         await(label);
+    }
+    private void revealBackwards(String label) throws Exception {
+        for(int attempt=0;attempt<10;attempt++){
+            UiObject2 match=node(label);
+            if(match!=null&&match.getVisibleBounds().height()>=44)return;
+            foreground();UiObject2 form=device.findObject(By.clazz("android.widget.ScrollView"));
+            assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
+            assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
+            assertTrue("Padding swipe must be delivered",device.swipe(area.left+12,area.top+48,area.left+12,area.bottom-32,35));
+            device.waitForIdle(1000);
+        }
+        assertTrue("Backward-revealed control must be reachable",await(label).getVisibleBounds().height()>=44);
     }
     private void capture(String name) throws Exception {
         foreground();
@@ -100,6 +125,35 @@ public class MarketplaceGoldenTest {
         for(int i=0;i<node.getChildCount();i++)if(passwordIsSecure(node.getChild(i),label))return true;
         return false;
     }
+    private void clearLoginForDiagnostic() throws Exception {
+        if(loggedIn||!credentialsEntered||!stage.equals("login-submit"))return;
+        foreground();UiScrollable form=new UiScrollable(new UiSelector().scrollable(true));
+        if(!form.scrollIntoView(new UiSelector().description("手機號碼或 Email")))return;
+        UiObject2 identifier=device.findObject(By.desc("手機號碼或 Email"));
+        if(identifier==null||!identifier.getClassName().equals("android.widget.EditText"))return;
+        identifier.setText("");String identifierValue=identifier.getText();if(identifierValue!=null&&!identifierValue.isEmpty()&&!identifierValue.equals("手機號碼或 Email"))return;
+        if(!form.scrollIntoView(new UiSelector().description("密碼")))return;
+        UiObject2 password=device.findObject(By.desc("密碼"));
+        if(password==null||!passwordIsSecure(InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow(),"密碼"))return;
+        password.setText("");String passwordValue=password.getText();if((passwordValue!=null&&!passwordValue.isEmpty()&&!passwordValue.equals("密碼"))||hasFilledPassword(InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow()))return;
+        credentialsEntered=false;
+        form.scrollToBeginning(10);capture("login-layout-cleared-top");
+        form.scrollToEnd(10);capture("login-layout-cleared-bottom");
+    }
+    private void loginStructure(AccessibilityNodeInfo node,JSONArray output) throws Exception {
+        if(node==null||output.length()>=100)return;
+        String kind=String.valueOf(node.getClassName()),desc=String.valueOf(node.getContentDescription());
+        if(target.contentEquals(node.getPackageName()==null?"":node.getPackageName())&&(kind.equals("android.widget.Button")||kind.equals("android.widget.ScrollView")||desc.equals("手機號碼或 Email")||desc.equals("密碼"))){
+            Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+            // No field text, arbitrary labels, IDs, or full pre-clear hierarchy.
+            output.put(new JSONObject().put("kind",kind).put("exactLoginLabel",desc.equals("登入")).put("busyLabel",desc.equals("確認中…")).put("identifierField",desc.equals("手機號碼或 Email")).put("passwordField",desc.equals("密碼")).put("visible",node.isVisibleToUser()).put("clickable",node.isClickable()).put("enabled",node.isEnabled()).put("focused",node.isFocused()).put("scrollable",node.isScrollable()).put("bounds",bounds.toShortString()));
+        }
+        for(int i=0;i<node.getChildCount();i++)loginStructure(node.getChild(i),output);
+    }
+    private void saveLoginStructure() throws Exception {
+        if(loggedIn||!stage.equals("login-submit"))return;foreground();JSONArray rows=new JSONArray();loginStructure(InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow(),rows);
+        try(FileOutputStream output=new FileOutputStream(new File(evidence,"login-structure-no-values.json"))){output.write(rows.toString().getBytes(StandardCharsets.UTF_8));}
+    }
     private void login() throws Exception {
         Bundle args=InstrumentationRegistry.getArguments();
         String port=args.getString("inputPort","");
@@ -122,6 +176,7 @@ public class MarketplaceGoldenTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         InstrumentationRegistry.getInstrumentation().getContext().startActivity(launch);
         checkpoint("synthetic-notice-and-login");
+        assertTrue("Exact QA app must finish opening before inspection",device.wait(Until.hasObject(By.pkg(target)),15000));
         device.waitForIdle(1500);capture("startup-before-credentials");
         // Only this isolated synthetic adult fixture. Never opens external policy links.
         long end=SystemClock.elapsedRealtime()+45000;
@@ -153,37 +208,50 @@ public class MarketplaceGoldenTest {
             if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD)keyboardVisible=true;
         if(keyboardVisible)device.pressBack();
         device.waitForIdle(1000);
-        checkpoint("login-submit");reveal("登入"); click("登入"); await("我的");
+        checkpoint("login-submit");
+        // The heading has the same text as the submit button. With larger fonts
+        // it remains visible while the actual button needs scrolling.
+        UiObject2 submit=null;
+        for(int attempt=0;attempt<10;attempt++){
+            foreground();submit=device.findObject(By.desc("登入").clickable(true));
+            if(submit!=null&&submit.getVisibleBounds().height()>=44)break;
+            // At enlarged text the centered swipe starts inside the password
+            // field. Use the form's visible padding so the field cannot consume it.
+            scrollForwardOnPadding();
+        }
+        assertNotNull("Login action must become visible",submit);
+        assertTrue("Login action must have a reachable tap area",submit.getVisibleBounds().height()>=44);
+        click("登入"); await("我的");
         assertFalse("Credential form remains visible",has("手機號碼或 Email"));
         loggedIn=true; checkpoint("logged-in");
     }
     private void buyer() throws Exception {
         checkpoint("wish-card-and-editor"); click("願望");
-        await("查看清單");click("查看清單");await("尋找符合商品");capture("golden-01-wish-cards");
-        click("新增願望");await("照片辨識");await("手動輸入");capture("golden-02-photo-form");
+        reveal("查看清單");click("查看清單");capture("golden-01-wish-header");reveal("尋找符合商品");capture("golden-01-wish-cards");
+        new UiScrollable(new UiSelector().scrollable(true)).scrollToBeginning(10);reveal("新增願望");click("新增願望");await("照片辨識");await("手動輸入");capture("golden-02-photo-form");
         click("手動輸入");
         long modeEnd=SystemClock.elapsedRealtime()+10000;
         while(SystemClock.elapsedRealtime()<modeEnd && (!await("手動輸入").isSelected() || has("從相簿選擇願望照片")))SystemClock.sleep(100);
         assertTrue("Manual tab must be selected",await("手動輸入").isSelected());
         assertFalse("Manual mode must hide photo controls",has("從相簿選擇願望照片"));
-        await("願望名稱");await("最高預算");await("儲存");
+        reveal("願望名稱");reveal("最高預算");await("儲存");
         reveal("手動輸入將儲存你填寫的名稱、預算與選填資訊，不會上傳照片或啟動 AI 辨識。");
         UiScrollable manualScroll=new UiScrollable(new UiSelector().scrollable(true));manualScroll.scrollToBeginning(10);
         assertTrue("Close stays fully reachable",await("關閉編輯").getVisibleBounds().height()>=44);
         capture("golden-02-manual-form");
         checkpoint("manual-wish-persistence");
-        await("願望名稱").setText("Golden Manual Mug");await("最高預算").setText("42.5");
+        reveal("願望名稱");await("願望名稱").setText("Golden Manual Mug");reveal("最高預算");await("最高預算").setText("42.5");
         click("儲存");assertTrue("Saved editor must close",device.wait(Until.gone(By.desc("關閉編輯")),15000));
-        checkpoint("manual-wish-created");reveal("Golden Manual Mug");checkpoint("manual-wish-more");click("Golden Manual Mug的更多操作");await("編輯願望");checkpoint("manual-wish-edit");click("編輯願望");
+        checkpoint("manual-wish-created");reveal("Golden Manual Mug");checkpoint("manual-wish-more");wishMenu("Golden Manual Mug");await("編輯願望");checkpoint("manual-wish-edit");click("編輯願望");
         await("願望名稱").setText("Golden Edited Mug");click("儲存");
         assertTrue("Edited wish must return to list",device.wait(Until.gone(By.desc("關閉編輯")),15000));
         reveal("Golden Edited Mug");capture("golden-01-edited-wish");
-        click("Golden Edited Mug的更多操作");click("隱藏願望");await("最高預算 TWD 42.5 · 已隱藏");
-        click("Golden Edited Mug的更多操作");click("取消隱藏");await("最高預算 TWD 42.5");
-        click("Golden Edited Mug的更多操作");click("標記完成");await("最高預算 TWD 42.5 · 已完成");
-        click("Golden Edited Mug的更多操作");click("取消完成");await("最高預算 TWD 42.5");
-        checkpoint("security-and-deletion-preview");click("我的");click("帳號安全");
-        await("更改密碼");await("登出所有裝置");capture("golden-06-security-directory");
+        wishMenu("Golden Edited Mug");click("隱藏願望");reveal("最高預算 TWD 42.5 · 已隱藏");
+        wishMenu("Golden Edited Mug");click("取消隱藏");reveal("最高預算 TWD 42.5");
+        wishMenu("Golden Edited Mug");click("標記完成");reveal("最高預算 TWD 42.5 · 已完成");
+        wishMenu("Golden Edited Mug");click("取消完成");reveal("最高預算 TWD 42.5");
+        checkpoint("security-and-deletion-preview");click("我的");reveal("帳號安全");click("帳號安全");
+        reveal("更改密碼");reveal("登出所有裝置");capture("golden-06-security-directory");
         reveal("刪除帳號");click("刪除帳號");await("刪除影響盤點");
         reveal("查看完整資料盤點（32項）");capture("golden-10-deletion-impact");
         reveal("永久刪除本人帳號");UiObject2 deletion=await("永久刪除本人帳號");
@@ -191,6 +259,10 @@ public class MarketplaceGoldenTest {
         assertFalse("Deletion requires password and exact confirmation",deletion.isEnabled());
         click("返回，不建立刪除操作");
         checkpoint("buyer-checks-complete");
+    }
+    private void wishMenu(String title) throws Exception {
+        new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(10);
+        device.waitForIdle(1000);reveal(title+"的更多操作");click(title+"的更多操作");
     }
     private void seller() throws Exception {
         checkpoint("management-compact-card");click("我的");click("我的商品 · 閱覽與管理");
@@ -206,8 +278,13 @@ public class MarketplaceGoldenTest {
     }
     private void market() throws Exception {
         checkpoint("popularity-real-like");click("探索");await("切換清單");click("切換清單");
+        checkpoint("map-data-explanation");click("地圖與資料說明");await("關閉地圖與資料說明");
+        reveal("商品地區示意，不顯示使用者即時位置。站內商品須由賣家手動同意顯示，一小時後停止；來源圖釘是公開地區示意。");
+        assertTrue("Explanation close remains reachable",await("關閉地圖與資料說明").getVisibleBounds().height()>=44);capture("golden-13-map-data-explanation");click("關閉地圖與資料說明");
+        assertTrue("Map explanation must finish dismissing before list input",device.wait(Until.gone(By.desc("關閉地圖與資料說明")),5000));
+        checkpoint("popularity-real-like");
         String mug="二手深藍色陶瓷馬克杯，NT$ 50，新北市板橋區";
-        reveal(mug);click(mug);await("商品詳情");checkpoint("popularity-detail");
+        reveal(mug);checkpoint("popularity-open-listing");click(mug);await("商品詳情");checkpoint("popularity-detail");
         reveal("0 人喜歡，喜歡此商品，僅公開人數");await("0 人詢問中");
         click("0 人喜歡，喜歡此商品，僅公開人數");await("1 人喜歡，取消喜歡此商品");
         capture("golden-13-actual-like");checkpoint("popularity-explanation");click("關於人氣數據");await("詢問中");await("喜歡");
@@ -220,10 +297,10 @@ public class MarketplaceGoldenTest {
         await("販售中");await("追蹤");
         reveal("驗證電子郵件不代表身分認證或交易保證。");capture("golden-12-storefront");
         // Scroll to the header rather than tapping an off-screen control.
-        UiScrollable storeScroll=new UiScrollable(new UiSelector().scrollable(true));storeScroll.scrollToBeginning(10);
-        click("追蹤");await("取消追蹤");
+        revealBackwards("追蹤");
+        checkpoint("storefront-follow");capture("golden-12-before-follow");click("追蹤");checkpoint("storefront-follow-requested");await("取消追蹤");capture("golden-12-followed");
         if(has("清理已確認的原操作"))click("清理已確認的原操作");
-        reveal("關於");click("關於");reveal("尚未提供交易評價功能。");capture("golden-12-trust-info");
+        checkpoint("storefront-about");revealBackwards("關於");click("關於");reveal("尚未提供交易評價功能。");capture("golden-12-trust-info");
         assertFalse("No invented rating badges",has("5.0"));
         UiScrollable aboutScroll=new UiScrollable(new UiSelector().scrollable(true));aboutScroll.scrollToBeginning(10);
         click("返回");await("商品詳情");
@@ -324,6 +401,8 @@ public class MarketplaceGoldenTest {
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
         try { login(); if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
         catch(Throwable failure){
+            try{saveLoginStructure();}catch(Throwable ignored){}
+            try{clearLoginForDiagnostic();}catch(Throwable ignored){}
             if(loggedIn||!credentialsEntered)try{capture("failed-"+stage);}catch(Throwable ignored){}
             String reason=failure instanceof AssertionError?String.valueOf(failure.getMessage()):"withheld";
             if(!reason.matches("[A-Za-z0-9 .:;_()<>?=/'-]{1,300}"))reason="withheld";

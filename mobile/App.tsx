@@ -230,7 +230,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
 
   return <ProductInterestProvider read={api} apiUrl={apiUrl} userId={user.id}><SafeAreaView style={styles.screen}>
     <View style={styles.header}>
-      <View style={styles.brandLockup}><View style={styles.appMark}><Ionicons name="sparkles" color={iosColors.white} size={17} /></View><View><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.eyebrow}>願望市集</Text></View></View>
+      <View style={styles.brandLockup}><View style={styles.appMark}><Ionicons name="sparkles" color={iosColors.white} size={17} /></View><View style={styles.brandWords}><Text numberOfLines={1} style={styles.brand}>Wishlist.ai</Text><Text style={styles.eyebrow}>願望市集</Text></View></View>
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
@@ -255,8 +255,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: iosSpacing.md, backgroundColor: iosColors.background },
   login: { padding: 28, paddingTop: 64, gap: 20 }, content: { padding: 24, gap: 20 },
-  header: { minHeight: 60, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm },
+  header: { minHeight: 60, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.xs, flexDirection: 'row', flexWrap: 'wrap', columnGap: iosSpacing.sm, rowGap: iosSpacing.xxs, alignItems: 'center', justifyContent: 'space-between' },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, flexShrink: 1, minWidth: 0 },
+  brandWords: { flexShrink: 1, minWidth: 0 },
   appMark: { width: 34, height: 34, borderRadius: iosRadius.small, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' },
   brand: { ...iosType.headline, color: iosColors.label }, title: { ...iosType.largeTitle, color: iosColors.label },
   eyebrow: { ...iosType.caption, letterSpacing: 0.4, color: iosColors.secondaryLabel },

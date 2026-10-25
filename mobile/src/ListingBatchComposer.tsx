@@ -402,7 +402,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const input = (value: string, label: string, onChangeText: (text: string) => void, numeric = false, multiline = false, targetKey?: string) =>
     <View style={s.inputGroup} onLayout={event => { if (targetKey && !/:(?:brand|price)$/.test(targetKey)) offsets.current[targetKey] = event.nativeEvent.layout.y; }}>
       <Text style={s.fieldLabel}>{label}</Text>
-      <TextInput accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={value} onChangeText={onChangeText} editable={!busy && !pending}
+      <TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={value} onChangeText={onChangeText} editable={!busy && !pending}
         keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline}
         style={[s.input, multiline && s.multiline, highlightKey === targetKey && s.highlight]} />
     </View>;

@@ -16,7 +16,7 @@ const localApiUrl = 'http://127.0.0.1:18889';
 const packageName = ORIGINAL_PACKAGE + '.visualqa' + label;
 const output = path.join(mobile, 'build', 'android-visual-qa-' + label);
 const disk = fs.statfsSync(mobile);
-if (disk.bavail * disk.bsize < 15 * 1024 ** 3) throw new Error('Visual QA build requires at least 15 GiB free');
+if (disk.bavail * disk.bsize < 23 * 1024 ** 3) throw new Error('Visual QA build requires the20GiB system reserve plus3GiB job budget');
 const java = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
 const sdk = '/Users/hank/Library/Android/sdk';
 const aapt = path.join(sdk, 'build-tools/36.0.0/aapt2');

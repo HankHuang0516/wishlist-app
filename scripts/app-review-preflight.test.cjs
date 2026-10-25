@@ -76,7 +76,7 @@ test('checks the actual completed review attachment, exact inspected video and n
 });
 
 const {assertApprovedHistoricalRecording}=require('./app-review-preflight.cjs');
-test('only the explicitly approved19 artifact can reuse accepted historical physical footage with honest notes',()=>{
+test('original19 human approval stays exact and requires honest historical footage disclosure',()=>{
  const scope={versionId:'00d4ab78-c004-4d89-a537-2399e54ae16f',buildId:'496d770a-b640-434b-a887-cdceb1233459',buildNumber:'19',nativeGitTree:'b699abd83d9c6c0ead7800bb4931a53eab87b60e',artifactSha256:'b9a86bc946ff69c0a471c561b47242aebb2b7f794bb4e200b9983e4732765baf'};
  const {receipt:base,age}=remediationFixture();
  const receipt={...base,...scope,mode:'approved-historical-recording',recordedVersion:'2.0.16',currentBuildPhysicalRecording:false,disclosureText:'This is the previously accepted2.0.16 physical footage, not a recording of19.',videoAttachment:{id:'attachment',fileName:'historical.mp4'}};
@@ -153,3 +153,29 @@ for(const [name,change] of [
  ['duplicate diagnostic',s=>{s.report.checks.push({...s.report.checks[0]});s.report.summary={errors:2,blocking:2};}],
  ['missing checks',s=>delete s.report.checks],['zero-error report but wrong actual item',s=>{s.report.checks=[];s.report.summary={errors:0,blocking:0};s.submission.data.relationships.items.data=[];}],
 ])test('prepared validation fails closed: '+name,()=>{const s=preparedValidation();change(s);assert.throws(()=>validatePrepared(s));});
+
+function sameRelease20() {
+ const original={versionId:'00d4ab78-c004-4d89-a537-2399e54ae16f',buildId:'496d770a-b640-434b-a887-cdceb1233459',buildNumber:'19',nativeGitTree:'b699abd83d9c6c0ead7800bb4931a53eab87b60e',artifactSha256:'b9a86bc946ff69c0a471c561b47242aebb2b7f794bb4e200b9983e4732765baf'};
+ const native={versionId:original.versionId,buildId:'8967dbcb-09b2-421a-8497-df5df0a30945',buildNumber:'20',nativeGitTree:'54d40389cb885b92a318ff4c05f0ef7b9a242cbc',artifactSha256:'c78f1bb7ba25c117ac18dfbc0d387d52f61951781a3c1319d22229f5af0aefa6'};
+ const {receipt:base,age}=remediationFixture();
+ const receipt={...base,...native,mode:'approved-historical-recording',recordedVersion:'2.0.16',currentBuildPhysicalRecording:false,authorizationBasis:'same-2.0.17-release-original19-approval',originalApprovalBuildNumber:'19',disclosureText:'This is the previously accepted2.0.16 physical footage, not a recording of20.',videoAttachment:{id:'attachment',fileName:'historical.mp4'}};
+ const approval={...original,approved:true,questionRef:'call_958c08f13f2e4d74ac306241a9540c2f',humanAnswer:'同意沿用並如實揭露，完成其他檢查後送審',scope:'This release only; historical physical footage is not current-build hardware verification; all other release gates stay required'};
+ return {receipt,native,approval,age,prior:{versionString:'2.0.16',state:'READY_FOR_SALE',buildId:'a79db7d4-f26a-475e-9ba3-986a9e5e4e30'}};
+}
+const verifySameRelease=s=>assertApprovedHistoricalRecording(s.receipt,s.native,s.age,s.approval,s.prior,s.receipt.disclosureText);
+test('same2.0.17 release20 binds its actual new binary and explicit disclosure without rewriting original19 human approval',()=>assert.doesNotThrow(()=>verifySameRelease(sameRelease20())));
+for(const [name,change] of [
+ ['new release',s=>{s.native.versionId='other';s.receipt.versionId='other';}],
+ ['future build',s=>{s.native.buildNumber='21';s.receipt.buildNumber='21';}],
+ ['different20 binary',s=>s.native.artifactSha256='another'],
+ ['different20 source',s=>s.receipt.nativeGitTree='another'],
+ ['fabricated new20 approval',s=>Object.assign(s.approval,s.native)],
+ ['missing original human answer',s=>delete s.approval.humanAnswer],
+ ['changed original authorization',s=>s.approval.humanAnswer='unrelated'],
+ ['missing release scope',s=>delete s.approval.scope],
+ ['missing explicit inherited basis',s=>delete s.receipt.authorizationBasis],
+ ['missing original approved build',s=>delete s.receipt.originalApprovalBuildNumber],
+ ['false current physical claim',s=>s.receipt.currentBuildPhysicalRecording=true],
+ ['wrong disclosed build',s=>s.receipt.disclosureText='This is the previously accepted2.0.16 physical footage, not a recording of19.'],
+ ['current check missing',s=>s.receipt.checks.mapStop=false],
+])test('same-release historical reuse blocks: '+name,()=>{const s=sameRelease20();change(s);assert.throws(()=>verifySameRelease(s));});

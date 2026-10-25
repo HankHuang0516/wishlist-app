@@ -70,3 +70,15 @@ is removed/recreated and no submission is sent by validation. The native,
 physical-recording approval, attachment, App Privacy and disabled-checkout
 checks remain required.73 focused gate tests pass; no new physical-device
 recording or build20 historical-footage approval is implied.
+
+
+Hank's existing answer,「同意沿用並如實揭露，完成其他檢查後送審」,
+authorizes historical footage for this2.0.17 release. Build20 is the correction
+within the same version/draft, not a new release or new footage. The original19
+human approval receipt is preserved byte-for-byte. A separate20 remediation
+receipt records the inherited authorization basis and binds the actual20 build
+ID, source tree and IPA hash. Its notes explicitly say the footage is2.0.16,
+not20; current source-matched regressions and attachment/privacy/business gates
+still apply. Future versions/builds are not covered. This is an interpretation
+of the already granted same-release authorization, not a claim that Hank gave a
+new20-specific answer.87 focused gate tests cover these boundaries.

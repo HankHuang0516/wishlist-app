@@ -251,7 +251,13 @@ public class MarketplaceGoldenTest {
         wishMenu("Golden Edited Mug");click("取消隱藏");reveal("最高預算 TWD 42.5");
         wishMenu("Golden Edited Mug");click("標記完成");reveal("最高預算 TWD 42.5 · 已完成");
         wishMenu("Golden Edited Mug");click("取消完成");reveal("最高預算 TWD 42.5");
-        checkpoint("security-and-deletion-preview");click("我的");reveal("帳號安全");click("帳號安全");
+        checkpoint("security-and-deletion-preview");click("我的");
+        android.content.pm.PackageInfo installed = InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
+        long installedBuild = android.os.Build.VERSION.SDK_INT >= 28 ? installed.getLongVersionCode() : installed.versionCode;
+        String installedVersion = "版本 " + installed.versionName + "（" + installedBuild + "）";
+        await(installedVersion);capture("my-native-version");
+        click("通知設定");await(installedVersion);await("開啟／重新連線裝置通知");capture("notification-native-version");click("返回我的設定");
+        reveal("帳號安全");click("帳號安全");
         reveal("更改密碼");reveal("登出所有裝置");capture("golden-06-security-directory");
         reveal("刪除帳號");click("刪除帳號");await("刪除影響盤點");
         reveal("查看完整資料盤點（32項）");capture("golden-10-deletion-impact");

@@ -4,14 +4,16 @@ import {createApi} from './api';
 import {useNotificationPreferences} from './useNotificationPreferences';
 import type {useNativeNotifications} from './nativeNotifications';
 import {NativeDisclosure} from './NativeDisclosure';
+import {AppVersionLabel} from './AppVersionLabel';
 import {iosColors,iosType} from './iosTheme';
 export function NotificationSettingsScreen({api,apiUrl,userId,runtime,onClose}:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number;runtime:ReturnType<typeof useNativeNotifications>;onClose:()=>void}){
  const p=useNotificationPreferences(api,apiUrl,userId),rows=[['chat','新的商品聊天訊息'],['meetup','面交預約與條件變更'],['sourceReply','代問收到原賣家回覆'],['preview','允許通知顯示訊息預覽']] as const;
  const action=(label:string,run:()=>void,disabled=false)=><Pressable accessibilityRole="button" disabled={disabled} style={[s.action,disabled&&s.disabled]} onPress={run}><Text style={s.link}>{label}</Text></Pressable>;
  return <ScrollView contentContainerStyle={s.body}><View style={s.header}>{action('返回我的設定',onClose)}<Text style={s.title}>通知設定</Text></View>
+ <AppVersionLabel />
  <View style={s.card}><Text style={s.title}>此裝置的系統通知</Text><Text style={s.text}>系統權限：{runtime.permission==='granted'?'已允許':runtime.permission==='denied'?'未允許':runtime.permission==='undetermined'?'尚未詢問':'尚未確認'}</Text><Text style={s.text}>{runtime.registered?'裝置已完成推播註冊；送達仍取決於系統與網路。':'此裝置推播尚未完成註冊。'}</Text>
  {action('開啟／重新連線裝置通知',()=>void runtime.enable(true),runtime.busy)}{action('前往系統通知設定',()=>void Linking.openSettings(),runtime.busy)}{action('停用此裝置推播',()=>void runtime.disable(),runtime.busy)}{runtime.busy&&<ActivityIndicator/>}
- {!!runtime.issue&&<Text accessibilityRole="alert" style={s.error}>{runtime.issue==='account'?'請以收到通知的帳號登入；不會自動切換帳號。':runtime.issue==='permission'?'系統未允許通知，仍可在App內查看訊息。':runtime.issue==='unavailable'?'通知內容已不可用或無權限；不會開啟其他人的對話。':runtime.issue==='target'?'通知內容暫時無法讀取，可重新查核。':'裝置通知註冊尚未確認，請稍後重新連線。'}</Text>}
+ {!!runtime.issue&&<Text accessibilityRole="alert" style={s.error}>{runtime.issue==='account'?'請以收到通知的帳號登入；不會自動切換帳號。':runtime.issue==='permission'?'系統未允許通知，仍可在App內查看訊息。':runtime.issue==='unavailable'?'通知內容已不可用或無權限；不會開啟其他人的對話。':runtime.issue==='target'?'通知內容暫時無法讀取，可重新查核。':runtime.issue==='token-timeout'?'取得推播權杖逾時，本次重新連線尚未完成。請確認網路後再試，仍可在App內查看訊息。':'裝置通知註冊尚未確認，請稍後重新連線。'}</Text>}
  {action('重試開啟待確認通知',()=>void runtime.retryPending(),runtime.busy)}
  </View>
  <View style={s.card}><Text style={s.title}>交易通知分類</Text><Text style={s.small}>設定會套用到同帳號已註冊的裝置；仍需要各裝置允許系統通知。行銷郵件另行設定。</Text>

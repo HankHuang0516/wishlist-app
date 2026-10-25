@@ -1171,7 +1171,11 @@ final class NativeQaTests: XCTestCase {
             checkpoint("map-wishlist-add-remove")
             let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
             try required(add,scroll:true,kind:.button);try tap(add)
-            try selectWishlistChoice("第二份地圖願望");try safeScreenshot("qa-map-wishlist-choice");try tap("確認加入")
+            checkpoint("map-wishlist-choice-open")
+            try safeScreenshot("qa-map-wishlist-choice")
+            try selectWishlistChoice("第二份地圖願望")
+            checkpoint("map-wishlist-second-list-selected")
+            try tap("確認加入")
             guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
             try required(remove,scroll:true,kind:.button)
             checkpoint("map-wishlist-server-readback")

@@ -7,13 +7,13 @@ import { feedbackJournal, parseFeedbackJournal, readFeedback, sendFeedback, Feed
 import { supportText as st } from '../lib/supportCopy';
 import MarketplaceDialog from './MarketplaceDialog';
 import { Button } from './ui/Button';
-type Props={isOpen:boolean;onClose:()=>void};
+type Props={isOpen:boolean;onClose:()=>void;initialContent?:string};
 export default function FeedbackModal(props:Props){
  const {user,token,isAuthenticated}=useAuth();
  const userId=isAuthenticated&&user&&token?user.id:null;
  return <FeedbackSession key={`${userId??'anonymous'}:${token??''}`} {...props} userId={userId} token={userId===null?null:token} sessionReady={!isAuthenticated||!!user&&!!token}/>;
 }
-function FeedbackSession({isOpen,onClose,userId,token,sessionReady}:Props&{userId:number|null;token:string|null;sessionReady:boolean}){
+function FeedbackSession({isOpen,onClose,userId,token,sessionReady,initialContent}:Props&{userId:number|null;token:string|null;sessionReady:boolean}){
  const [content,setContent]=useState(''),[email,setEmail]=useState(''),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
  const [pending,setPending]=useState<string|null>(null),[result,setResult]=useState<FeedbackReceipt|null>(null),[notice,setNotice]=useState('');
  const [storageError,setStorageError]=useState(false),[reload,setReload]=useState(0),[cleanupOnly,setCleanupOnly]=useState(false);
@@ -40,7 +40,7 @@ function FeedbackSession({isOpen,onClose,userId,token,sessionReady}:Props&{userI
     if(epoch.current!==generation)return;key.current=nextKey;
     if(original){const journal=await parseFeedbackJournal(original,userId);if(epoch.current!==generation)return;mark(original);setContent(journal.content);setEmail(journal.email);
      try{await settle(await readFeedback(original,userId,token),original,generation);}catch{if(epoch.current===generation)setNotice('尚未確認收件；原內容與識別碼已保留。重開只查核，不會自動重送。');}
-    }else mark(null);
+    }else {mark(null);setContent(current=>current||initialContent||'');}
    }catch{if(epoch.current===generation){setStorageError(true);setNotice('尚未安全讀取恢復資料，暫停送出；請重試讀取。');}}
    finally{if(epoch.current===generation){lock.current=false;setReady(true);setBusy(false);}}
   })();return()=>{epoch.current++;};

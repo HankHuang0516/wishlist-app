@@ -18,7 +18,7 @@ const send = message => { if (process.connected) { try { process.send(message, (
 async function cleanFixtures() {
   if (!prisma) {
     if (root) await fs.rmdir(root);
-    return { fixturesRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
+    return { fixturesRemaining: 0, followsRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
   }
   const ids = { in: userIds }, identityHashes = { in: [...hashes] };
   const rooms = await prisma.conversation.findMany({ where: { OR: [{ buyerUserId: ids }, { sellerUserId: ids }] }, select: { id: true } });
@@ -39,6 +39,7 @@ async function cleanFixtures() {
     }
     await tx.conversation.deleteMany({ where: { id: { in: [...roomIds] } } });
     await tx.wishlist.deleteMany({ where: { userId: ids } });
+    await tx.follow.deleteMany({ where: { OR: [{ followerId: ids }, { followingId: ids }] } });
     await tx.user.deleteMany({ where: { id: ids } });
     await tx.mediaErasureTask.deleteMany({ where: { identityHash: identityHashes } });
     await tx.legacyAssetErasureTask.deleteMany({ where: { identityHash: identityHashes } });
@@ -46,6 +47,7 @@ async function cleanFixtures() {
   });
   const summary = {
     fixturesRemaining: await prisma.user.count({ where: { id: ids } }),
+    followsRemaining: await prisma.follow.count({ where: { OR: [{ followerId: ids }, { followingId: ids }] } }),
     conversationsRemaining: await prisma.conversation.count({ where: { id: { in: [...roomIds] } } }),
     receiptsRemaining: await prisma.accountErasureReceipt.count({ where: { identityHash: identityHashes } }),
     mediaTasksRemaining: await prisma.mediaErasureTask.count({ where: { identityHash: identityHashes } }),
@@ -283,16 +285,21 @@ async function main() {
         return next(); // Real login still verifies bcrypt, version and email.
       }
       if (req.path.startsWith('/api/auth/')) return res.status(503).json({ errorCode: 'QA_EXTERNAL_OPERATION_DISABLED' });
-      const userRoute = req.path === '/api/users/me' && ['GET', 'DELETE'].includes(req.method) ||
+      const followState=visualHomeFixture&&req.method==='GET'&&/^\/api\/users\/me\/follow-state\/[1-9][0-9]*$/.test(req.path);
+      const followOperation=visualHomeFixture&&['GET','POST'].includes(req.method)&&/^\/api\/users\/me\/follow-operations\/[0-9a-f-]{36}(?:\/abandon)?$/.test(req.path);
+      if(followState&&!userIds.includes(Number(req.path.split('/').at(-1)))||followOperation&&req.method==='POST'&&!req.path.endsWith('/abandon')&&!userIds.includes(req.body?.targetUserId))return res.status(403).json({errorCode:'QA_FIXTURE_ONLY'});
+      const userRoute = followState || followOperation || req.path === '/api/users/me' && ['GET', 'DELETE'].includes(req.method) ||
         req.path === '/api/users/me/deletion-impact' && req.method === 'GET' ||
+        visualHomeFixture && /^\/api\/users\/[1-9][0-9]*\/storefront$/.test(req.path) && req.method==='GET' && userIds.includes(Number(req.path.split('/')[3])) ||
         req.path === '/api/users/me/password' && req.method === 'PUT' ||
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
+      const goldenRoute=visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
       const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path) ||
         !!marketingVisualOwnerRole && req.method === 'GET' && /^\/api\/marketing\/(?:availability|jobs(?:\/[0-9a-f-]{36})?)$/.test(req.path) ||
         externalListingsPilot && /^\/api\/external-listings(?:\/|$)/.test(req.path);
       const workerRoute = listingAiPilot && /^\/api\/internal\/minimax-vision(?:\/|$)/.test(req.path);
-      if (!userRoute && !marketRoute && !workerRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
+      if (!userRoute && !marketRoute && !workerRoute && !goldenRoute) return res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' });
       if (req.headers['x-api-key'] !== undefined) return res.status(401).json({ errorCode: 'QA_FIXTURE_ONLY' });
       if (!workerRoute && req.headers.authorization !== undefined && !(listingAiPilot && req.headers.authorization === 'Bearer ' + callbackToken)) {
         if (typeof req.headers.authorization !== 'string' || !/^Bearer [^\s]{1,8192}$/.test(req.headers.authorization)) throw new jwt.JsonWebTokenError('Invalid QA session');
@@ -324,6 +331,13 @@ async function main() {
     ...(marketingVisualOwnerRole ? [['marketing', 'marketingRoutes']] : []),
     ...(externalListingsPilot ? [['external-listings', 'externalListingRoutes']] : [])]) {
     app.use('/api/' + route, require('../../server/dist/routes/' + file).default);
+  }
+  if(visualHomeFixture){
+    app.use('/api/notifications',require('../../server/dist/routes/notificationRoutes').default);
+    app.use('/api/product-interest',require('../../server/dist/routes/productInterestRoutes').default);
+    app.use('/api/discovery',require('../../server/dist/routes/discoveryRoutes').createDiscoveryRoutes());
+    app.use('/api/product-wishes',require('../../server/dist/routes/productWishRoutes').createProductWishRoutes());
+    app.use('/api/users',require('../../server/dist/routes/socialRoutes').default);
   }
   if (listingAiPilot) app.use('/api/internal/minimax-vision', require('../../server/dist/routes/minimaxRecognitionRoutes').default);
   app.use((_req, res) => res.status(404).json({ errorCode: 'QA_ROUTE_DISABLED' }));

@@ -1,0 +1,15 @@
+import {Router} from 'express';
+import rateLimit from 'express-rate-limit';
+import {authenticateToken} from '../middleware/auth';
+import {getSourceNotificationTarget,getSourceNotificationReadState,markSourceNotificationRead,getNotificationPreferences,getNotificationOperation,submitNotificationOperation,abandonNotificationOperation,registerPushDevice,removePushDevice} from '../controllers/notificationController';
+const router=Router();router.use(authenticateToken);router.use(rateLimit({windowMs:60000,limit:60,standardHeaders:'draft-8',legacyHeaders:false}));
+router.get('/source-target/:leadId',getSourceNotificationTarget);
+router.get('/source-read/:inquiryId',getSourceNotificationReadState);
+router.post('/source-read/:inquiryId',markSourceNotificationRead);
+router.get('/preferences',getNotificationPreferences);
+router.get('/preference-operations/:clientActionId',getNotificationOperation);
+router.post('/preference-operations/:clientActionId',submitNotificationOperation);
+router.post('/preference-operations/:clientActionId/abandon',abandonNotificationOperation);
+router.post('/devices',registerPushDevice);
+router.delete('/devices',removePushDevice);
+export default router;

@@ -1,5 +1,7 @@
+import { ListingLocationPicker } from './ListingLocationPicker';
+import { approximateListingPoint } from './listingLocation';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +19,9 @@ import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } 
 
 type Photo = { key: string; uri: string; record?: PhotoRecord; failed?: boolean };
 export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onClose: () => void; onSaved: (status: string) => void }) {
+  const [step,setStep]=useState(0);
+  const { width, fontScale } = useWindowDimensions();
+  const compactSteps = width < 360 || fontScale >= 1.3;
   const [form, setForm] = useState<ListingForm>({ ...emptyListingForm });
   const [clientId] = useState(() => Crypto.randomUUID());
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -105,7 +110,7 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
     try {
       if (!(await Location.requestForegroundPermissionsAsync()).granted) throw new ListingFormError('已拒絕定位；仍可手動填寫商品所在行政區與地圖位置。');
       const result = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setForm(old => ({ ...old, latitude: result.coords.latitude.toFixed(6), longitude: result.coords.longitude.toFixed(6) }));
+      setForm(old => ({ ...old, ...approximateListingPoint(result.coords.longitude,result.coords.latitude) }));
     } catch (failure) { setError(failure instanceof ListingFormError ? failure.message : '暫時無法定位，請手動設定位置。'); } finally { end(); }
   }
   async function save(publish: boolean) {
@@ -152,24 +157,23 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
     photos.forEach(releasePreparedPhoto);
     onClose();
   }
-  const input = (key: 'title' | 'description' | 'brand' | 'price' | 'county' | 'district' | 'latitude' | 'longitude', label: string, numeric = false, multiline = false) => <View key={key} style={s.fieldGroup}><Text style={s.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={form[key]} onChangeText={value => change(key, value)} editable={!locked} keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} /></View>;
+  const input = (key: 'title' | 'description' | 'brand' | 'price' | 'county' | 'district' | 'latitude' | 'longitude', label: string, numeric = false, multiline = false) => <View key={key} style={s.fieldGroup}><Text style={s.fieldLabel}>{label}</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={form[key]} onChangeText={value => change(key, value)} editable={!locked} keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline} style={[s.input, multiline && s.multiline]} /></View>;
   const toggle = (key: 'meetup' | 'shipping' | 'negotiable' | 'consent', label: string) => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: form[key], disabled: locked }} disabled={locked} onPress={() => change(key, !form[key])} style={s.option}><Text style={s.text}>{form[key] ? '☑' : '☐'} {label}</Text></Pressable>;
   return <Modal visible animationType="slide" onRequestClose={() => void close()}><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><Text style={s.title}>刊登好物</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void close()} style={s.option}><Text style={s.text}>{pending || !ready ? '稍後確認' : '取消'}</Text></Pressable></View>
+    <View style={s.progress}>{['商品資料','交易與地點','確認刊登'].map((label,index)=><Pressable key={label} accessibilityLabel={`${index+1} ${label}`} accessibilityRole="tab" accessibilityState={{selected:step===index,disabled:locked}} disabled={locked} style={[s.chip,s.progressStep,step===index&&s.selected]} onPress={()=>setStep(index)}><Text style={s.stepText}>{index+1} {compactSteps ? ['商品','地點','確認'][index] : label}</Text></Pressable>)}</View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
       <Text style={s.text}>個人二手與新品。不處理付款，請以站內聯絡預約面交。</Text>
       {pending && <Text style={s.text}>已恢復上次待確認刊登。重試使用原識別碼與完整資料；也可稍後返回確認，不會重新建立商品。</Text>}
       {!ready && <Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={() => void restore()}><Text style={s.text}>重試恢復待確認刊登</Text></Pressable>}
-      {input('title', '商品名稱')}{input('description', '商品狀況與說明', false, true)}{input('brand', '品牌（可留空）')}{input('price', '售價 TWD（0為贈送）', true)}
+      {step===0&&<>{input('title', '商品名稱')}{input('description', '商品狀況與說明', false, true)}{input('brand', '品牌（可留空）')}{input('price', '售價 TWD（0為贈送）', true)}
       <View style={s.wrap}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: form.condition === value }} disabled={locked} style={[s.chip, form.condition === value && s.selected]} onPress={() => change('condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
       <View style={s.wrap}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: form.category === value }} disabled={locked} style={[s.chip, form.category === value && s.selected]} onPress={() => change('category', value)}><Text style={s.text}>{label}</Text></Pressable>)}</View>
       <Text style={s.section}>實拍照片 {photos.length}/8</Text>
       <View style={s.wrap}>{photos.map(photo => <View key={photo.key} style={s.photo}><Image source={{ uri: photo.uri }} style={s.preview} accessibilityLabel="選取的商品照片" /><Text style={s.small}>{photo.record ? '已上傳' : '尚未上傳'}</Text>{photo.failed && <Pressable accessibilityRole="button" disabled={locked} style={s.option} onPress={() => void retry(photo)}><Text style={s.text}>重試</Text></Pressable>}<Pressable accessibilityRole="button" disabled={locked} style={s.option} onPress={() => void removePhoto(photo)}><Text style={s.text}>移除</Text></Pressable></View>)}</View>
       <View style={s.wrap}><Pressable accessibilityRole="button" disabled={locked || photos.length >= 8} style={s.chip} onPress={() => void choosePhoto(false)}><Text style={s.text}>從相簿選擇</Text></Pressable><Pressable accessibilityRole="button" disabled={locked || photos.length >= 8} style={s.chip} onPress={() => void choosePhoto(true)}><Text style={s.text}>拍攝照片</Text></Pressable></View>
-      <Text style={s.section}>商品所在行政區</Text>{input('county', '縣市')}{input('district', '行政區')}
+      </>}{step===1&&<><Text style={s.section}>商品所在行政區</Text><ListingLocationPicker value={form} disabled={locked} onChange={value=>setForm(old=>({...old,...value,consent:false}))}/>
       <Pressable accessibilityRole="button" disabled={locked} style={s.chip} onPress={() => void locate()}><Text style={s.text}>使用目前位置</Text></Pressable>
-      {input('latitude', '位置緯度', true)}{input('longitude', '位置經度', true)}
-      <Text style={s.small}>後端只保存約2公里模糊位置，不公開或保存原始GPS。行政區與地圖選位介面仍待整合驗收。</Text>
       {toggle('meetup', '可面交')}{toggle('shipping', '可寄送')}{toggle('negotiable', '可議價')}
       <Text style={s.section}>失效日期（選填）</Text><Text style={s.text}>{form.expiryDate || '預設：發布後 30 天'}</Text>
       <Pressable accessibilityRole="button" disabled={locked} style={s.chip} onPress={() => setPicker(true)}><Text style={s.text}>自訂失效日期 · 選用</Text></Pressable>
@@ -177,12 +181,17 @@ export function ListingComposer({ api, apiUrl, userId, onClose, onSaved }: { api
       {picker && !locked && <ListingExpiryPicker value={form.expiryDate} onApply={date => { change('expiryDate', date); setPicker(false); }} onCancel={() => setPicker(false)} />}
       {toggle('consent', '本次同意商品約略位置在地圖顯示一小時（選填）')}
       <Text style={s.small}>可不勾選並繼續刊登，商品會保留在我的商品與分享連結。定位只是協助填寫；不會顯示使用者即時位置。地圖顯示不會自動續期，可在「我的商品」手動確認或隨時停止。</Text>
+      </>}{step===2&&<View style={{padding:16,gap:12,borderRadius:16,backgroundColor:iosColors.surface}}><Text style={s.section}>確認商品與交易方式</Text><Text style={s.title}>{form.title||'商品名稱未填'}</Text><Text style={s.text}>{form.price?'NT$'+form.price:'售價未填'} · {form.condition==='USED'?'二手':'全新'}</Text><Text style={s.text}>實拍照片 {photos.length}/8</Text><Text style={s.text}>{form.county&&form.district?form.county+' '+form.district:'地點尚未設定'} · {form.latitude&&form.longitude?'已選約略位置':'尚未選位'}</Text><Text style={s.text}>{form.meetup?'可面交 ':''}{form.shipping?'可寄送':''}</Text><Text style={s.small}>{form.consent?'本次在地圖顯示一小時，不會自動續期。':'本次不在地圖顯示；仍可刊登及分享。'}</Text><Text style={s.small}>確認內容後才會發布。草稿不會公開；目前不提供商品付款服務。</Text></View>}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
+    </ScrollView><View style={{padding:12,gap:8,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:iosColors.separator,backgroundColor:iosColors.surface}}>{!pending&&<View style={s.wrap}>{step>0&&<Pressable accessibilityRole="button" disabled={busy} style={s.chip} onPress={()=>setStep(n=>n-1)}><Text style={s.text}>上一步</Text></Pressable>}{step<2&&<Pressable accessibilityRole="button" disabled={locked} style={s.button} onPress={()=>setStep(n=>n+1)}><Text style={s.white}>下一步：{step===0?'交易與地點':'確認刊登'}</Text></Pressable>}</View>}{pending||step===2?<>
       {pending ? <Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>重試相同刊登</Text></Pressable> : <><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.button} onPress={() => void save(true)}><Text style={s.white}>發布商品</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready} style={s.option} onPress={() => void save(false)}><Text style={s.text}>儲存草稿</Text></Pressable></>}
-    </ScrollView>
+</>:<Pressable accessibilityRole="button" disabled={locked} style={s.option} onPress={()=>void save(false)}><Text style={s.text}>先儲存草稿（不公開）</Text></Pressable>}</View>
   </KeyboardAvoidingView></SafeAreaView></Modal>;
 }
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 }, header: { minHeight: 56, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator }, content: { padding: iosSpacing.lg, gap: iosSpacing.md, paddingBottom: 48 },
   title: { ...iosType.title, color: iosColors.label }, text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel }, section: { ...iosType.headline, color: iosColors.label, marginTop: iosSpacing.sm }, fieldGroup: { gap: iosSpacing.xs }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' }, input: { minHeight: 52, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, padding: iosSpacing.md, borderRadius: iosRadius.control, fontSize: 17, color: iosColors.label, backgroundColor: iosColors.surface, ...iosShadow }, multiline: { minHeight: 116, textAlignVertical: 'top' },
+  progress: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  progressStep: { flex: 1, minWidth: 0, paddingHorizontal: 6, alignItems: 'center' },
+  stepText: { ...iosType.footnote, color: iosColors.label, textAlign: 'center', fontWeight: '600' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, chip: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: iosColors.surface, borderRadius: iosRadius.pill, justifyContent: 'center' }, selected: { backgroundColor: iosColors.tintSoft, borderColor: iosColors.tint }, option: { minHeight: minimumTapSize, padding: iosSpacing.sm, justifyContent: 'center', alignItems: 'center' }, button: { minHeight: 52, padding: iosSpacing.md, borderRadius: iosRadius.control, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' }, white: { color: iosColors.white, ...iosType.headline }, error: { color: iosColors.danger, ...iosType.subheadline, backgroundColor: iosColors.dangerSoft, borderRadius: iosRadius.control, padding: iosSpacing.sm }, photo: { width: 124, gap: iosSpacing.xs }, preview: { width: 124, height: 104, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary },
 });

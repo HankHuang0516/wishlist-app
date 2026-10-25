@@ -16,7 +16,7 @@ const localApiUrl = 'http://127.0.0.1:18889';
 const packageName = ORIGINAL_PACKAGE + '.visualqa' + label;
 const output = path.join(mobile, 'build', 'android-visual-qa-' + label);
 const disk = fs.statfsSync(mobile);
-if (disk.bavail * disk.bsize < 15 * 1024 ** 3) throw new Error('Visual QA build requires at least 15 GiB free');
+if (disk.bavail * disk.bsize < 23 * 1024 ** 3) throw new Error('Visual QA build requires the20GiB system reserve plus3GiB job budget');
 const java = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
 const sdk = '/Users/hank/Library/Android/sdk';
 const aapt = path.join(sdk, 'build-tools/36.0.0/aapt2');
@@ -25,13 +25,20 @@ for (const required of [path.join(java, 'bin/java'), path.join(sdk, 'platform-to
   path.join(mobile, 'android/gradlew'), path.join(mobile, 'android/app/debug.keystore')]) {
   if (!fs.existsSync(required)) throw new Error('Visual QA build prerequisite unavailable; no key will be generated');
 }
+// Apply the same audited QA-only Google Services guard after default Expo mods.
+const gradleFile=path.join(mobile,'android/app/build.gradle');
+const gradleText=fs.readFileSync(gradleFile,'utf8');
+const guardedGradle=require('../plugins/withIsolatedDebugQa').isolatedQaGoogleServices(gradleText);
+if(guardedGradle!==gradleText)fs.writeFileSync(gradleFile,guardedGradle);
 const sources = [...new Set([...androidQaSources(mobile, { includeInstrumentation: false }),
   'scripts/build-android-visual-qa.cjs'])].sort();
 const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const fingerprint = () => Object.fromEntries(sources.map(source => [source, hash(path.join(mobile, source))]));
 const sourceHashes = fingerprint();
 fs.mkdirSync(output, { mode: 0o700 });
-const env = { ...hostEnvironment(process.execPath, java, sdk, os.homedir()),
+const explicitGradleHome=process.env.WISHLIST_QA_GRADLE_HOME;
+if(explicitGradleHome&&(!path.isAbsolute(explicitGradleHome)||!path.resolve(explicitGradleHome).startsWith(path.join(os.homedir(),'.cache','hank-internal')+path.sep)))throw new Error('Explicit QA Gradle cache must stay inside local test storage');
+const env = { ...(explicitGradleHome?{GRADLE_USER_HOME:explicitGradleHome}:{}),...hostEnvironment(process.execPath, java, sdk, os.homedir()),
   NODE_ENV: 'production', EXPO_PUBLIC_API_URL: localApiUrl, EXPO_PUBLIC_VISUAL_QA: '1' };
 const built = spawnSync('./gradlew', [':app:assembleVisualQa', '-PwishlistVisualQa=true',
   '-PwishlistVisualQaSuffix=.visualqa' + label, '-PreactNativeArchitectures=arm64-v8a',
@@ -56,7 +63,7 @@ else {
     throw new Error('Visual QA APK is unsigned, or it used the production upload certificate');
   const metadata = { kind: 'isolated-android-release-equivalent-visual-qa', label, package: packageName,
     apiOrigin: localApiUrl, nonDebuggable: true, staticJsBundle: true, storeDeliverable: false,
-    usesProductionUploadCertificate: false, apkSha256: hash(target), sourceFiles: sources, sourceHashes };
+    usesProductionUploadCertificate: false,pushRegistrationValidated:false, apkSha256: hash(target), sourceFiles: sources, sourceHashes };
   fs.writeFileSync(path.join(output, 'build.json'), JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   console.log(JSON.stringify({ kind: metadata.kind, label, package: packageName, apkSha256: metadata.apkSha256,
     staticJsBundle: true, nonDebuggable: true, storeDeliverable: false }));

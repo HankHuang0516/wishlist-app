@@ -15,7 +15,7 @@ export async function readAccountDeletionImpact(userId: number) {
             wishes: await tx.item.count({ where: { wishlist: { userId } } }),
             wishCreateReceipts: await tx.wishCreateReceipt.count({ where: { userId } }),
             listings: await tx.listing.count({ where: { ownerUserId: userId } }),
-            uploadedPhotos: await tx.listingMedia.count({ where: { ownerUserId: userId } }),
+            uploadedPhotos: await tx.listingMedia.count({ where: { ownerUserId: userId } }) + await tx.message.count({ where: { senderUserId: userId, photoHash: { not: null } } }),
             conversations: await tx.conversation.count({ where: conversations }),
             messagesAuthored: await tx.message.count({ where: { senderUserId: userId } }),
             // Other people's authored content needs explicit preservation, not a
@@ -37,6 +37,19 @@ export async function readAccountDeletionImpact(userId: number) {
             moderationActionsOnOwnedListings: await tx.listingModerationAction.count({ where: { listing: { ownerUserId: userId } } }),
             moderationActionsDetachingOwnReports: await tx.listingModerationAction.count({ where: { report: { reporterUserId: userId }, listing: { ownerUserId: { not: userId } } } }),
         };
-        return { version: 2 as const, previewOnly: true as const, accountDeleted: false as const, capturedAt: capturedAt.toISOString(), counts };
+        // Additional root projection preserves the v2/23-key count contract used
+        // by released apps while giving new clients the full new-feature scope.
+        const additionalCounts={
+          productInterests:await tx.productInterest.count({where:{userId}}),
+          productInterestOperations:await tx.productInterestOperation.count({where:{userId}}),
+          notificationPreferences:await tx.notificationPreference.count({where:{userId}}),
+          notificationOperations:await tx.notificationPreferenceOperation.count({where:{userId}}),
+          pushDevices:await tx.pushDevice.count({where:{userId}}),
+          pushEvents:await tx.pushOutbox.count({where:{userId}}),
+          pushDeliveries:await tx.pushDelivery.count({where:{OR:[{outbox:{userId}},{device:{userId}}]}}),
+          sourceInquiries:await tx.sourceLeadInquiry.count({where:{buyerUserId:userId}}),
+          photoCancellations:await tx.chatPhotoCancellation.count({where:{senderUserId:userId}}),
+        };
+        return { additionalCounts,version: 2 as const, previewOnly: true as const, accountDeleted: false as const, capturedAt: capturedAt.toISOString(), counts };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }

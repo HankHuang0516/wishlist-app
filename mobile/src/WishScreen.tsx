@@ -1,6 +1,8 @@
+import { NativeActionMenu } from './NativeActionMenu';
+import { NativeDisclosure } from './NativeDisclosure';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,7 +14,7 @@ import { jpegPhotoUploadForm } from './photoUploadForm';
 import { uploadPhotoRecord } from './photoUploadRecovery';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
 import { PendingStoreError } from './pendingStore';
-import { ManagedList, ManagedWish, parseManagedList, parseManagedWish, parseManagementPage, parseWishJournal, WishDraft, WishManagementError, wishDraftBody } from './wishManagement';
+import { WISH_CURRENCIES, ManagedList, ManagedWish, parseManagedList, parseManagedWish, parseManagementPage, parseWishJournal, WishDraft, WishManagementError, wishDraftBody } from './wishManagement';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 type Editor = { kind: 'LIST'; list?: ManagedList } | { kind: 'ITEM'; wish?: ManagedWish };
 type WishPhoto = { key: string; uri: string; record?: PhotoRecord; failed?: boolean };
@@ -23,10 +25,13 @@ function WishImage({ wish, compact = false }: { wish: ManagedWish; compact?: boo
   const [failed, setFailed] = useState(false), [loaded, setLoaded] = useState(false);
   useEffect(() => { setFailed(false); setLoaded(false); }, [wish.imageUrl]);
   const message = wish.imageUrl ? '商品圖片載入中' : '尚未提供商品圖片';
-  if (failed || !wish.imageUrl) return <View accessibilityLabel={`${wish.name} ${failed ? '商品圖片載入失敗' : '尚未提供商品圖片'}`} style={[s.wishImage, compact && s.wishImageCompact, s.imagePlaceholder]}><Text style={s.placeholderIcon}>🖼️</Text>{!compact && <Text style={s.placeholderText}>{failed ? '圖片暫時無法載入' : message}</Text>}</View>;
+  if (failed || !wish.imageUrl) return <View accessibilityLabel={`${wish.name} ${failed ? '商品圖片載入失敗' : '尚未提供商品圖片'}`} style={[s.wishImage, compact && s.wishImageCompact, s.imagePlaceholder]}><Ionicons name="image-outline" size={compact?28:40} color={iosColors.secondaryLabel}/>{!compact && <Text style={s.placeholderText}>{failed ? '圖片暫時無法載入' : message}</Text>}</View>;
   return <View accessible accessibilityLabel={`${wish.name} 商品圖片${loaded ? '已載入' : '載入中'}`} style={[s.wishImage, compact && s.wishImageCompact, s.imagePlaceholder]}>{!loaded && !compact && <Text style={s.placeholderText}>{message}</Text>}<Image accessible={false} source={{ uri: wish.imageUrl }} style={s.imageContent} resizeMode="cover" resizeMethod="resize" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} /></View>;
 }
 export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; onExplore: (id: number) => void }) {
+  const { width, fontScale } = useWindowDimensions();
+  const compactListHeader = width < 360 || fontScale >= 1.3;
+  const [menuWishId,setMenuWishId]=useState<number|null>(null),[editorMode,setEditorMode]=useState<'PHOTO'|'MANUAL'>('PHOTO'),[currencyOpen,setCurrencyOpen]=useState(false);
   const [lists, setLists] = useState<ManagedList[]>([]), [listCursor, setListCursor] = useState<number | null>(null);
   const [selected, setSelected] = useState<ManagedList | null>(null), [wishes, setWishes] = useState<ManagedWish[]>([]), [wishCursor, setWishCursor] = useState<number | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [ready, setReady] = useState(false), [pending, setPending] = useState<string | null>(null);
@@ -36,6 +41,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [isPublic, setPublic] = useState(false);
   const active = useRef(true), locked = useRef(false), journalKey = useRef<string | null>(null);
   const selectedId = useRef<number | null>(null);
+  const editorScroll = useRef<ScrollView>(null);
   const begin = () => { if (!active.current || locked.current) return false; locked.current = true; setBusy(true); setError(''); return true; };
   const end = () => { locked.current = false; if (active.current) setBusy(false); };
   const blocked = busy || !ready || pending !== null;
@@ -77,6 +83,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
   function openEditor(value: Editor) {
     if (blocked) return;
     setPhoto(null);
+    setEditorMode(value.kind==='ITEM'&&value.wish?'MANUAL':'PHOTO');
     setEditor(value);
     if (value.kind === 'LIST') { setTitle(value.list?.title ?? ''); setDescription(value.list?.description ?? ''); setPublic(value.list?.isPublic ?? false); }
     else { const w = value.wish; setDraft(w ? { name: w.name, notes: w.notes ?? '', link: w.link ?? '', imageUrl: w.imageUrl ?? '', budget: w.maxPrice === null ? '' : String(w.maxPrice), currency: w.priceCurrency ?? 'TWD' } : { ...emptyWish }); }
@@ -205,30 +212,41 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
   return <View style={s.flex}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
     {!selected && <Text style={s.title}>我的願望</Text>}{!editor && status}
     {selected ? <>
-      <View style={s.listHeader}><View style={s.headerActions}>{button('返回清單', () => { selectedId.current = null; setSelected(null); setWishes([]); }, busy)}{button('編輯清單與公開設定', () => openEditor({ kind: 'LIST', list: selected }))}</View>
-        <View style={s.headerRow}><View style={s.headerTitle}><Text numberOfLines={1} style={s.listTitle}>{selected.title}</Text><Text style={s.muted}>{selected.isPublic ? '公開清單：未隱藏願望與備註可供他人查看' : '私人清單：只有自己可查看'} · {selected.count}/{selected.maxItems}</Text></View>{button('新增願望', () => openEditor({ kind: 'ITEM' }), blocked, 'primary')}</View></View>
+      <View style={s.listHeader}><View style={s.headerActions}><Pressable accessibilityRole="button" accessibilityLabel="返回清單" disabled={busy} style={[s.button,busy&&s.disabled]} onPress={() => { selectedId.current = null; setSelected(null); setWishes([]); }}><Text style={s.buttonText}>{compactListHeader?'返回':'返回清單'}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="編輯清單與公開設定" disabled={blocked} style={[s.button, s.listSettings, blocked && s.disabled]} onPress={() => openEditor({ kind: 'LIST', list: selected })}><Ionicons name="settings-outline" size={19} color={iosColors.tint}/><Text style={s.buttonText}>清單設定</Text></Pressable></View>
+        <View style={[s.headerRow,compactListHeader&&s.headerRowStacked]}><View style={[s.headerTitle,compactListHeader&&s.headerTitleStacked]}><Text numberOfLines={1} style={s.listTitle}>{selected.title}</Text><Text style={s.muted}>{selected.isPublic ? '公開清單：未隱藏願望與備註可供他人查看' : '私人清單：只有自己可查看'} · {selected.count}/{selected.maxItems}</Text></View>{button('新增願望', () => openEditor({ kind: 'ITEM' }), blocked, 'primary')}</View></View>
       {wishes.length === 0 && !busy && <Text style={s.text}>這個清單還沒有願望，先記下想找的好物。</Text>}
-      {wishes.map(w => <View key={w.id} style={s.card}><View style={s.wishCardHeader}><WishImage wish={w} compact /><View style={s.wishCardInfo}><Text style={s.heading}>{w.name}</Text><Text style={[s.aiStatus, w.aiStatus === 'FAILED' && s.aiFailed]}>{aiLabel[w.aiStatus]}</Text>{w.aiStatus === 'COMPLETED' && w.aiPrice !== null && <Text style={s.aiPrice}>AI 參考價格 {w.aiCurrency ?? ''} {w.aiPrice}</Text>}<Text style={s.muted}>{w.maxPrice === null ? '未設定預算' : `最高預算 ${w.priceCurrency ?? '幣別未確認'} ${w.maxPrice}`}{w.isHidden ? ' · 已隱藏' : ''}{w.isPurchased ? ' · 已完成' : ''}</Text></View></View>{!!w.notes && <><Text numberOfLines={expandedWishIds.has(w.id) ? undefined : 3} style={s.text}>{w.notes}</Text>{w.notes.length > 100 && <Pressable accessibilityRole="button" onPress={() => setExpandedWishIds(old => { const next = new Set(old); next.has(w.id) ? next.delete(w.id) : next.add(w.id); return next; })}><Text style={s.expandText}>{expandedWishIds.has(w.id) ? '收合詳細資訊' : '展開詳細資訊'}</Text></Pressable>}</>}{!!w.link && <Text style={s.text}>參考連結：{w.link}</Text>}{!!w.aiLink && <Text style={s.text}>AI 參考商品：{w.aiLink}</Text>}
-        {button('編輯願望', () => openEditor({ kind: 'ITEM', wish: w }))}{button(w.isHidden ? '取消隱藏' : '隱藏願望', () => void mutate('/items/' + w.id, { isHidden: !w.isHidden }))}
-        {button(w.isPurchased ? '取消完成' : '標記完成', () => void mutate('/items/' + w.id, { isPurchased: !w.isPurchased }))}
-        {button('查附近符合商品', () => onExplore(w.id), busy || w.isHidden || w.isPurchased, 'primary')}
-        {button('刪除願望', () => Alert.alert('刪除願望', `確定刪除「${w.name}」？無法復原。`, [{ text: '取消', style: 'cancel' }, { text: '刪除', style: 'destructive', onPress: () => void mutate('/items/' + w.id) }]), blocked, 'destructive')}
+      {wishes.map(w => <View key={w.id} style={s.card}><View style={s.wishCardHeader}><WishImage wish={w} compact /><View style={s.wishCardInfo}><View style={s.wishNameRow}><Text accessibilityLabel={w.name} numberOfLines={3} style={[s.heading,s.wishName]}>{w.name}</Text><Pressable accessibilityRole="button" accessibilityLabel={w.name+'的更多操作'} style={s.wishMore} disabled={blocked} onPress={()=>setMenuWishId(w.id)}><Ionicons name="ellipsis-horizontal" size={23} color={iosColors.tint}/></Pressable></View><Text style={[s.aiStatus, w.aiStatus === 'FAILED' && s.aiFailed]}>{aiLabel[w.aiStatus]}</Text>{w.aiStatus === 'COMPLETED' && w.aiPrice !== null && <Text style={s.aiPrice}>AI 參考價格 {w.aiCurrency ?? ''} {w.aiPrice}</Text>}<Text style={s.muted}>{w.maxPrice === null ? '未設定預算' : `最高預算 ${w.priceCurrency ?? '幣別未確認'} ${w.maxPrice}`}{w.isHidden ? ' · 已隱藏' : ''}{w.isPurchased ? ' · 已完成' : ''}</Text></View></View>{!!w.notes && <><Text numberOfLines={expandedWishIds.has(w.id) ? undefined : 3} style={s.text}>{w.notes}</Text>{w.notes.length > 100 && <Pressable accessibilityRole="button" onPress={() => setExpandedWishIds(old => { const next = new Set(old); next.has(w.id) ? next.delete(w.id) : next.add(w.id); return next; })}><Text style={s.expandText}>{expandedWishIds.has(w.id) ? '收合詳細資訊' : '展開詳細資訊'}</Text></Pressable>}</>}{!!w.link && <Text style={s.text}>參考連結：{w.link}</Text>}{!!w.aiLink && <Text style={s.text}>AI 參考商品：{w.aiLink}</Text>}
+        {button('尋找符合商品', () => onExplore(w.id), busy || w.isHidden || w.isPurchased, 'primary')}
       </View>)}
       {wishCursor !== null && button('載入更多願望', () => void read(() => loadDetail(selected.id, wishCursor)), busy)}
       {button('重新載入', () => void read(() => loadDetail(selected.id)), busy)}
       {button('刪除整個清單', () => Alert.alert('刪除清單', `確定刪除「${selected.title}」及其中 ${selected.count} 個願望？無法復原。`, [{ text: '取消', style: 'cancel' }, { text: '全部刪除', style: 'destructive', onPress: () => void mutate('/lists/' + selected.id) }]), blocked, 'destructive')}
     </> : <>{button('建立願望清單', () => openEditor({ kind: 'LIST' }), blocked, 'primary')}{!busy && lists.length === 0 && <Text style={s.text}>用願望清單記下想找的好物，隨時查找附近商品。</Text>}{lists.map(l => <View key={l.id} style={s.card}><Text style={s.heading}>{l.title}</Text><Text style={s.text}>{l.isPublic ? '公開' : '私人'} · {l.count} 個願望</Text>{button('查看清單', () => selectList(l.id), busy)}</View>)}{listCursor !== null && button('載入更多清單', () => void read(() => loadLists(listCursor)), busy)}{button('重新載入清單', () => void read(() => loadLists()), busy)}</>}
-  </ScrollView><Modal visible={editor !== null} animationType="slide" onRequestClose={() => void closeEditor()}><SafeAreaProvider><SafeAreaView style={s.flex}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
-    <View style={s.editorHeader}><Pressable accessibilityRole="button" accessibilityLabel="關閉編輯" disabled={busy} onPress={() => void closeEditor()} style={s.editorClose}><Ionicons name="close" size={25} color={iosColors.label} /></Pressable><Text style={s.editorTitle}>{editor?.kind === 'LIST' ? '願望清單' : editor?.wish ? '編輯願望' : '新增願望'}</Text><View style={s.editorClose} /></View>{status}
-    {editor?.kind === 'LIST' ? <><View style={s.fieldGroup}><Text style={s.fieldLabel}>清單名稱</Text><TextInput style={s.input} accessibilityLabel="清單名稱" placeholder="為清單命名" value={title} onChangeText={setTitle} editable={!blocked} maxLength={200} /></View><View style={s.fieldGroup}><Text style={s.fieldLabel}>清單說明（選填）</Text><TextInput style={s.input} accessibilityLabel="清單說明" placeholder="公開清單會顯示" value={description} onChangeText={setDescription} editable={!blocked} multiline maxLength={1000} /></View><Pressable accessibilityRole="switch" accessibilityState={{ checked: isPublic, disabled: blocked }} disabled={blocked} style={s.button} onPress={() => setPublic(v => !v)}><Text style={s.buttonText}>{isPublic ? '公開清單' : '私人清單（預設）'} · 點擊切換</Text></Pressable></> : <>
-      {!editor?.wish && <>
-        {photo ? <View style={s.card}><Image source={{ uri: photo.uri }} style={s.photoPreview} accessibilityLabel="選取的願望照片" /><Text style={s.text}>{photo.record ? '照片已上傳，儲存後開始 AI 辨識' : photo.failed ? '照片尚未上傳成功' : '照片上傳中…'}</Text>{photo.failed && button('重試上傳照片', () => void retryPhoto())}{button('移除照片', () => void removePhoto())}</View> : <View style={s.photoActions}><Pressable accessibilityRole="button" accessibilityLabel="從相簿選擇願望照片" disabled={blocked} onPress={() => void choosePhoto(false)} style={s.photoDropzone}><View style={s.photoSymbol}><Ionicons name="images-outline" size={33} color={iosColors.tint} /></View><Text style={s.photoDropzoneTitle}>從相簿選擇</Text><Text style={s.muted}>支援一張圖片</Text></Pressable><Pressable accessibilityRole="button" disabled={blocked} onPress={() => void choosePhoto(true)} style={s.cameraButton}><Ionicons name="camera-outline" size={22} color={iosColors.tint} /><Text style={s.cameraButtonText}>拍攝照片</Text></Pressable><Text style={s.orText}>或</Text></View>}
+  </ScrollView>{menuWishId!==null&&(()=>{const w=wishes.find(item=>item.id===menuWishId);return w?<NativeActionMenu title={w.name} onClose={()=>setMenuWishId(null)} actions={[
+ {label:'編輯願望',disabled:blocked,onPress:()=>{setMenuWishId(null);openEditor({kind:'ITEM',wish:w});}},
+ {label:w.isHidden?'取消隱藏':'隱藏願望',disabled:blocked,onPress:()=>{setMenuWishId(null);void mutate('/items/'+w.id,{isHidden:!w.isHidden});}},
+ {label:w.isPurchased?'取消完成':'標記完成',disabled:blocked,onPress:()=>{setMenuWishId(null);void mutate('/items/'+w.id,{isPurchased:!w.isPurchased});}},
+ {label:'刪除願望',disabled:blocked,destructive:true,onPress:()=>{setMenuWishId(null);Alert.alert('刪除願望',`確定刪除「${w.name}」？無法復原。`,[{text:'取消',style:'cancel'},{text:'刪除',style:'destructive',onPress:()=>void mutate('/items/'+w.id)}]);}}
+ ]}/>:null;})()}<Modal visible={editor !== null} animationType="slide" onShow={() => { Keyboard.dismiss(); editorScroll.current?.scrollTo({y:0,animated:false}); }} onRequestClose={() => void closeEditor()}><SafeAreaProvider><SafeAreaView style={s.flex}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={s.editorHeader}><Pressable accessibilityRole="button" accessibilityLabel="關閉編輯" disabled={busy} onPress={() => void closeEditor()} style={s.editorClose}><Ionicons name="close" size={25} color={iosColors.label} /></Pressable><Text style={s.editorTitle}>{editor?.kind === 'LIST' ? '願望清單' : editor?.wish ? '編輯願望' : '新增願望'}</Text><View style={s.editorClose} /></View><ScrollView ref={editorScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>{status}
+    {editor?.kind === 'LIST' ? <><View style={s.fieldGroup}><Text style={s.fieldLabel}>清單名稱</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} style={s.input} accessibilityLabel="清單名稱" placeholder="為清單命名" value={title} onChangeText={setTitle} editable={!blocked} maxLength={200} /></View><View style={s.fieldGroup}><Text style={s.fieldLabel}>清單說明（選填）</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} style={s.input} accessibilityLabel="清單說明" placeholder="公開清單會顯示" value={description} onChangeText={setDescription} editable={!blocked} multiline maxLength={1000} /></View><Pressable accessibilityRole="switch" accessibilityState={{ checked: isPublic, disabled: blocked }} disabled={blocked} style={s.button} onPress={() => setPublic(v => !v)}><Text style={s.buttonText}>{isPublic ? '公開清單' : '私人清單（預設）'} · 點擊切換</Text></Pressable></> : <>
+      {!editor?.wish&&<View style={{flexDirection:'row',backgroundColor:iosColors.surfaceSecondary,borderRadius:12,padding:3}}>{(['PHOTO','MANUAL'] as const).map(mode=><Pressable key={mode} accessibilityRole="tab" accessibilityState={{selected:editorMode===mode,disabled:blocked}} disabled={blocked} style={{flex:1,minHeight:44,padding:10,alignItems:'center',justifyContent:'center',borderRadius:10,backgroundColor:editorMode===mode?iosColors.surface:'transparent'}} onPress={()=>{if(mode==='MANUAL'&&(photo||draft.imageUrl)){Alert.alert('先移除圖片','請先移除已選照片或圖片網址，再切換手動建立。');return;}setEditorMode(mode);}}><Text style={s.buttonText}>{mode==='PHOTO'?'照片辨識':'手動輸入'}</Text></Pressable>)}</View>}
+      {!editor?.wish && editorMode==='PHOTO' && <>
+        {photo ? <View style={s.card}><Image source={{ uri: photo.uri }} style={s.photoPreview} accessibilityLabel="選取的願望照片" /><Text style={s.text}>{photo.record ? '照片已上傳，儲存後開始 AI 辨識' : photo.failed ? '照片尚未上傳成功' : '照片上傳中…'}</Text>{photo.failed && button('重試上傳照片', () => void retryPhoto())}{button('移除照片', () => void removePhoto())}</View> : <View style={s.photoActions}><Pressable accessibilityRole="button" accessibilityLabel="從相簿選擇願望照片" disabled={blocked} onPress={() => void choosePhoto(false)} style={s.photoDropzone}><View style={s.photoSymbol}><Ionicons name="images-outline" size={33} color={iosColors.tint} /></View><Text style={s.photoDropzoneTitle}>從相簿選擇</Text><Text style={s.muted}>支援一張圖片</Text></Pressable><Pressable accessibilityRole="button" disabled={blocked} onPress={() => void choosePhoto(true)} style={s.cameraButton}><Ionicons name="camera-outline" size={22} color={iosColors.tint} /><Text style={s.cameraButtonText}>拍攝照片</Text></Pressable></View>}
       </>}
-      {(['imageUrl', 'name', 'budget', 'currency', 'notes', 'link'] as const).map(field => <View key={field} style={s.fieldGroup}>
+      {(['name', 'budget'] as (keyof WishDraft)[]).map(field => <View key={field} style={s.fieldGroup}>
         <Text style={s.fieldLabel}>{{ imageUrl: '輸入圖片網址（HTTPS）', name: '願望名稱', budget: '最高預算（選填）', currency: '預算幣別', notes: '備註（選填）', link: '參考商品連結（選填）' }[field]}{field === 'budget' && draft.currency ? ` · ${draft.currency}` : ''}</Text>
-        <TextInput style={s.input} accessibilityLabel={{ imageUrl: 'AI 商品圖片網址', name: '願望名稱', budget: '最高預算', currency: '預算幣別', notes: '備註', link: '參考商品連結' }[field]} placeholder={{ imageUrl: editor?.wish ? '圖片僅建立時可設定' : '或貼上公開 HTTPS 圖片網址', name: '有照片可留空由 AI 辨識', budget: '留空不限', currency: '例如 TWD', notes: '公開清單會顯示', link: 'https://example.com/item' }[field]} value={draft[field]} onChangeText={value => setDraft(old => ({ ...old, [field]: value }))} editable={!blocked && !(field === 'imageUrl' && (!!editor?.wish || !!photo))} multiline={field === 'notes'} keyboardType={field === 'budget' ? 'decimal-pad' : field === 'link' || field === 'imageUrl' ? 'url' : 'default'} autoCorrect={field !== 'link' && field !== 'imageUrl'} autoCapitalize={field === 'link' || field === 'imageUrl' ? 'none' : field === 'currency' ? 'characters' : 'sentences'} />
+        <TextInput placeholderTextColor={iosColors.secondaryLabel} style={s.input} accessibilityLabel={{ imageUrl: 'AI 商品圖片網址', name: '願望名稱', budget: '最高預算', currency: '預算幣別', notes: '備註', link: '參考商品連結' }[field]} placeholder={{ imageUrl: editor?.wish ? '圖片僅建立時可設定' : '或貼上公開 HTTPS 圖片網址', name: editorMode === 'MANUAL' ? '想找什麼好物？' : '有照片可留空由 AI 辨識', budget: '留空不限', currency: '例如 TWD', notes: '公開清單會顯示', link: 'https://example.com/item' }[field]} value={draft[field]} onChangeText={value => setDraft(old => ({ ...old, [field]: value }))} editable={!blocked && !(field === 'imageUrl' && (!!editor?.wish || !!photo))} multiline={field === 'notes'} keyboardType={field === 'budget' ? 'decimal-pad' : field === 'link' || field === 'imageUrl' ? 'url' : 'default'} autoCorrect={field !== 'link' && field !== 'imageUrl'} autoCapitalize={field === 'link' || field === 'imageUrl' ? 'none' : field === 'currency' ? 'characters' : 'sentences'} />
       </View>)}
-      <Text style={s.muted}>照片或公開圖片網址擇一；儲存後 AI 會更新名稱、參考價格與詳細描述。照片會去除位置資訊並縮小後上傳，但知道圖片網址的人仍可查看照片。</Text>
+      <View style={s.fieldGroup}><Text style={s.fieldLabel}>預算幣別</Text><Pressable accessibilityRole="button" disabled={blocked} style={s.input} onPress={()=>setCurrencyOpen(true)}><Text style={s.text}>{draft.currency||'TWD'} · 選擇幣別</Text></Pressable></View>
+      <NativeDisclosure title="備註與參考連結（選填）">
+      {(['notes', 'link', ...(editorMode==='PHOTO'?['imageUrl']:[])] as (keyof WishDraft)[]).map(field => <View key={field} style={s.fieldGroup}>
+        <Text style={s.fieldLabel}>{{ imageUrl: '輸入圖片網址（HTTPS）', name: '願望名稱', budget: '最高預算（選填）', currency: '預算幣別', notes: '備註（選填）', link: '參考商品連結（選填）' }[field]}{field === 'budget' && draft.currency ? ` · ${draft.currency}` : ''}</Text>
+        <TextInput placeholderTextColor={iosColors.secondaryLabel} style={s.input} accessibilityLabel={{ imageUrl: 'AI 商品圖片網址', name: '願望名稱', budget: '最高預算', currency: '預算幣別', notes: '備註', link: '參考商品連結' }[field]} placeholder={{ imageUrl: editor?.wish ? '圖片僅建立時可設定' : '或貼上公開 HTTPS 圖片網址', name: editorMode === 'MANUAL' ? '想找什麼好物？' : '有照片可留空由 AI 辨識', budget: '留空不限', currency: '例如 TWD', notes: '公開清單會顯示', link: 'https://example.com/item' }[field]} value={draft[field]} onChangeText={value => setDraft(old => ({ ...old, [field]: value }))} editable={!blocked && !(field === 'imageUrl' && (!!editor?.wish || !!photo))} multiline={field === 'notes'} keyboardType={field === 'budget' ? 'decimal-pad' : field === 'link' || field === 'imageUrl' ? 'url' : 'default'} autoCorrect={field !== 'link' && field !== 'imageUrl'} autoCapitalize={field === 'link' || field === 'imageUrl' ? 'none' : field === 'currency' ? 'characters' : 'sentences'} />
+      </View>)}
+</NativeDisclosure>
+      {currencyOpen&&<NativeActionMenu title="選擇預算幣別" onClose={()=>setCurrencyOpen(false)} actions={WISH_CURRENCIES.map(value=>({label:value,selected:draft.currency===value,onPress:()=>{setDraft(old=>({...old,currency:value}));setCurrencyOpen(false);}}))}/>}
+      <Text style={s.muted}>{editor?.wish ? '編輯會更新願望名稱、預算、備註與連結，不會重新執行 AI 辨識。' : editorMode==='MANUAL' ? '手動輸入將儲存你填寫的名稱、預算與選填資訊，不會上傳照片或啟動 AI 辨識。' : '照片或公開圖片網址擇一；儲存後 AI 會更新名稱、參考價格與詳細描述。照片會去除位置資訊並縮小後上傳，但知道圖片網址的人仍可查看照片。'}</Text>
     </>}
   </ScrollView><View style={s.editorFooter}>{button(editor?.kind === 'ITEM' && !editor.wish && (photo || draft.imageUrl) ? '儲存後開始 AI 辨識' : '儲存', () => void save(), blocked, 'primary')}{pending && button('稍後確認', () => void closeEditor(), busy)}</View></KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal></View>;
 }
@@ -238,7 +256,7 @@ const s = StyleSheet.create({
   title: { ...iosType.largeTitle, color: iosColors.label },
   listTitle: { ...iosType.title, color: iosColors.label },
   expandText: { ...iosType.subheadline, color: iosColors.tint, fontWeight: '600' },
-  editorHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editorHeader: { paddingHorizontal: iosSpacing.lg, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   editorClose: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
   editorTitle: { ...iosType.headline, color: iosColors.label },
   editorFooter: { paddingHorizontal: iosSpacing.lg, paddingTop: iosSpacing.sm, paddingBottom: iosSpacing.sm, gap: iosSpacing.xs, backgroundColor: iosColors.background, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: iosColors.separator },
@@ -247,13 +265,19 @@ const s = StyleSheet.create({
   listHeader: { gap: iosSpacing.sm },
   headerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm },
+  headerRowStacked: { flexDirection: 'column', alignItems: 'stretch' },
   headerTitle: { flex: 1, gap: iosSpacing.xxs },
-  wishCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: iosSpacing.md },
-  wishCardInfo: { flex: 1, gap: iosSpacing.xs },
+  headerTitleStacked: { flex: 0, width: '100%' },
+  wishCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: iosSpacing.sm },
+  wishCardInfo: { flex: 1, minWidth: 0, gap: iosSpacing.xs },
+  wishNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  wishName: { flex: 1, minWidth: 0 },
+  wishMore: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  listSettings: { flexDirection: 'row', gap: 6 },
   fieldGroup: { gap: iosSpacing.xs }, fieldLabel: { ...iosType.subheadline, color: iosColors.label, fontWeight: '600' },
   text: { ...iosType.body, color: iosColors.label },
   error: { ...iosType.subheadline, color: iosColors.danger },
-  card: { padding: iosSpacing.lg, gap: iosSpacing.sm, backgroundColor: iosColors.surface, borderRadius: iosRadius.card, ...iosShadow },
+  card: { padding: iosSpacing.md, gap: iosSpacing.sm, backgroundColor: iosColors.surface, borderRadius: iosRadius.card, ...iosShadow },
   button: { minHeight: minimumTapSize, paddingHorizontal: iosSpacing.md, paddingVertical: iosSpacing.sm, justifyContent: 'center', alignItems: 'center', borderRadius: iosRadius.control, backgroundColor: iosColors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator },
   primaryButton: { backgroundColor: iosColors.tint, borderColor: iosColors.tint },
   destructiveButton: { backgroundColor: iosColors.dangerSoft, borderColor: iosColors.dangerSoft },
@@ -271,10 +295,9 @@ const s = StyleSheet.create({
   orText: { ...iosType.subheadline, color: iosColors.secondaryLabel, textAlign: 'center' },
   photoPreview: { width: '100%', aspectRatio: 4 / 3, borderRadius: iosRadius.control, backgroundColor: iosColors.surfaceSecondary },
   wishImage: { width: '100%', aspectRatio: 16 / 9, borderRadius: iosRadius.control, backgroundColor: iosColors.background, overflow: 'hidden' },
-  wishImageCompact: { width: 100, height: 112, aspectRatio: undefined },
+  wishImageCompact: { width: 72, height: 84, aspectRatio: undefined },
   imageContent: { position: 'absolute', inset: 0 },
   imagePlaceholder: { justifyContent: 'center', alignItems: 'center', gap: iosSpacing.xs },
-  placeholderIcon: { fontSize: 34 },
   placeholderText: { ...iosType.footnote, color: iosColors.secondaryLabel },
   aiStatus: { ...iosType.footnote, color: iosColors.secondaryLabel },
   aiPrice: { ...iosType.headline, color: iosColors.tint },

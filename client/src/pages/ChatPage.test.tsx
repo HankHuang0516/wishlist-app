@@ -30,9 +30,39 @@ beforeEach(() => {
   });
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
-const roomView = (value = props) => <ChatRoomWeb {...value} />;
+const roomView = (value = props) => <MemoryRouter><ChatRoomWeb {...value} /></MemoryRouter>;
 const posts = () => api.mock.calls.filter(call => call[2]?.method === 'POST');
 describe('private chat web parity', () => {
+  it('loads initial history after an early send cancels the first history response', async () => {
+    const old = makeMessage(1, { text: '先前已存在的詢問' }); rows = [old];
+    room = makeRoom({ lastMessageSequence: 1, lastMessageText: old.text });
+    const base = api.getMockImplementation()!;
+    let release!: () => void, firstHistory = true;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    api.mockImplementation(async (...args) => {
+      if (args[1].includes('/messages?') && firstHistory) {
+        firstHistory = false; await held;
+      }
+      return base(...args);
+    });
+    render(roomView());
+    const field = await screen.findByRole('textbox', { name: '商品聊天訊息（最多2000字元）' });
+    await waitFor(() => expect(field).toBeEnabled());
+    await waitFor(() => expect(firstHistory).toBe(false));
+    fireEvent.change(field, { target: { value: '歷史載入前的新詢問' } });
+    fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    await screen.findByText('歷史載入前的新詢問');
+    await waitFor(() => expect(field).toBeEnabled());
+    await act(async () => { release(); await held; });
+    // A manual refresh after the superseded read must hydrate the baseline,
+    // rather than skipping everything before the newly acknowledged sequence2.
+    await waitFor(() => expect(screen.getByRole('button', { name: '只更新聊天' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '只更新聊天' }));
+    expect(await screen.findByText(old.text)).toBeInTheDocument();
+    expect(screen.getAllByText('歷史載入前的新詢問')).toHaveLength(1);
+    expect(rows.map(row => row.sequence)).toEqual([1, 2]);
+  });
+
   it('updates the chat summary immediately after confirmation and cancellation in the open meetup dialog', async () => {
     const base = api.getMockImplementation()!;
     let appointment = makeMeetup();
@@ -340,7 +370,7 @@ describe('private chat web parity', () => {
   it('does not inject a delayed old-account conversation after switching session scope', async () => {
     let finish!: (value: unknown) => void; const original = makeRoom();
     api.mockImplementation((token: string, path: string) => token === 'fixture' && path === '/chat/conversations/' + roomId ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(path.endsWith('/meetup') ? { appointment: null } : path.includes('/messages?') ? { items: [], nextBeforeSequence: null, nextAfterSequence: null } : makeRoom({ buyerUserId: 44, buyer: { id: 44, name: '另一個合成買家' }, listing: { ...original.listing, title: '新帳號商品' } })));
-    const view = render(<ChatRoomWeb key="42" {...props} />); await waitFor(() => expect(finish).toBeDefined()); view.rerender(<ChatRoomWeb key="44" {...props} token="next" userId={44} />);
+    const view = render(<MemoryRouter><ChatRoomWeb key="42" {...props} /></MemoryRouter>); await waitFor(() => expect(finish).toBeDefined()); view.rerender(<MemoryRouter><ChatRoomWeb key="44" {...props} token="next" userId={44} /></MemoryRouter>);
     await screen.findByText('新帳號商品'); await act(async () => finish(original)); expect(screen.queryByText(original.listing.title)).not.toBeInTheDocument(); expect(store.get).toHaveBeenCalledWith(`44.message.${roomId}`);
   });
 });

@@ -1,7 +1,14 @@
+import {ProductInterest} from './ProductInterestView';
+import {useNativeSourceInquiry} from './useNativeSourceInquiry';
+import {sourceContactText as t} from './sourceContactCopy';
+import {NativeDisclosure} from './NativeDisclosure';
+import { iosColors } from './iosTheme';
+import { DeviceEventEmitter } from 'react-native';
+import { useSourceReplyRead } from './useSourceReplyRead';
 import { ChatMessageBubble, chatPresentation } from './ChatPresentation';
 import { ListingPhoto, photoStyles, listingPresentation } from './ListingPhoto';
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Linking, AppState } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Linking, AppState, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaModal } from './SafeAreaModal';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import * as Crypto from 'expo-crypto';
@@ -10,9 +17,9 @@ import { createApi, ApiError } from './api';
 import type { Bounds } from './listingSearch';
 import { uuid } from './listingForm';
 import { pendingRequestKey, privatePendingStore } from './nativePendingStore';
-import { sourceLocationLabel, parseLeadPage, parseLead, parseLeadRoom, type SourceLead, type LeadRoom, type ContactRouting } from './sourceLeadData';
-export type SourceChatContext = {id:string;title:string;canonicalUrl:string;county:string;district:string;priceText:string;thumbnailUrl?:string;contactRouting?:ContactRouting};
-export const sourceChatContext=(r:SourceLead):SourceChatContext=>({id:r.id,title:r.title,canonicalUrl:r.canonicalUrl,county:r.county,district:r.district,priceText:r.publicFacts?.priceText||"售價待詢問",thumbnailUrl:r.media?.[0]?.thumbnailUrl,contactRouting:r.contactRouting});
+import { sourceLocationLabel, isLocatedLead, type LocatedSourceLead, parseLeadPage, parseLead, parseLeadRoom, type SourceLead, type LeadRoom, type ContactRouting } from './sourceLeadData';
+export type SourceChatContext = {id:string;title:string;canonicalUrl:string;county:string;district:string;priceText:string;thumbnailUrl?:string;contactRouting?:ContactRouting;locationPrecision?:'COUNTY_ILLUSTRATION'|'CONTACT_FOR_LOCATION'};
+export const sourceChatContext=(r:SourceLead):SourceChatContext=>({id:r.id,title:r.title,canonicalUrl:r.canonicalUrl,county:r.county??'',district:r.district??'',locationPrecision:r.locationPrecision,priceText:r.publicFacts?.priceText||"售價待詢問",thumbnailUrl:r.media?.[0]?.thumbnailUrl,contactRouting:r.contactRouting});
 export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenSourceChat,initialSourceId,onInitialSourceHandled }: {
     api: ReturnType<typeof createApi>;
     apiUrl: string;
@@ -24,6 +31,7 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
     initialSourceId?:string|null;onInitialSourceHandled?:()=>void;
 }) {
     const [items, setItems] = useState<SourceLead[]>([]), [cursor, setCursor] = useState<string | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [detail, setDetail] = useState<SourceLead | null>(null), [asking, setAsking] = useState(false), [groupIds, setGroupIds] = useState<string[]>([]);
+    const pendingSourceRoute=useRef<SourceChatContext|null>(null);
     const generation = useRef(0), alive = useRef(true), inflight = useRef(false), detailGeneration = useRef(0);
     const path = bounds && !hidden ? '/source-leads?bbox=' + bounds.join(',') + '&presentation=1&approximate=1&q=' + encodeURIComponent(q) : null;
     async function load(next?: string) { if (!path || inflight.current)
@@ -85,8 +93,8 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
         }
     } }
     useEffect(()=>{if(initialSourceId&&uuid(initialSourceId))void open(initialSourceId).finally(()=>onInitialSourceHandled?.());},[initialSourceId,api]);
-    const groups = new Map<string, SourceLead[]>();
-    for (const r of items) {
+    const groups = new Map<string, LocatedSourceLead[]>();
+    for (const r of items.filter(isLocatedLead)) {
         const key = r.longitude + ',' + r.latitude;
         groups.set(key, [...(groups.get(key) ?? []), r]);
     }
@@ -103,85 +111,35 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
   <Layer id="source-lead-points" type="circle" paint={{ 'circle-color': ['case',['get','approximate'],'#A36B17','#5269B0'], 'circle-radius': 16, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 }}/>
   <Layer id="source-lead-point-counts" type="symbol" layout={{ 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true }} paint={{ 'text-color': '#FFFFFF' }}/>
  </GeoJSONSource>;
-    const list = <View><Text>外部來源線索 {items.length} 筆 · 不是在售件數</Text><Text>公共面交點不是賣家或商品所在地；概略位置，非取貨點。庫存與交易待確認。</Text>{items.map(r => <Pressable key={r.id} accessibilityRole="button" onPress={() => void open(r.id)} style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt ?? r.title}/><View style={listingPresentation.cardText}><Text style={listingPresentation.badge}>外部來源 · 庫存待確認</Text><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText || "售價待詢問"}</Text><Text style={listingPresentation.small}>{r.county}{r.district} · {sourceLocationLabel(r)}</Text><Text style={listingPresentation.small}>{r.publicPlaceName}</Text></View></Pressable>)}{cursor && items.length < 500 && <Pressable disabled={busy} onPress={() => void load(cursor)}><Text>載入更多來源線索</Text></Pressable>}{items.length >= 500 && <Text>請縮小範圍再搜尋。</Text>}{!!error && <><Text accessibilityRole="alert">{error}</Text><Pressable disabled={busy} onPress={() => void load()}><Text>重新讀取來源線索</Text></Pressable></>}</View>;
-    const modal = <SafeAreaModal visible={!!detail || groupIds.length > 0} animationType="slide" onRequestClose={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}><Pressable accessibilityRole="button" onPress={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><Text>返回探索</Text></Pressable>{groupIds.length > 0 && <View><Text>同一公共／概略位置的來源線索，非現貨位置</Text>{items.filter(r => groupIds.includes(r.id)).map(r => <Pressable key={r.id} onPress={() => void open(r.id)} style={{ padding: 14 }}><View style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt??r.title}/><View style={listingPresentation.cardText}><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText||"售價待詢問"}</Text><Text style={listingPresentation.small}>{sourceLocationLabel(r)} · 庫存待確認</Text></View></View></Pressable>)}</View>}{detail && (asking ? <Text>請從 Wishlist AI 聊聊繼續</Text> : <><ScrollView horizontal>{detail.media?.length ? detail.media.map(m => <ListingPhoto key={m.id} uri={m.imageUrl} label={m.alt} detail style={photoStyles.detail}/>) : <ListingPhoto label={detail.title} detail style={photoStyles.detail}/>}</ScrollView><Text style={listingPresentation.badge}>外部來源線索 · 庫存與交易待確認</Text><Text accessibilityRole="header" style={listingPresentation.title}>{detail.title}</Text><Text style={listingPresentation.price}>{detail.publicFacts?.priceText || "售價待詢問"}</Text><Text style={listingPresentation.small}>{detail.county}{detail.district} · {sourceLocationLabel(detail)}，非現貨所在地</Text><Text style={listingPresentation.title}>商品說明</Text><Text>{detail.summary}</Text>{detail.publicFacts && <><Text>計價單位：{detail.publicFacts.priceUnitStatus === 'unknown' ? '原帖未明示，待詢問' : '依原帖標示，仍需確認交付數量'}。{detail.publicFacts.currencyStatus.includes('infer') ? '幣別為情境推定，待原賣家確認。' : '幣別依原帖證據標示。'}</Text><Text>{detail.publicFacts.sourceAccessNotice}</Text><Text>{detail.publicFacts.originalDateLabel}</Text><Text>{detail.publicFacts.locationRelation}</Text>{detail.publicFacts.coordinateQualityNotes.map((note, i) => <Text key={i}>{note}</Text>)}</>}{detail.coordinateAttribution && <Pressable onPress={() => void Linking.openURL(detail.coordinateAttribution!.url)}><Text>{detail.coordinateAttribution.text} · ODbL</Text></Pressable>}<Text>{sourceLocationLabel(detail)}：{detail.publicPlaceName}／{detail.publicAddress}</Text><Text>{detail.notice}</Text><Text>{detail.contactRouting?.reason||'原賣家收訊路由待核實；原帖不能代替私訊收件人。'}</Text><Text>原始發布日期區間：{new Date(detail.postedEarliestAt).toLocaleDateString('zh-TW')}～{new Date(detail.postedLatestAt).toLocaleDateString('zh-TW')}</Text><Text>來源最後查核：{new Date(detail.checkedAt).toLocaleString('zh-TW')}</Text><Pressable accessibilityRole="button" onPress={() => void api<unknown>('/source-leads/' + detail.id+'?approximate=1').then(parseLead).then(r => Linking.openURL(r.canonicalUrl)).catch(() => setError('來源已失效，未開啟。'))}><Text>前往原始來源</Text></Pressable><Pressable accessibilityRole="button" onPress={() => {onOpenSourceChat(sourceChatContext(detail));setDetail(null);}}><Text>聯絡賣家（Wishlist AI 代轉）</Text></Pressable><Text>不顯示未授權圖片，不提供下訂或付款。</Text>{!!error && <Text accessibilityRole="alert">{error}</Text>}</>)}</ScrollView></SafeAreaModal>;
-    return { layers, list, modal, count: items.length, ready: !path || ready, points: items.map(r => ({ longitude: r.longitude, latitude: r.latitude })) };
+    const list = <View><Text>外部來源線索 {items.length} 筆 · 不是在售件數</Text><Text>公共面交點不是賣家或商品所在地；概略位置，非取貨點。庫存與交易待確認。</Text>{items.map(r => <Pressable key={r.id} accessibilityRole="button" onPress={() => void open(r.id)} style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt ?? r.title}/><View style={listingPresentation.cardText}><Text style={listingPresentation.badge}>外部來源 · 庫存待確認</Text><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText || "售價待詢問"}</Text><ProductInterest kind="source" id={r.id} compact readOnly/><Text style={listingPresentation.small}>{r.county}{r.district} · {sourceLocationLabel(r)}</Text><Text style={listingPresentation.small}>{r.publicPlaceName}</Text></View></Pressable>)}{cursor && items.length < 500 && <Pressable disabled={busy} onPress={() => void load(cursor)}><Text>載入更多來源線索</Text></Pressable>}{items.length >= 500 && <Text>請縮小範圍再搜尋。</Text>}{!!error && <><Text accessibilityRole="alert">{error}</Text><Pressable disabled={busy} onPress={() => void load()}><Text>重新讀取來源線索</Text></Pressable></>}</View>;
+    const modal = <SafeAreaModal onDismiss={()=>{const context=pendingSourceRoute.current;pendingSourceRoute.current=null;if(context&&alive.current)onOpenSourceChat(context);}} visible={!!detail || groupIds.length > 0} animationType="slide" onRequestClose={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}><Pressable accessibilityRole="button" onPress={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><Text>返回探索</Text></Pressable>{groupIds.length > 0 && <View><Text>同一公共／概略位置的來源線索，非現貨位置</Text>{items.filter(r => groupIds.includes(r.id)).map(r => <Pressable key={r.id} onPress={() => void open(r.id)} style={{ padding: 14 }}><View style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt??r.title}/><View style={listingPresentation.cardText}><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText||"售價待詢問"}</Text><Text style={listingPresentation.small}>{sourceLocationLabel(r)} · 庫存待確認</Text></View></View></Pressable>)}</View>}{detail && (asking ? <Text>請從 Wishlist AI 聊聊繼續</Text> : <><ScrollView horizontal>{detail.media?.length ? detail.media.map(m => <ListingPhoto key={m.id} uri={m.imageUrl} label={m.alt} detail style={photoStyles.detail}/>) : <ListingPhoto label={detail.title} detail style={photoStyles.detail}/>}</ScrollView><Text style={listingPresentation.badge}>外部來源線索 · 庫存與交易待確認</Text><Text accessibilityRole="header" style={listingPresentation.title}>{detail.title}</Text><Text style={listingPresentation.price}>{detail.publicFacts?.priceText || "售價待詢問"}</Text><ProductInterest kind="source" id={detail.id}/><Text style={listingPresentation.small}>{detail.county}{detail.district} · {sourceLocationLabel(detail)}，非現貨所在地</Text><Text style={listingPresentation.title}>商品說明</Text><Text>{detail.summary}</Text>{detail.publicFacts && <><Text>計價單位：{detail.publicFacts.priceUnitStatus === 'unknown' ? '原帖未明示，待詢問' : '依原帖標示，仍需確認交付數量'}。{detail.publicFacts.currencyStatus.includes('infer') ? '幣別為情境推定，待原賣家確認。' : '幣別依原帖證據標示。'}</Text><Text>{detail.publicFacts.sourceAccessNotice}</Text><Text>{detail.publicFacts.originalDateLabel}</Text><Text>{detail.publicFacts.locationRelation}</Text>{detail.publicFacts.coordinateQualityNotes.map((note, i) => <Text key={i}>{note}</Text>)}</>}{detail.coordinateAttribution && <Pressable onPress={() => void Linking.openURL(detail.coordinateAttribution!.url)}><Text>{detail.coordinateAttribution.text} · ODbL</Text></Pressable>}<Text>{sourceLocationLabel(detail)}：{detail.publicPlaceName}／{detail.publicAddress}</Text><Text>{detail.notice}</Text><Text>{detail.contactRouting?.reason||'原賣家收訊路由待核實；原帖不能代替私訊收件人。'}</Text><Text>原始發布日期區間：{new Date(detail.postedEarliestAt).toLocaleDateString('zh-TW')}～{new Date(detail.postedLatestAt).toLocaleDateString('zh-TW')}</Text><Text>來源最後查核：{new Date(detail.checkedAt).toLocaleString('zh-TW')}</Text><Pressable accessibilityRole="button" onPress={() => void api<unknown>('/source-leads/' + detail.id+'?approximate=1').then(parseLead).then(r => Linking.openURL(r.canonicalUrl)).catch(() => setError('來源已失效，未開啟。'))}><Text>前往原始來源</Text></Pressable><Pressable accessibilityRole="button" onPress={() => {const context=sourceChatContext(detail);setDetail(null);setGroupIds([]);if(Platform.OS==='ios')pendingSourceRoute.current=context;else onOpenSourceChat(context);}}><Text>聯絡賣家（Wishlist AI 代轉）</Text></Pressable><Text>不顯示未授權圖片，不提供下訂或付款。</Text>{!!error && <Text accessibilityRole="alert">{error}</Text>}</>)}</ScrollView></SafeAreaModal>;
+    return { layers, list, modal, count: items.filter(isLocatedLead).length, ready: !path || ready, points: items.filter(isLocatedLead).map(r => ({ longitude: r.longitude, latitude: r.latitude })) };
 }
-export function SourceLeadInquiry({ api, apiUrl, userId, context, onBack }: {
-    api: ReturnType<typeof createApi>;
-    apiUrl: string;
-    userId: number;
-    context: SourceChatContext;
-    onBack: () => void;
-}) {
-    const leadId=context.id;
-    const [room, setRoom] = useState<LeadRoom | null>(null), [text, setText] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
-    const alive = useRef(true), inflight = useRef(false), key = useRef<string | null>(null), pending = useRef<{
-        requestId: string;
-        action: string;
-        text?: string;
-        consent?: boolean;
-        transferHash?: string;
-    } | null>(null);
-    async function load() { if (inflight.current)
-        return; inflight.current = true; setBusy(true); try {
-        key.current = await pendingRequestKey(apiUrl, userId, 'source-lead.' + leadId);
-        const saved = await privatePendingStore.get(key.current);
-        if (saved) {
-            const b = JSON.parse(saved);
-            if (!uuid(b.requestId) || !['ASK', 'CONSENT', 'CANCEL'].includes(b.action))
-                throw new Error();
-            pending.current = b;
-        }
-        const raw = await api<unknown>('/source-leads/' + leadId + '/inquiry?presentation=1');
-        if(raw === null){if(alive.current){setRoom(null);setError(pending.current?'原請求結果未確認，僅能重試同一筆。':'');}return;}
-        const r = parseLeadRoom(raw, leadId);
-        if (saved && r.events.some(e => e.requestId === pending.current?.requestId && e.action === pending.current?.action && e.text === pending.current?.text)) {
-            await privatePendingStore.clear(key.current, saved);
-            pending.current = null;
-        }
-        if (alive.current) {
-            setRoom(r);
-            setError(pending.current ? '原請求結果未確認，僅能重試同一筆。' : '');
-        }
-    }
-    catch (failure) {
-        if (alive.current)
-            setError(failure instanceof ApiError && failure.status === 429 ? failure.message : '無法開啟線索詢問。');
-    }
-    finally {
-        inflight.current = false;
-        if (alive.current)
-            setBusy(false);
-    } }
-    useEffect(() => { alive.current = true; void load(); return () => { alive.current = false; }; }, [api, leadId]);
-    async function act(action: string) {
-      if ((!room&&action!=='ASK')||!key.current||inflight.current)return;
-      inflight.current=true;setBusy(true);let body=pending.current;
-      try {
-        const active=room??parseLeadRoom(await api<unknown>('/source-leads/'+leadId+'/inquiry?presentation=1',{method:'POST',body:'{}'}),leadId);
-        if(alive.current)setRoom(active);
-        if(!body&&!room&&active.events.some(e=>e.action==='ASK')) throw new Error('另一裝置已有問題，請先更新閱讀後再同意代問。');
-        body=body??{requestId:Crypto.randomUUID(),action,...(action==='ASK'?{text:text.trim(),consent:true,transferHash:active.transferHash}:{}),...(action==='CONSENT'?{consent:true,transferHash:active.transferHash}:{})};
-        await privatePendingStore.save(key.current,JSON.stringify(body));pending.current=body;
-        const result=parseLeadRoom(await api<unknown>('/source-leads/'+leadId+'/inquiry/'+active.id+'/actions?presentation=1',{method:'POST',body:JSON.stringify(body)}),leadId);
-        await privatePendingStore.clear(key.current,JSON.stringify(body));pending.current=null;
-        if(alive.current){setRoom(result);setText('');setError('');}
-      } catch(e) {
-        if(body&&e instanceof ApiError&&[400,401,403,404,409,429].includes(e.status)){
-          try{await privatePendingStore.clear(key.current,JSON.stringify(body));pending.current=null;}catch{if(alive.current)setError('無法清除已拒絕紀錄，請更新核對。');return;}
-          if(alive.current)setError('未接受新操作，尚未送給原賣家；請更新閱讀問題與來源後重新確認。');
-        }else if(alive.current)setError(pending.current?'结果尚未確認，保留同一識別碼；請更新或重試同一筆，不建立替代訊息。':e instanceof Error?e.message:'目前無法讀取，未送出問題。');
-      }finally{inflight.current=false;if(alive.current)setBusy(false);}
-    }
-    const button = (label: string, action: string, disabled = false) => <Pressable accessibilityRole="button" disabled={busy || !!pending.current || disabled} onPress={() => void act(action)} style={chatPresentation.button}><Text style={chatPresentation.buttonText}>{label}</Text></Pressable>;
-    const editable=!busy&&!pending.current&&(!room||room.available&&room.state==='INQUIRY');
-    const status=!room?'輸入商品問題或購買意願，送出即接至 Wishlist AI 收件；未核實原賣家路由前不外送。':['DELIVERY_REQUIRES_REVIEW','CANCEL_REQUESTED'].includes(room.state)?'回執需人工核對或正在撤回，停止後續轉交，不會重送。':room.state==='CANCELLED'?'購買意願與後續代問已取消。':!room.available?'來源商品已失效或變更，後續代問已停止；保留原詢問供核查。':room.state==='INQUIRY'?'請閱讀先前问题或輸入新問題，送出即同意代問。':room.state==='WAITING_ROUTE'?'已接至 Wishlist AI 收件；'+(context.contactRouting?.reason||'原賣家收訊路由待核實。')+' 尚未送給賣家。':room.state==='DELIVERED'&&room.delivered?'已記錄人工代轉回執，等待原賣家答覆；尚未成立訂單。':'人工代問處理中，尚未確認送達。';
-    return <View style={chatPresentation.screen}><View style={chatPresentation.header}><Pressable accessibilityRole="button" accessibilityLabel="返回商品" style={{ minHeight: 44, minWidth: 72, justifyContent: 'center' }} onPress={onBack}><Text>返回商品</Text></Pressable><Text numberOfLines={1} style={[chatPresentation.heading, { flex: 1, textAlign: 'center', marginHorizontal: 12 }]}>Wishlist AI 聊聊</Text><Pressable accessibilityRole="button" accessibilityLabel="更新線索詢問" style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }} disabled={busy} onPress={()=>void load()}><Text>更新</Text></Pressable></View>
-    <View style={chatPresentation.context}><ListingPhoto uri={context.thumbnailUrl} label={context.title}/><View style={{flex:1}}><Text style={listingPresentation.title}>{context.title}</Text><Text style={listingPresentation.price}>{context.priceText}</Text><Text style={listingPresentation.small}>{context.county}{context.district} · 外部來源</Text><Text style={chatPresentation.meta}>商品ID：{context.id}</Text><Pressable onPress={()=>void Linking.openURL(context.canonicalUrl)}><Text>查看原始來源</Text></Pressable></View></View>
-    <ScrollView style={chatPresentation.body}><ChatMessageBubble mine={false} label="Wishlist AI · 流程提示" text={'我協助代問，並不是原賣家。現貨、價格、圖文權利及交易條件仍待確認；提出購買意願不會下訂或付款。'}/><ChatMessageBubble mine={false} label="下一步" text={status}/>{room&&<><Text style={chatPresentation.meta}>收件編號：{room.id} · {room.state} · {room.state==='DELIVERED'&&room.delivered?'已人工轉交':room.delivered?'已保存外送回執，後續待核查':'未送給賣家'}</Text>{room.events.map(e=><ChatMessageBubble key={e.requestId} mine={e.action!=="SELLER_REPLY"} label={e.action==="SELLER_REPLY"?"原賣家回覆 · Wishlist AI 代轉":"你"} time={e.at} text={e.text??(e.action==='CONSENT'?'同意只代問上述問題':'取消後續代問')}/>)}</>}{!!error&&<Text accessibilityRole="alert">{error}</Text>}</ScrollView>
-    <View style={chatPresentation.composer}>{editable&&<><Pressable accessibilityRole="button" onPress={()=>{setText('我有購買意願。請先向原賣家確認是否仍在售、單件價格與數量、實際商品所在地、取貨方式及最新交易條件。');}}><Text>我想購買，先代問現貨與交易條件</Text></Pressable><TextInput accessibilityLabel="Wishlist AI 商品問題" placeholder="想確認什麼？問題送出前可修改" maxLength={1500} value={text} onChangeText={v=>{setText(v);}} editable={editable} multiline style={chatPresentation.input}/><Text style={chatPresentation.meta}>按送出即同意由 Wishlist AI 按此商品來源代轉本對話問題給核實的原賣家，不附加帳號聯絡資料；不下訂或付款。</Text>{button('送出並委託聯絡賣家','ASK',!text.trim())}</>}
-    {room?.available&&room.state==='INQUIRY'&&room.events.some(e=>e.action==='ASK')&&<><Text>僅轉交上列問題及來源連結，不附加帳號聯絡資料；請勿加入不願分享的個資。</Text>{button('同意代問上列問題','CONSENT')}</>}
-    {room&&!['CANCELLED','DELIVERED','CANCEL_REQUESTED','DELIVERY_REQUIRES_REVIEW'].includes(room.state)&&button('取消購買意願及後續代問','CANCEL')}
-    {pending.current&&<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void act(pending.current!.action)}><Text>重試同一筆收件，不重複送出</Text></Pressable>}{!room&&<Pressable accessibilityRole="button" accessibilityLabel="更新線索詢問" style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }} disabled={busy} onPress={()=>void load()}><Text>重試讀取</Text></Pressable>}</View></View>;
+export function SourceLeadInquiry({api,apiUrl,userId,context,onBack}:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number;context:SourceChatContext;onBack:()=>void}) {
+ const {scope,room,recovery,ready,error,notice,question,setQuestion,busy,waiting,action}=useNativeSourceInquiry(api,apiUrl,userId,context.id);
+ const [editorScope,setEditorScope]=useState('');const editing=editorScope===scope,correction=room?.state==='WAITING_ROUTE',reopening=room?.state==='CANCELLED';
+ const pending=recovery.cancel??recovery.inquiry,locked=busy||waiting>0||!ready||!!pending;
+ const compose=!room||room.available&&(['INQUIRY','DELIVERED'].includes(room.state)||editing&&(correction||reopening));
+ const startEditing=()=>{setQuestion(room?.events.slice().reverse().find(e=>['ASK','REVISE','REOPEN'].includes(e.action))?.text??'');setEditorScope(scope);};
+ const status=room?.transferIssue?t('facebookRejected'):!room?t('empty'):['DELIVERY_REQUIRES_REVIEW','CANCEL_REQUESTED'].includes(room.state)?t('review'):room.state==='CANCELLED'?t('cancelled'):!room.available?t('unavailable'):room.state==='WAITING_ROUTE'?t('waiting')+(context.contactRouting?.reason||t('route'))+' '+t('notSent'):room.state==='DELIVERED'&&room.delivered?t('deliveredNotice'):t('compose');
+ const replyRead=useSourceReplyRead(api,room?.id??null,room?.events.filter(e=>e.action==='SELLER_REPLY').length??0,()=>DeviceEventEmitter.emit('wishlist:chat-read'));
+ const button=(label:string,run:()=>void,disabled=locked,secondary=false)=><Pressable accessibilityRole="button" disabled={disabled} onPress={run} style={[chatPresentation.button,secondary&&{backgroundColor:iosColors.surface,borderWidth:1,borderColor:iosColors.separator},disabled&&{opacity:.5}]}><Text style={[chatPresentation.buttonText,secondary&&{color:iosColors.tint}]}>{label}</Text></Pressable>;
+ return <KeyboardAvoidingView style={chatPresentation.screen} behavior={Platform.OS==='ios'?'padding':undefined}>
+ <View style={chatPresentation.header}><Pressable accessibilityRole="button" accessibilityLabel="返回商品" style={{minHeight:48,minWidth:72,justifyContent:'center'}} onPress={onBack}><Text>{t('back')}</Text></Pressable><Text accessibilityRole="header" numberOfLines={1} style={[chatPresentation.heading,{flex:1,textAlign:'center',marginHorizontal:12}]}>{t('title')}</Text><Pressable accessibilityRole="button" accessibilityLabel="更新線索詢問" style={{minHeight:48,minWidth:48,justifyContent:'center'}} disabled={busy||waiting>0} onPress={()=>void action('READ')}><Text>{t('update')}</Text></Pressable></View>
+ <View style={chatPresentation.context}><ListingPhoto uri={context.thumbnailUrl} label={context.title}/><View style={{flex:1}}><Text style={listingPresentation.title}>{context.title}</Text><Text style={listingPresentation.price}>{context.priceText}</Text><Text style={listingPresentation.small}>{context.county}{context.district} · {t('external')}</Text><Pressable accessibilityRole="link" style={{minHeight:48,justifyContent:'center'}} onPress={()=>void Linking.openURL(context.canonicalUrl)}><Text>{t('original')}</Text></Pressable></View></View>
+ <ScrollView style={chatPresentation.body} keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingBottom:20,gap:12}}>
+ <ChatMessageBubble mine={false} label="Wishlist AI · 流程提示" text={t('intro')}/><ChatMessageBubble mine={false} label="下一步" text={status}/>
+ {context.locationPrecision==='CONTACT_FOR_LOCATION'&&<Text style={chatPresentation.meta}>{t('contactLocation')}</Text>}
+ {room?.transferIssue&&<View style={{padding:16,backgroundColor:'#fff4d6',borderRadius:12}}><Text>{t('selfAskNotice')}</Text><Pressable accessibilityRole="link" style={{minHeight:48,justifyContent:'center'}} onPress={()=>void Linking.openURL(room.transferIssue!.originalPostUrl)}><Text>{t('selfAskOriginal')}</Text></Pressable></View>}
+ {room&&<><NativeDisclosure title="對話資訊"><Text style={chatPresentation.meta}>{t('receipt')}{room.id} · {room.state==='DELIVERED'&&room.delivered?t('delivered'):room.delivered?t('evidence'):t('notSent')}</Text></NativeDisclosure>{room.events.map(e=><ChatMessageBubble key={e.requestId} mine={e.action!=='SELLER_REPLY'} label={e.action==='SELLER_REPLY'?t('seller'):e.action==='REVISE'?t('revisedEvent'):e.action==='REOPEN'?t('reopenedEvent'):'你'} time={e.at} text={e.text??(e.action==='CONSENT'?t('consentEvent'):t('cancelEvent'))}/>)}</>}
+ {pending&&<View accessibilityRole="summary" style={{padding:16,backgroundColor:'#fff4d6',borderRadius:12}}><Text>{t(pending.operation.version===0?'legacy':'pending')}</Text><NativeDisclosure title={t('savedQuestion')}><Text>{recovery.inquiry?.operation.version===1?recovery.inquiry.operation.payload.text:recovery.inquiry?.operation.legacyPayload?.text}</Text>{pending.operation.version===1&&button(t('retry'),()=>void action('RETRY'),busy||waiting>0||!ready)}</NativeDisclosure></View>}
+ {!!error&&<Text accessibilityRole="alert">{error}</Text>}{!!notice&&<Text>{notice}</Text>}{waiting>0&&<Text>{t('wait',{seconds:waiting})}</Text>}
+ {pending||!ready?button(t(ready?'read':'restore'),()=>void action('READ'),busy||waiting>0):null}
+ {replyRead.canMark&&button('將已載入的原賣家回覆標記已讀'+(replyRead.unread!==null?'（'+replyRead.unread+'則未讀）':''),()=>void replyRead.mark(),replyRead.busy)}{replyRead.issue&&<Text style={chatPresentation.meta}>回覆已讀狀態尚未確認，不會假稱已讀。</Text>}
+ {room?.available&&(correction||reopening)&&!editing&&button(t(reopening?'reopen':'revise'),startEditing)}
+ {room?.state==='CANCEL_REQUESTED'&&<Text>{t('withdrawalPending')}</Text>}
+ {compose&&!pending&&<View style={{padding:16,gap:12,backgroundColor:'white',borderRadius:16}}>{editing&&(correction||reopening)&&<Text>{t(reopening?'reopenDraft':'revisionDraft')}</Text>}{button(t('purchase'),()=>setQuestion(t('purchaseDraft')),locked,true)}<TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="Wishlist AI 商品問題" placeholder="想確認什麼？問題送出前可修改" maxLength={1500} value={question} onChangeText={setQuestion} editable={!locked} multiline style={chatPresentation.input}/><Text style={chatPresentation.meta}>{t('consent')}</Text>{button(t(reopening?'sendReopen':correction?'sendRevision':'send'),()=>void action(reopening?'REOPEN':correction?'REVISE':'ASK').then(ok=>{if(ok)setEditorScope('');}),locked||!question.trim())}{editing&&(correction||reopening)&&button(t('cancelEdit'),()=>setEditorScope(''),busy)}</View>}
+ {room?.available&&room.state==='INQUIRY'&&room.events.some(e=>e.action==='ASK')&&button(t('consentButton'),()=>void action('CONSENT'))}
+ {room&&['INQUIRY','WAITING_ROUTE','TRANSFER_RESERVED'].includes(room.state)&&button(t('cancel'),()=>void action('CANCEL'),busy||waiting>0||!ready,true)}
+ </ScrollView></KeyboardAvoidingView>;
 }

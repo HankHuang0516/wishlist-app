@@ -1,0 +1,147 @@
+{
+  "createdAt": "2026-10-24T15:09:04.691361+00:00",
+  "sourceBase": "c281541",
+  "status": "13_GOLDEN_DESIGN_TARGETS_APPROVED_IMPLEMENTATION_AND_ACCEPTANCE_IN_PROGRESS",
+  "userApproval": "2026-10-24 本對話明確要求設為golden及實作發布",
+  "assets": [
+    {
+      "id": 1,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/01-after.png",
+      "sha256": "464e8e36e2a2c32bf041b70c81fb7926f4c126721afa0333e454552af1a23688"
+    },
+    {
+      "id": 2,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/02-after.png",
+      "sha256": "bd987f89ca1336c5177c5bbf623200576defc3533097dbed3b8953104943edee"
+    },
+    {
+      "id": 3,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/03-after.png",
+      "sha256": "02c9b716e317d1880b928e0476176f749665f6dfa2c18c3871b1fc08fc50df4c"
+    },
+    {
+      "id": 4,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/04-after.png",
+      "sha256": "45f2341418a1bf4f9b783144a48517ea5eb3c504ee02e4e168dd22dcca080496"
+    },
+    {
+      "id": 5,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/05-after.png",
+      "sha256": "bce1fe9e399e36f80e031ee33dd2d588efaa3f0a8d4d65f4e908e1e3fa1e343b"
+    },
+    {
+      "id": 6,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/06-after.png",
+      "sha256": "db512341aef1c5005edfe3d370c4e714964ae7db215fe45c6a2f2409b6df71bf"
+    },
+    {
+      "id": 7,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/07-after.png",
+      "sha256": "673290881b711905283ef20d829872d2624295e1347f1ef4bb71972067bb24d8"
+    },
+    {
+      "id": 8,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/08-after.png",
+      "sha256": "e86cb20af90c4240debce04601de5f9871d03dd14a47253ce7f22b030afc2952"
+    },
+    {
+      "id": 9,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/09-after.png",
+      "sha256": "c70e48d4ab45b7b12d917c0a5a7f862eb60c7a2bff0f1babcf8635e13ec39203"
+    },
+    {
+      "id": 10,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/10-after.png",
+      "sha256": "6c38ddf35b5e6466f437da926931d43379f020dc8127eada358fd8b42c36b2f0"
+    },
+    {
+      "id": 11,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/11-golden.png",
+      "sha256": "fe929e6419b14ac67e29b7f2d93a64053b88567237f638535041b0ca8f5a309b"
+    },
+    {
+      "id": 12,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/12-popularity-v3.png",
+      "sha256": "5b8f033905e128920e31456ae1bd78c6c4fa8dfc1e324e046bc9f1238a187458"
+    },
+    {
+      "id": 13,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/13-golden.png",
+      "sha256": "c61516f40c33e1c574bf08b782aedb3fc495c36e9eb0064a4551ec4594c89a2b"
+    }
+  ],
+  "criteria": {
+    "01": "願望卡主操作單一明確；其餘編輯、隱藏、完成及刪除收進選單，保留回執及狀態。",
+    "02": "願望編輯分照片／手動，預算幣別清楚、進階欄位漸進展開、儲存可達。",
+    "03": "刊登分商品／交易地點／確認；行政區選擇及地圖定位不要求輸入經緯度，保留2km模糊、1小時明確同意及無地點草稿。",
+    "04": "我的刊登清楚狀態、主要操作與次選單；保留到期、售出、延期、移除及分享。",
+    "05": "Web個人設定目錄及分頁；保留原有個資、贈禮、私密地址、通知偏好與暫停付費說明。",
+    "06": "帳號安全目錄；密碼、登出所有裝置及目前登出清楚分組，刪除另列危險區。",
+    "07": "面交顯示時間地點雙方同意，修改版本與細節收合；保留完成、取消與重新同意。",
+    "08": "結果不明先查回執，不自動重送；保留原ID、確認後重試及編輯鎖。",
+    "09": "檢舉表單、進度與紀錄清楚分層；未收到及未知狀態文案正確，保留撤回／查詢。",
+    "10": "刪除摘要與分類展開；密碼、確認文字、二次確認，照片清理及保留訊息說明真實。",
+    "11": "真實聊天可選單張照片、預覽移除、選填說明、壓縮5MB與移除EXIF；伺服器成員授權、放大、檢舉、封鎖、回執及帳號刪除完整，未知結果不自動重送。",
+    "12": "商品與聊天可進完整賣場；真實加入日期、公開名稱與頭像、email驗證狀態、分頁在售商品、追蹤及封鎖／檢舉；無資料的簡介不生成，無星等成交保證或個資洩漏。；每件商品顯示一致的詢問中／喜歡參考數據與說明入口，依13定義。",
+    "13": "商品詳情、探索卡、完整賣場及我的刊登顯示每件商品的詢問中與喜歡人數。詢問中＝近7天曾實際傳訊且對話未結束的不同買家；同人去重、賣家本人不計。喜歡需明確操作、可取消，與私人願望／賣家追蹤分開，不把既有私人願望回填成喜歡。只公開匿名總數；外部來源明確稱Wishlist內代問中，不冒稱原平台人氣。空值／失敗顯示—，真實零才顯示0；售出、封鎖、退出、刪帳與併發重送須一致，無假熱度或排隊／保留／成交保證。"
+  },
+  "crossCutting": [
+    "44pt/48dp可點區、對比與放大字體、窄螢幕、鍵盤及安全區",
+    "Web導覽整併但原功能可達；Native維持五分頁",
+    "全域及每列未讀數、前景同步；AI來源狀態分離",
+    "背景聊天／面交通知、分類偏好、裝置權限、隱私預覽、授權深連結與token生命週期",
+    "首頁探索層級及照片／價格優先詳情",
+    "所有可用語言不得留下裸key或混用文案"
+  ],
+  "reasonablenessReview": {
+    "chat": "已目視修正過度隱私承諾與錯誤字數；接受為設計目標。圖為成功與預覽狀態，錯誤、離線、無權限及回執需另驗。",
+    "seller": "無假星等／成交數／身分認證；有條件簡介空狀態。底部分頁選中需依實際進入路徑；示範相片名稱日期不得硬編碼。",
+    "existing10": "沿用既有目視審查；示範資料與歷史日期只供視覺比較，正式畫面用真實API。",
+    "popularity": "已目視13商品詳情／探索／說明視窗及12人氣增強v3；數字3/12與0/4跨畫面一致、無假星等、無名單揭露，已補回驗證非交易保證聲明。愛心的操作區與純統計區實作需避免重複操作與小點擊區。使用者2026-10-25明確回覆「看起來沒問題 加到這次增強的 golden中」，正式納入。示例不算真實人氣或完成驗證。"
+  },
+  "scoring": {
+    "minimumEach": 85,
+    "functional": {
+      "API與資料一致性": 25,
+      "端到端主要流程": 30,
+      "權限與失敗恢復": 25,
+      "跨平台與回歸": 20
+    },
+    "uiux": {
+      "13畫面golden結構與層級": 40,
+      "互動狀態與可達性": 25,
+      "排版對比字級及安全區": 20,
+      "跨平台與語言一致性": 15
+    },
+    "rules": [
+      "功能與UIUX分別評分，不平均抵銷。",
+      "各golden畫面功能及UIUX均至少85%；整體亦各至少85%。",
+      "沒有證據的項目不給分；目標圖不算實作驗證。",
+      "權限漏洞、資料遺失、錯誤重送、刪帳破壞、建置簽章、icon H或商店必要檢查失敗皆禁止發布，即使總分達85。"
+    ]
+  },
+  "currentScores": null,
+  "release": {
+    "iosProduction": "PENDING",
+    "androidProduction": "PENDING",
+    "androidInternal": "PENDING"
+  },
+  "supersededAssets": [
+    {
+      "id": 12,
+      "path": "/Volumes/codex_2T/codex_project/Wishlist/Design/golden-release-20261024/12-golden.png",
+      "sha256": "3ea833f9c5552e178cee87d6215c17294c3bf4dc3a9d12737ba99698692a4793",
+      "reason": "2026-10-25 使用者批准商品人氣增強版，原始賣場目標保留供追溯"
+    }
+  ],
+  "scopeAdditions": [
+    {
+      "date": "2026-10-25",
+      "userApproval": "看起來沒問題 加到這次增強的 golden中",
+      "goldenId": 13,
+      "relatedUpdatedGolden": 12,
+      "status": "APPROVED_GOLDEN_IMPLEMENTATION_PENDING",
+      "generation": "built-in image_gen; prompts retained alongside images"
+    }
+  ]
+}

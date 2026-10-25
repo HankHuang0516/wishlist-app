@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+import { createHash } from 'crypto';
 /** Real first-party chat through HTTP/auth and isolated PostgreSQL. */
 import express from 'express';
 import request from 'supertest';
@@ -192,4 +194,50 @@ describe('first-party chat / PostgreSQL integration', () => {
         expect(new Set([...page1.items, ...page2.items].map((item: { id: string }) => item.id))).toEqual(new Set([first, second]));
         expect((await call('get', '/conversations', third).query({ cursor: first })).status).toBe(404); expect((await call('get', '/conversations').query({ limit: '1000' })).status).toBe(400);
     });
+});
+
+describe('private photo messages / durable receipts', () => {
+ const photo=()=>sharp({create:{width:40,height:30,channels:3,background:'#45735b'}}).jpeg().withMetadata({exif:{IFD0:{Artist:'synthetic-private-marker'}}}).toBuffer();
+ const upload=(room:string,bytes:Buffer,key=randomUUID(),text='機身背面',userId=buyer)=>call('post',`/conversations/${room}/photo-messages`,userId).field('clientMessageId',key).field('text',text).attach('photo',bytes,{filename:'camera.jpg',contentType:'image/jpeg'});
+ it('atomically persists sanitized bytes, restricts reads and returns no bytes in history or receipts',async()=>{
+  const room=(await open()).body.id,bytes=await photo(),key=randomUUID(),sent=await upload(room,bytes,key);
+  expect(sent.status).toBe(201);expect(sent.body.photoHash).toBe(createHash('sha256').update(bytes).digest('hex'));expect(sent.body).not.toHaveProperty('photoBytes');
+  const path=`/conversations/${room}/messages/${sent.body.id}/photo`;
+  const mine=await call('get',path);expect(mine.status).toBe(200);expect(mine.headers['cache-control']).toContain('no-store');expect(mine.headers['content-type']).toContain('image/webp');
+  expect((await sharp(mine.body).metadata()).exif).toBeUndefined();expect((await call('get',path,seller)).status).toBe(200);expect((await call('get',path,third)).status).toBe(404);
+  const page=await call('get',`/conversations/${room}/messages`);expect(page.body.items[0].photoHash).toBe(sent.body.photoHash);expect(page.body.items[0]).not.toHaveProperty('photoBytes');
+  const receipt=await call('get',`/conversations/${room}/messages/by-client-id/${key}`);expect(receipt.body.id).toBe(sent.body.id);
+ });
+ it('serializes identical uploads and rejects reusing the receipt for different content or text',async()=>{
+  const room=(await open()).body.id,bytes=await photo(),key=randomUUID();
+  // The process memory bound can reject a simultaneous request; explicit retry
+  // still binds the original identity and never creates a second message.
+  const first=await upload(room,bytes,key),again=await upload(room,bytes,key);expect(first.status).toBe(201);expect(again.status).toBe(200);expect(again.body.id).toBe(first.body.id);
+  expect((await upload(room,bytes,key,'不同說明')).status).toBe(409);expect((await send(room,'機身背面',buyer,key)).status).toBe(409);
+  expect(await prisma.message.count({where:{conversationId:room}})).toBe(1);
+ });
+ it('rejects outsiders, wrong formats, multiple files and oversized payloads without a partial message',async()=>{
+  const room=(await open()).body.id,bytes=await photo();expect((await upload(room,bytes,randomUUID(),'照片',third)).status).toBe(404);
+  expect((await upload(room,Buffer.from('<svg>untrusted</svg>'))).status).toBe(400);
+  expect((await upload(room,Buffer.alloc(5242881))).status).toBe(413);
+  expect(await prisma.message.count({where:{conversationId:room}})).toBe(0);
+ });
+ it('honors a committed block while allowing the original same-content acknowledgement',async()=>{
+  const room=(await open()).body.id,bytes=await photo(),key=randomUUID();expect((await upload(room,bytes,key)).status).toBe(201);
+  expect((await call('post','/blocks/'+buyer,seller).send({})).status).toBe(200);
+  expect((await upload(room,bytes)).status).toBe(403);expect((await upload(room,bytes,key)).status).toBe(200);
+ });
+ it('durably stops a missing send so delayed photo uploads cannot resurrect it',async()=>{
+  const room=(await open()).body.id,bytes=await photo(),key=randomUUID(),body={clientMessageId:key,text:'照片',photoHash:createHash('sha256').update(bytes).digest('hex')};
+  const stopped=await call('post',`/conversations/${room}/photo-messages/abandon`).send(body);expect(stopped.status).toBe(200);expect(stopped.body.state).toBe('ABANDONED');
+  expect((await upload(room,bytes,key,'照片')).status).toBe(409);expect(await prisma.message.count({where:{conversationId:room}})).toBe(0);
+  expect((await call('post',`/conversations/${room}/photo-messages/abandon`).send({...body,photoHash:'0'.repeat(64)})).status).toBe(409);
+ });
+ it('reports already delivered when cancellation races after a successful send and clears private bytes with the sender participant',async()=>{
+  const room=(await open()).body.id,bytes=await photo(),key=randomUUID(),sent=await upload(room,bytes,key,'照片');
+  const result=await call('post',`/conversations/${room}/photo-messages/abandon`).send({clientMessageId:key,text:'照片',photoHash:createHash('sha256').update(bytes).digest('hex')});
+  expect(result.body.state).toBe('SENT');expect(result.body.message.id).toBe(sent.body.id);
+  await prisma.conversationParticipant.delete({where:{conversationId_userId:{conversationId:room,userId:buyer}}});
+  expect(await prisma.message.findUnique({where:{id:sent.body.id},select:{id:true}})).toBeNull();
+ });
 });

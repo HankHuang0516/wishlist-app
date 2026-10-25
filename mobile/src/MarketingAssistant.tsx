@@ -148,7 +148,7 @@ export function MarketingAssistant({ api, apiUrl, token, sourceMediaId, listingI
             </Pressable>)}</View></View>}
           {!!selected.length && <View style={s.revision}><Text style={s.stepTitle}>2 · 拖放公開順序</Text><Text style={s.small}>拖動右側把手；第一張為封面。</Text>
             {selected.map((id, index) => { const media = choices.find(item => item.id === id); return media && <SortablePhoto key={id} id={id} index={index} length={selected.length} slot={media.marketingSlot} thumbnailUrl={media.thumbnailUrl} apiUrl={apiUrl} token={token} onMove={move} />; })}</View>}
-          <Text style={s.stepTitle}>3 · 核對行銷文案</Text><Text style={s.small}>確認描述、售價與商品實況；可先修改再公開。</Text><TextInput accessibilityLabel="編輯行銷文案" multiline
+          <Text style={s.stepTitle}>3 · 核對行銷文案</Text><Text style={s.small}>確認描述、售價與商品實況；可先修改再公開。</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯行銷文案" multiline
             maxLength={1200} value={copy} onChangeText={setCopy} style={s.input} />
           {job.status === 'REVIEW' && <Pressable accessibilityRole="button" disabled={loading || job.generatedMedia.length !== 4}
             style={s.button} onPress={() => void approve()}><Text style={s.buttonText}>確認照片與文案</Text></Pressable>}
@@ -158,7 +158,7 @@ export function MarketingAssistant({ api, apiUrl, token, sourceMediaId, listingI
               accessibilityState={{ checked: revisionSlots.includes(slot) }} onPress={() => setRevisionSlots(old => old.includes(slot)
                 ? old.filter(value => value !== slot) : [...old, slot])} style={s.chip}>
               <Text>{revisionSlots.includes(slot) ? '☑' : '☐'} 圖 {slot}</Text></Pressable>)}</View>
-            <TextInput accessibilityLabel="描述要調整的地方" placeholder="例如：改成更明亮的背景" maxLength={500}
+            <TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="描述要調整的地方" placeholder="例如：改成更明亮的背景" maxLength={500}
               value={revisionText} onChangeText={setRevisionText} style={s.input} />
             <Pressable accessibilityRole="button" disabled={loading} style={s.chip} onPress={() => void revise()}><Text>免費調整一次</Text></Pressable>
           </View>}

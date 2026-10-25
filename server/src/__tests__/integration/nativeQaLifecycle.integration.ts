@@ -6,7 +6,7 @@ const { startNativeQa, qaEnvironment } = require('../../../../mobile/scripts/nat
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Identical isolated test DB required');
 const worker = path.resolve(__dirname, '../../../../mobile/scripts/native-qa-worker.cjs');
-const empty = { fixturesRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
+const empty = { fixturesRemaining: 0, followsRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
 const ownedUsers: number[] = [];
 function childFixture(env: NodeJS.ProcessEnv) {
     const child = fork(worker, [], { env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });

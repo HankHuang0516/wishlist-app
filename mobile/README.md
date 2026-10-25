@@ -1,3 +1,5 @@
+2026-10-25 本次 marketplace golden 增強進行中：13 個已批准目標包含私密聊天商品照片、真實賣場資訊及匿名詢問／喜歡人數，定義與逐項功能／UIUX各85分門檻見 `../docs/marketplace-golden-20261024.json`。最近完整通過為 full24：server1129 passed／3 skipped、60 migrations drift0、DB／browser765、Web2219、Native909；後續取消面交文案已有Web54項與實際Android雙方同意／取消流程通過。Android亦完成真實系統選圖、照片上傳／放大與私密權限，以及201回應遺失後僅查原回執、一次上傳、原UUID／雜湊一致、上傳前與儲存後EXIF移除的驗證。full22／23曾在整套DB／browser回歸遇到初始化等待失敗；同源完整5萬筆流程、相同CI／DB的兩個失敗套件及後續full24均通過。早前失敗與只讀診斷仍保留，沒有宣稱已找到根因或修正產品原因。逐項評分、實機推播、本版產物H自檢、商店隱私資料及iOS／Android正式版與Android internal發布仍待完成；未宣稱85分或已發布。
+
 # Wishlist.ai 原生手機端（開發中）
 
 採浪浪地圖同款 React Native／Expo／原生 MapLibre。Web 與後端保留；這裡不是 Capacitor 或遠端 WebView 包裝。

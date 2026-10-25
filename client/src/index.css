@@ -8,6 +8,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Keep editable-field hints readable on the app's light form surfaces. */
+html:root input::placeholder,
+html:root textarea::placeholder {
+  color: #636366;
+  opacity: 1;
+}
+
 @layer utilities {
   @keyframes shake {
     0%, 100% { transform: translateX(0); }

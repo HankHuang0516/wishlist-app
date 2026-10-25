@@ -162,7 +162,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -181,7 +181,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("unexpected-logbox-warning")
             throw Failure.invalidIdentity
         }
-        if ["qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
+        if ["qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit"].contains(name) { try dismissCollapsedDebugWarningToastIfPresent() }
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
@@ -440,6 +440,13 @@ final class NativeQaTests: XCTestCase {
         try required("我了解，繼續使用", scroll: true)
         try safeScreenshot("qa-product-notice")
         try tap("我了解，繼續使用")
+        // Real visible agreement for this isolated synthetic adult fixture;
+        // never manufacture a stored acceptance or bypass the auth UI.
+        if element("使用條款與社群安全").waitForExistence(timeout: 3) {
+            checkpoint("synthetic-terms-visible-confirmation")
+            try tap("☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。", kind: .any)
+            try tap("同意並繼續")
+        }
         checkpoint("real-login-native-input")
         try required("手機號碼或 Email"); try required("密碼")
         try privateInput("login-buyer")
@@ -1024,4 +1031,40 @@ final class NativeQaTests: XCTestCase {
             app.terminate()
         } catch { reportFailure() }
     }
+    func test16RealLoginGoldenWishTransitions() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("golden-wish-cards")
+            try tapTab("願望")
+            try tap("查看清單")
+            try required("尋找符合商品", scroll: true)
+            try safeScreenshot("qa-golden-wish-cards")
+            checkpoint("golden-more-to-editor")
+            try tap("深藍色陶瓷馬克杯的更多操作")
+            try tap("編輯願望")
+            let close = try required("關閉編輯", scroll: true, kind: .button)
+            guard close.isHittable, close.frame.height >= 44 else { throw Failure.unstableControl }
+            try required("願望名稱")
+            try safeScreenshot("qa-golden-wish-editor")
+            checkpoint("golden-currency-modal")
+            try tap("TWD · 選擇幣別")
+            try required("選擇預算幣別")
+            try safeScreenshot("qa-golden-wish-currency")
+            try tap("USD")
+            try required("USD · 選擇幣別", scroll: true)
+            try tap("關閉編輯")
+            try required("尋找符合商品", scroll: true)
+            checkpoint("golden-manual-editor")
+            try tap("新增願望")
+            try tap("手動輸入", kind: .any)
+            try required("願望名稱")
+            try required("關閉編輯", kind: .button)
+            try tap("關閉編輯")
+            try required("尋找符合商品", scroll: true)
+            app.terminate()
+        } catch { reportFailure() }
+    }
+
 }

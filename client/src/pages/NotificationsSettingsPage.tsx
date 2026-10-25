@@ -1,3 +1,4 @@
+import NotificationPreferencesControls from '../components/NotificationPreferencesControls';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +32,7 @@ function NotificationsSession({ token, userId }: { token: string; userId: number
             <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />{t('common.back')}
         </Link>
         <h1 className="text-2xl font-bold text-muji-primary mb-6">{t('settings.notifications')}</h1>
+        <NotificationPreferencesControls token={token} userId={userId}/>
         <Card className="bg-white">
             <CardHeader><CardTitle className="text-lg">{t('settings.emailNotifs')}</CardTitle></CardHeader>
             <CardContent className="space-y-4">

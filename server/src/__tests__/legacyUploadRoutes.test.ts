@@ -2,10 +2,12 @@ import express from 'express';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-import request from 'supertest';
+import { createLoopbackRequest } from './integration/loopbackHttp';
 import { createLegacyUploadRoutes } from '../routes/legacyUploadRoutes';
 
 describe('legacy public uploads', () => {
+    const app = express();
+    const http = createLoopbackRequest(app);
     it('serves flat legacy images but never the private listing-media directory', async () => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-flat-uploads-'));
         try {
@@ -16,8 +18,8 @@ describe('legacy public uploads', () => {
             const receipts = path.join(root, '.source-sync-receipts');
             await fs.mkdir(receipts, { mode: 0o700 });
             await fs.writeFile(path.join(receipts, 'deployment-verification.json'), 'PRIVATE_RECEIPT_SYNTHETIC_ONLY', { mode: 0o600 });
-            const app = express(); app.use('/uploads', createLegacyUploadRoutes(root));
-            const legacy = await request(app).get('/uploads/avatar_123.jpg');
+            app.use('/uploads', createLegacyUploadRoutes(root));
+            const legacy = await http.get('/uploads/avatar_123.jpg');
             expect(legacy.status).toBe(200); expect(legacy.body.toString('utf8')).toBe('legacy');
             for (const url of [
                 '/uploads/listing-media/123e4567-e89b-42d3-a456-426614174000/image.webp',
@@ -27,7 +29,7 @@ describe('legacy public uploads', () => {
                 '/uploads/%2esource-sync-receipts/deployment-verification.json',
                 '/uploads/.source-sync-receipts%2fdeployment-verification.json',
                 '/uploads/.source-sync-receipts/',
-            ]) expect((await request(app).get(url)).status).toBe(404);
+            ]) expect((await http.get(url)).status).toBe(404);
         } finally {
             await fs.rm(root, { recursive: true, force: true });
         }

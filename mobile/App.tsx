@@ -1,3 +1,9 @@
+import {ProductInterestProvider} from './src/ProductInterestView';
+import { SafeAreaModal } from './src/SafeAreaModal';
+import * as Notifications from 'expo-notifications';
+import { useNativeNotifications } from './src/nativeNotifications';
+import { NotificationSettingsScreen } from './src/NotificationSettingsScreen';
+import { useNativeUnreadCount } from './src/useNativeUnreadCount';
 import { type SourceChatContext } from './src/SourceLeadExplorer';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -59,6 +65,7 @@ export default function App() {
 }
 
 function NativeApp({ apiUrl }: { apiUrl: string }) {
+  const [notificationSettingsOpen,setNotificationSettingsOpen]=useState(false);
   const [activeSourceChat,setActiveSourceChat]=useState<SourceChatContext|null>(null);
   const [focusSource,setFocusSource]=useState<string|null>(null);
 
@@ -77,6 +84,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [composing, setComposing] = useState<'batch' | 'manual' | null>(null);
   const [managingListings, setManagingListings] = useState(false);
+  const listingCloseRequest=useRef<(()=>void)|null>(null);
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [exploreWishId, setExploreWishId] = useState<number | undefined>(undefined);
   const [focusListing, setFocusListing] = useState<PublicListing | null>(null);
@@ -90,6 +98,9 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   const recoveryOperation = useRef(createAuthOperationGate()).current;
   const sessionEpoch = authEpoch.current;
   const api = useMemo(() => createApi(apiUrl, () => token, __DEV__), [apiUrl, token]);
+  const unreadCount=useNativeUnreadCount(api,token?user?.id:undefined);
+  const notificationRuntime=useNativeNotifications(api,apiUrl,token?user?.id:undefined,activeRoom,target=>{setNotificationSettingsOpen(false);if(target.kind==='chat'){setActiveSourceChat(null);setActiveRoom(target.roomId);}else{setActiveRoom(null);setActiveSourceChat(target.context);}setTab('社交');});
+  useEffect(()=>{if(token&&unreadCount!==null)void Notifications.setBadgeCountAsync(unreadCount).catch(()=>undefined);},[token,unreadCount]);
 
   useEffect(() => {
     let active = true;
@@ -138,6 +149,8 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     if (authRunning.current || deletionActive.current) return;
     authRunning.current = true; setBusy(true);
     authEpoch.current++;
+    let pushDisconnectUnconfirmed=false;try{await notificationRuntime.disconnect();}catch{pushDisconnectUnconfirmed=true;}
+    setNotificationSettingsOpen(false);
     if (revokedMessage) {
       setToken(null); setUser(null); setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
       setError(revokedMessage); setSessionIssue('expired');
@@ -145,7 +158,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     try {
       await SecureStore.deleteItemAsync(SESSION_KEY);
       setToken(null); setUser(null); setActiveRoom(null); setActiveSourceChat(null);setFocusSource(null); setComposing(null); setManagingListings(false); setExploreWishId(undefined); setFocusListing(null); setTab('首頁');
-      setError(revokedMessage ?? ''); setSessionIssue(revokedMessage ? 'expired' : null); setBusy(false);
+      setError((revokedMessage??'')+(pushDisconnectUnconfirmed?'\n此裝置推播停用尚未確認，請先在系統設定關閉Wishlist通知。':'')); setSessionIssue(revokedMessage ? 'expired' : null); setBusy(false);
     } catch {
       if (revokedMessage) { setSessionIssue('expired-storage-unavailable'); setError(revokedMessage + '\n' + sessionIssueMessage('expired-storage-unavailable')); }
       else Alert.alert('無法登出', '請稍後重試。');
@@ -216,34 +229,36 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   if (user && (!termsChecked || !termsAccepted)) return <SafeAreaView style={styles.screen}>{termsChecked ? <TermsAgreement apiUrl={apiUrl} onAccept={() => setTermsAccepted(true)} onDecline={() => setDeletionOpen(true)} /> : <ActivityIndicator />}</SafeAreaView>;
   if (!user) return <SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
 
-  return <SafeAreaView style={styles.screen}>
+  return <ProductInterestProvider read={api} apiUrl={apiUrl} userId={user.id}><SafeAreaView style={styles.screen}>
     <View style={styles.header}>
-      <View style={styles.brandLockup}><View style={styles.appMark}><Ionicons name="sparkles" color={iosColors.white} size={17} /></View><View><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.eyebrow}>願望市集</Text></View></View>
+      <View style={styles.brandLockup}><View style={styles.appMark}><Ionicons name="sparkles" color={iosColors.white} size={17} /></View><View style={styles.brandWords}><Text numberOfLines={1} style={styles.brand}>Wishlist.ai</Text><Text style={styles.eyebrow}>願望市集</Text></View></View>
       <View style={styles.profilePill}><Ionicons name="person" color={iosColors.secondaryLabel} size={14} /><Text numberOfLines={1} style={styles.profileName}>{user.name || '我的願望'}</Text></View>
     </View>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {tab === '首頁' ? <WishHome key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={(wishId, listing) => { setExploreWishId(wishId); setFocusListing(listing ?? null); setTab('探索'); }} onWishes={() => setTab('願望')} /> : tab === '願望' ? <WishScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} onExplore={id => { setExploreWishId(id); setFocusListing(null); setTab('探索'); }} /> : tab === '探索' ? <ExploreScreen api={api} apiUrl={apiUrl} userId={user.id} initialSourceId={focusSource} onInitialSourceHandled={()=>setFocusSource(null)} initialListing={focusListing} onInitialListingHandled={() => setFocusListing(null)} wishItemId={exploreWishId} onClearWish={() => setExploreWishId(undefined)} onOpenChat={id => {setActiveSourceChat(null);setFocusSource(null); setActiveRoom(id); setTab('社交'); }} onOpenSourceChat={context=>{setActiveRoom(null);setActiveSourceChat(context);setTab('社交');}} /> : tab === '社交' ? <ChatInbox api={api} apiUrl={apiUrl} token={token ?? ''} userId={user.id} activeRoom={activeRoom} onRoomChange={setActiveRoom} activeSourceChat={activeSourceChat} onSourceChatChange={context=>{if(!context&&activeSourceChat){setFocusSource(activeSourceChat.id);setExploreWishId(undefined);setTab('探索');}setActiveSourceChat(context);}} /> :
-      <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
+      <AccountSecurityScreen key={user.id} api={api} operationGate={accountOperation} onDelete={openDeletion} onNotifications={()=>setNotificationSettingsOpen(true)} onPublish={() => setComposing('batch')} onManage={() => setManagingListings(true)} onLogout={() => void logout()} onRevoked={logout} />}
     <View style={styles.tabs}>{TABS.map(item => {
       const selected = item === tab;
       return <Pressable key={item} testID={TAB_IDS[item]} accessibilityLabel={item} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setTab(item)} style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}>
-        <Ionicons name={selected ? TAB_ICONS[item].active : TAB_ICONS[item].inactive} size={23} color={selected ? iosColors.tint : iosColors.tertiaryLabel} />
+        <View style={{position:'relative'}}><Ionicons name={selected ? TAB_ICONS[item].active : TAB_ICONS[item].inactive} size={23} color={selected ? iosColors.tint : iosColors.secondaryLabel} />{item==='社交'&&unreadCount!==null&&unreadCount>0&&<View style={{position:'absolute',right:-18,top:-8,minWidth:20,minHeight:20,paddingHorizontal:5,borderRadius:10,backgroundColor:'#B91C1C',alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:12,color:iosColors.white,fontWeight:'700'}}>{unreadCount>99?'99+':unreadCount}</Text></View>}</View>
         <Text style={selected ? styles.activeTab : styles.inactiveTab}>{item}</Text>
       </Pressable>;
     })}</View>
     {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); Alert.alert('商品已刊登', `已確認 ${count} 件商品。可在我的商品分享連結，或手動同意本次地圖顯示。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
+    {notificationSettingsOpen&&<SafeAreaModal visible animationType="slide" onRequestClose={()=>setNotificationSettingsOpen(false)} contentStyle={styles.screen}><NotificationSettingsScreen api={api} apiUrl={apiUrl} userId={user.id} runtime={notificationRuntime} onClose={()=>setNotificationSettingsOpen(false)}/></SafeAreaModal>}
     {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可在我的商品分享連結，或手動同意本次地圖顯示。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
-    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
+    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => listingCloseRequest.current?.()}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} closeRequestRef={listingCloseRequest} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
     {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
-  </SafeAreaView>;
+  </SafeAreaView></ProductInterestProvider>;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: iosSpacing.md, backgroundColor: iosColors.background },
   login: { padding: 28, paddingTop: 64, gap: 20 }, content: { padding: 24, gap: 20 },
-  header: { minHeight: 60, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm },
+  header: { minHeight: 60, paddingHorizontal: iosSpacing.lg, paddingVertical: iosSpacing.xs, flexDirection: 'row', flexWrap: 'wrap', columnGap: iosSpacing.sm, rowGap: iosSpacing.xxs, alignItems: 'center', justifyContent: 'space-between' },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm, flexShrink: 1, minWidth: 0 },
+  brandWords: { flexShrink: 1, minWidth: 0 },
   appMark: { width: 34, height: 34, borderRadius: iosRadius.small, backgroundColor: iosColors.tint, alignItems: 'center', justifyContent: 'center' },
   brand: { ...iosType.headline, color: iosColors.label }, title: { ...iosType.largeTitle, color: iosColors.label },
   eyebrow: { ...iosType.caption, letterSpacing: 0.4, color: iosColors.secondaryLabel },
@@ -257,6 +272,6 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', minHeight: 64, paddingTop: 6, paddingHorizontal: iosSpacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, backgroundColor: 'rgba(255,255,255,0.97)', ...iosFloatingShadow },
   tab: { flex: 1, minHeight: minimumTapSize, alignItems: 'center', justifyContent: 'center', gap: 2, borderRadius: iosRadius.control },
   tabPressed: { backgroundColor: iosColors.surfaceSecondary },
-  activeTab: { color: iosColors.tint, fontSize: 10.5, lineHeight: 13, fontWeight: '700' }, inactiveTab: { color: iosColors.tertiaryLabel, fontSize: 10.5, lineHeight: 13, fontWeight: '600' },
+  activeTab: { color: iosColors.tint, fontSize: 11.5, lineHeight: 13, fontWeight: '700' }, inactiveTab: { color: iosColors.secondaryLabel, fontSize: 11.5, lineHeight: 13, fontWeight: '600' },
   mapNotice: { position: 'absolute', top: 12, left: 12, right: 12, backgroundColor: iosColors.surface, padding: 12, borderRadius: iosRadius.control },
 });

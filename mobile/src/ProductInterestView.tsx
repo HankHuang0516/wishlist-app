@@ -1,0 +1,42 @@
+import React,{createContext,useCallback,useContext,useEffect,useMemo,useState,useSyncExternalStore} from 'react';
+import {View,Text,Pressable,AppState,ScrollView,StyleSheet} from 'react-native';
+import {Ionicons} from '@expo/vector-icons';
+import {InterestStore,type InterestRead} from './productInterest';
+import {useInterestOperation} from './useInterestOperation';
+import {SafeAreaModal} from './SafeAreaModal';
+import {NativeDisclosure} from './NativeDisclosure';
+import {iosColors,iosRadius,iosType} from './iosTheme';
+const Context=createContext<{store:InterestStore;operation:ReturnType<typeof useInterestOperation>}|null>(null);
+export function ProductInterestProvider({read,apiUrl,userId,children}:{read:InterestRead;apiUrl:string;userId:number;children:React.ReactNode}){
+ const store=useMemo(()=>new InterestStore(read),[read]),operation=useInterestOperation(read,apiUrl,userId,store),[recoveryOpen,setRecoveryOpen]=useState(false);
+ useEffect(()=>{store.start();const refresh=()=>{if(AppState.currentState==='active')void store.refresh();};const interval=setInterval(refresh,30000),subscription=AppState.addEventListener('change',refresh);return()=>{clearInterval(interval);subscription.remove();store.destroy();};},[store]);
+ const recovering=!!operation.pending||operation.issue==='restore';
+ return <Context.Provider value={{store,operation}}><View style={{flex:1}}>{recovering&&<Pressable accessibilityRole="button" style={{minHeight:48,padding:12,backgroundColor:'#FFF4D6'}} onPress={()=>setRecoveryOpen(true)}><Text style={{fontSize:15,color:'#6B4300'}}>喜歡操作結果尚未確認 · 點此查核</Text></Pressable>}<View style={{flex:1}}>{children}</View></View><SafeAreaModal visible={recovering&&recoveryOpen} animationType="slide" onRequestClose={()=>setRecoveryOpen(false)}><ScrollView contentContainerStyle={{padding:24,gap:16}}><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>setRecoveryOpen(false)}><Text>稍後核對</Text></Pressable><Text accessibilityRole="header" style={{fontSize:24,fontWeight:'700'}}>喜歡操作待核對</Text><Text style={{fontSize:16,lineHeight:25}}>原操作仍保留。先查核結果，尚未確認前不會自動重送。</Text><Pressable accessibilityRole="button" disabled={operation.busy} style={{minHeight:48,padding:12,backgroundColor:'#EAF3FF',borderRadius:12}} onPress={()=>operation.pending?void operation.recover('read'):operation.reload()}><Text>查核原結果</Text></Pressable>{operation.pending&&<NativeDisclosure title="其他恢復方式"><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} disabled={operation.busy} onPress={()=>void operation.recover('retry')}><Text>重試原喜歡操作</Text></Pressable><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} disabled={operation.busy} onPress={()=>void operation.recover('abandon')}><Text>停止尚未執行的操作</Text></Pressable><Text>若原操作已完成，停止不會撤銷已完成的喜歡；可核對後再取消喜歡。</Text></NativeDisclosure>}</ScrollView></SafeAreaModal></Context.Provider>;
+}
+export function ProductInterest({kind,id,compact=false,readOnly=false}:{kind:'listing'|'source'|'external';id:string;compact?:boolean;readOnly?:boolean}){
+ const context=useContext(Context),key=kind+':'+id,[info,setInfo]=useState(false);
+ const subscribe=useCallback((listener:()=>void)=>context?.store.subscribe(key,listener)??(()=>{}),[context?.store,key]),snapshot=useCallback(()=>context?.store.get(key)??null,[context?.store,key]);
+ const data=useSyncExternalStore(subscribe,snapshot,snapshot),operation=context?.operation;
+ const inquiry=(data?.inquiringCount??'—')+(kind==='source'?' 人代問中':' 人詢問中'),liked=data?.own?.liked??false;
+ return <><View style={{minHeight:48,flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:8}}><View style={{minHeight:48,flexDirection:'row',alignItems:'center',gap:4}}><Ionicons name="chatbubble-outline" size={17} color="#636366"/><Text style={{fontSize:compact?13:15,color:'#636366'}}>{inquiry}</Text></View>{readOnly?<Text style={{fontSize:compact?13:15,color:'#636366'}}>♡ {data?.likedCount??'—'} 人喜歡</Text>:<Pressable accessibilityRole="button" accessibilityLabel={`${data?.likedCount??'—'} 人喜歡，${liked?'取消喜歡此商品':'喜歡此商品，僅公開人數'}`} accessibilityState={{selected:liked}} disabled={!data?.canLike||!data?.own||!operation?.ready||operation.busy||!!operation.pending} style={{minHeight:48,minWidth:48,flexDirection:'row',alignItems:'center',gap:4}} onPress={e=>{e.stopPropagation();void operation?.toggle(key);}}><Ionicons name={liked?'heart':'heart-outline'} size={19} color={liked?'#C72C59':'#636366'}/><Text style={{fontSize:compact?13:15,color:'#636366'}}>{data?.likedCount??'—'}{compact?'':' 人喜歡'}</Text></Pressable>}{!(compact&&readOnly)&&<Pressable accessibilityRole="button" accessibilityLabel="關於人氣數據" style={{minHeight:48,minWidth:48,alignItems:'center',justifyContent:'center'}} onPress={e=>{e.stopPropagation();setInfo(true);}}><Ionicons name="information-circle-outline" size={19} color="#636366"/></Pressable>}</View>
+ <SafeAreaModal visible={info} animationType="slide" onRequestClose={()=>setInfo(false)}><InterestExplanation onClose={()=>setInfo(false)}/></SafeAreaModal></>;
+}
+
+function InterestExplanation({onClose}:{onClose:()=>void}){
+ const sections=[
+  {title:'詢問中',icon:'chatbubble-outline' as const,color:iosColors.tint,body:'近7天曾傳訊，且對話尚未結束的不同買家人數。同一人多次傳訊只計1人。'},
+  {title:'喜歡',icon:'heart' as const,color:'#C72C59',body:'主動按下喜歡的帳號數；取消後會扣除。與私人願望清單分開，舊願望不會被轉成人氣。'},
+  {title:'外部來源',icon:'open-outline' as const,color:iosColors.label,body:'僅統計Wishlist內的代問與喜歡，不代表原平台的人氣或庫存。無可核對的詢問紀錄顯示—。'},
+ ];
+ return <View style={infoStyles.page}>
+  <View style={infoStyles.header}><Text accessibilityRole="header" style={infoStyles.title}>關於人氣數據</Text><Pressable accessibilityRole="button" accessibilityLabel="關閉人氣說明" style={infoStyles.close} onPress={onClose}><Ionicons name="close" size={24} color={iosColors.label}/></Pressable></View>
+  <ScrollView style={infoStyles.scroll} contentContainerStyle={infoStyles.body}>
+   {sections.map(section=><View key={section.title} style={infoStyles.section}><Ionicons name={section.icon} size={24} color={section.color}/><View style={infoStyles.copy}><Text style={infoStyles.heading}>{section.title}</Text><Text style={infoStyles.text}>{section.body}</Text></View></View>)}
+   <Text style={infoStyles.note}>只公開總人數，不公開名單；不是排隊、保留或成交保證。資料無法讀取時顯示—，不以0代替。</Text>
+  </ScrollView>
+  <View style={infoStyles.footer}><Pressable accessibilityRole="button" style={infoStyles.done} onPress={onClose}><Text style={infoStyles.doneText}>知道了</Text></Pressable></View>
+ </View>;
+}
+const infoStyles=StyleSheet.create({
+ page:{flex:1,backgroundColor:iosColors.surface},header:{minHeight:64,paddingLeft:24,paddingRight:12,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:iosColors.separator},title:{...iosType.title2,color:iosColors.label,flex:1},close:{minHeight:48,minWidth:48,alignItems:'center',justifyContent:'center'},scroll:{flex:1},body:{padding:24,gap:24},section:{flexDirection:'row',gap:16,alignItems:'flex-start'},copy:{flex:1,gap:8},heading:{...iosType.headline,color:iosColors.label},text:{...iosType.body,color:iosColors.label},note:{...iosType.subheadline,color:iosColors.secondaryLabel,lineHeight:24,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:iosColors.separator,paddingTop:16},footer:{padding:16,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:iosColors.separator},done:{minHeight:52,backgroundColor:iosColors.tint,borderRadius:iosRadius.control,alignItems:'center',justifyContent:'center',padding:12},doneText:{...iosType.headline,color:iosColors.white},
+});

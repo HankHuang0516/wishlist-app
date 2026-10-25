@@ -1,5 +1,7 @@
+import {ADDITIONAL_DELETION_LABELS} from './accountDeletion';
+import { NativeDisclosure } from './NativeDisclosure';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { abandonDeletion, deletionApi, DELETION_IMPACT_LABELS, encodeDeletionJournal, lookupDeletion, parseDeletionImpact, prepareDeletion, retainDeletionResult, submitDeletion, type DeletionAck, type DeletionImpact, type DeletionJournal, type DeletionResult } from './accountDeletion';
 import { DELETION_STORAGE_ISSUE, clearErasedSession } from './deletionRecovery';
@@ -116,16 +118,16 @@ export function AccountDeletionScreen({ apiUrl, userId, token, initialJournal, o
   }
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <Text style={styles.title}>刪除帳號</Text>
-    <Text style={styles.body}>只處理目前本人帳號；不刪其他人的願望或自有訊息。購買紀錄解除帳號關聯，照片可能需後續清理。資料保留政策仍須與正式實作核對。</Text>
-    <Text style={styles.body}>本人商品檢舉、證據及收件／安全放棄回執會隨帳號刪除。本人商品上的案件與審核紀錄也會移除；其他人商品上的審核紀錄會保留但解除本人案件關聯。其他檢舉者仍可確認原操作已收件，不保留已刪商品內容。以下分類可能重疊，不可加總為唯一資料筆數。</Text>
+    <Text style={styles.body}>只處理目前本人帳號；不刪其他人的願望或自有訊息。購買紀錄解除帳號關聯，照片可能需後續清理。本人聊天照片、喜歡、代問紀錄、通知偏好、推播裝置與相關回執也會移除。</Text>
+    <NativeDisclosure title="其他影響與資料保留"><Text style={styles.body}>本人商品檢舉、證據及收件／安全放棄回執會隨帳號刪除。本人商品上的案件與審核紀錄也會移除；其他人商品上的審核紀錄會保留但解除本人案件關聯。其他檢舉者仍可確認原操作已收件，不保留已刪商品內容。以下分類可能重疊，不可加總為唯一資料筆數。</Text></NativeDisclosure>
     {busy && <ActivityIndicator accessibilityLabel="確認刪除操作中" />}
     {!!issue && <Text accessibilityRole="alert" style={styles.error}>{issue}</Text>}
     {!journal ? <>
       <Text style={styles.heading}>刪除影響盤點</Text>
-      {impact ? <><Text style={styles.note}>唯讀盤點時間：{new Date(impact.capturedAt).toLocaleString('zh-TW')}。數量可能因新資料而變動，不是刪除收據。</Text>{Object.entries(DELETION_IMPACT_LABELS).map(([name, label]) => <Text key={name} style={styles.body}>{label}：{impact.counts[name as keyof typeof DELETION_IMPACT_LABELS]}</Text>)}</> : <Text style={styles.note}>尚未取得有效盤點，不可送出刪除。</Text>}
+      {impact ? <><Text style={styles.note}>唯讀盤點時間：{new Date(impact.capturedAt).toLocaleString('zh-TW')}。數量可能因新資料而變動，不是刪除收據。</Text><View style={{padding:16,gap:8,backgroundColor:iosColors.surface,borderRadius:16}}><Text style={styles.body}>{impact.counts.wishlists} 個願望清單 · {impact.counts.wishes} 個願望</Text><Text style={styles.body}>{impact.counts.listings} 件刊登 · {impact.counts.uploadedPhotos} 張照片</Text><Text style={styles.body}>{impact.counts.messagesAuthored} 則本人訊息</Text></View><NativeDisclosure title={"查看完整資料盤點（"+(impact.additionalCounts?32:23)+"項）"}>{Object.entries(DELETION_IMPACT_LABELS).map(([name, label]) => <Text key={name} style={styles.body}>{label}：{impact.counts[name as keyof typeof DELETION_IMPACT_LABELS]}</Text>)}{impact.additionalCounts&&Object.entries(ADDITIONAL_DELETION_LABELS).map(([name,label])=><Text key={name} style={styles.body}>{label}：{impact.additionalCounts![name as keyof typeof ADDITIONAL_DELETION_LABELS]}</Text>)}</NativeDisclosure></> : <Text style={styles.note}>尚未取得有效盤點，不可送出刪除。</Text>}
       <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton, busy && styles.disabled]} onPress={() => void loadImpact()}><Text style={styles.secondaryButtonText}>重新盤點</Text></Pressable>
-      <Text style={styles.fieldLabel}>目前密碼</Text><TextInput accessibilityLabel="刪除帳號的目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={1024} value={password} onChangeText={setPassword} style={styles.input} />
-      <Text style={styles.fieldLabel}>確認文字（請輸入「刪除帳號」）</Text><TextInput accessibilityLabel="輸入刪除帳號以確認" placeholder="請輸入「刪除帳號」" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={20} value={confirmation} onChangeText={setConfirmation} style={styles.input} />
+      <Text style={styles.fieldLabel}>目前密碼</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="刪除帳號的目前密碼" placeholder="目前密碼" secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={1024} value={password} onChangeText={setPassword} style={styles.input} />
+      <Text style={styles.fieldLabel}>確認文字（請輸入「刪除帳號」）</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="輸入刪除帳號以確認" placeholder="請輸入「刪除帳號」" autoCapitalize="none" autoCorrect={false} editable={!busy} maxLength={20} value={confirmation} onChangeText={setConfirmation} style={styles.input} />
       <Pressable accessibilityRole="button" disabled={busy || !impact || !password || confirmation !== '刪除帳號'} style={[styles.button, styles.danger, (busy || !impact || !password || confirmation !== '刪除帳號') && styles.disabled]} onPress={confirmDelete}><Text style={styles.buttonText}>永久刪除本人帳號</Text></Pressable>
       <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, styles.secondaryButton]} onPress={back}><Text style={styles.secondaryButtonText}>返回，不建立刪除操作</Text></Pressable>
     </> : <>

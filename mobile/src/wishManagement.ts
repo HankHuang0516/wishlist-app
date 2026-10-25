@@ -2,7 +2,7 @@ import { uuid } from './listingForm';
 export class WishManagementError extends Error { constructor(message = '願望資料不正確') { super(message); } }
 export type ManagedList = { id: number; title: string; description: string | null; isPublic: boolean; maxItems: number; count: number };
 export type ManagedWish = { id: number; wishlistId: number; name: string; notes: string | null; link: string | null; imageUrl: string | null; aiStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'SKIPPED'; aiPrice: string | null; aiCurrency: string | null; aiLink: string | null; maxPrice: number | null; priceCurrency: string | null; isHidden: boolean; isPurchased: boolean };
-const currencies = ['TWD', 'USD', 'JPY', 'EUR', 'GBP', 'CNY', 'HKD', 'KRW', 'SGD', 'AUD', 'CAD'];
+export const WISH_CURRENCIES = ['TWD', 'USD', 'JPY', 'EUR', 'GBP', 'CNY', 'HKD', 'KRW', 'SGD', 'AUD', 'CAD'];
 export const validWishId = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 2147483647;
 function record(v: unknown): Record<string, unknown> { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new WishManagementError(); return v as Record<string, unknown>; }
 function text(v: unknown, max: number, empty = false): v is string { return typeof v === 'string' && (empty || !!v.trim()) && v.length <= max && !v.includes('\u0000'); }
@@ -14,7 +14,7 @@ export function parseManagedList(v: unknown): ManagedList {
 }
 export function parseManagedWish(v: unknown): ManagedWish {
   const p = record(v);
-  if (!validWishId(p.id) || !validWishId(p.wishlistId) || !text(p.name, 200) || !nullable(p.notes, 1000) || !nullable(p.link, 2048) || !nullable(p.imageUrl, 2048) || !nullable(p.price, 64) || !(p.currency === null || typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency)) || !nullable(p.aiLink, 2048) || !['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'SKIPPED'].includes(p.aiStatus as string) || !(p.maxPrice === null || typeof p.maxPrice === 'number' && Number.isFinite(p.maxPrice) && p.maxPrice >= 0 && p.maxPrice <= 1e12) || !(p.priceCurrency === null || typeof p.priceCurrency === 'string' && currencies.includes(p.priceCurrency)) || typeof p.isHidden !== 'boolean' || typeof p.isPurchased !== 'boolean') throw new WishManagementError();
+  if (!validWishId(p.id) || !validWishId(p.wishlistId) || !text(p.name, 200) || !nullable(p.notes, 1000) || !nullable(p.link, 2048) || !nullable(p.imageUrl, 2048) || !nullable(p.price, 64) || !(p.currency === null || typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency)) || !nullable(p.aiLink, 2048) || !['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'SKIPPED'].includes(p.aiStatus as string) || !(p.maxPrice === null || typeof p.maxPrice === 'number' && Number.isFinite(p.maxPrice) && p.maxPrice >= 0 && p.maxPrice <= 1e12) || !(p.priceCurrency === null || typeof p.priceCurrency === 'string' && WISH_CURRENCIES.includes(p.priceCurrency)) || typeof p.isHidden !== 'boolean' || typeof p.isPurchased !== 'boolean') throw new WishManagementError();
   if (p.price !== null && !/^\d+(?:\.\d+)?$/.test(p.price as string)) throw new WishManagementError();
   if (p.imageUrl !== null) {
     let image: URL; try { image = new URL(p.imageUrl as string); } catch { throw new WishManagementError(); }
@@ -47,7 +47,7 @@ export function wishDraftBody(form: WishDraft, mediaId: string | null = null) {
   if (mediaId !== null && (!uuid(mediaId) || imageUrl !== null)) throw new WishManagementError('請選擇照片或圖片網址其中一種');
   const budget = form.budget.trim(); let maxPrice: number | null = null;
   if (budget) { if (!/^\d+(?:\.\d{1,2})?$/.test(budget) || !Number.isFinite(Number(budget)) || Number(budget) > 1e12) throw new WishManagementError('預算須為非負金額，最多兩位小數'); maxPrice = Number(budget); }
-  const currency = form.currency.trim().toUpperCase(); if (maxPrice !== null && !currencies.includes(currency)) throw new WishManagementError('請填寫支援的幣別，例如TWD／USD／JPY');
+  const currency = form.currency.trim().toUpperCase(); if (maxPrice !== null && !WISH_CURRENCIES.includes(currency)) throw new WishManagementError('請填寫支援的幣別，例如TWD／USD／JPY');
   return { name, notes: form.notes || null, link, imageUrl, ...(mediaId ? { mediaId } : {}), maxPrice, ...(maxPrice !== null ? { priceCurrency: currency } : {}) };
 }
 export type WishCreateJournal = { kind: 'LIST' | 'ITEM'; listId: number | null; body: string };

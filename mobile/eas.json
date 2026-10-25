@@ -9,6 +9,10 @@
       "credentialsSource": "remote",
       "android": {
         "buildType": "app-bundle"
+      },
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://wishlist-app-production.up.railway.app/api"
       }
     },
     "ios-validation": {
@@ -19,7 +23,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://wishlist-app-production.up.railway.app/api"
-      }
+      },
+      "environment": "production"
     },
     "simulator": {
       "distribution": "internal",

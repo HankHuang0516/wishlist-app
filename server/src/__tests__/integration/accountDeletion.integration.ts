@@ -77,8 +77,8 @@ describe('read-only account deletion impact / actual routers and isolated Postgr
             reportsAuthored: 1, reportOperationReceipts: 2, reportsOnOwnedListings: 1, moderationActionsOnOwnedListings: 1, moderationActionsDetachingOwnReports: 1,
         } });
         expect(Number.isFinite(Date.parse(res.body.capturedAt))).toBe(true);
-        expect(Object.keys(res.body).sort()).toEqual(['accountDeleted', 'capturedAt', 'counts', 'previewOnly', 'version']);
-        expect(Object.keys(res.body.counts)).toHaveLength(23);
+        expect(Object.keys(res.body).sort()).toEqual(['accountDeleted', 'additionalCounts', 'capturedAt', 'counts', 'previewOnly', 'version']);
+        expect(Object.keys(res.body.counts)).toHaveLength(23);expect(Object.keys(res.body.additionalCounts)).toHaveLength(9);expect(Object.values(res.body.additionalCounts).every(v=>Number.isSafeInteger(v)&&Number(v)>=0)).toBe(true);
         expect(JSON.stringify(res.body)).not.toMatch(/private-|latitude|longitude|password|apiKey|token|userId/);
         expect(await prisma.user.count({ where: { id: { in: users } } })).toBe(3);
         expect(await prisma.message.count({ where: { senderUserId: { in: users } } })).toBe(2);

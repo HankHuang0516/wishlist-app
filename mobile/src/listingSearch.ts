@@ -13,7 +13,7 @@ export type PublicListing = {
   mapVisibleUntil?: string | null;
   owner: { id: number; name: string | null };
   location: { county: string; district: string; publicLatitude: number; publicLongitude: number; precisionMeters: number };
-  media: { id: string; imageUrl: string; thumbnailUrl: string }[];
+  media: { id: string; imageUrl: string; thumbnailUrl: string; capturePurpose?: 'AI_MARKETING' }[];
 };
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ListingSearchError('商品資料回應不正確');
@@ -69,7 +69,7 @@ export function parsePublicListing(value: unknown, apiUrl: string, local = false
   const media = row.media.map(value => {
     const image = object(value);
     if (!uuid(image.id) || image.imageUrl !== `${base}/api/listing-media/${image.id}/image` || image.thumbnailUrl !== `${base}/api/listing-media/${image.id}/thumbnail`) throw new ListingSearchError('商品照片來源不正確');
-    return { id: image.id, imageUrl: image.imageUrl as string, thumbnailUrl: image.thumbnailUrl as string };
+    return { id: image.id, imageUrl: image.imageUrl as string, thumbnailUrl: image.thumbnailUrl as string, ...(image.capturePurpose === 'AI_MARKETING' ? { capturePurpose: 'AI_MARKETING' as const } : {}) };
   });
   if (new Set(media.map(m => m.id)).size !== media.length) throw new ListingSearchError('商品照片重複');
   // Only public allowlisted fields enter map/card state. Ignore profile/private extras.

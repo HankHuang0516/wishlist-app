@@ -61,7 +61,7 @@ async function seedUiuxHomeQa(qa) {
       description: '合成二手深藍色陶瓷馬克杯；僅用於 Wishlist.ai 隔離視覺驗收，不是真實販售。',
       category: 'home', brand: '無品牌', condition: 'USED', price: item.priceTwd,
       deliveryMethods: ['MEETUP'], location: { county: item.county, district: item.district,
-        latitude: location[0], longitude: location[1] }, mediaIds: [media.id], publish: true, consentToMap: true,
+        latitude: location[0], longitude: location[1] }, mediaIds: [media.id], publish: true, consentToMap: true,mapCheckIn:true,
     });
     if (!/^[0-9a-f-]{36}$/.test(listing?.id || '') || listing.title !== item.title ||
         listing.owner?.id !== seller.id || Number(listing.price) !== item.priceTwd ||

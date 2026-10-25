@@ -43,3 +43,13 @@ export async function privateListingThumbnailDataUri(thumbnailUrl: string, apiUr
     throw new Error('Invalid private thumbnail data');
   return uri;
 }
+
+export async function privateChatPhotoDataUri(conversationId: string, messageId: string, apiUrl: string, token: string, signal: AbortSignal, allowLocalHttp = false): Promise<string> {
+  if (!uuid(conversationId) || !uuid(messageId) || !token || /[\r\n]/.test(token)) throw new Error('Invalid private chat photo');
+  const url = `${validateApiUrl(apiUrl, allowLocalHttp)}/api/chat/conversations/${conversationId}/messages/${messageId}/photo`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error', cache: 'no-store', signal });
+  if (!response.ok || response.redirected || response.url !== url || response.headers.get('Content-Type')?.split(';')[0] !== 'image/webp') throw new Error('Photo unavailable');
+  const blob = await response.blob();
+  if (!blob.size || blob.size > 5242880 || signal.aborted) throw new Error('Invalid photo');
+  return readBlobAsDataUri(blob, signal);
+}

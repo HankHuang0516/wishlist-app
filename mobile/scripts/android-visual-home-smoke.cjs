@@ -8,6 +8,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { startNativeQa } = require('./native-qa.cjs');
 const { seedUiuxHomeQa } = require('./seed-uiux-home-qa.cjs');
+const { foregroundPackage } = require('./android-foreground.cjs');
 const { qaLabel, assignedSerial } = require('./android-qa-config.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 
@@ -82,7 +83,7 @@ async function tapVisibleLoginButton() {
   report.loginButtonAttempts = [];
   for (let attempt = 0; attempt < 7; attempt++) {
     const activity = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-    if (!activity.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1]?.includes(packageName + '/'))
+    if (foregroundPackage(activity) !== packageName)
       throw new Error('Isolated QA app left foreground before login submit');
     const screen = await dump();
     const button = nodes(screen).find(node =>
@@ -148,18 +149,37 @@ async function main() {
   await adb(['shell', 'am', 'start', '-n', packageName + '/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity']);
   stage = 'notice';
   const noticeEnd = Date.now() + 45000;
+  let termsObserved = false;
+  const uncheckedTerms = '☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。';
+  const checkedTerms = uncheckedTerms.replace('☐', '☑');
   while (Date.now() < noticeEnd) {
     const screen = await dump();
     const consent = nodeWith(screen, '我了解，繼續使用');
-    if (consent) { await tap(consent); break; }
+    if (consent) { await tap(consent); continue; }
     if (nodeWith(screen, '手機號碼或 Email')) break;
+    if (screen.includes('使用條款與社群安全')) termsObserved = true;
+    // This test has already verified a fresh, isolated visual-QA identity and
+    // loopback-only API. Exercise the actual notice for its synthetic adult
+    // fixture; do not change app storage or open external policy links.
+    if (termsObserved && !report.syntheticTermsNoticeExercised) {
+      if (foregroundPackage(await adb(['shell', 'dumpsys', 'activity', 'activities'])) !== packageName)
+        throw new Error('QA app left foreground during synthetic terms flow');
+      const unchecked = nodeWith(screen, uncheckedTerms), checked = nodeWith(screen, checkedTerms);
+      if (unchecked) { await tap(unchecked); continue; }
+      const accept = nodeWith(screen, '同意並繼續');
+      if (checked && accept?.includes('enabled="true"')) {
+        await tap(accept); report.syntheticTermsNoticeExercised = true; continue;
+      }
+      await adb(['shell', 'input', 'swipe', '160', '470', '160', '150', '350']);
+      continue;
+    }
     if (screen.includes('新的願望') || screen.includes('帳號與資料說明'))
       await adb(['shell', 'input', 'swipe', '160', '470', '160', '150', '350']);
     await sleep(850);
   }
   const foreground = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-  const resumed = foreground.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1] ?? '';
-  if (!resumed.includes(packageName + '/')) throw new Error('Isolated QA app left foreground before login');
+  const resumed = foregroundPackage(foreground);
+  if (resumed !== packageName) throw new Error('Isolated QA app left foreground before login');
   stage = 'login-identifier';
   await tap(await waitInput('手機號碼或 Email'));
   await adb(['shell', 'input', 'text', qa.actors.buyer.phoneNumber]);
@@ -167,11 +187,26 @@ async function main() {
   if (!identifierScreen.includes(`text="${xmlEscape(qa.actors.buyer.phoneNumber)}"`))
     throw new Error('Synthetic account identifier was not entered in its field');
   stage = 'login-password';
+  const identifierKeyboard = await adb(['shell', 'dumpsys', 'input_method']);
+  if (/mInputShown=true/.test(identifierKeyboard)) {
+    await adb(['shell', 'input', 'keyevent', '4']);
+    if (foregroundPackage(await adb(['shell', 'dumpsys', 'activity', 'activities'])) !== packageName)
+      throw new Error('QA app left foreground while dismissing the identifier keyboard');
+  }
   await tap(await waitInput('密碼'));
+  const focusedPassword = nodes(await dump()).find(node => node.includes('class="android.widget.EditText"') &&
+    node.includes('content-desc="密碼"'));
+  if (!focusedPassword?.includes('focused="true"') || !focusedPassword.includes('password="true"'))
+    throw new Error('The visible secure password field did not receive focus');
   await adb(['shell', 'input', 'text', qa.actors.buyer.password]);
   const passwordNode = nodes(await dump()).find(node => node.includes('class="android.widget.EditText"') &&
     node.includes('content-desc="密碼"'));
-  if (!passwordNode?.includes('focused="true"') || !passwordNode?.match(/\btext="[^"]+"/) ||
+  // Android 8 can redact secure EditText text from accessibility entirely.
+  // A successful real HTTP login below, rather than exposed password bytes,
+  // is the authoritative assertion that the credential arrived correctly.
+  report.passwordField = { focused: !!passwordNode?.includes('focused="true"'),
+    secure: !!passwordNode?.includes('password="true"') };
+  if (!passwordNode?.includes('focused="true"') || !passwordNode.includes('password="true"') ||
       passwordNode.includes('text="密碼"'))
     throw new Error('Synthetic password was not entered in its field');
   stage = 'login-submit';
@@ -181,7 +216,7 @@ async function main() {
     await adb(['shell', 'input', 'keyevent', '4']);
     await sleep(450);
     const activity = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-    if (!activity.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1]?.includes(packageName + '/'))
+    if (foregroundPackage(activity) !== packageName)
       throw new Error('Back from the actual password input left the QA app');
     report.keyboardDismissedForSubmit = true;
     report.keyboardBeforeSubmit = false;
@@ -217,7 +252,7 @@ async function main() {
             .map(label => [label, !!nodeWith(screen, label)]));
         report.safeLoginDiagnostics.nodeCount = nodes(screen).length;
         const activity = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-        report.safeLoginDiagnostics.qaForeground = !!activity.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1]?.includes(packageName + '/');
+        report.safeLoginDiagnostics.qaForeground = foregroundPackage(activity) === packageName;
         if (stage === 'login-identifier' && report.safeLoginDiagnostics.qaForeground)
           await screenshot('pre-login-diagnostic');
       } catch { report.safeLoginDiagnostics = { unavailable: true }; }
@@ -230,16 +265,15 @@ async function main() {
             '手機號碼或 Email', '密碼', '登入', '請輸入帳號與密碼。', '目前無法完成，請稍後再試。']
             .map(label => [label, !!nodeWith(screen, label)]));
         const activity = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-        report.safeHomeDiagnostics.qaForeground = !!activity.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1]
-          ?.includes(packageName + '/');
+        report.safeHomeDiagnostics.qaForeground = foregroundPackage(activity) === packageName;
       } catch { report.safeHomeDiagnostics = { unavailable: true }; }
     }
     if (installed && (stage === 'notice' || stage.startsWith('login'))) {
       try {
         const activity = await adb(['shell', 'dumpsys', 'activity', 'activities']);
-        const resumed = activity.match(/^\s*topResumedActivity=([^\n]+)/m)?.[1] ?? '';
+        const resumed = foregroundPackage(activity);
         report.safeActivityDiagnostics = {
-          topPackage: resumed.match(/([a-zA-Z0-9_.]+)\//)?.[1] ?? 'unknown',
+          topPackage: resumed ?? 'unknown',
           qaProcessAlive: !!(await adb(['shell', 'pidof', packageName]).catch(() => '')).trim(),
         };
       } catch { report.safeActivityDiagnostics = { unavailable: true }; }

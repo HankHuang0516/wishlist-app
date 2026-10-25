@@ -1,7 +1,8 @@
+import ProductInterest from '../components/ProductInterest';
 import { ListingPhoto } from '../components/ListingPhoto';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MapPin, Share2 } from 'lucide-react';
+import { MapPin, Share2, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { parsePublicListing, type PublicListing } from '../lib/listingSearch';
 import { ApiFailure, publicApi } from '../lib/marketplaceApi';
@@ -9,7 +10,20 @@ import { publicListingText as text, publicListingPhotoLabel, publicListingPrice,
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import ProductActionsWeb from '../components/ProductActionsWeb';
 import ListingReportWeb from '../components/ListingReportWeb';
+import { getDisplayLocale } from '../utils/localization';
+const say = (zh: string, en: string) => getDisplayLocale().startsWith('zh') ? zh : en;
 const listingId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function PublicListingGallery({listing}:{listing:PublicListing}) {
+  const [index,setIndex]=useState(0), photo=listing.media[index];
+  return <section aria-label={say('商品照片','Item photos')} className="relative">
+    <ListingPhoto src={photo.imageUrl} alt={publicListingPhotoLabel(listing.title,index+1,photo.capturePurpose==='AI_MARKETING')} marketing={photo.capturePurpose==='AI_MARKETING'} detail/>
+    <div className="flex items-center justify-center gap-4 border-b border-stone-100 px-3 py-1">
+      {listing.media.length>1&&<button type="button" disabled={index===0} aria-label={say('上一張商品照片','Previous item photo')} onClick={()=>setIndex(value=>value-1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40"><ChevronLeft className="h-5 w-5" aria-hidden="true"/></button>}
+      <span aria-live="polite" className="text-sm text-stone-600">{index+1} / {listing.media.length}</span>
+      {listing.media.length>1&&<button type="button" disabled={index===listing.media.length-1} aria-label={say('下一張商品照片','Next item photo')} onClick={()=>setIndex(value=>value+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border disabled:opacity-40"><ChevronRight className="h-5 w-5" aria-hidden="true"/></button>}
+    </div>
+  </section>;
+}
 export default function PublicListingPage() {
   const { id } = useParams(), { user, token } = useAuth();
   return <PublicListingSession key={`${id}:${user?.id ?? 'anonymous'}:${token ?? ''}`} id={id} token={token} userId={user?.id ?? null} />;
@@ -88,20 +102,20 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     <button type="button" disabled={sharing} onClick={reloadItem} className="mt-6 min-h-11 rounded-xl border px-4 disabled:opacity-50">{text('重新載入商品')}</button>
     <Link className="mt-6 inline-block text-blue-700 underline" to="/">{text('回首頁')}</Link></div>;
 
-  return <><article className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
-    <div className="flex overflow-x-auto">{listing.media.map((photo, index) => <div key={photo.id} className="w-full flex-none"><ListingPhoto src={photo.imageUrl} alt={publicListingPhotoLabel(listing.title,index+1,photo.capturePurpose === 'AI_MARKETING')} marketing={photo.capturePurpose === 'AI_MARKETING'} detail/></div>)}</div>
+  return <><article className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white pb-24 shadow-sm">
+    <PublicListingGallery key={`${listing.id}:${listing.version}`} listing={listing}/>
     <div className="space-y-5 p-5 sm:p-8">
       <div className="flex flex-wrap items-center gap-2 text-sm text-stone-600">
         <span className="rounded-full bg-stone-100 px-3 py-1">{text(listing.condition === 'USED' ? '二手' : '新品')}</span>
         {listing.status === 'RESERVED' && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{text('已保留')}</span>}
       </div>
-      <h1 className="text-2xl font-bold text-stone-900 sm:text-3xl">{listing.title}</h1>
+      <h1 className="break-words text-2xl font-bold text-stone-900 sm:text-3xl">{listing.title}</h1>
       <p className="text-2xl font-semibold text-blue-700">{publicListingPrice(listing.price)}</p>
       {listing.location && <p className="flex items-center gap-2 text-stone-600"><MapPin className="h-4 w-4" aria-hidden="true" />{listing.location.county}{listing.location.district}{text('（約略地區）')}</p>}
+      <ProductInterest kind="listing" id={listing.id} readOnly={userId===listing.owner.id}/>
+      <Link className="inline-flex min-h-11 items-center text-blue-800 underline" to={'/users/'+listing.owner.id+'/storefront'}>{text('刊登者：')}{listing.owner?.name || text('用戶')}</Link>
       {listing.description && <section><h2 className="font-semibold">{text('商品說明')}</h2><p className="mt-2 whitespace-pre-wrap break-words text-stone-700">{listing.description}</p></section>}
-      <p className="text-sm text-stone-500">{text('刊登者：')}{listing.owner?.name || text('用戶')}</p>
-      <dl className="space-y-2 text-sm"><div><dt className="inline font-semibold">{text('品牌：')}</dt><dd className="inline">{listing.brand ?? text('未提供')}</dd></div><div><dt className="inline font-semibold">{text('交付：')}</dt><dd className="inline">{listing.deliveryMethods.map(method => text(method === 'MEETUP' ? '面交' : '寄送')).join(' / ')} · {text(listing.negotiable ? '可議價' : '不議價')}</dd></div><div><dt className="inline font-semibold">{text('失效時間：')}</dt><dd className="inline">{publicListingTime(listing.expiresAt)}{text('（台灣時間）')}</dd></div></dl>
-      <ProductActionsWeb listing={listing} onReport={() => setReport(true)} />
+      <details className="rounded-xl border border-stone-200"><summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 font-medium">{say('商品資訊','Item information')}<ChevronDown className="h-4 w-4" aria-hidden="true"/></summary><dl className="space-y-2 px-3 pb-3 text-sm"><div><dt className="inline font-semibold">{text('品牌：')}</dt><dd className="inline">{listing.brand ?? text('未提供')}</dd></div><div><dt className="inline font-semibold">{text('交付：')}</dt><dd className="inline">{listing.deliveryMethods.map(method => text(method === 'MEETUP' ? '面交' : '寄送')).join(' / ')} · {text(listing.negotiable ? '可議價' : '不議價')}</dd></div><div><dt className="inline font-semibold">{text('失效時間：')}</dt><dd className="inline">{publicListingTime(listing.expiresAt)}{text('（台灣時間）')}</dd></div></dl></details>
       <Link to={`/explore?listing=${listing.id}`} className="inline-flex min-h-11 items-center rounded-xl border px-4">{text('在探索地圖定位此商品')}</Link>
       <button type="button" disabled={sharing} onClick={() => void share()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-5 text-white disabled:opacity-50"><Share2 className="h-4 w-4" aria-hidden="true" />{text(sharing ? '正在分享…' : '分享商品')}</button>
       <button type="button" disabled={sharing} onClick={toggleManualShare} className="inline-flex min-h-11 items-center rounded-xl border px-4 disabled:opacity-50">{text(manualShareVisible ? '收合分享文字' : '顯示分享文字與連結')}</button>
@@ -113,5 +127,5 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
         <span className="block text-sm text-stone-600">{text('選取並複製文字，再貼到您要分享的地方。')}</span>
       </label>}
     </div>
-  </article>{report && token && userId && <ListingReportWeb key={`${userId}:${token}:${listing.id}`} token={token} userId={userId} listing={{ id: listing.id, title: listing.title, available: Date.parse(listing.expiresAt) > Date.now() }} onClose={() => setReport(false)} />}</>;
+  </article><div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-40 mx-auto max-w-3xl border-t border-stone-200 bg-white p-3 shadow-sm sm:bottom-0" aria-label={text('聯絡賣家／預約面交')}><ProductActionsWeb listing={listing} onReport={() => setReport(true)} compact/></div>{report && token && userId && <ListingReportWeb key={`${userId}:${token}:${listing.id}`} token={token} userId={userId} listing={{ id: listing.id, title: listing.title, available: Date.parse(listing.expiresAt) > Date.now() }} onClose={() => setReport(false)} />}</>;
 }

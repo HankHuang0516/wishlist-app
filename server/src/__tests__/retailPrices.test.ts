@@ -85,3 +85,18 @@ test.each([
 ])('keeps PChome price-label support scoped to the exact variant and non-promotion %p',patch=>{
  expect(()=>retailObservation({...pchomeCalculatorInput(),...patch},calculator)).toThrow();
 });
+
+const ipad={...p,title:'Apple iPad 7 10.2吋 128GB Wi-Fi 太空灰 二手 C級'};
+test('binds seventh-generation iPad capacity and connectivity across retailer spellings',()=>{
+ expect(retailIdentity(ipad)).toBe('ipad:7:wifi:128gb');
+ expect(retailIdentity({...ipad,title:'Apple iPad 10.2 7代 wifi (128G)'})).toBe(retailIdentity(ipad));
+ for(const title of ['iPad 7 32GB Wi-Fi','iPad 7 128GB Wi-Fi LTE','iPad Air 7 128GB Wi-Fi','iPad 8 128GB Wi-Fi'])expect(retailIdentity({...ipad,title})).not.toBe(retailIdentity(ipad));
+ expect(retailIdentity({...ipad,title:'iPad 7 128GB'})).toBeNull();
+});
+const ipadInput=()=>({...input(),productKey:ipad.key,bindingHash:retailBinding(ipad),originalPrice:'13900',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.jyes.com.tw/product/APPLE平板-iPad-10-2-wifi-128GB',sourceTitle:'傑昇通信商品頁',sourceProductTitle:'Apple iPad 10.2 7代 wifi (128G)',sourcePeriod:'2026-04-24',evidenceQuote:'Apple iPad 10.2 7代 wifi (128G) 原廠建議售價 $13,900'});
+test('accepts the reviewed retailer original price and refuses promotion or lookalike hosts',()=>{
+ expect(Number(retailObservation(ipadInput(),ipad).originalPrice)).toBe(13900);
+ for(const patch of [{originalPrice:'12990'},{evidenceQuote:'Apple iPad 10.2 7代 wifi (128G) 網購優惠價 $13,900'},{sourceProductTitle:'Apple iPad 7 32GB Wi-Fi'},{sourceUrl:'https://www.jyes.com.tw.attacker.invalid/product/ipad'},{priceType:'MANUFACTURER_MSRP'}])expect(()=>retailObservation({...ipadInput(),...patch},ipad)).toThrow();
+});
+
+

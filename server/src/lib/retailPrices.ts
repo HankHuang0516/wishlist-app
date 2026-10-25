@@ -29,6 +29,13 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
     const iphone = t.match(/iphone\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini)?/);
     if (iphone)
         return capacity ? 'iphone:' + iphone[1] + ':' + (iphone[2] ?? 'base').replace(/\s/g, '') + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
+    // A seventh-generation iPad price must retain capacity and radio variant.
+    // iPad 10.2 7代 is a common Taiwanese retailer spelling of iPad 7.
+    if (/\bipad\b/.test(t) && !/ipad\s*(?:air|pro|mini)/.test(t)) {
+        const seventh = /ipad\s*7\b|ipad\s*10\.2\s*(?:吋\s*)?7代|ipad.*第\s*7\s*代/.test(t);
+        const radio = /cellular|lte|4g|行動網路/.test(t) ? 'cellular' : /wi[ -]?fi/.test(t) ? 'wifi' : null;
+        if (seventh) return capacity && radio ? 'ipad:7:' + radio + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
+    }
     const buds = t.match(/galaxy\s*buds\s*(\d+)\s*(pro|fe)?\b/);
     if (buds)
         return 'samsung:galaxy-buds:' + buds[1] + ':' + (buds[2] ?? 'base');
@@ -57,7 +64,7 @@ export type RetailReference = {
     checkedAt: string;
 };
 const manufacturerHosts: Record<string, RegExp> = { 'casio.com': /casio|卡西歐/i, 'samsung.com': /samsung|三星|galaxy/i, 'apple.com': /apple|蘋果|iphone|ipad|macbook|imac/i, 'sony.com.tw': /sony|索尼|playstation/i, 'sony.com': /sony|playstation/i, 'benq.com': /benq|明基/i, 'nike.com': /nike|耐吉/i, 'asus.com': /asus|華碩/i, 'acer.com': /acer|宏碁/i, 'lg.com': /\blg\b|樂金/i, 'logitech.com': /logitech|羅技/i, 'dell.com': /dell|戴爾/i, 'lenovo.com': /lenovo|聯想/i, 'lego.com': /lego|樂高/i, 'seikowatches.com': /seiko|精工/i, 'whirlpool.com.tw': /whirlpool|惠而浦/i, 'heran.com.tw': /heran|禾聯/i, 'sampo.com.tw': /sampo|聲寶/i, 'adidas.com.tw': /adidas|愛迪達/i };
-const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw', 'onitsukatiger.com.tw'];
+const retailerHosts = ['pchome.com.tw', 'momoshop.com.tw', 'costco.com.tw', 'senao.com.tw', 'myfone.com.tw', 'eclife.com.tw', 'tk3c.com', 'books.com.tw', 'sanmin.com.tw', 'kingstone.com.tw', 'lcstw.com.tw', 'onitsukatiger.com.tw', 'jyes.com.tw'];
 function originalUrl(value: unknown, kind: string, product: DiscoveryProduct) { if (typeof value !== 'string' || value.length > 1800)
     throw new DiscoveryError(400, 'RETAIL_INVALID_SOURCE'); let u: URL; try {
     u = new URL(value);

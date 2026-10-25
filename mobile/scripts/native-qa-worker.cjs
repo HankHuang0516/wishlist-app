@@ -6,13 +6,13 @@ const path = require('node:path');
 const os = require('node:os');
 const { createServer } = require('node:http');
 const { assertNativeQaMigrations } = require('./native-qa-migrations.cjs');
-const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_MARKETING_VISUAL_OWNER', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_EXTERNAL_MAP_STRESS', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT', 'NATIVE_QA_VISUAL_HOME_FIXTURE', 'NATIVE_QA_VISUAL_PORT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
+const allowedEnv = new Set(['PATH', 'NODE_ENV', 'TZ', 'TEST_DATABASE_URL', 'DATABASE_URL', 'JWT_SECRET', 'NATIVE_QA_LIFETIME_SECONDS', 'NATIVE_QA_LISTING_AI_PILOT', 'NATIVE_QA_MARKETING_VISUAL_OWNER', 'NATIVE_QA_EXTERNAL_LISTINGS_PILOT', 'NATIVE_QA_EXTERNAL_MAP_STRESS', 'NATIVE_QA_HOLD_LISTING_UPLOAD_ACK', 'NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD', 'NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT', 'NATIVE_QA_VISUAL_HOME_FIXTURE', 'NATIVE_QA_VISUAL_PORT', 'NATIVE_QA_SOURCE_LEADS_PILOT', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE', '__CF_USER_TEXT_ENCODING']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 let prisma, server, storage, root, timer, stopping;
 let startup;
 let startupStage = 'launch-guard';
 let startupFailed = false;
-const userIds = [], sourceIds = [], hashes = new Set(), roomIds = new Set();
+const userIds = [], sourceIds = [], leadIds = [], hashes = new Set(), roomIds = new Set();
 const send = message => { if (process.connected) { try { process.send(message, () => undefined); } catch { /* Disconnect triggers owned cleanup. */ } } };
 
 async function cleanFixtures() {
@@ -41,6 +41,7 @@ async function cleanFixtures() {
     await tx.wishlist.deleteMany({ where: { userId: ids } });
     await tx.follow.deleteMany({ where: { OR: [{ followerId: ids }, { followingId: ids }] } });
     await tx.user.deleteMany({ where: { id: ids } });
+    if(leadIds.length)await tx.externalSourceLead.deleteMany({where:{id:{in:leadIds}}});
     await tx.mediaErasureTask.deleteMany({ where: { identityHash: identityHashes } });
     await tx.legacyAssetErasureTask.deleteMany({ where: { identityHash: identityHashes } });
     await tx.accountErasureReceipt.deleteMany({ where: { identityHash: identityHashes } });
@@ -52,6 +53,7 @@ async function cleanFixtures() {
     receiptsRemaining: await prisma.accountErasureReceipt.count({ where: { identityHash: identityHashes } }),
     mediaTasksRemaining: await prisma.mediaErasureTask.count({ where: { identityHash: identityHashes } }),
     legacyTasksRemaining: await prisma.legacyAssetErasureTask.count({ where: { identityHash: identityHashes } }),
+    ...(leadIds.length?{sourceLeadsRemaining:await prisma.externalSourceLead.count({where:{id:{in:leadIds}}}),sourceInquiriesRemaining:await prisma.sourceLeadInquiry.count({where:{leadId:{in:leadIds}}})}:{}),
     photoFoldersRemaining: root ? (await fs.readdir(root)).length : 0,
     ...(sourceIds.length ? {
       externalCandidatesRemaining: await prisma.externalListingCandidate.count({ where: { sourceId: { in: sourceIds } } }),
@@ -114,6 +116,10 @@ async function main() {
   const rejectFirstListingUpload = process.env.NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD === '1';
   const staleBatchRecoverySnapshot = process.env.NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT === '1';
   const visualHomeFixture = process.env.NATIVE_QA_VISUAL_HOME_FIXTURE === '1';
+  if(process.env.NATIVE_QA_SOURCE_LEADS_PILOT!==undefined&&process.env.NATIVE_QA_SOURCE_LEADS_PILOT!=='1')throw Error('Unsafe source QA mode');
+  const sourceLeadsPilot=process.env.NATIVE_QA_SOURCE_LEADS_PILOT==='1';
+  if(sourceLeadsPilot&&!visualHomeFixture)throw Error('Source visual fixture needs isolated golden mode');
+  if(sourceLeadsPilot)process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';
   if (holdListingUploadAck && rejectFirstListingUpload) throw new Error('Conflicting QA upload interruption modes');
   if (staleBatchRecoverySnapshot && !holdListingUploadAck) throw new Error('Stale recovery snapshot requires held upload ACK');
   if (externalListingsPilot) process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
@@ -162,6 +168,12 @@ async function main() {
     userIds.push(user.id); hashes.add(erasureIdentityHash(user.id, 0));
     actors[roles[index]] = { ...user, password };
   });
+  if(sourceLeadsPilot){
+    const {parseLead}=require('../../server/dist/lib/sourceLeadRules');
+    const id=randomUUID(),shopId=String(Date.now()),itemId=String(Date.now()+1),url='https://shopee.tw/product/'+shopId+'/'+itemId,at=new Date(Date.now()-3600000).toISOString().replace(/\.\d{3}Z$/,'Z');
+    const data=parseLead({archiveItemId:'SP'+shopId+'-'+itemId+'-01',libraryFileId:null,archiveVersion:null,archiveSha256:null,title:'隔離合成公開來源馬克杯',summary:'僅用於隔離原生驗收的合成線索，未提供地區，請聯絡賣家確認。',canonicalUrl:url,county:null,district:null,publicPlaceName:null,publicAddress:null,latitude:null,longitude:null,postedEarliestAt:null,postedLatestAt:null,checkedAt:new Date().toISOString(),evidence:{sourceUrl:url,sourcePublic:true,publicSourceRef:'source:shopee-item/'+shopId+'.'+itemId,dateRef:'source:shopee-first-observed/'+shopId+'.'+itemId,observedListing:{provider:'SHOPEE',shopId,itemId,firstObservedAt:at,availability:'VISIBLE_PURCHASE_CONTROL'},publicPlace:false,locationType:'SELLER_CONTACT_REQUIRED',sourceMeetingPointConfirmed:false,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,reviewRef:'review:synthetic-native',sourceCheckRef:'source:synthetic-native-check',publicFacts:{priceText:'NT$ 55',currencyStatus:'TWD',priceUnitStatus:'unknown',sourceAccessNotice:'合成公開來源，僅供隔離驗收。',originalDateLabel:'刊登日期未提供；首次查核 '+at,locationRelation:'未提供地區，需向賣家確認。',coordinateQualityNotes:[]}}},new Date(),true);
+    await prisma.externalSourceLead.create({data:{id,...data,recordOrigin:'DB_MASTER',status:'PUBLISHED'}});leadIds.push(id);
+  }
   if (externalListingsPilot) {
     // A review-shaped, self-owned synthetic fixture lives only in the
     // isolated test database. It is never inserted in the seller Listing table.
@@ -294,7 +306,8 @@ async function main() {
         req.path === '/api/users/me/password' && req.method === 'PUT' ||
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
-      const goldenRoute=visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
+      const sourceRead=sourceLeadsPilot&&req.method==='GET'&&/^\/api\/source-leads\/[0-9a-f-]{36}(?:\/inquiry)?$/.test(req.path)&&leadIds.includes(req.path.split('/')[3]);
+      const goldenRoute=sourceRead||visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
       const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path) ||
         !!marketingVisualOwnerRole && req.method === 'GET' && /^\/api\/marketing\/(?:availability|jobs(?:\/[0-9a-f-]{36})?)$/.test(req.path) ||
         externalListingsPilot && /^\/api\/external-listings(?:\/|$)/.test(req.path);
@@ -332,6 +345,7 @@ async function main() {
     ...(externalListingsPilot ? [['external-listings', 'externalListingRoutes']] : [])]) {
     app.use('/api/' + route, require('../../server/dist/routes/' + file).default);
   }
+  if(sourceLeadsPilot)app.use('/api/source-leads',require('../../server/dist/routes/sourceLeadRoutes').createSourceLeadRoutes());
   if(visualHomeFixture){
     app.use('/api/notifications',require('../../server/dist/routes/notificationRoutes').default);
     app.use('/api/product-interest',require('../../server/dist/routes/productInterestRoutes').default);
@@ -349,7 +363,7 @@ async function main() {
   const apiUrl = 'http://127.0.0.1:' + server.address().port;
   process.env.API_URL = apiUrl + '/api'; process.env.CLIENT_URL = apiUrl;
   timer = setTimeout(() => { void stop(); }, lifetime * 1000);
-  send({ kind: 'ready', apiUrl, runId, actors, ...(listingAiPilot ? { callbackToken } : {}) });
+  send({ kind: 'ready', apiUrl, runId, actors, ...(sourceLeadsPilot?{sourceLeadIds:leadIds}:{}), ...(listingAiPilot ? { callbackToken } : {}) });
 }
 startup = main();
 startup.catch(() => {

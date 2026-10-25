@@ -40,8 +40,8 @@ public class MarketplaceGoldenTest {
     }
     private boolean has(String label) { return device.hasObject(By.desc(label)) || device.hasObject(By.text(label)); }
     private UiObject2 node(String label) {
-        UiObject2 result = device.findObject(By.desc(label));
-        return result != null ? result : device.findObject(By.text(label));
+        try { UiObject2 result=device.findObject(By.desc(label));return result!=null?result:device.findObject(By.text(label)); }
+        catch(StaleObjectException refreshedTree){return null;}
     }
     private UiObject2 await(String label) {
         long end = SystemClock.elapsedRealtime() + 25000;
@@ -77,31 +77,36 @@ public class MarketplaceGoldenTest {
         }
         throw new AssertionError("Unstable click target at "+stage);
     }
-    private void scrollForwardOnPadding() {
-        foreground();UiObject2 form=device.findObject(By.clazz("android.widget.ScrollView"));assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
-        assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
-        assertTrue("Padding swipe must be delivered",device.swipe(area.left+12,area.bottom-32,area.left+12,area.top+48,35));
-        device.waitForIdle(1000);SystemClock.sleep(100);
+    private boolean visible(String label,int minimumHeight){
+        try{UiObject2 item=node(label);return item!=null&&item.getVisibleBounds().height()>=minimumHeight;}
+        catch(StaleObjectException refreshedTree){return false;}
     }
-    private void reveal(String label) throws Exception {
-        for (int attempt=0; attempt<10 && !has(label); attempt++) {
+    private String readText(String label){
+        long end=SystemClock.elapsedRealtime()+5000;
+        while(SystemClock.elapsedRealtime()<end){try{return await(label).getText();}catch(StaleObjectException refreshedTree){SystemClock.sleep(100);}}
+        throw new AssertionError("Text did not settle at "+stage);
+    }
+    private void scrollOnPadding(boolean forward){
+        for(int attempt=0;attempt<3;attempt++){
             foreground();
-            scrollForwardOnPadding();
+            try{UiObject2 form=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),5000);assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
+                assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
+                boolean delivered=device.swipe(area.left+12,forward?area.bottom-32:area.top+48,area.left+12,forward?area.top+48:area.bottom-32,35);
+                if(delivered){device.waitForIdle(1000);SystemClock.sleep(100);return;}
+            }catch(StaleObjectException refreshedTree){/* Re-query after a committed React layout. */}
+            device.waitForIdle(500);SystemClock.sleep(100);
         }
-        await(label);
+        throw new AssertionError("Padding swipe must be delivered at "+stage);
     }
-    private void revealBackwards(String label) throws Exception { revealBackwards(label,44); }
+    private void scrollForwardOnPadding(){scrollOnPadding(true);}
+    private void reveal(String label) throws Exception {
+        for(int attempt=0;attempt<10&&!visible(label,1);attempt++)scrollOnPadding(true);
+        assertTrue("Revealed control must be visible at "+stage,visible(label,1));
+    }
+    private void revealBackwards(String label) throws Exception {revealBackwards(label,44);}
     private void revealBackwards(String label,int minimumHeight) throws Exception {
-        for(int attempt=0;attempt<10;attempt++){
-            UiObject2 match=node(label);
-            if(match!=null&&match.getVisibleBounds().height()>=minimumHeight)return;
-            foreground();UiObject2 form=device.findObject(By.clazz("android.widget.ScrollView"));
-            assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
-            assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
-            assertTrue("Padding swipe must be delivered",device.swipe(area.left+12,area.top+48,area.left+12,area.bottom-32,35));
-            device.waitForIdle(1000);
-        }
-        assertTrue("Backward-revealed control must be reachable",await(label).getVisibleBounds().height()>=minimumHeight);
+        for(int attempt=0;attempt<10&&!visible(label,minimumHeight);attempt++)scrollOnPadding(false);
+        assertTrue("Backward-revealed control must be reachable at "+stage,visible(label,minimumHeight));
     }
     private void capture(String name) throws Exception {
         foreground();
@@ -297,14 +302,9 @@ public class MarketplaceGoldenTest {
         click("取消");checkpoint("seller-checks-complete");
     }
     private void market() throws Exception {
-        checkpoint("popularity-real-like");click("探索");await("切換清單");click("切換清單");
-        checkpoint("map-data-explanation");click("地圖與資料說明");await("關閉地圖與資料說明");
-        reveal("商品地區示意，不顯示使用者即時位置。站內商品須由賣家手動同意顯示，一小時後停止；來源圖釘是公開地區示意。");
-        assertTrue("Explanation close remains reachable",await("關閉地圖與資料說明").getVisibleBounds().height()>=44);capture("golden-13-map-data-explanation");click("關閉地圖與資料說明");
-        assertTrue("Map explanation must finish dismissing before list input",device.wait(Until.gone(By.desc("關閉地圖與資料說明")),5000));
-        checkpoint("popularity-real-like");
-        String mug="二手深藍色陶瓷馬克杯，NT$ 50，新北市板橋區";
-        reveal(mug);checkpoint("popularity-open-listing");click(mug);await("商品詳情");checkpoint("popularity-detail");
+        checkpoint("popularity-real-like");click("探索");await("探索");
+        reveal("查看商品：二手深藍色陶瓷馬克杯");capture("golden-13-product-first-explore");
+        checkpoint("popularity-open-listing");click("查看商品：二手深藍色陶瓷馬克杯");await("商品詳情");checkpoint("popularity-detail");
         reveal("0 人喜歡，喜歡此商品，僅公開人數");await("0 人詢問中");
         click("0 人喜歡，喜歡此商品，僅公開人數");await("1 人喜歡，取消喜歡此商品");
         capture("golden-13-actual-like");checkpoint("popularity-explanation");click("關於人氣數據");await("詢問中");await("喜歡");
@@ -406,6 +406,27 @@ public class MarketplaceGoldenTest {
         assertTrue("Photo composer closes only after acknowledgment",device.wait(Until.gone(By.text("傳送商品照片")),20000));
         checkpoint("photo-confirmed-message");revealBackwards("放大商品照片",80);capture("golden-11-photo-sent");click("放大商品照片");checkpoint("photo-zoom-open");await("商品照片放大檢視");capture("golden-11-photo-zoom");click("關閉商品照片");checkpoint("photo-checks-complete");
     }
+    private void discovery() throws Exception {
+        checkpoint("product-first-discovery");click("探索");await("探索");
+        await("3 筆商品與來源");capture("explore-product-first");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        assertFalse("Legacy wish-map toolbar is not the browse entry",has("切換清單"));
+        checkpoint("same-filter-refresh");revealBackwards("搜尋商品");click("搜尋商品");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        checkpoint("filter-invalid-price");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");checkpoint("filter-price-entry");reveal("探索最低價格");await("探索最低價格").setText("100");reveal("探索最高價格");await("探索最高價格").setText("50");checkpoint("filter-price-validation");click("套用篩選");reveal("價格需為有效的新臺幣金額，最低價不能高於最高價。");capture("explore-filter-validation");
+        reveal("探索最低價格");await("探索最低價格").setText("0");reveal("探索最高價格");await("探索最高價格").setText("100");checkpoint("category-keeps-price-draft");revealBackwards("分類目錄 ▾");click("分類目錄 ▾");await("商品分類");click("家具家居");reveal("全部家具家居");click("全部家具家居");await("篩選商品");reveal("探索最高價格");assertEquals("Changing category retains the price draft","100",readText("探索最高價格"));click("套用篩選");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        checkpoint("listing-photo-first-detail");click("查看商品：二手深藍色陶瓷馬克杯");await("商品詳情");capture("listing-detail-photo-first");reveal("聊聊詢問");assertTrue("Contact action stays reachable",await("聊聊詢問").getVisibleBounds().height()>=48);click("返回探索");assertTrue("Detail window must dismiss before browse gestures",device.wait(Until.gone(By.text("商品詳情")),5000));device.waitForIdle(1000);
+        checkpoint("explicit-map-navigation");revealBackwards("切換地圖瀏覽");click("切換地圖瀏覽");await("返回商品瀏覽");capture("explore-explicit-map");click("返回商品瀏覽");await("探索");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        checkpoint("wish-context-preserves-new-filters");click("首頁");reveal("尋找深藍色陶瓷馬克杯的符合商品");click("尋找深藍色陶瓷馬克杯的符合商品");await("正在配對你選擇的願望");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");click("最新上架");reveal("探索最高價格");await("探索最高價格").setText("55");click("套用篩選");await("2 筆商品與來源");assertFalse("Leaving a wish scope removes its banner",has("正在配對你選擇的願望"));capture("explore-wish-cleared-price-retained");
+        checkpoint("native-version-settings");click("我的");
+        android.content.pm.PackageInfo installed=InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
+        long build=android.os.Build.VERSION.SDK_INT>=28?installed.getLongVersionCode():installed.versionCode;
+        String version="版本 "+installed.versionName+"（"+build+"）";await(version);click("通知設定");await(version);capture("notification-native-version");click("返回我的設定");
+        checkpoint("discovery-checks-complete");
+    }
+    private void source() throws Exception {
+        checkpoint("unlocated-source-discovery");click("探索");await("4 筆商品與來源");reveal("查看商品：隔離合成公開來源馬克杯");click("查看商品：隔離合成公開來源馬克杯");await("商品詳情");await("尚無可公開的商品照片");capture("source-detail-photo-unavailable");
+        checkpoint("source-detail-disclosures");reveal("價格與來源資訊");click("價格與來源資訊");reveal("合成公開來源，僅供隔離驗收。");capture("source-detail-source-evidence");
+        checkpoint("source-ai-navigation-no-send");click("Wishlist AI 代問");await("Wishlist AI 聊聊");capture("source-ai-before-send");click("返回商品");await("商品詳情");await("隔離合成公開來源馬克杯");capture("source-return-to-detail");checkpoint("source-checks-complete");
+    }
     private void logout() throws Exception {
         checkpoint("never-enabled-push-logout");click("我的");click("帳號安全");click("登出此裝置");
         long end=SystemClock.elapsedRealtime()+25000;
@@ -417,12 +438,12 @@ public class MarketplaceGoldenTest {
     @Test public void approvedMarketplaceRegression() throws Exception {
         device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         phase=InstrumentationRegistry.getArguments().getString("phase","");
-        assertTrue("Explicit bounded phase required",phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
+        assertTrue("Explicit bounded phase required",phase.equals("source")||phase.equals("discovery")||phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
         File external=InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
         assertNotNull("Owned test-host storage unavailable",external);
         evidence=new File(external,"golden-"+phase);
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
-        try { login(); if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
+        try { login(); if(phase.equals("source"))source();else if(phase.equals("discovery"))discovery();else if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
         catch(Throwable failure){
             try{saveLoginStructure();}catch(Throwable ignored){}
             try{clearLoginForDiagnostic();}catch(Throwable ignored){}

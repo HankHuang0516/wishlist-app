@@ -288,8 +288,8 @@ async function main() {
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
-    visualHomeFixture: ['home-visual','golden-wishes'].includes(flow) });
-  if (['home-visual','golden-wishes'].includes(flow)) {
+    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery'].includes(flow) });
+  if (['home-visual','golden-wishes','golden-discovery'].includes(flow)) {
     stage = 'isolated-home-visual-fixture';
     const seeded = await seedUiuxHomeQa(qa);
     homeVisualMatchScores = seeded.scores.map(item => item.score);
@@ -375,14 +375,14 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       ((flow === 'listing-batch-photo' || listingAiFlow) && !sellerDraftVerified) ||
       (listingAiFlow && (!listingAiDraftVerified || listingAiTaskFailed)) ||
       (publishOneAiFlow && !listingPublicationVerified) ||
-      (['home-visual','golden-wishes'].includes(flow) && !homeVisualFixtureSeeded) ||
+      (['home-visual','golden-wishes','golden-discovery'].includes(flow) && !homeVisualFixtureSeeded) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -413,6 +413,7 @@ async function main() {
       ...(visualFixture === 'visual-mug' ? ['my-listings-marketing-entry', 'my-listings-marketing-open'] : [])],
     'home-visual': ['product-notice', 'home', 'home-visual-collapsed', 'home-visual-expanded', 'home-visual-scrolled'],
     'golden-wishes': ['product-notice', 'home', 'golden-wish-cards', 'golden-wish-editor', 'golden-wish-currency'],
+    'golden-discovery': ['product-notice', 'home', 'golden-discovery-list', 'golden-discovery-detail', 'golden-discovery-map'],
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],

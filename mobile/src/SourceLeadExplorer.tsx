@@ -1,3 +1,4 @@
+import {SourceLeadDetailContent} from './SourceLeadDetailContent';
 import {ProductInterest} from './ProductInterestView';
 import {useNativeSourceInquiry} from './useNativeSourceInquiry';
 import {sourceContactText as t} from './sourceContactCopy';
@@ -6,7 +7,7 @@ import { iosColors } from './iosTheme';
 import { DeviceEventEmitter } from 'react-native';
 import { useSourceReplyRead } from './useSourceReplyRead';
 import { ChatMessageBubble, chatPresentation } from './ChatPresentation';
-import { ListingPhoto, photoStyles, listingPresentation } from './ListingPhoto';
+import { ListingPhoto, listingPresentation } from './ListingPhoto';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Linking, AppState, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaModal } from './SafeAreaModal';
@@ -30,7 +31,7 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
     onOpenSourceChat:(context:SourceChatContext)=>void;
     initialSourceId?:string|null;onInitialSourceHandled?:()=>void;
 }) {
-    const [items, setItems] = useState<SourceLead[]>([]), [cursor, setCursor] = useState<string | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [detail, setDetail] = useState<SourceLead | null>(null), [asking, setAsking] = useState(false), [groupIds, setGroupIds] = useState<string[]>([]);
+    const [items, setItems] = useState<SourceLead[]>([]), [cursor, setCursor] = useState<string | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [detail, setDetail] = useState<SourceLead | null>(null), [groupIds, setGroupIds] = useState<string[]>([]);
     const pendingSourceRoute=useRef<SourceChatContext|null>(null);
     const generation = useRef(0), alive = useRef(true), inflight = useRef(false), detailGeneration = useRef(0);
     const path = bounds && !hidden ? '/source-leads?bbox=' + bounds.join(',') + '&presentation=1&approximate=1&q=' + encodeURIComponent(q) : null;
@@ -79,19 +80,18 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
         expire();
         void load();
     } }); return () => { clearInterval(timer); sub.remove(); }; }, [path, api]);
-    async function open(id: string) { const seq = ++detailGeneration.current; setAsking(false); setGroupIds([]); try {
-        const r = parseLead(await api<unknown>('/source-leads/' + id + '?presentation=1&approximate=1'));
+    async function open(id: string) { const seq = ++detailGeneration.current; setGroupIds([]); setError(''); try {
+        const r = parseLead(await api<unknown>('/source-leads/' + id + '?presentation=1&photos=2&approximate=1&unlocated=1'));
         if (r.id !== id)
             throw new Error();
-        if (alive.current && seq === detailGeneration.current)
-            setDetail(r);
+        if (alive.current && seq === detailGeneration.current) { setDetail(r); return true; }
     }
     catch {
         if (alive.current && seq === detailGeneration.current) {
             setDetail(null);
             setError('線索已撤回或超過日期範圍，請重新搜尋。');
         }
-    } }
+    } return false; }
     useEffect(()=>{if(initialSourceId&&uuid(initialSourceId))void open(initialSourceId).finally(()=>onInitialSourceHandled?.());},[initialSourceId,api]);
     const groups = new Map<string, LocatedSourceLead[]>();
     for (const r of items.filter(isLocatedLead)) {
@@ -112,8 +112,15 @@ export function useSourceLeads({ api, apiUrl, userId, bounds, q, hidden, onOpenS
   <Layer id="source-lead-point-counts" type="symbol" layout={{ 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true }} paint={{ 'text-color': '#FFFFFF' }}/>
  </GeoJSONSource>;
     const list = <View><Text>外部來源線索 {items.length} 筆 · 不是在售件數</Text><Text>公共面交點不是賣家或商品所在地；概略位置，非取貨點。庫存與交易待確認。</Text>{items.map(r => <Pressable key={r.id} accessibilityRole="button" onPress={() => void open(r.id)} style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt ?? r.title}/><View style={listingPresentation.cardText}><Text style={listingPresentation.badge}>外部來源 · 庫存待確認</Text><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText || "售價待詢問"}</Text><ProductInterest kind="source" id={r.id} compact readOnly/><Text style={listingPresentation.small}>{r.county}{r.district} · {sourceLocationLabel(r)}</Text><Text style={listingPresentation.small}>{r.publicPlaceName}</Text></View></Pressable>)}{cursor && items.length < 500 && <Pressable disabled={busy} onPress={() => void load(cursor)}><Text>載入更多來源線索</Text></Pressable>}{items.length >= 500 && <Text>請縮小範圍再搜尋。</Text>}{!!error && <><Text accessibilityRole="alert">{error}</Text><Pressable disabled={busy} onPress={() => void load()}><Text>重新讀取來源線索</Text></Pressable></>}</View>;
-    const modal = <SafeAreaModal onDismiss={()=>{const context=pendingSourceRoute.current;pendingSourceRoute.current=null;if(context&&alive.current)onOpenSourceChat(context);}} visible={!!detail || groupIds.length > 0} animationType="slide" onRequestClose={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}><Pressable accessibilityRole="button" onPress={() => { detailGeneration.current++; setDetail(null); setGroupIds([]); }}><Text>返回探索</Text></Pressable>{groupIds.length > 0 && <View><Text>同一公共／概略位置的來源線索，非現貨位置</Text>{items.filter(r => groupIds.includes(r.id)).map(r => <Pressable key={r.id} onPress={() => void open(r.id)} style={{ padding: 14 }}><View style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt??r.title}/><View style={listingPresentation.cardText}><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText||"售價待詢問"}</Text><Text style={listingPresentation.small}>{sourceLocationLabel(r)} · 庫存待確認</Text></View></View></Pressable>)}</View>}{detail && (asking ? <Text>請從 Wishlist AI 聊聊繼續</Text> : <><ScrollView horizontal>{detail.media?.length ? detail.media.map(m => <ListingPhoto key={m.id} uri={m.imageUrl} label={m.alt} detail style={photoStyles.detail}/>) : <ListingPhoto label={detail.title} detail style={photoStyles.detail}/>}</ScrollView><Text style={listingPresentation.badge}>外部來源線索 · 庫存與交易待確認</Text><Text accessibilityRole="header" style={listingPresentation.title}>{detail.title}</Text><Text style={listingPresentation.price}>{detail.publicFacts?.priceText || "售價待詢問"}</Text><ProductInterest kind="source" id={detail.id}/><Text style={listingPresentation.small}>{detail.county}{detail.district} · {sourceLocationLabel(detail)}，非現貨所在地</Text><Text style={listingPresentation.title}>商品說明</Text><Text>{detail.summary}</Text>{detail.publicFacts && <><Text>計價單位：{detail.publicFacts.priceUnitStatus === 'unknown' ? '原帖未明示，待詢問' : '依原帖標示，仍需確認交付數量'}。{detail.publicFacts.currencyStatus.includes('infer') ? '幣別為情境推定，待原賣家確認。' : '幣別依原帖證據標示。'}</Text><Text>{detail.publicFacts.sourceAccessNotice}</Text><Text>{detail.publicFacts.originalDateLabel}</Text><Text>{detail.publicFacts.locationRelation}</Text>{detail.publicFacts.coordinateQualityNotes.map((note, i) => <Text key={i}>{note}</Text>)}</>}{detail.coordinateAttribution && <Pressable onPress={() => void Linking.openURL(detail.coordinateAttribution!.url)}><Text>{detail.coordinateAttribution.text} · ODbL</Text></Pressable>}<Text>{sourceLocationLabel(detail)}：{detail.publicPlaceName}／{detail.publicAddress}</Text><Text>{detail.notice}</Text><Text>{detail.contactRouting?.reason||'原賣家收訊路由待核實；原帖不能代替私訊收件人。'}</Text><Text>原始發布日期區間：{new Date(detail.postedEarliestAt).toLocaleDateString('zh-TW')}～{new Date(detail.postedLatestAt).toLocaleDateString('zh-TW')}</Text><Text>來源最後查核：{new Date(detail.checkedAt).toLocaleString('zh-TW')}</Text><Pressable accessibilityRole="button" onPress={() => void api<unknown>('/source-leads/' + detail.id+'?approximate=1').then(parseLead).then(r => Linking.openURL(r.canonicalUrl)).catch(() => setError('來源已失效，未開啟。'))}><Text>前往原始來源</Text></Pressable><Pressable accessibilityRole="button" onPress={() => {const context=sourceChatContext(detail);setDetail(null);setGroupIds([]);if(Platform.OS==='ios')pendingSourceRoute.current=context;else onOpenSourceChat(context);}}><Text>聯絡賣家（Wishlist AI 代轉）</Text></Pressable><Text>不顯示未授權圖片，不提供下訂或付款。</Text>{!!error && <Text accessibilityRole="alert">{error}</Text>}</>)}</ScrollView></SafeAreaModal>;
-    return { layers, list, modal, count: items.filter(isLocatedLead).length, ready: !path || ready, points: items.filter(isLocatedLead).map(r => ({ longitude: r.longitude, latitude: r.latitude })) };
+    const closeDetail=()=>{detailGeneration.current++;setDetail(null);setGroupIds([]);};
+    const modal = <SafeAreaModal onDismiss={()=>{const context=pendingSourceRoute.current;pendingSourceRoute.current=null;if(context&&alive.current)onOpenSourceChat(context);}} visible={!!detail || groupIds.length > 0} animationType="slide" onRequestClose={closeDetail}>
+      {detail?<SourceLeadDetailContent key={detail.id} detail={detail} error={error} onBack={closeDetail}
+        onAttribution={()=>{if(detail.coordinateAttribution)void Linking.openURL(detail.coordinateAttribution.url);}}
+        onOriginal={async()=>{const request=detailGeneration.current;try{const fresh=parseLead(await api<unknown>('/source-leads/'+detail.id+'?approximate=1&unlocated=1'));if(fresh.id!==detail.id)throw new Error();if(!alive.current||request!==detailGeneration.current)return;await Linking.openURL(fresh.canonicalUrl);}catch{setError('來源已失效或無法開啟，請稍後重試。');}}}
+        onContact={()=>{const context=sourceChatContext(detail);setDetail(null);setGroupIds([]);if(Platform.OS==='ios')pendingSourceRoute.current=context;else onOpenSourceChat(context);}}/>
+       :<ScrollView contentContainerStyle={{padding:24,gap:16}}><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={closeDetail}><Text>返回探索</Text></Pressable><Text>同一公共／概略位置的來源線索，非現貨位置</Text>{items.filter(r=>groupIds.includes(r.id)).map(r=><Pressable key={r.id} accessibilityRole="button" onPress={()=>void open(r.id)} style={listingPresentation.card}><ListingPhoto uri={r.media?.[0]?.thumbnailUrl} label={r.media?.[0]?.alt??r.title}/><View style={listingPresentation.cardText}><Text numberOfLines={2} style={listingPresentation.title}>{r.title}</Text><Text style={listingPresentation.price}>{r.publicFacts?.priceText||'售價待詢問'}</Text><Text style={listingPresentation.small}>{sourceLocationLabel(r)} · 庫存待確認</Text></View></Pressable>)}</ScrollView>}
+    </SafeAreaModal>;
+    return { open, layers, list, modal, count: items.filter(isLocatedLead).length, ready: !path || ready, points: items.filter(isLocatedLead).map(r => ({ longitude: r.longitude, latitude: r.latitude })) };
 }
 export function SourceLeadInquiry({api,apiUrl,userId,context,onBack}:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number;context:SourceChatContext;onBack:()=>void}) {
  const {scope,room,recovery,ready,error,notice,question,setQuestion,busy,waiting,action}=useNativeSourceInquiry(api,apiUrl,userId,context.id);

@@ -30,6 +30,7 @@ const AUTHENTICATED_FLOWS = {
   'marketplace-my-listings': AUTHENTICATED_MY_LISTINGS_TESTS,
   'home-visual': AUTHENTICATED_HOME_VISUAL_TESTS,
   'golden-wishes': ['NativeQaTests/test16RealLoginGoldenWishTransitions'],
+  'golden-discovery': ['NativeQaTests/test17RealLoginGoldenDiscoveryAndDetail'],
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||

@@ -86,6 +86,9 @@ jobs:
     - name: Test restricted source sync and private receipt verification
       run: node --test scripts/source-sync-once.test.cjs scripts/source-sync-receipt-check.test.cjs scripts/records-bridge.test.cjs
 
+    - name: Test bounded LINE desktop observations
+      run: node --test ../tools/source-pipeline/line-read-budget.test.mjs
+
     - name: Test relay identity compatibility and rejected-send stop
       run: node --test ../tools/inquiry-relay/relay-identity.test.cjs
 

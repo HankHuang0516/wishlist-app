@@ -1,3 +1,4 @@
+import {marketingUsedInPeriod} from '../lib/marketingUsage';
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -69,7 +70,7 @@ export const submitMarketingRequest = endpoint(async(req,userId,clientRequestId)
             const version='listingVersion' in facts?facts.listingVersion:facts.sellerDraftVersion;
             if(version!==body.expectedVersion) throw new MarketingInputError('STALE_DETAILS',409,'商品資料已變更，請先核對後再建立新工作');
             const period=freeMarketingWindow(new Date());
-            const count=await tx.marketingJob.count({where:{ownerUserId:userId,parentJobId:null,quotaPeriodStart:period.startsAt,status:{in:['PENDING','PROCESSING','REVIEW','COMPLETED']}}});
+            const count=await marketingUsedInPeriod(tx,userId,period.startsAt);
             const premium = await verifiedPremium(tx,userId);
             await reconcileMarketingCredits(tx,userId);
             paidCredit = count >= (premium ? 100 : MARKETING_FREE_MONTHLY_LIMIT);

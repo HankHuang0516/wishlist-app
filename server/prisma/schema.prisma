@@ -84,6 +84,7 @@ model User {
   listingReportOperations ListingReportOperation[]
   listingMedia    ListingMedia[]
   marketingJobs   MarketingJob[]
+  removedMarketingUsage RemovedMarketingUsage[]
   marketingRequestReceipts MarketingRequestReceipt[]
   marketingApprovalReceipts MarketingApprovalReceipt[]
   buyerConversations Conversation[] @relation("ConversationBuyer")
@@ -185,6 +186,16 @@ model MarketingApprovalReceipt {
 
 // A delivered job contains four privately stored images and seller-editable
 // copy. Only explicit seller selection may publish generated media.
+model RemovedMarketingUsage {
+  jobId String @id @db.Uuid
+  userId Int
+  quotaPeriodStart DateTime
+  quotaPeriodEnd DateTime
+  recordedAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId,quotaPeriodStart])
+}
+
 model MarketingJob {
   id               String             @id @default(uuid())
   ownerUserId      Int

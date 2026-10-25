@@ -1,3 +1,4 @@
+import {marketingUsedInPeriod} from '../lib/marketingUsage';
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -61,9 +62,7 @@ export async function marketingAvailability(req: AuthRequest, res: Response) {
           await listingCreationGate(tx,req,userId);
           const premium = await verifiedPremium(tx,userId);
           const credits = await reconcileMarketingCredits(tx,userId);
-          const used = await tx.marketingJob.count({ where: { ownerUserId: userId,
-            parentJobId: null, quotaPeriodStart: period.startsAt,
-            status: { in: ['PENDING', 'PROCESSING', 'REVIEW', 'COMPLETED'] } } });
+          const used = await marketingUsedInPeriod(tx,userId,period.startsAt);
           return {premium, used, credits:credits._sum.creditRemaining ?? 0};
         });
         return res.set('Cache-Control', 'private, no-store').json({ available: marketingEnabledFor(req.user.id),
@@ -145,8 +144,7 @@ export async function createMarketingJob(req: AuthRequest, res: Response) {
                     !['ACTIVE', 'RESERVED'].includes(currentListing.status))
                     throw new MarketingInputError('STALE_DETAILS', 409, '商品資料已變更，請重新生成');
             }
-            const reserved = await tx.marketingJob.count({ where: { ownerUserId: req.user!.id, parentJobId: null,
-                quotaPeriodStart: period.startsAt, status: { in: ['PENDING', 'PROCESSING', 'REVIEW', 'COMPLETED'] } } });
+            const reserved = await marketingUsedInPeriod(tx,req.user!.id,period.startsAt);
             const premium = await verifiedPremium(tx,req.user!.id);
             await reconcileMarketingCredits(tx,req.user!.id);
             const job = await tx.marketingJob.create({ data: { ownerUserId: req.user!.id, listingId: details.listingId,

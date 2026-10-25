@@ -10,10 +10,13 @@ export function createDiscoveryRoutes() {
   router.use((_q,r,n)=>{r.set('Cache-Control','private, no-store');n();});
   const read=async(req:AuthRequest,res:any)=>{
     try{
-      const query=discoveryQuery(req.query), recommended=req.path==='/for-you',cp=req.path==='/cp';
+      const recommended=req.path==='/for-you',cp=req.path==='/cp',raw={...req.query};
+      const wish=raw.wish;delete raw.wish;
+      if(wish!==undefined&&(!recommended||typeof wish!=='string'||! /^[1-9]\d{0,9}$/.test(wish)||Number(wish)>2147483647))throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+      const query=discoveryQuery(raw);
       if(query.sort==='cp'&&!cp)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
       let products=await loadDiscovery();
-      if(recommended){ products=await recommendDiscovery(products,req.user!.id);if(req.query.sort===undefined)query.sort='recommended'; }
+      if(recommended){ products=await recommendDiscovery(products,req.user!.id,wish===undefined?undefined:Number(wish));if(req.query.sort===undefined)query.sort='recommended'; }
       if(cp){
         const evaluated=await attachCp(products),scoped=discoveryPage(evaluated,{...query,cursor:'',limit:60}),scopeProducts=filterDiscovery(evaluated,query);
         const ready=evaluated.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined&&p.cp.score>=75&&p.cp.confidence==='MEDIUM');if(req.query.sort===undefined)query.sort='cp';

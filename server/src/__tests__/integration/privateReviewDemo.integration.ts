@@ -1,3 +1,4 @@
+import {createDiscoveryRoutes} from '../../routes/discoveryRoutes';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
@@ -17,6 +18,7 @@ const previous = process.env.PRIVATE_REVIEW_DEMO_ROOMS;
 const secret = 'isolated-review-demo-integration'; process.env.JWT_SECRET = secret;
 const app = express(); app.set('trust proxy', 1); app.use(express.json());
 app.use('/api/chat', chatRoutes); app.use('/api/listings', listingRoutes); app.use('/api/product-interest', productInterestRoutes);
+app.use('/api/discovery',createDiscoveryRoutes());
 app.get('/api/storefronts/:id', authenticateToken, getStorefront);
 const server = createServer(app);
 let seller: number, buyer: number, third: number, listingId: string, roomId: string, ip = 1;
@@ -113,6 +115,7 @@ it('keeps sample data out of discovery, public storefronts and anonymous or memb
     await prisma.listing.update({ where: { id: listingId }, data: { title: 'malformed sample marker' } });
     const search = await call('get', '/listings?limit=100', third); expect(search.status).toBe(200);
     expect(search.body.items.some((l: { id: string }) => l.id === listingId)).toBe(false);
+    const discovery=await call('get','/discovery?source=listing',third);expect(discovery.status).toBe(200);expect(discovery.body.items.some((l:{id:string})=>l.id===listingId)).toBe(false);
     const storefront = await call('get', '/storefronts/' + seller, third); expect(storefront.status).toBe(200); expect(storefront.body.items).toEqual([]);
     for (const viewer of [buyer, seller, third]) {
         const interest = await call('get', '/product-interest?keys=' + encodeURIComponent('listing:' + listingId), viewer);

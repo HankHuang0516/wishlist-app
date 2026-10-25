@@ -38,6 +38,7 @@ export function ListingDetailContent({listing, userId, error, reasons, onBack, o
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <View>
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event => setPage(Math.max(0, Math.min(listing.media.length-1, Math.round(event.nativeEvent.contentOffset.x/width))))}>
+          {!listing.media.length&&<ListingPhoto label={listing.title} detail missing="尚未提供商品照片" style={{width,height:Math.min(width*.64,280),borderRadius:0}}/>}
           {listing.media.map((photo, index) => <ListingPhoto key={photo.id} uri={photo.imageUrl} label={`${listing.title} · ${photo.capturePurpose==='AI_MARKETING'?'AI 行銷圖片':'商品照片'} ${index+1}/${listing.media.length}`} detail style={{width, height:Math.min(width*.78, 340), borderRadius:0}} missing="尚未提供商品照片"/>)}
         </ScrollView>
         {listing.media.length>1 && <Text style={s.page}>{page+1}/{listing.media.length}</Text>}
@@ -61,10 +62,10 @@ export function ListingDetailContent({listing, userId, error, reasons, onBack, o
           <Text style={s.secondary}>刊登至 {new Date(listing.expiresAt).toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei'})}</Text>
         </NativeDisclosure>
         {reasons.map(reason=><Text key={reason} style={s.secondary}>{reason}</Text>)}
-        {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
+
       </View>
     </ScrollView>
-    {!own && <View style={s.footer}><Pressable accessibilityRole="button" disabled={contacting} accessibilityState={{disabled:contacting,busy:contacting}} style={[s.contact,contacting&&s.disabled]} onPress={()=>void contact()}><Ionicons name="chatbubble-outline" color="white" size={21}/><Text style={s.contactText}>{contacting?'正在開啟聊天…':'聊聊詢問'}</Text></Pressable></View>}
+    {!own && <View style={s.footer}>{!!error&&<Text accessibilityRole="alert" style={s.error}>{error}</Text>}<Pressable accessibilityRole="button" accessibilityLabel={contacting?'正在開啟聊天…':'聊聊詢問'} disabled={contacting} accessibilityState={{disabled:contacting,busy:contacting}} style={[s.contact,contacting&&s.disabled]} onPress={()=>void contact()}><Ionicons name="chatbubble-outline" color="white" size={21}/><Text style={s.contactText}>{contacting?'正在開啟聊天…':'聊聊詢問'}</Text></Pressable></View>}
   </View>;
 }
 

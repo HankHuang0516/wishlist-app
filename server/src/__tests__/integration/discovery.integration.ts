@@ -10,7 +10,7 @@ import {createLoopbackRequest} from './loopbackHttp';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Isolated DB required');
 const app=express();app.use(express.json());app.use('/discovery',createDiscoveryRoutes());const http=createLoopbackRequest(app);
-const run=randomUUID(),apiKey=randomUUID(),otherKey=randomUUID();let userId:number,otherId:number,listingId:string;
+const run=randomUUID(),apiKey=randomUUID(),otherKey=randomUUID();let userId:number,otherId:number,listingId:string,wishId:number,unrelatedWishId:number,foreignWishId:number;
 const retailIds:string[]=[],leadIds:string[]=[],oldFlag=process.env.SOURCE_LEADS_PUBLIC_ENABLED,oldModel=process.env.DISCOVERY_CP_MODEL,model='synthetic-cp-'+run;
 beforeAll(async()=>{
  process.env.SOURCE_LEADS_PUBLIC_ENABLED='1';
@@ -19,7 +19,9 @@ beforeAll(async()=>{
  listingId=(await prisma.listing.create({data:{ownerUserId:userId,clientListingId:randomUUID(),requestHash:'synthetic',title:'BenQ GW2270 合成二手電腦螢幕',category:'electronics',price:750,status:'ACTIVE',expiresAt:new Date(Date.now()+86400000),publishedAt:new Date()}})).id;
  const rows=Array.from({length:503},(_,i)=>{const id=randomUUID(),url='https://www.facebook.com/groups/123456789/posts/'+id;const data=parseLead({archiveItemId:'SYNTHETIC-'+run+'-'+i,libraryFileId:'libfile_'+'a'.repeat(32),archiveVersion:3,archiveSha256:'a'.repeat(64),title:i===502?'合成二手筆電唯一尾頁商品':'BenQ GW2270 合成二手電腦螢幕 '+i,summary:'公開來源參考，庫存與交易待確認。',canonicalUrl:url,county:'臺南市',district:'永康區',publicPlaceName:'合成公共面交點',publicAddress:'臺南市永康區合成路123號',latitude:23,longitude:120.236,postedEarliestAt:new Date(Date.now()-86400000).toISOString(),postedLatestAt:new Date(Date.now()-86400000).toISOString(),checkedAt:new Date().toISOString(),evidence:{sourceUrl:url,sourcePublic:true,publicSourceRef:'self:synthetic-public',dateRef:'self:synthetic-date',locationRef:'self:synthetic-location',coordinateRef:'self:synthetic-coordinate',locationSourceUrl:'https://public.example.invalid/qa',coordinateSourceUrl:'https://public.example.invalid/map',publicPlace:true,locationType:'PUBLIC_MEETING_POINT',sourceMeetingPointConfirmed:true,independentlyReviewed:true,selfWrittenSummary:true,noCopiedTextOrImages:true,noPrivateData:true,reviewRef:'self:synthetic-review',publicFacts:{priceText:'1000',currencyStatus:'TWD',priceUnitStatus:'SOURCE_STATED',sourceAccessNotice:'公開來源',originalDateLabel:'來源昨日貼文',locationRelation:'公共面交點',coordinateQualityNotes:[]}}});leadIds.push(id);return{id,...data};});
  await prisma.externalSourceLead.createMany({data:rows});
- await prisma.wishlist.create({data:{userId,title:'合成私人願望',items:{create:{name:'電腦螢幕',maxPrice:800,priceCurrency:'TWD',aiStatus:'SKIPPED'}}}});
+ const mine=await prisma.wishlist.create({data:{userId,title:'合成私人願望',items:{create:[{name:'電腦螢幕',maxPrice:800,priceCurrency:'TWD',aiStatus:'SKIPPED'},{name:'完全無關小提琴',aiStatus:'SKIPPED'}]}},include:{items:true}});
+ wishId=mine.items.find(i=>i.name==='電腦螢幕')!.id;unrelatedWishId=mine.items.find(i=>i.name!=='電腦螢幕')!.id;
+ foreignWishId=(await prisma.wishlist.create({data:{userId:otherId,title:'其他帳號私人願望',items:{create:{name:'電腦螢幕',isHidden:true,aiStatus:'SKIPPED'}}},include:{items:true}})).items[0].id;
 },30_000);
 afterAll(async()=>{if(oldFlag===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=oldFlag;if(oldModel===undefined)delete process.env.DISCOVERY_CP_MODEL;else process.env.DISCOVERY_CP_MODEL=oldModel;await prisma.discoveryCpRun.deleteMany({where:{model}});await prisma.retailPriceObservation.deleteMany({where:{id:{in:retailIds}}});await prisma.externalSourceLead.deleteMany({where:{id:{in:leadIds}}});await prisma.listing.deleteMany({where:{ownerUserId:userId}});await prisma.user.deleteMany({where:{id:{in:[userId,otherId]}}});await prisma.$disconnect();});
 it('reads every published source before applying main/subcategory and budget filters',async()=>{
@@ -31,6 +33,18 @@ it('isolates recommendations using the authenticated owner wishes and actual bud
  expect((await http.get('/discovery/for-you')).status).toBe(401);
  const mine=await http.get('/discovery/for-you').set('X-Api-Key',apiKey);expect(mine.status).toBe(200);expect(mine.body.total).toBe(1);expect(mine.body.items[0].id).toBe(listingId);expect(mine.body.items[0].match.reasons).toEqual(['NAME','BUDGET']);
  const other=await http.get('/discovery/for-you').set('X-Api-Key',otherKey);expect(other.body.total).toBe(0);
+});
+it('scopes a selected wish to its authenticated owner and hides purchased or hidden wishes',async()=>{
+ const selected=await http.get('/discovery/for-you?wish='+wishId).set('X-Api-Key',apiKey);expect(selected.status).toBe(200);expect(selected.body.total).toBe(1);expect(selected.body.items[0].match.wishItemId).toBe(wishId);
+ const unrelated=await http.get('/discovery/for-you?wish='+unrelatedWishId).set('X-Api-Key',apiKey);expect(unrelated.status).toBe(200);expect(unrelated.body.total).toBe(0);
+ expect((await http.get('/discovery/for-you?wish='+foreignWishId).set('X-Api-Key',apiKey)).status).toBe(404);
+ expect((await http.get('/discovery/for-you?wish='+wishId).set('X-Api-Key',otherKey)).status).toBe(404);
+ for(const state of [{isHidden:true},{isPurchased:true}]){await prisma.item.update({where:{id:wishId},data:{isHidden:false,isPurchased:false,...state}});expect((await http.get('/discovery/for-you?wish='+wishId).set('X-Api-Key',apiKey)).status).toBe(404);}
+ await prisma.item.update({where:{id:wishId},data:{isHidden:false,isPurchased:false}});
+});
+it('rejects invalid or misplaced selected-wish query parameters',async()=>{
+ for(const path of ['/discovery?wish=1','/discovery/cp?wish=1','/discovery/for-you?wish=0','/discovery/for-you?wish=-1','/discovery/for-you?wish=1.5','/discovery/for-you?wish=2147483648','/discovery/for-you?wish=1&wish=2'])expect((await http.get(path).set('X-Api-Key',apiKey)).status).toBe(400);
+ expect((await http.get('/discovery/for-you?wish='+wishId)).status).toBe(401);
 });
 it('removes withdrawn sources and rejects prior-page cursors rather than mixing snapshots',async()=>{
  const first=await http.get('/discovery?limit=1');expect(first.body.nextCursor).toBeTruthy();

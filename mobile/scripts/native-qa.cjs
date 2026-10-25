@@ -7,7 +7,7 @@ const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs')
 function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.env,
   { listingAiPilot = false, marketingVisualOwnerRole = null, externalListingsPilot = false, externalMapStress = false,
     holdListingUploadAck = false, rejectFirstListingUpload = false,
-    staleBatchRecoverySnapshot = false, visualHomeFixture = false } = {}) {
+    staleBatchRecoverySnapshot = false, visualHomeFixture = false, sourceLeadsPilot = false } = {}) {
   assertTestDatabase(databaseUrl);
   if (!Number.isInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > 900) throw new Error('QA lifetime must be 1–900 seconds');
   if (marketingVisualOwnerRole !== null && !['buyer', 'seller'].includes(marketingVisualOwnerRole))
@@ -27,6 +27,7 @@ function qaEnvironment(databaseUrl, lifetimeSeconds = 300, inherited = process.e
     ...(holdListingUploadAck ? { NATIVE_QA_HOLD_LISTING_UPLOAD_ACK: '1' } : {}),
     ...(rejectFirstListingUpload ? { NATIVE_QA_REJECT_FIRST_LISTING_UPLOAD: '1' } : {}),
     ...(staleBatchRecoverySnapshot ? { NATIVE_QA_STALE_BATCH_RECOVERY_SNAPSHOT: '1' } : {}),
+    ...(sourceLeadsPilot ? { NATIVE_QA_SOURCE_LEADS_PILOT: '1' } : {}),
     ...(visualHomeFixture ? { NATIVE_QA_VISUAL_HOME_FIXTURE: '1', NATIVE_QA_VISUAL_PORT: '18889' } : {}),
   };
 }
@@ -96,6 +97,7 @@ async function startNativeQa(databaseUrl, lifetimeSeconds = 300, options = {}) {
   // the caller's memory. Never serialize this object into a QA report/screenshot.
   return {
     apiUrl: fixture.apiUrl, runId: fixture.runId, actors: fixture.actors,
+    ...(options.sourceLeadsPilot ? { sourceLeadIds: fixture.sourceLeadIds } : {}),
     ...(options.listingAiPilot ? { callbackToken: fixture.callbackToken } : {}),
     ...(options.holdListingUploadAck ? { uploadAckHeld } : {}),
     ...(options.rejectFirstListingUpload ? { listingUploadRejected } : {}),

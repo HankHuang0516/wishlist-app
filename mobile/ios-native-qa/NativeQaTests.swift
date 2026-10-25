@@ -162,7 +162,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -1026,7 +1026,7 @@ final class NativeQaTests: XCTestCase {
             try required("深藍色陶瓷杯", scroll: true, kind: .staticText)
             try safeScreenshot("qa-home-visual-expanded")
             checkpoint("home-visual-map-entry")
-            try required("在地圖交叉比對深藍色陶瓷馬克杯", scroll: true, kind: .button)
+            try required("尋找深藍色陶瓷馬克杯的符合商品", scroll: true, kind: .button)
             try safeScreenshot("qa-home-visual-scrolled")
             app.terminate()
         } catch { reportFailure() }
@@ -1063,6 +1063,37 @@ final class NativeQaTests: XCTestCase {
             try required("關閉編輯", kind: .button)
             try tap("關閉編輯")
             try required("尋找符合商品", scroll: true)
+            app.terminate()
+        } catch { reportFailure() }
+    }
+
+    func test17RealLoginGoldenDiscoveryAndDetail() {
+        executionTimeAllowance = 180
+        do {
+            try prepare()
+            try loginBuyerAndRequireTabs()
+            checkpoint("golden-discovery-list")
+            try tapTab("探索")
+            try required("3 筆商品與來源", scroll: true)
+            try safeScreenshot("qa-golden-discovery-list")
+            try tap("搜尋商品")
+            try required("3 筆商品與來源", scroll: true)
+            checkpoint("golden-discovery-detail")
+            try required("查看商品：二手深藍色陶瓷馬克杯", scroll: true, kind: .button)
+            try tap("查看商品：二手深藍色陶瓷馬克杯")
+            try required("商品詳情")
+            let contact = try required("聊聊詢問", kind: .button)
+            guard contact.isHittable, contact.frame.height >= 44 else { throw Failure.unstableControl }
+            try safeScreenshot("qa-golden-discovery-detail")
+            try tap("返回探索")
+            checkpoint("golden-discovery-map")
+            try required("切換地圖瀏覽", scroll: true, kind: .any)
+            try tap("切換地圖瀏覽", kind: .any)
+            try required("返回商品瀏覽")
+            try safeScreenshot("qa-golden-discovery-map")
+            try tap("返回商品瀏覽", kind: .any)
+            try required("3 筆商品與來源", scroll: true)
+            checkpoint("golden-discovery-complete")
             app.terminate()
         } catch { reportFailure() }
     }

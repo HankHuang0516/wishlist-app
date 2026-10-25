@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from './prisma';
 import { publicListingSelect } from '../controllers/listingController';
 import { NON_SALE_QA_PREFIX } from './listingRules';
+import { privateReviewListingIds } from './privateReviewDemo';
 import { leadCurrent, leadDTO } from './sourceLeadRules';
 import { externalCandidateSelect, publicCandidate } from '../routes/externalListingRoutes';
 import { classifyDiscovery, discoveryCatalog, sourcePrice, statedCondition } from './discoveryCatalog';
@@ -52,7 +53,7 @@ async function scan<T extends {id: string}>(read: (cursor?: string) => Promise<T
 export async function loadDiscovery(now = new Date()) {
   const products: DiscoveryProduct[] = [];
   await prisma.$transaction(async tx => {
-    const listings = await scan(cursor => tx.listing.findMany({where:{status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
+    const listings = await scan(cursor => tx.listing.findMany({where:{id:{notIn:privateReviewListingIds()},status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
     for (const r of listings) {
       const c = classifyDiscovery(r.title,r.category);
       products.push({kind:'listing',id:r.id,key:'listing:'+r.id,title:r.title,description:r.description??'',...c,classificationMethod:c.method,
@@ -71,7 +72,7 @@ export async function loadDiscovery(now = new Date()) {
           photos:(d.media??[]).map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),county:r.county,district:r.district,
           condition:statedCondition(r.title),sourceLabel:new URL(r.canonicalUrl).hostname.replace(/^www\./,''),stockStatus:'UNKNOWN',canonicalUrl:r.canonicalUrl,
           detailPath:'/explore?view=source-leads&source='+r.id+'&presentation=1&photos=2&approximate=1&unlocated=1',
-          date:(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null});
+          date:d.firstObservedAt??(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null});
       }
     }
     if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED === '1') {
@@ -88,8 +89,9 @@ export async function loadDiscovery(now = new Date()) {
   },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead,timeout:20_000});
   return products;
 }
-export async function recommendDiscovery(products: DiscoveryProduct[], userId: number) {
-  const wishes = await prisma.item.findMany({where:{wishlist:{userId},isPurchased:false},select:{id:true,name:true,maxPrice:true,priceCurrency:true},orderBy:{id:'desc'},take:500});
+export async function recommendDiscovery(products: DiscoveryProduct[], userId: number, wishItemId?: number) {
+  const wishes = await prisma.item.findMany({where:{wishlist:{userId},isPurchased:false,isHidden:false,...(wishItemId===undefined?{}:{id:wishItemId})},select:{id:true,name:true,maxPrice:true,priceCurrency:true},orderBy:{id:'desc'},take:500});
+  if(wishItemId!==undefined&&!wishes.length)throw new DiscoveryError(404,'DISCOVERY_WISH_UNAVAILABLE');
   return products.flatMap(p=>{
     let best: DiscoveryProduct['match'];
     for(const w of wishes){

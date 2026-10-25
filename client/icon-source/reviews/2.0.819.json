@@ -9,7 +9,7 @@
     "pwa-icon-192.png": "5bee6f2b9858c852fb6dcdc69449038ca2f0510b4d9ab6d96faf8757343afe47",
     "apple-touch-icon.png": "d4c5578b3b13b463059bf5be91835a53db8d5003d5cf2fa0e463609d86b668bd"
   },
-  "version": "2.0.817",
+  "version": "2.0.819",
   "status": "passed",
   "reusedFrom": "2.0.754",
   "actualBuildInspected": false,

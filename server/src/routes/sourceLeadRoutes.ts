@@ -424,9 +424,9 @@ export function createSourceLeadRoutes() {
                 throw new LeadError('EXPLICIT_SCOPED_CONSENT_REQUIRED');
             // Withdrawal and original-operation replay remain available even
             // when a store is unavailable. Refresh only a potentially new round.
-            if (['ASK','CONSENT','REOPEN'].includes(b.action)) {
-                const prior = await prisma.sourceLeadInquiry.findFirst({where:{id:String(req.params.roomId),leadId:String(req.params.id),buyerUserId:req.user!.id},select:{events:true}});
-                if (prior && !(prior.events as unknown as LeadEvent[]).some(event=>event.requestId===b.requestId)) await refreshBilling(req.user!.id);
+            if (['ASK','CONSENT','REOPEN','REVISE'].includes(b.action)) {
+                const prior = await prisma.sourceLeadInquiry.findFirst({where:{id:String(req.params.roomId),leadId:String(req.params.id),buyerUserId:req.user!.id},select:{events:true,state:true}});
+                if (prior && (b.action!=='REVISE'||prior.state==='INQUIRY') && !(prior.events as unknown as LeadEvent[]).some(event=>event.requestId===b.requestId)) await refreshBilling(req.user!.id);
             }
             const r = await prisma.$transaction(async (tx) => {
                 await listingCreationGate(tx, req, req.user!.id);

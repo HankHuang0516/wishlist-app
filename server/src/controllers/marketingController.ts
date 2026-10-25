@@ -1,3 +1,4 @@
+import {marketingUsedInPeriod} from '../lib/marketingUsage';
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -55,9 +56,7 @@ export async function marketingAvailability(req: AuthRequest, res: Response) {
         const userId=req.user.id;
         const usedThisMonth = await prisma.$transaction(async tx=>{
           await listingCreationGate(tx,req,userId);
-          return tx.marketingJob.count({ where: { ownerUserId: userId,
-            parentJobId: null, quotaPeriodStart: period.startsAt,
-            status: { in: ['PENDING', 'PROCESSING', 'REVIEW', 'COMPLETED'] } } });
+          return marketingUsedInPeriod(tx,userId,period.startsAt);
         });
         // No verified paid-credit ledger exists yet. Do not infer entitlement
         // from the legacy isPremium flag or an unverified client receipt.
@@ -139,8 +138,7 @@ export async function createMarketingJob(req: AuthRequest, res: Response) {
                     !['ACTIVE', 'RESERVED'].includes(currentListing.status))
                     throw new MarketingInputError('STALE_DETAILS', 409, '商品資料已變更，請重新生成');
             }
-            const reserved = await tx.marketingJob.count({ where: { ownerUserId: req.user!.id, parentJobId: null,
-                quotaPeriodStart: period.startsAt, status: { in: ['PENDING', 'PROCESSING', 'REVIEW', 'COMPLETED'] } } });
+            const reserved = await marketingUsedInPeriod(tx,req.user!.id,period.startsAt);
             if (reserved >= MARKETING_FREE_MONTHLY_LIMIT) throw new MarketingInputError('MONTHLY_LIMIT', 429,
                 '免費版每月 3 次已用完；尊榮版每月 100 次及單次購買 10 次／US$1 須完成付款驗證後開放');
             const job = await tx.marketingJob.create({ data: { ownerUserId: req.user!.id, listingId: details.listingId,

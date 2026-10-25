@@ -97,3 +97,39 @@ test('only the explicitly approved19 artifact can reuse accepted historical phys
  assert.throws(()=>verify(receipt,scope,approval,prior,'A current physical recording.'));
  assert.throws(()=>verify({...receipt,checks:{...receipt.checks,mapStop:false}}));
 });
+
+function disabledDrafts() {
+ const s=ready();
+ s.productInventory=[
+  {id:'one',kind:'iap',productId:'wishlist_marketing_10',state:'MISSING_METADATA'},
+  {id:'two',kind:'iap',productId:'wishlist_sponsor_90',state:'MISSING_METADATA'},
+  {id:'three',kind:'subscription',productId:'wishlist_premium_monthly',state:'MISSING_METADATA'},
+ ];
+ s.iapCount=2;s.subscriptionCount=1;
+ s.businessContext={versionId:'version20',nativeTree:'native20',serverTree:'server20'};
+ const disclosure='Configured draft products wishlist_marketing_10, wishlist_sponsor_90 and wishlist_premium_monthly are incomplete, unavailable for purchase and not requested for review in this submission. Checkout remains disabled; the reviewer can use the existing free allowance.';
+ s.businessEvidence={...s.businessContext,appId:'6468950847',mode:'disabled-draft-products',verifiedAt:new Date(now).toISOString(),paidPurchasesAvailable:false,productsRequestedForReview:false,disclosureText:disclosure,products:structuredClone(s.productInventory)};
+ s.notes+='\n'+disclosure;
+ return s;
+}
+test('accepts only live-matched unsubmitted draft inventory with current honest disclosure and checkout disabled',()=>
+ assert.doesNotThrow(()=>assertDemoReady(disabledDrafts(),now)));
+for(const [name,change] of [
+ ['missing receipt',s=>delete s.businessEvidence],
+ ['changed version',s=>s.businessEvidence.versionId='another'],
+ ['changed native tree',s=>s.businessEvidence.nativeTree='another'],
+ ['changed server tree',s=>s.businessEvidence.serverTree='another'],
+ ['stale review',s=>s.businessEvidence.verifiedAt='2020-01-01'],
+ ['future review',s=>s.businessEvidence.verifiedAt='2030-01-01'],
+ ['purchase enabled',s=>s.marketing.paidPurchasesAvailable=true],
+ ['receipt enables purchase',s=>s.businessEvidence.paidPurchasesAvailable=true],
+ ['IAP requested for review',s=>s.businessEvidence.productsRequestedForReview=true],
+ ['missing note disclosure',s=>s.notes='Business model Q1: Free.'],
+ ['new SKU',s=>s.productInventory[0].productId='unreviewed_sku'],
+ ['changed product state',s=>s.productInventory[0].state='APPROVED'],
+ ['missing product receipt',s=>s.businessEvidence.products.pop()],
+ ['different product identity',s=>s.businessEvidence.products[0].id='another'],
+ ['duplicate inventory',s=>s.productInventory[1]={...s.productInventory[0]}],
+ ['wrong inventory count',s=>s.iapCount=1],
+ ['missing inventory',s=>delete s.productInventory],
+]) test('blocks disabled-draft business evidence: '+name,()=>{const s=disabledDrafts();change(s);assert.throws(()=>assertDemoReady(s,now));});

@@ -119,9 +119,21 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
   // Require a genuine pointer target, then use a normal browser click.
   try{
    await page.waitForFunction((selector:string)=>{const e=document.querySelector(selector);if(!e)return false;const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!hit&&e.contains(hit);},{},meetupButton);
+   // The previous hit test can precede a React summary/layout update. Observe
+   // stable, pointer-reachable bounds across frames before one genuine click.
+   await page.evaluate((selector:string)=>new Promise<void>((resolve,reject)=>{
+    let previous='',stable=0;const deadline=window.performance.now()+5000;
+    const frame=()=>{const e=document.querySelector(selector);if(!e){reject(Error('Meetup control disappeared'));return;}const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2),bounds=JSON.stringify([r.x,r.y,r.width,r.height]);stable=hit&&e.contains(hit)&&bounds===previous?stable+1:0;previous=bounds;if(stable>=3){resolve();return;}if(window.performance.now()>=deadline){reject(Error('Meetup control did not settle'));return;}requestAnimationFrame(frame);};
+    requestAnimationFrame(frame);
+   }),meetupButton);
    await page.click(meetupButton);
    const place=i===1?'合成地點1改約':`合成地點${i}原版`;await page.waitForFunction((p:string)=>document.querySelector('[role="dialog"]')?.textContent?.includes(p),{},place);
-  }catch(failure){await page.screenshot({path:webQaEvidence(`chat-meetup-${i}-unready-synthetic.png`)});throw failure;}
+  }catch(failure){
+   // Keep only synthetic UI and bounded state counters; no session/header/body
+   // values. The query- prefix includes this evidence in the CI artifact glob.
+   console.log(JSON.stringify({meetupDiagnostic:await page.evaluate(()=>({dialogs:document.querySelectorAll('[role="dialog"]').length,appointmentSections:document.querySelectorAll('[aria-label="聊天面交預約"]').length,viewport:[innerWidth,innerHeight]})),roomIndex:i,meetupHttpStatuses:traffic.filter(t=>t.path===`/api/chat/conversations/${rooms[i]}/meetup`).map(t=>t.status)}));
+   await page.screenshot({path:webQaEvidence(`query-chat-meetup-${i}-unready-synthetic.png`)});throw failure;
+  }
   const modal=await page.$eval('[role="dialog"]',(el:any)=>el.innerText);expect(modal).toContain(i===0?'雙方已確認':i===1?'已取消':'提議中');if(i!==0)expect(modal).not.toContain('雙方已確認');for(let j=0;j<3;j++)if(i!==j)expect(modal).not.toContain(`合成地點${j}`);
   await page.screenshot({path:webQaEvidence(`chat-meetup-${i}-synthetic.png`)});
  }

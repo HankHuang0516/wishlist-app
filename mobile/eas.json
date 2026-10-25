@@ -10,7 +10,10 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://wishlist-app-production.up.railway.app/api"
+      }
     },
     "ios-validation": {
       "distribution": "store",

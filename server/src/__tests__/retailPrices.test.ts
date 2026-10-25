@@ -100,3 +100,9 @@ test('accepts the reviewed retailer original price and refuses promotion or look
 });
 
 
+
+
+test('standard white Nintendo OLED set never matches a partial or different console',()=>{const {retailIdentity}=require('../lib/retailPrices');const p={mainId:'electronics',subId:'gaming',title:'Nintendo Switch OLED 白色 二手 含原盒及配件收納包'};expect(retailIdentity(p)).toBe('nintendo:switch:oled:white:standard-console');for(const title of ['Nintendo Switch OLED 單螢幕 白色','Nintendo Switch 2 OLED 白色','Nintendo Switch OLED 薩爾達 白色','Nintendo Switch OLED 紅藍','Nintendo Switch OLED 白色 不含底座'])expect(retailIdentity({...p,title})).toBeNull();});
+
+
+test('Nintendo Taiwan MSRP is model-bound and refuses lookalike domains',()=>{const product={...p,title:'Nintendo Switch OLED 白色 二手 含原盒及配件收納包',mainId:'electronics',subId:'gaming'};const body={...input(),productKey:product.key,bindingHash:retailBinding(product),originalPrice:'10480',sourceUrl:'https://support.nintendo.com/tw/information/2021/210706/index.html',sourceProductTitle:'Nintendo Switch（OLED款式）白色',evidenceQuote:'Nintendo Switch（OLED款式）建議售價NTD 10,480（含稅）；白色',sourcePeriod:'2021-07-06'};expect(Number(retailObservation(body,product).originalPrice)).toBe(10480);expect(()=>retailObservation({...body,sourceUrl:'https://nintendo.com.attacker.invalid/'},product)).toThrow();expect(()=>retailObservation({...body,sourceProductTitle:'Nintendo Switch OLED 紅藍'},product)).toThrow();});

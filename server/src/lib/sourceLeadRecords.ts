@@ -1,10 +1,11 @@
+import { observedShopeeListing } from './sourceObservedListing';
 import type {ExternalSourceLead} from '@prisma/client';
 import {LeadError,digest,exact,object,publicUrl,ref,parseLead} from './sourceLeadRules';
 import {privateContactField,forbiddenListingField} from './listingPolicy';
 import {isCountyIllustration} from './sourceCountyIllustration';
 import {isContactLocation} from './sourceContactLocation';
 export const recordFactKeys=['canonicalUrl','title','summary','county','district','publicPlaceName','publicAddress','latitude','longitude','postedEarliestAt','postedLatestAt','checkedAt','evidence','sourceClaimState','stateEvidenceRef'] as const;
-const evidenceKeys=['sourceUrl','sourcePublic','publicSourceRef','dateRef','locationRef','coordinateRef','locationSourceUrl','coordinateSourceUrl','publicPlace','locationType','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData','reviewRef','publicFacts','coordinateNodeVersion','countyIllustration','sourceCheckRef'];
+const evidenceKeys=['sourceUrl','sourcePublic','publicSourceRef','dateRef','locationRef','coordinateRef','locationSourceUrl','coordinateSourceUrl','publicPlace','locationType','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData','reviewRef','publicFacts','coordinateNodeVersion','countyIllustration','sourceCheckRef','observedListing'];
 const boolKeys=['sourcePublic','publicPlace','sourceMeetingPointConfirmed','independentlyReviewed','selfWrittenSummary','noCopiedTextOrImages','noPrivateData'];
 const factKeys=['priceText','priceUnitStatus','currencyStatus','sourceAccessNotice','originalDateLabel','locationRelation','coordinateQualityNotes'];
 const safeText=(v:unknown,max:number,empty=false)=>typeof v==='string'&&v.length<=max&&(empty||!!v.trim())&&!/[\x00-\x1f\x7f]/.test(v)&&!privateContactField({title:v})&&!forbiddenListingField({title:v});
@@ -30,7 +31,7 @@ export function parseRecordFacts(value:unknown,now=new Date()){
  if(out.publicAddress!==null&&(e.publicPlace!==(approximate?false:true)||e.noPrivateData!==true))throw new LeadError('PUBLIC_ADDRESS_ONLY');
  if(e.publicFacts!==undefined){const f=object(e.publicFacts);exact(f,factKeys);for(const k of factKeys){if(f[k]===undefined)continue;if(k==='coordinateQualityNotes'){if(!Array.isArray(f[k])||f[k].length>5||f[k].some((v:unknown)=>!safeText(v,500)))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}else if(!safeText(f[k],300))throw new LeadError('SAFE_PUBLIC_FACTS_REQUIRED');}}
  out.sourceClaimState=b.sourceClaimState??'UNKNOWN';if(!['UNKNOWN','RESERVED','SOLD','WITHDRAWN'].includes(out.sourceClaimState))throw new LeadError('NO_CONFIRMED_STOCK_PROMOTION');out.stateEvidenceRef=b.stateEvidenceRef??null;if(out.stateEvidenceRef!==null&&!ref(out.stateEvidenceRef))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');if(e.sourceCheckRef!==undefined&&out.checkedAt===null)throw new LeadError('SOURCE_CHECK_TIME_REQUIRED');if(out.sourceClaimState!=='UNKNOWN'&&(!ref(out.stateEvidenceRef)||out.checkedAt===null))throw new LeadError('BOUND_SOURCE_STATE_REQUIRED');
- out.evidence=e;return out;
+ out.evidence=e;observedShopeeListing(out,now);return out;
 }
 export function recordSnapshot(r:ExternalSourceLead){
  return {...Object.fromEntries(recordFactKeys.map(k=>[k,(r as any)[k]])),id:r.id,archiveItemId:r.archiveItemId,sourceClaimState:r.sourceClaimState,status:r.status,recordOrigin:r.recordOrigin,recordRevision:r.recordRevision,contentHash:r.contentHash,pendingHash:r.pendingHash,pendingFacts:r.pendingFacts,pendingEvidenceRef:r.pendingEvidenceRef,

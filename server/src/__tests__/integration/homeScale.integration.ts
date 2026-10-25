@@ -106,9 +106,17 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
   await page.goto(origin+'/chat?room='+rooms[i],{waitUntil:'domcontentloaded'});
   await page.waitForFunction((id:string)=>document.body.innerText.includes(id),{},productIds[i]);
   const body=await page.evaluate(()=>document.body.innerText);expect(body).toContain(`SYNTHETIC ROOM ${i}`);for(let j=0;j<3;j++)if(i!==j)expect(body).not.toContain(`SYNTHETIC ROOM ${j}`);
-  await page.waitForSelector('button[aria-label="查看或提議面交預約"]',{visible:true});
-  await page.click('button[aria-label="查看或提議面交預約"]');
-  const place=i===1?'合成地點1改約':`合成地點${i}原版`;await page.waitForFunction((p:string)=>document.querySelector('[role="dialog"]')?.textContent?.includes(p),{},place);
+  const meetupButton='button[aria-label="查看或提議面交預約"]';
+  await page.waitForSelector(meetupButton,{visible:true});
+  await page.evaluate(()=>document.fonts.ready);
+  await page.$eval(meetupButton,(el:Element)=>el.scrollIntoView({block:'center',behavior:'instant'}));
+  // A CSS-visible button can still sit behind the sticky composer/navigation.
+  // Require a genuine pointer target, then use a normal browser click.
+  try{
+   await page.waitForFunction((selector:string)=>{const e=document.querySelector(selector);if(!e)return false;const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!hit&&e.contains(hit);},{},meetupButton);
+   await page.click(meetupButton);
+   const place=i===1?'合成地點1改約':`合成地點${i}原版`;await page.waitForFunction((p:string)=>document.querySelector('[role="dialog"]')?.textContent?.includes(p),{},place);
+  }catch(failure){await page.screenshot({path:webQaEvidence(`chat-meetup-${i}-unready-synthetic.png`)});throw failure;}
   const modal=await page.$eval('[role="dialog"]',(el:any)=>el.innerText);expect(modal).toContain(i===0?'雙方已確認':i===1?'已取消':'提議中');if(i!==0)expect(modal).not.toContain('雙方已確認');for(let j=0;j<3;j++)if(i!==j)expect(modal).not.toContain(`合成地點${j}`);
   await page.screenshot({path:webQaEvidence(`chat-meetup-${i}-synthetic.png`)});
  }

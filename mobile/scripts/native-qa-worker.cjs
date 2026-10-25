@@ -18,7 +18,7 @@ const send = message => { if (process.connected) { try { process.send(message, (
 async function cleanFixtures() {
   if (!prisma) {
     if (root) await fs.rmdir(root);
-    return { fixturesRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
+    return { fixturesRemaining: 0, followsRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
   }
   const ids = { in: userIds }, identityHashes = { in: [...hashes] };
   const rooms = await prisma.conversation.findMany({ where: { OR: [{ buyerUserId: ids }, { sellerUserId: ids }] }, select: { id: true } });
@@ -39,6 +39,7 @@ async function cleanFixtures() {
     }
     await tx.conversation.deleteMany({ where: { id: { in: [...roomIds] } } });
     await tx.wishlist.deleteMany({ where: { userId: ids } });
+    await tx.follow.deleteMany({ where: { OR: [{ followerId: ids }, { followingId: ids }] } });
     await tx.user.deleteMany({ where: { id: ids } });
     await tx.mediaErasureTask.deleteMany({ where: { identityHash: identityHashes } });
     await tx.legacyAssetErasureTask.deleteMany({ where: { identityHash: identityHashes } });
@@ -46,6 +47,7 @@ async function cleanFixtures() {
   });
   const summary = {
     fixturesRemaining: await prisma.user.count({ where: { id: ids } }),
+    followsRemaining: await prisma.follow.count({ where: { OR: [{ followerId: ids }, { followingId: ids }] } }),
     conversationsRemaining: await prisma.conversation.count({ where: { id: { in: [...roomIds] } } }),
     receiptsRemaining: await prisma.accountErasureReceipt.count({ where: { identityHash: identityHashes } }),
     mediaTasksRemaining: await prisma.mediaErasureTask.count({ where: { identityHash: identityHashes } }),
@@ -283,7 +285,10 @@ async function main() {
         return next(); // Real login still verifies bcrypt, version and email.
       }
       if (req.path.startsWith('/api/auth/')) return res.status(503).json({ errorCode: 'QA_EXTERNAL_OPERATION_DISABLED' });
-      const userRoute = req.path === '/api/users/me' && ['GET', 'DELETE'].includes(req.method) ||
+      const followState=visualHomeFixture&&req.method==='GET'&&/^\/api\/users\/me\/follow-state\/[1-9][0-9]*$/.test(req.path);
+      const followOperation=visualHomeFixture&&['GET','POST'].includes(req.method)&&/^\/api\/users\/me\/follow-operations\/[0-9a-f-]{36}(?:\/abandon)?$/.test(req.path);
+      if(followState&&!userIds.includes(Number(req.path.split('/').at(-1)))||followOperation&&req.method==='POST'&&!req.path.endsWith('/abandon')&&!userIds.includes(req.body?.targetUserId))return res.status(403).json({errorCode:'QA_FIXTURE_ONLY'});
+      const userRoute = followState || followOperation || req.path === '/api/users/me' && ['GET', 'DELETE'].includes(req.method) ||
         req.path === '/api/users/me/deletion-impact' && req.method === 'GET' ||
         visualHomeFixture && /^\/api\/users\/[1-9][0-9]*\/storefront$/.test(req.path) && req.method==='GET' && userIds.includes(Number(req.path.split('/')[3])) ||
         req.path === '/api/users/me/password' && req.method === 'PUT' ||

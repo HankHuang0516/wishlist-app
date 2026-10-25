@@ -1,10 +1,11 @@
 import React,{createContext,useCallback,useContext,useEffect,useMemo,useState,useSyncExternalStore} from 'react';
-import {View,Text,Pressable,AppState,ScrollView} from 'react-native';
+import {View,Text,Pressable,AppState,ScrollView,StyleSheet} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
 import {InterestStore,type InterestRead} from './productInterest';
 import {useInterestOperation} from './useInterestOperation';
 import {SafeAreaModal} from './SafeAreaModal';
 import {NativeDisclosure} from './NativeDisclosure';
+import {iosColors,iosRadius,iosType} from './iosTheme';
 const Context=createContext<{store:InterestStore;operation:ReturnType<typeof useInterestOperation>}|null>(null);
 export function ProductInterestProvider({read,apiUrl,userId,children}:{read:InterestRead;apiUrl:string;userId:number;children:React.ReactNode}){
  const store=useMemo(()=>new InterestStore(read),[read]),operation=useInterestOperation(read,apiUrl,userId,store),[recoveryOpen,setRecoveryOpen]=useState(false);
@@ -18,5 +19,24 @@ export function ProductInterest({kind,id,compact=false,readOnly=false}:{kind:'li
  const data=useSyncExternalStore(subscribe,snapshot,snapshot),operation=context?.operation;
  const inquiry=(data?.inquiringCount??'—')+(kind==='source'?' 人代問中':' 人詢問中'),liked=data?.own?.liked??false;
  return <><View style={{minHeight:48,flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:8}}><View style={{minHeight:48,flexDirection:'row',alignItems:'center',gap:4}}><Ionicons name="chatbubble-outline" size={17} color="#636366"/><Text style={{fontSize:compact?13:15,color:'#636366'}}>{inquiry}</Text></View>{readOnly?<Text style={{fontSize:compact?13:15,color:'#636366'}}>♡ {data?.likedCount??'—'} 人喜歡</Text>:<Pressable accessibilityRole="button" accessibilityLabel={`${data?.likedCount??'—'} 人喜歡，${liked?'取消喜歡此商品':'喜歡此商品，僅公開人數'}`} accessibilityState={{selected:liked}} disabled={!data?.canLike||!data?.own||!operation?.ready||operation.busy||!!operation.pending} style={{minHeight:48,minWidth:48,flexDirection:'row',alignItems:'center',gap:4}} onPress={e=>{e.stopPropagation();void operation?.toggle(key);}}><Ionicons name={liked?'heart':'heart-outline'} size={19} color={liked?'#C72C59':'#636366'}/><Text style={{fontSize:compact?13:15,color:'#636366'}}>{data?.likedCount??'—'}{compact?'':' 人喜歡'}</Text></Pressable>}{!(compact&&readOnly)&&<Pressable accessibilityRole="button" accessibilityLabel="關於人氣數據" style={{minHeight:48,minWidth:48,alignItems:'center',justifyContent:'center'}} onPress={e=>{e.stopPropagation();setInfo(true);}}><Ionicons name="information-circle-outline" size={19} color="#636366"/></Pressable>}</View>
- <SafeAreaModal visible={info} animationType="slide" onRequestClose={()=>setInfo(false)}><ScrollView contentContainerStyle={{padding:24,gap:20}}><Text accessibilityRole="header" style={{fontSize:25,fontWeight:'700'}}>關於人氣數據</Text>{[['詢問中','近7天曾傳訊，且對話尚未結束的不同買家人數。同一人多次傳訊只計1人。'],['喜歡','主動按下喜歡的帳號數；取消後會扣除。與私人願望清單分開，舊願望不會被轉成人氣。'],['外部來源','僅統計Wishlist內的代問與喜歡，不代表原平台的人氣或庫存。無可核對的詢問紀錄顯示—。']].map(([title,body])=><View key={title} style={{gap:8}}><Text style={{fontSize:18,fontWeight:'600'}}>{title}</Text><Text style={{fontSize:16,lineHeight:26}}>{body}</Text></View>)}<Text style={{fontSize:15,lineHeight:24,color:'#636366'}}>只公開總人數，不公開名單；不是排隊、保留或成交保證。資料無法讀取時顯示—，不以0代替。</Text><Pressable accessibilityRole="button" style={{minHeight:52,backgroundColor:'#0066DB',borderRadius:12,alignItems:'center',justifyContent:'center'}} onPress={()=>setInfo(false)}><Text style={{color:'white',fontSize:17,fontWeight:'600'}}>知道了</Text></Pressable></ScrollView></SafeAreaModal></>;
+ <SafeAreaModal visible={info} animationType="slide" onRequestClose={()=>setInfo(false)}><InterestExplanation onClose={()=>setInfo(false)}/></SafeAreaModal></>;
 }
+
+function InterestExplanation({onClose}:{onClose:()=>void}){
+ const sections=[
+  {title:'詢問中',icon:'chatbubble-outline' as const,color:iosColors.tint,body:'近7天曾傳訊，且對話尚未結束的不同買家人數。同一人多次傳訊只計1人。'},
+  {title:'喜歡',icon:'heart' as const,color:'#C72C59',body:'主動按下喜歡的帳號數；取消後會扣除。與私人願望清單分開，舊願望不會被轉成人氣。'},
+  {title:'外部來源',icon:'open-outline' as const,color:iosColors.label,body:'僅統計Wishlist內的代問與喜歡，不代表原平台的人氣或庫存。無可核對的詢問紀錄顯示—。'},
+ ];
+ return <View style={infoStyles.page}>
+  <View style={infoStyles.header}><Text accessibilityRole="header" style={infoStyles.title}>關於人氣數據</Text><Pressable accessibilityRole="button" accessibilityLabel="關閉人氣說明" style={infoStyles.close} onPress={onClose}><Ionicons name="close" size={24} color={iosColors.label}/></Pressable></View>
+  <ScrollView style={infoStyles.scroll} contentContainerStyle={infoStyles.body}>
+   {sections.map(section=><View key={section.title} style={infoStyles.section}><Ionicons name={section.icon} size={24} color={section.color}/><View style={infoStyles.copy}><Text style={infoStyles.heading}>{section.title}</Text><Text style={infoStyles.text}>{section.body}</Text></View></View>)}
+   <Text style={infoStyles.note}>只公開總人數，不公開名單；不是排隊、保留或成交保證。資料無法讀取時顯示—，不以0代替。</Text>
+  </ScrollView>
+  <View style={infoStyles.footer}><Pressable accessibilityRole="button" style={infoStyles.done} onPress={onClose}><Text style={infoStyles.doneText}>知道了</Text></Pressable></View>
+ </View>;
+}
+const infoStyles=StyleSheet.create({
+ page:{flex:1,backgroundColor:iosColors.surface},header:{minHeight:64,paddingLeft:24,paddingRight:12,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:iosColors.separator},title:{...iosType.title2,color:iosColors.label,flex:1},close:{minHeight:48,minWidth:48,alignItems:'center',justifyContent:'center'},scroll:{flex:1},body:{padding:24,gap:24},section:{flexDirection:'row',gap:16,alignItems:'flex-start'},copy:{flex:1,gap:8},heading:{...iosType.headline,color:iosColors.label},text:{...iosType.body,color:iosColors.label},note:{...iosType.subheadline,color:iosColors.secondaryLabel,lineHeight:24,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:iosColors.separator,paddingTop:16},footer:{padding:16,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:iosColors.separator},done:{minHeight:52,backgroundColor:iosColors.tint,borderRadius:iosRadius.control,alignItems:'center',justifyContent:'center',padding:12},doneText:{...iosType.headline,color:iosColors.white},
+});

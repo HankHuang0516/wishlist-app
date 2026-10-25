@@ -25,6 +25,7 @@ cd ..
 
 echo "🧪 原生 QA 的隔離 API、合成帳號與確切資料清理"
 node mobile/scripts/test-native-qa-marketplace-fixture.cjs
+node mobile/scripts/test-golden-social-fixture.cjs
 node mobile/scripts/native-qa-api-smoke.cjs
 node scripts/verify-erasure-test-cleanup.cjs
 

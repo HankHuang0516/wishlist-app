@@ -1,6 +1,7 @@
 package com.hankhuang.wishlistgoldenqa;
 
 import android.content.Intent;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -50,13 +51,22 @@ public class MarketplaceGoldenTest {
     }
     private void foreground() { assertEquals("Only the exact isolated app may receive input", target, device.getCurrentPackageName()); }
     private void click(String label) {
-        foreground(); UiObject2 found = await(label);
-        for (int depth = 0; !found.isClickable() && depth < 5; depth++) {
-            found = found.getParent(); assertNotNull("Expected actionable ancestor at " + stage, found);
+        Rect prior=null;int stable=0;long end=SystemClock.elapsedRealtime()+10000;
+        while(SystemClock.elapsedRealtime()<end){
+            foreground();UiObject2 found=await(label);
+            for(int depth=0;!found.isClickable()&&depth<5;depth++){
+                found=found.getParent();assertNotNull("Expected actionable ancestor at "+stage,found);
+            }
+            assertTrue("Expected clickable control at "+stage,found.isClickable());
+            assertTrue("Expected enabled control at "+stage,found.isEnabled());
+            Rect bounds=new Rect(found.getVisibleBounds());
+            stable=!bounds.isEmpty()&&bounds.equals(prior)?stable+1:0;prior=bounds;
+            // Scroll/fling can keep a CSS/accessibility-visible control moving.
+            // Wait for its actual native bounds; never retry a submitted action.
+            if(stable>=3){found.click();device.waitForIdle(1500);return;}
+            SystemClock.sleep(100);
         }
-        assertTrue("Expected clickable control at " + stage, found.isClickable());
-        assertTrue("Expected enabled control at " + stage, found.isEnabled());
-        found.click(); device.waitForIdle(1500);
+        throw new AssertionError("Unstable click target at "+stage);
     }
     private void reveal(String label) throws Exception {
         for (int attempt=0; attempt<10 && !has(label); attempt++) {
@@ -157,12 +167,14 @@ public class MarketplaceGoldenTest {
         assertTrue("Manual tab must be selected",await("手動輸入").isSelected());
         assertFalse("Manual mode must hide photo controls",has("從相簿選擇願望照片"));
         await("願望名稱");await("最高預算");await("儲存");
+        reveal("手動輸入將儲存你填寫的名稱、預算與選填資訊，不會上傳照片或啟動 AI 辨識。");
+        UiScrollable manualScroll=new UiScrollable(new UiSelector().scrollable(true));manualScroll.scrollToBeginning(10);
         assertTrue("Close stays fully reachable",await("關閉編輯").getVisibleBounds().height()>=44);
         capture("golden-02-manual-form");
         checkpoint("manual-wish-persistence");
         await("願望名稱").setText("Golden Manual Mug");await("最高預算").setText("42.5");
         click("儲存");assertTrue("Saved editor must close",device.wait(Until.gone(By.desc("關閉編輯")),15000));
-        reveal("Golden Manual Mug");click("Golden Manual Mug的更多操作");click("編輯願望");
+        checkpoint("manual-wish-created");reveal("Golden Manual Mug");checkpoint("manual-wish-more");click("Golden Manual Mug的更多操作");await("編輯願望");checkpoint("manual-wish-edit");click("編輯願望");
         await("願望名稱").setText("Golden Edited Mug");click("儲存");
         assertTrue("Edited wish must return to list",device.wait(Until.gone(By.desc("關閉編輯")),15000));
         reveal("Golden Edited Mug");capture("golden-01-edited-wish");
@@ -192,15 +204,53 @@ public class MarketplaceGoldenTest {
         await("刊登好物");await("1 商品資料");await("2 交易與地點");await("3 確認刊登");capture("golden-03-manual-stage-one");
         click("取消");checkpoint("seller-checks-complete");
     }
+    private void market() throws Exception {
+        checkpoint("popularity-real-like");click("探索");await("切換清單");click("切換清單");
+        String mug="二手深藍色陶瓷馬克杯，NT$ 50，新北市板橋區";
+        reveal(mug);click(mug);await("商品詳情");checkpoint("popularity-detail");
+        reveal("0 人喜歡，喜歡此商品，僅公開人數");await("0 人詢問中");
+        click("0 人喜歡，喜歡此商品，僅公開人數");await("1 人喜歡，取消喜歡此商品");
+        capture("golden-13-actual-like");checkpoint("popularity-explanation");click("關於人氣數據");await("詢問中");await("喜歡");
+        assertTrue("Explanation always has a visible close control",await("關閉人氣說明").getVisibleBounds().height()>=44);
+        assertTrue("Explanation acknowledgment stays in the viewport",await("知道了").getVisibleBounds().height()>=52);
+        capture("golden-13-explanation-top");
+        reveal("只公開總人數，不公開名單；不是排隊、保留或成交保證。資料無法讀取時顯示—，不以0代替。");
+        capture("golden-13-count-explanation");assertTrue("Acknowledgment remains fixed after scrolling",await("知道了").getVisibleBounds().height()>=52);reveal("知道了");click("知道了");
+        checkpoint("truthful-seller-storefront");reveal("查看賣場");click("查看賣場");
+        await("販售中");await("追蹤");
+        reveal("驗證電子郵件不代表身分認證或交易保證。");capture("golden-12-storefront");
+        // Scroll to the header rather than tapping an off-screen control.
+        UiScrollable storeScroll=new UiScrollable(new UiSelector().scrollable(true));storeScroll.scrollToBeginning(10);
+        click("追蹤");await("取消追蹤");
+        if(has("清理已確認的原操作"))click("清理已確認的原操作");
+        reveal("關於");click("關於");reveal("尚未提供交易評價功能。");capture("golden-12-trust-info");
+        assertFalse("No invented rating badges",has("5.0"));
+        UiScrollable aboutScroll=new UiScrollable(new UiSelector().scrollable(true));aboutScroll.scrollToBeginning(10);
+        click("返回");await("商品詳情");
+        checkpoint("listing-report-receipt");click("檢舉商品");await("我的商品檢舉");
+        reveal("其他");click("其他");reveal("檢舉補充說明，選填");
+        await("檢舉補充說明，選填").setText("Golden isolated report only");
+        reveal("送出商品檢舉");assertTrue("Report return remains reachable at the end of the form",await("返回探索，保留未確認紀錄").getVisibleBounds().height()>=44);capture("golden-09-report-form");click("送出商品檢舉");
+        reveal("本人檢舉紀錄");click("本人檢舉紀錄");reveal("已收件，待審核");capture("golden-09-received-pending");
+        checkpoint("market-checks-complete");
+    }
+    private void logout() throws Exception {
+        checkpoint("never-enabled-push-logout");click("我的");click("帳號安全");click("登出此裝置");
+        long end=SystemClock.elapsedRealtime()+25000;
+        while(SystemClock.elapsedRealtime()<end&&!has("使用條款與社群安全")&&!has("手機號碼或 Email"))SystemClock.sleep(150);
+        assertTrue("Sign-out must return to authentication",has("使用條款與社群安全")||has("手機號碼或 Email"));
+        assertFalse("Signed-out account must not keep its tab bar",has("我的"));
+        capture("golden-06-logged-out");checkpoint("logout-checks-complete");
+    }
     @Test public void approvedMarketplaceRegression() throws Exception {
         device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         phase=InstrumentationRegistry.getArguments().getString("phase","");
-        assertTrue("Explicit bounded phase required",phase.equals("buyer")||phase.equals("seller"));
+        assertTrue("Explicit bounded phase required",phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market"));
         File external=InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
         assertNotNull("Owned test-host storage unavailable",external);
         evidence=new File(external,"golden-"+phase);
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
-        try { login(); if(phase.equals("buyer"))buyer();else seller(); }
+        try { login(); if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else logout(); }
         catch(Throwable failure){
             if(loggedIn||!credentialsEntered)try{capture("failed-"+stage);}catch(Throwable ignored){}
             String reason=failure instanceof AssertionError?String.valueOf(failure.getMessage()):"withheld";

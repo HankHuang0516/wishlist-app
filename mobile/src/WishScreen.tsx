@@ -244,7 +244,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
       </View>)}
 </NativeDisclosure>
       {currencyOpen&&<NativeActionMenu title="選擇預算幣別" onClose={()=>setCurrencyOpen(false)} actions={WISH_CURRENCIES.map(value=>({label:value,selected:draft.currency===value,onPress:()=>{setDraft(old=>({...old,currency:value}));setCurrencyOpen(false);}}))}/>}
-      <Text style={s.muted}>照片或公開圖片網址擇一；儲存後 AI 會更新名稱、參考價格與詳細描述。照片會去除位置資訊並縮小後上傳，但知道圖片網址的人仍可查看照片。</Text>
+      <Text style={s.muted}>{editor?.wish ? '編輯會更新願望名稱、預算、備註與連結，不會重新執行 AI 辨識。' : editorMode==='MANUAL' ? '手動輸入將儲存你填寫的名稱、預算與選填資訊，不會上傳照片或啟動 AI 辨識。' : '照片或公開圖片網址擇一；儲存後 AI 會更新名稱、參考價格與詳細描述。照片會去除位置資訊並縮小後上傳，但知道圖片網址的人仍可查看照片。'}</Text>
     </>}
   </ScrollView><View style={s.editorFooter}>{button(editor?.kind === 'ITEM' && !editor.wish && (photo || draft.imageUrl) ? '儲存後開始 AI 辨識' : '儲存', () => void save(), blocked, 'primary')}{pending && button('稍後確認', () => void closeEditor(), busy)}</View></KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal></View>;
 }

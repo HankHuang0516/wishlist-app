@@ -55,7 +55,7 @@ run('built source inquiry correction and restart',()=>{
    for(const button of await page.$$('button'))if(await button.evaluate((b:Element,value:string)=>b.textContent===value,label)){await button.evaluate((element:Element)=>element.scrollIntoView({block:'center',inline:'nearest'}));await button.click();return;}
    throw Error('Missing visible control '+label);
   };
-  const write=async(value:string)=>{const field='textarea[aria-label="詢問內容"]';await page.waitForSelector(field);await page.waitForFunction(()=>{const field=document.querySelector('textarea') as HTMLTextAreaElement|null;return !!field&&!field.disabled;});await page.click(field,{clickCount:3});await page.type(field,value);expect(await page.$eval(field,(e:HTMLTextAreaElement)=>e.value)).toBe(value);};
+  const write=async(value:string)=>{const field='textarea[aria-label="詢問內容"]';await page.waitForSelector(field);await page.waitForFunction((selector:string)=>{const field=document.querySelector(selector) as HTMLTextAreaElement|null;return !!field&&!field.disabled;},{},field);await page.click(field,{clickCount:3});await page.type(field,value);expect(await page.$eval(field,(e:HTMLTextAreaElement)=>e.value)).toBe(value);};
   const own=()=>prisma.sourceLeadInquiry.findUniqueOrThrow({where:{leadId_buyerUserId:{leadId,buyerUserId:buyer}},include:{lead:true}});
   const save=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:webQaEvidence(name),fullPage:true});};
   await page.goto(origin+'/login');await page.waitForSelector('#identifier');await page.type('#identifier',phone);await page.type('#password',password);await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');

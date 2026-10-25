@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import prisma from '../lib/prisma';
 import { isListingId, NON_SALE_QA_PREFIX } from '../lib/listingRules';
 import { publicListingSelect } from './listingController';
+import { privateReviewListingIds } from '../lib/privateReviewDemo';
 export async function getStorefront(req: AuthRequest, res: Response) {
  res.set('Cache-Control','private, no-store');
  if (!req.user) return res.status(401).json({error:'請先登入'});
@@ -14,7 +15,7 @@ export async function getStorefront(req: AuthRequest, res: Response) {
   const result=await prisma.$transaction(async tx=>{
    const seller=await tx.user.findUnique({where:{id},select:{id:true,name:true,avatarUrl:true,isAvatarVisible:true,createdAt:true,isEmailVerified:true}});
    if(!seller)return null;
-   const where:Prisma.ListingWhereInput={ownerUserId:id,status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:new Date()},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}};
+   const where:Prisma.ListingWhereInput={ownerUserId:id,status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:new Date()},NOT:{OR:[{title:{startsWith:NON_SALE_QA_PREFIX}},{id:{in:privateReviewListingIds()}}]}};
    const boundary=cursor?await tx.listing.findFirst({where:{...where,id:cursor},select:{id:true,createdAt:true}}):null;
    if(cursor&&!boundary)return {invalidCursor:true};
    const rows=await tx.listing.findMany({where:{...where,...(boundary?{OR:[{createdAt:{lt:boundary.createdAt}},{createdAt:boundary.createdAt,id:{lt:boundary.id}}]}:{})},orderBy:[{createdAt:'desc'},{id:'desc'}],take:25,select:publicListingSelect});

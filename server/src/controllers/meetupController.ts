@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ChatInputError, chatIdentity } from '../lib/chatRules';
 import { assertFutureMeetup, parseMeetupAction } from '../lib/meetupRules';
 import { isExplicitNonSaleFixture, isDiscoverable } from '../lib/listingRules';
+import { isPrivateReviewRoom, privateReviewListingIds } from '../lib/privateReviewDemo';
 import { lockChatPair } from './chatController';
 import { lockListingAdmission } from '../lib/listingAdmission';
 
@@ -90,8 +91,8 @@ export async function mutateMeetup(req: AuthRequest, res: Response) {
                 // A seller's concurrent status edit must not be bypassed by a
                 // stale listing check. This locks only the listing, not GPS.
                 await tx.$queryRaw`SELECT id FROM "Listing" WHERE id = ${room.listingId} FOR SHARE`;
-                const listing = await tx.listing.findUnique({ where: { id: room.listingId }, select: { status: true, title: true, expiresAt: true, deliveryMethods: true } });
-                if (!listing || isExplicitNonSaleFixture(listing.title) || !isDiscoverable(listing.status, listing.expiresAt, now)) return reject(409, 'MEETUP_LISTING_UNAVAILABLE', '商品已停止刊登或不供販售；仍可取消既有預約');
+                const listing = await tx.listing.findUnique({ where: { id: room.listingId }, select: { id: true, ownerUserId: true, status: true, title: true, expiresAt: true, deliveryMethods: true } });
+                if (!listing || ((isExplicitNonSaleFixture(listing.title) || privateReviewListingIds().includes(listing.id)) && !isPrivateReviewRoom(room, listing)) || !isDiscoverable(listing.status, listing.expiresAt, now)) return reject(409, 'MEETUP_LISTING_UNAVAILABLE', '商品已停止刊登或不供販售；仍可取消既有預約');
                 if (!listing.deliveryMethods.includes('MEETUP')) return reject(409, 'MEETUP_NOT_SUPPORTED', '此商品尚未提供面交');
                 const terms = proposing ? input.terms! : current!;
                 assertFutureMeetup(terms.startsAt, now);
@@ -115,7 +116,7 @@ export async function mutateMeetup(req: AuthRequest, res: Response) {
                 const sellerCompletedAt = buyer ? current!.sellerCompletedAt : current!.sellerCompletedAt ?? now;
                 current = await tx.meetupAppointment.update({ where: { conversationId }, data: { buyerCompletedAt, sellerCompletedAt, status: buyerCompletedAt && sellerCompletedAt ? 'COMPLETED' : 'CONFIRMED' }, select });
             }
-            await queuePush(tx,actorUserId===room.buyerUserId?room.sellerUserId:room.buyerUserId,'meetup.'+conversationId+'.'+input.clientActionId,'MEETUP',{meetupId:current!.id});
+            if (!privateReviewListingIds().includes(room.listingId)) await queuePush(tx,actorUserId===room.buyerUserId?room.sellerUserId:room.buyerUserId,'meetup.'+conversationId+'.'+input.clientActionId,'MEETUP',{meetupId:current!.id});
             const saved = await tx.meetupOperation.create({ data: { ...receiptKey, requestHash: input.requestHash, action: input.action, resultingVersion: current!.version }, select: { resultingVersion: true } });
             return { appointment: current, receipt: { ...receiptKey, action: input.action, resultingVersion: saved.resultingVersion, abandoned: false }, replayed: false };
         }, { timeout: 15_000 });

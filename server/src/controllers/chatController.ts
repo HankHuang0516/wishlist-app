@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { isExplicitNonSaleFixture, isDiscoverable } from '../lib/listingRules';
+import { isPrivateReviewRoom, privateReviewListingIds } from '../lib/privateReviewDemo';
 import { lockListingAdmission } from '../lib/listingAdmission';
 import { ChatInputError, chatIdentity, chatObject, chatSequence, parseChatPage, parseTextMessage } from '../lib/chatRules';
 
@@ -32,7 +33,7 @@ function messageDto(message: Prisma.MessageGetPayload<{ select: typeof messageSe
 const conversationSelect = {
     id: true, listingId: true, buyerUserId: true, sellerUserId: true, archivedAt: true, lastMessageSequence: true, lastMessageAt: true, createdAt: true,
     buyer: { select: { id: true, name: true } }, seller: { select: { id: true, name: true } },
-    listing: { select: { id: true, title: true, status: true, expiresAt: true, price: true, currency: true,
+    listing: { select: { id: true, ownerUserId: true, title: true, status: true, expiresAt: true, price: true, currency: true,
         location: { select: { county: true, district: true } },
         media: { where: { OR: [{ capturePurpose: { not: 'AI_MARKETING' } }, { marketingSelected: true }] },
             orderBy: { position: 'asc' }, take: 1, select: { thumbnailUrl: true } } } },
@@ -64,7 +65,8 @@ async function projection(room: Room, userId: number) {
         otherUserId === null ? Promise.resolve([]) : prisma.userBlock.findMany({ where: blockedWhere(userId, otherUserId), select: { blockerUserId: true } }),
     ]);
     const { participants, messages, listing, ...publicToMembers } = room;
-    const listingAvailable = !room.archivedAt && !!room.buyer && !!room.seller && !!listing && !isExplicitNonSaleFixture(listing.title) && isDiscoverable(listing.status, listing.expiresAt, new Date());
+    const listingAvailable = !room.archivedAt && !!room.buyer && !!room.seller && !!listing &&
+        ((!isExplicitNonSaleFixture(listing.title) && !privateReviewListingIds().includes(listing.id)) || isPrivateReviewRoom(room, listing)) && isDiscoverable(listing.status, listing.expiresAt, new Date());
     return { ...publicToMembers,
         listing: listing ? { id: listing.id, title: listing.title, status: listing.status, expiresAt: listing.expiresAt,
             location: listing.location, price: listing.price?.toNumber() ?? null, currency: listing.currency,
@@ -81,17 +83,20 @@ export async function openConversation(req: AuthRequest, res: Response) {
     try {
         const body = chatObject(req.body, ['listingId']); const listingId = chatIdentity(body.listingId); const buyerUserId = req.user.id;
         const listing = await prisma.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true, title: true } });
-        if (!listing || isExplicitNonSaleFixture(listing.title)) throw new ChatAccessError(); const sellerUserId = listing.ownerUserId;
+        if (!listing) throw new ChatAccessError(); const sellerUserId = listing.ownerUserId;
         if (sellerUserId === buyerUserId) throw new ChatInputError('無法與自己建立商品聊天');
         const result = await prisma.$transaction(async tx => {
             await lockListingAdmission(tx, listingId);
             await lockChatPair(tx, buyerUserId, sellerUserId);
             const existing = await tx.conversation.findUnique({ where: { listingId_buyerUserId_sellerUserId: { listingId, buyerUserId, sellerUserId } }, select: conversationSelect });
-            if (existing) return { room: existing, created: false };
+            if (existing) {
+                if (existing.listing && (isExplicitNonSaleFixture(existing.listing.title) || privateReviewListingIds().includes(existing.listing.id)) && !isPrivateReviewRoom(existing, existing.listing)) throw new ChatAccessError();
+                return { room: existing, created: false };
+            }
             if (!await tx.user.findUnique({ where: { id: buyerUserId }, select: { id: true } })) throw new ChatAccessError(401);
             if (await tx.userBlock.findFirst({ where: blockedWhere(buyerUserId, sellerUserId) })) throw new ChatAccessError(403);
             const current = await tx.listing.findUnique({ where: { id: listingId }, select: { status: true, expiresAt: true, ownerUserId: true, title: true } });
-            if (!current || isExplicitNonSaleFixture(current.title) || current.ownerUserId !== sellerUserId || !isDiscoverable(current.status, current.expiresAt, new Date())) throw new ChatAccessError();
+            if (!current || isExplicitNonSaleFixture(current.title) || privateReviewListingIds().includes(listingId) || current.ownerUserId !== sellerUserId || !isDiscoverable(current.status, current.expiresAt, new Date())) throw new ChatAccessError();
             return { room: await tx.conversation.create({ data: { listingId, buyerUserId, sellerUserId, participants: { create: [
                 { userId: buyerUserId, role: 'BUYER' }, { userId: sellerUserId, role: 'SELLER' },
             ] } }, select: conversationSelect }), created: true };
@@ -159,7 +164,8 @@ export async function sendMessage(req: AuthRequest, res: Response) {
             if (existing) { if (existing.text !== input.text || existing.photoHash !== photoHash) throw new ChatConflictError(); return { message: existing, created: false }; }
             if (await tx.chatPhotoCancellation.findUnique({ where: { conversationId_senderUserId_clientMessageId: { conversationId, senderUserId, clientMessageId: input.clientMessageId } } }))
                 throw new PhotoInputError('原照片傳送已停止，請建立新的傳送', 409);
-            if (current.listing && isExplicitNonSaleFixture(current.listing.title)) throw new ChatNonSaleError();
+            const privateDemo = isPrivateReviewRoom(current, current.listing);
+            if (current.listing && (isExplicitNonSaleFixture(current.listing.title) || privateReviewListingIds().includes(current.listing.id)) && !privateDemo) throw new ChatNonSaleError();
             if (await tx.userBlock.findFirst({ where: blockedWhere(buyer, seller) })) throw new ChatAccessError(403);
             if (photo) {
                 const used = await tx.message.aggregate({ where: { senderUserId }, _sum: { photoByteSize: true } });
@@ -167,7 +173,7 @@ export async function sendMessage(req: AuthRequest, res: Response) {
             }
             const updated = await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageSequence: { increment: 1 }, lastMessageAt: new Date() }, select: { lastMessageSequence: true } });
             const message = await tx.message.create({ data: { conversationId, senderUserId, ...input, ...(photo ? { photoBytes: photo.image, photoHash, photoWidth: photo.width, photoHeight: photo.height, photoByteSize: photo.byteSize } : {}), sequence: updated.lastMessageSequence }, select: messageSelect });
-            await queuePush(tx,senderUserId===buyer?seller:buyer,'message.'+message.id,'CHAT',{messageId:message.id});
+            if (!privateDemo) await queuePush(tx,senderUserId===buyer?seller:buyer,'message.'+message.id,'CHAT',{messageId:message.id});
             return { message, created: true };
         });
         return res.status(result.created ? 201 : 200).json(messageDto(result.message));

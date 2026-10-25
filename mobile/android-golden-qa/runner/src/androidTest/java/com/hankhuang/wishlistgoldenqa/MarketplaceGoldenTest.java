@@ -267,12 +267,25 @@ public class MarketplaceGoldenTest {
     }
     private void seller() throws Exception {
         checkpoint("management-compact-card");click("我的");click("我的商品 · 閱覽與管理");
-        await("標記保留");capture("golden-04-active-card");
-        click("標記保留");await("標記已保留");click("標記已保留");
-        // Exact synthetic fixture has one owned listing. Counts must change.
-        await("已保留 (1)");click("已保留 (1)");await("恢復在售");capture("golden-04-reserved-card");
-        click("恢復在售");await("確認恢復在售？");click("恢復在售");await("在售 (1)");
-        click("關閉我的商品");
+        await("編輯資訊");capture("golden-04-active-card");click("編輯資訊");checkpoint("management-unsaved-edit");
+        reveal("編輯商品名稱");await("編輯商品名稱").setText("Golden retained edit");
+        reveal("取消編輯");click("取消編輯");await("尚有未儲存的商品修改");click("繼續編輯");
+        revealBackwards("編輯商品名稱");assertEquals("Cancel keeps unsaved title","Golden retained edit",await("編輯商品名稱").getText());
+        capture("golden-04-unsaved-edit-retained");checkpoint("management-hardware-back-guard");
+        for(AccessibilityWindowInfo window:InstrumentationRegistry.getInstrumentation().getUiAutomation().getWindows())if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD){device.pressBack();device.waitForIdle(1000);break;}
+        device.pressBack();await("尚有未儲存的商品修改");click("繼續編輯");checkpoint("management-remove-cancel");
+        reveal("移除商品");capture("golden-04-editor-remove");click("移除商品");await("確認移除商品？");click("取消");
+        revealBackwards("編輯商品名稱");assertEquals("Removal cancel keeps unsaved title","Golden retained edit",await("編輯商品名稱").getText());
+        reveal("取消編輯");click("取消編輯");await("尚有未儲存的商品修改");click("捨棄修改並離開");
+        checkpoint("management-status-shortcuts");new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(10);
+        click("深藍色陶瓷馬克杯的更多操作");click("標記保留");await("標記已保留");click("標記已保留");
+        await("已保留 (1)");click("已保留 (1)");await("編輯資訊");capture("golden-04-reserved-card");
+        click("深藍色陶瓷馬克杯的更多操作");click("恢復在售");await("確認恢復在售？");click("恢復在售");await("在售 (1)");click("在售 (1)");
+        checkpoint("management-extension-cancel");click("深藍色陶瓷馬克杯的更多操作");click("延長期限");
+        assertTrue("Actual calendar required",device.wait(Until.hasObject(By.clazz("android.widget.DatePicker")),5000));
+        UiObject2 acceptDate=device.findObject(By.res("android:id/button1"));assertNotNull("Calendar confirmation required",acceptDate);acceptDate.click();
+        await("確認延長刊登？");click("取消");reveal("重新選擇日期");capture("golden-04-extension-date-retained");
+        click("取消延長");click("關閉我的商品");
         checkpoint("batch-to-manual-transition");click("刊登好物");await("進階模式 · 選用  ↗");click("進階模式 · 選用  ↗");
         await("刊登好物");await("1 商品資料");await("2 交易與地點");await("3 確認刊登");capture("golden-03-manual-stage-one");
         click("取消");checkpoint("seller-checks-complete");
@@ -385,7 +398,7 @@ public class MarketplaceGoldenTest {
             revealBackwards("確認照片傳送結果",48);click("確認照片傳送結果");
         }
         assertTrue("Photo composer closes only after acknowledgment",device.wait(Until.gone(By.text("傳送商品照片")),20000));
-        await("放大商品照片");capture("golden-11-photo-sent");click("放大商品照片");await("商品照片放大檢視");capture("golden-11-photo-zoom");click("關閉商品照片");checkpoint("photo-checks-complete");
+        checkpoint("photo-confirmed-message");revealBackwards("放大商品照片",80);capture("golden-11-photo-sent");click("放大商品照片");checkpoint("photo-zoom-open");await("商品照片放大檢視");capture("golden-11-photo-zoom");click("關閉商品照片");checkpoint("photo-checks-complete");
     }
     private void logout() throws Exception {
         checkpoint("never-enabled-push-logout");click("我的");click("帳號安全");click("登出此裝置");

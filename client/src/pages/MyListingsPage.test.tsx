@@ -59,6 +59,26 @@ async function proof(url:string,init:RequestInit,state='APPLIED',appliedVersion?
 beforeEach(() => {localStorage.setItem('user-locale','zh-TW');journals.clear();vi.clearAllMocks();vi.stubGlobal('crypto',webcrypto);vi.spyOn(window, 'confirm').mockReturnValue(true);});
 afterEach(() => { localStorage.removeItem('user-locale'); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('native-equivalent owner management', () => {
+  it('offers removal inside editing and cancelling keeps unsaved fields without any mutation',async()=>{
+    const fetcher=vi.fn(async(_url:string,_init?:RequestInit)=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());
+    await screen.findByRole('heading',{name:row.title});await openEditor();
+    fireEvent.change(screen.getByLabelText('商品名稱'),{target:{value:'保留的修改'}});
+    const danger=screen.getByRole('region',{name:'商品危險操作'});
+    await waitFor(()=>expect(within(danger).getByRole('button',{name:'移除商品'})).toBeEnabled());
+    fireEvent.click(within(danger).getByRole('button',{name:'移除商品'}));
+    const dialog=screen.getByRole('dialog',{name:'確認商品狀態'});expect(dialog).toHaveTextContent(row.title);expect(dialog).toHaveTextContent('無法從此頁恢復');
+    fireEvent.click(within(dialog).getByRole('button',{name:'取消',exact:true}));
+    expect(screen.getByLabelText('商品名稱')).toHaveValue('保留的修改');expect(fetcher.mock.calls.filter(([,init])=>init?.method&&init.method!=='GET')).toHaveLength(0);
+  });
+  it('uses the existing fenced remove operation once from the English editor',async()=>{
+    localStorage.setItem('user-locale','en');
+    const fetcher=vi.fn(async(url:string,init?:RequestInit)=>init?.method==='POST'?proof(url,init):url.endsWith('/listings/'+id)?ok({...row,status:'REMOVED',version:2}):ok({items:[row],nextCursor:null}));
+    vi.stubGlobal('fetch',fetcher);render(view());await screen.findByRole('heading',{name:row.title});fireEvent.click(screen.getByRole('button',{name:'Edit details'}));
+    const danger=await screen.findByRole('region',{name:'Listing danger zone'});await waitFor(()=>expect(within(danger).getByRole('button',{name:'Remove listing'})).toBeEnabled());fireEvent.click(within(danger).getByRole('button',{name:'Remove listing'}));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'Confirm listing status'})).getByRole('button',{name:'Confirm this status change'}));
+    await screen.findByText('Version: 2');const writes=fetcher.mock.calls.filter(([,init])=>init?.method==='POST');expect(writes).toHaveLength(1);expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({kind:'STATUS',listingId:id,expectedVersion:1,changes:{action:'remove'}});
+  });
+
   it.each(['Escape','cancel'])('does not save or send a status operation before confirmation and restores focus on %s',async choice=>{
     const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());await ready();
     const opener=screen.getByRole('button',{name:'標記保留',exact:true});opener.focus();fireEvent.click(opener);
@@ -80,17 +100,19 @@ describe('native-equivalent owner management', () => {
     mounted.rerender(view({...auth,token:'another-session'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await screen.findByRole('heading',{name:row.title});expect(journals.size).toBe(0);expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(0);
   });
-  it('keeps secondary controls folded while exposing the state action and keyboard return', async () => {
+  it('exposes editing directly and keeps status shortcuts in the keyboard-accessible menu', async () => {
     const fetcher=vi.fn(async()=>ok({items:[row],nextCursor:null}));vi.stubGlobal('fetch',fetcher);render(view());
     await screen.findByRole('heading',{name:row.title});
     expect(screen.getByRole('button',{name:'查看詳情'})).toBeInTheDocument();
-    expect(screen.getByRole('button',{name:'標記保留'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'編輯資訊'})).toBeInTheDocument();
     const summary=screen.getByLabelText('更多操作');const menu=summary.closest('details')!;
     expect(menu.open).toBe(false);
+    expect(screen.getByRole('button',{name:'標記保留'}).closest('details')).toBe(menu);
+    expect(screen.getByRole('button',{name:'編輯資訊'}).closest('details')).toBeNull();
     // Closed details hides secondary controls in the browser accessibility tree.
     fireEvent.click(summary);expect(menu.open).toBe(true);
     await waitFor(()=>expect(screen.getByRole('button',{name:'編輯資訊'})).toBeEnabled());
-    expect(screen.getByRole('button',{name:'移除',exact:true})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'移除商品',exact:true})).toBeInTheDocument();
     fireEvent.keyDown(menu,{key:'Escape'});expect(menu.open).toBe(false);expect(summary).toHaveFocus();
     expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
   });

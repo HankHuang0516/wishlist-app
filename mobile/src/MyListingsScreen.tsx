@@ -16,9 +16,9 @@ const labels: Record<ManagedListing['status'], string> = {
   DRAFT: '草稿', PENDING_CONFIRMATION: '待確認', ACTIVE: '在售', RESERVED: '已保留',
   SOLD: '已售出', REMOVED: '已移除', EXPIRED: '已失效',
 };
-type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string; onClose: () => void };
+type Props = { api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string; onClose: () => void; closeRequestRef?: {current:(()=>void)|null} };
 
-export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props) {
+export function MyListingsScreen({ api, apiUrl, userId, token, onClose, closeRequestRef }: Props) {
   const { width, fontScale } = useWindowDimensions();
   const compactCardActions = width >= 390 && fontScale < 1.3;
   const [menuId,setMenuId]=useState<string|null>(null);
@@ -28,7 +28,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
   const [editing, setEditing] = useState<string | null>(null), [title, setTitle] = useState(''),
     [description, setDescription] = useState(''), [price, setPrice] = useState('');
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [expiryId, setExpiryId] = useState<string | null>(null);
+  const [expiryId, setExpiryId] = useState<string | null>(null),[expiryDate,setExpiryDate]=useState('');
   const alive = useRef(true), sequence = useRef(0), running = useRef(false);
 
   async function load(next?: string) {
@@ -64,15 +64,39 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
         failure instanceof ManagedListingError ? failure.message : '操作結果尚未確認，請重新載入最新狀態；勿連續重送。');
     } finally { running.current = false; if (alive.current) setLoading(false); }
   }
+  function editorDirty() {
+    const item=rows.find(row=>row.id===editing);
+    return !!item&&(title!==item.title||description!==(item.description??'')||price!==(item.price===null?'':String(item.price)));
+  }
+  function leaveEditor(next:()=>void) {
+    if(loading)return;
+    if(!editorDirty()){next();return;}
+    Alert.alert('尚有未儲存的商品修改','離開會捨棄目前編輯文字，商品資料不會更新。',[
+      {text:'繼續編輯',style:'cancel'},
+      {text:'捨棄修改並離開',style:'destructive',onPress:next},
+    ]);
+  }
+  useEffect(()=>{
+    if(!closeRequestRef)return;
+    closeRequestRef.current=()=>leaveEditor(onClose);
+    return()=>{closeRequestRef.current=null;};
+  },[closeRequestRef,onClose,loading,editing,title,description,price,rows]);
+  function openEditor(item:ManagedListing) {
+    if(editing===item.id)return;
+    leaveEditor(()=>{setExpiryId(null);setEditing(item.id);setTitle(item.title);setDescription(item.description??'');setPrice(item.price===null?'':String(item.price));});
+  }
+  function openExpiry(item:ManagedListing) {
+    leaveEditor(()=>{setEditing(null);setExpiryDate('');setExpiryId(item.id);});
+  }
   function askStatus(item: ManagedListing, action: 'reserve' | 'release' | 'sold' | 'remove', next: ManagedListing['status']) {
     const name = action === 'reserve' ? '標記已保留' : action === 'release' ? '恢復在售' : action === 'sold' ? '標記已售出' : '移除商品';
-    Alert.alert(`確認${name}？`, action === 'remove' ? '移除後不會在探索地圖顯示，且無法從 App 恢復。' : `只會更改「${item.title}」的狀態。`, [
+    Alert.alert(`確認${name}？`, (action === 'remove' ? '移除後不會在探索地圖顯示，且無法從 App 恢復。' : `只會更改「${item.title}」的狀態。`) + (editorDirty() ? ' 未儲存的商品修改不會套用。' : ''), [
       { text: '取消', style: 'cancel' }, { text: name, style: action === 'remove' ? 'destructive' : 'default',
         onPress: () => void mutate(item, `/listings/${item.id}/status`, 'POST', { expectedVersion: item.version, action }, next, `「${item.title}」已${name}。`) },
     ]);
   }
   function extend(item: ManagedListing, date: string) {
-    setExpiryId(null);
+    setExpiryDate(date);
     Alert.alert('確認延長刊登？', `新失效日期：${date}。延長刊登不會自動更新地圖顯示。`, [
       { text: '取消', style: 'cancel' }, { text: '確認延長',
         onPress: () => void mutate(item, `/listings/${item.id}/extend`, 'POST', { expectedVersion: item.version, expiryDate: date },
@@ -84,6 +108,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
     catch (failure) { setError(failure instanceof Error ? failure.message : '請確認商品資料。'); }
   }
   function mapPresence(item: ManagedListing, display: boolean) {
+    if(editorDirty()){setError('請先儲存或取消編輯，再調整地圖顯示。');return;}
     Alert.alert(display ? '這次在地圖顯示一小時？' : '停止在地圖顯示？',
       display ? '只顯示商品的約 2 公里模糊位置，不是使用者即時定位。一小時後停止顯示，開啟 App、編輯或延長刊登都不會自動續期。' : '停止地圖顯示，商品刊登與聊天仍保留。', [
         { text: '不顯示／取消', style: 'cancel' },
@@ -104,10 +129,10 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
   const cardAction = (label: string, press: () => void, danger = false) => action(label, press, danger, compactCardActions);
   return <SafeAreaView style={s.screen}><KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
     <View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel="關閉我的商品" accessibilityHint="返回我的頁面"
-      onPress={onClose} style={s.closeButton}><Text style={s.closeGlyph}>×</Text></Pressable>
+      onPress={()=>leaveEditor(onClose)} style={s.closeButton}><Text style={s.closeGlyph}>×</Text></Pressable>
       <Text accessibilityRole="header" style={s.heading}>我的商品</Text><View style={s.headerSpacer} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" /></View>
     <ScrollView horizontal style={s.tabRail} showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs}>{MANAGEMENT_TABS.map(name => <Pressable key={name} accessibilityRole="tab" accessibilityState={{ selected: tab === name }}
-      onPress={() => { setTab(name); setEditing(null); setExpiryId(null); }} style={[s.tab, tab === name && s.activeTab]}><Text style={[s.tabText, tab === name && s.activeTabText]}>{name} ({rows.filter(item => managementTab(item, now) === name).length})</Text></Pressable>)}</ScrollView>
+      onPress={() => {if(name!==tab)leaveEditor(() => { setTab(name); setEditing(null); setExpiryId(null); });}} style={[s.tab, tab === name && s.activeTab]}><Text style={[s.tabText, tab === name && s.activeTabText]}>{name} ({rows.filter(item => managementTab(item, now) === name).length})</Text></Pressable>)}</ScrollView>
     {!!cursor && <Text style={s.summary}>本頁「{tab}」已載入 {visible.length} 件；全部狀態共已載入 {rows.length} 件，還有更多。</Text>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
@@ -116,11 +141,11 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
  if(listingShareUrl(item,apiUrl,__DEV__))add('分享連結',()=>void share(item));
  if(['ACTIVE','RESERVED'].includes(item.status)&&available){add('手動顯示地圖一小時',()=>mapPresence(item,true));if(item.mapVisibleUntil&&Date.parse(item.mapVisibleUntil)>now)add('停止地圖顯示',()=>mapPresence(item,false));}
  if(['DRAFT','ACTIVE','RESERVED','EXPIRED'].includes(item.status)){
- if(available)add('編輯資訊',()=>{setEditing(item.id);setTitle(item.title);setDescription(item.description??'');setPrice(item.price===null?'':String(item.price));});
+
  if(item.status==='ACTIVE'&&managementTab(item,now)==='在售')add('標記保留',()=>askStatus(item,'reserve','RESERVED'));
  if(item.status==='RESERVED'&&managementTab(item,now)==='已保留')add('恢復在售',()=>askStatus(item,'release','ACTIVE'));
  if(['ACTIVE','RESERVED'].includes(item.status)&&available)add('標記售出',()=>askStatus(item,'sold','SOLD'));
- if(['ACTIVE','RESERVED','EXPIRED'].includes(item.status))add('延長期限',()=>setExpiryId(item.id));
+ if(['ACTIVE','RESERVED','EXPIRED'].includes(item.status))add('延長期限',()=>openExpiry(item));
  add('移除商品',()=>askStatus(item,'remove','REMOVED'),true);
  }
  return <NativeActionMenu title={item.title} actions={actions} onClose={()=>setMenuId(null)}/>;})()}
@@ -140,7 +165,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
         {detailId === item.id && <Text style={s.muted}>分類：{item.category ?? '未分類'} · 建立日期：{item.createdAt.slice(0, 10)} · 商品編號：{item.id}</Text>}
         <View style={s.actions}><View style={{flex:1}}>{cardAction(detailId === item.id ? '收合詳情' : '查看詳情', () => setDetailId(current => current === item.id ? null : item.id))}</View>{(()=>{
           const state=managementTab(item,now);
-          const primary=state==='已保留'?{label:'恢復在售',run:()=>askStatus(item,'release','ACTIVE')}:state==='在售'?{label:'標記保留',run:()=>askStatus(item,'reserve','RESERVED')}:state==='已失效'?{label:'延長期限',run:()=>setExpiryId(item.id)}:item.status==='DRAFT'?{label:'編輯資訊',run:()=>{setEditing(item.id);setTitle(item.title);setDescription(item.description??'');setPrice(item.price===null?'':String(item.price));}}:null;
+          const primary=state==='已失效'?{label:'延長期限',run:()=>openExpiry(item)}:['DRAFT','ACTIVE','RESERVED'].includes(item.status)?{label:'編輯資訊',run:()=>openEditor(item)}:null;
           return primary&&<View style={{flex:1}}><Pressable accessibilityRole="button" disabled={loading} onPress={primary.run} style={[s.action,s.primaryAction,loading&&s.disabled]}><Text style={[s.actionText,s.primaryText]}>{primary.label}</Text></Pressable></View>;
         })()}<Pressable accessibilityRole="button" accessibilityLabel={item.title+'的更多操作'} disabled={loading} onPress={()=>setMenuId(item.id)} style={s.moreButton}><Text style={s.actionText}>•••</Text></Pressable></View>
         {managementTab(item, now) === '已失效' && <Text style={s.muted}>此商品已失效；請先延長期限，再編輯或繼續刊登。</Text>}
@@ -149,7 +174,8 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
           <Text style={s.fieldLabel}>商品名稱</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品名稱" value={title} onChangeText={setTitle} maxLength={100} style={s.input} />
           <Text style={s.fieldLabel}>商品說明</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品說明" value={description} onChangeText={setDescription} multiline scrollEnabled maxLength={3000} style={[s.input, s.description]} />
           <Text style={s.fieldLabel}>售價（NT$，0 代表免費贈送）</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel="編輯商品售價，新臺幣" value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={s.input} />
-          <View style={s.actions}>{action('取消編輯', () => setEditing(null))}{action('儲存修改', () => save(item))}</View>
+          <View style={s.actions}>{action('取消編輯', () => leaveEditor(()=>setEditing(null)))}{action('儲存修改', () => save(item))}</View>
+          <View style={s.dangerZone}><Text style={s.subheading}>移除商品</Text><Text style={s.muted}>移除會停止刊登，未儲存的修改不會套用。此操作需再次確認。</Text>{action('移除商品',()=>askStatus(item,'remove','REMOVED'),true)}</View>
           <Text style={s.subheading}>額外選項</Text>
           {item.media.find(media => media.capturePurpose !== 'AI_MARKETING') && ['ACTIVE', 'RESERVED'].includes(item.status) &&
             <MarketingAssistant api={api} apiUrl={apiUrl} token={token} listingId={item.id}
@@ -158,7 +184,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose }: Props)
                 price !== (item.price === null ? '' : String(item.price))) {
                 setError('請先儲存商品資訊，再使用行銷小助手。'); return false; } return true; }}
               onApproved={() => load()} />}</View>}
-        {expiryId === item.id && <View style={s.editor}><Text style={s.subheading}>選擇新的失效日期</Text><ListingExpiryPicker value={earliestExtensionDate(item.expiresAt)} minimumDateValue={earliestExtensionDate(item.expiresAt)} onApply={date => extend(item, date)} onCancel={() => setExpiryId(null)} /></View>}
+        {expiryId === item.id && <View style={s.editor}><Text style={s.subheading}>選擇新的失效日期</Text>{expiryDate?<><Text style={s.body}>已選日期：{expiryDate}</Text><View style={s.actions}>{action('取消延長',()=>setExpiryId(null))}{action('重新選擇日期',()=>setExpiryDate(''))}{action('確認延長',()=>extend(item,expiryDate))}</View></>:<ListingExpiryPicker value={earliestExtensionDate(item.expiresAt)} minimumDateValue={earliestExtensionDate(item.expiresAt)} onApply={date => extend(item, date)} onCancel={() => setExpiryId(null)} />}</View>}
       </View>}
       ListFooterComponent={<View style={s.footer}>{cursor && action('載入更多我的商品', () => void load(cursor))}{loading && <ActivityIndicator accessibilityLabel="載入我的商品中" />}
         {action('重新載入', () => void load())}</View>} />
@@ -194,6 +220,7 @@ const s = StyleSheet.create({
   compactAction: { paddingHorizontal: iosSpacing.xs }, compactActionText: { ...iosType.footnote, fontWeight: '700' },
   dangerText: { color: iosColors.danger }, disabled: { opacity: 0.45 },
   editor: { gap: iosSpacing.sm, borderTopColor: iosColors.separator, borderTopWidth: StyleSheet.hairlineWidth, padding: iosSpacing.md, backgroundColor: iosColors.surfaceSecondary, borderRadius: iosRadius.control },
+  dangerZone: {padding:iosSpacing.md,gap:iosSpacing.sm,borderRadius:iosRadius.control,backgroundColor:iosColors.dangerSoft},
   input: { minHeight: 50, borderWidth: StyleSheet.hairlineWidth, borderColor: iosColors.separator, borderRadius: iosRadius.control, backgroundColor: iosColors.surface, padding: iosSpacing.sm, ...iosType.body, color: iosColors.label },
   description: { height: 110, textAlignVertical: 'top' }, footer: { gap: iosSpacing.sm, alignItems: 'center', padding: iosSpacing.md },
   notice: { ...iosType.footnote, color: iosColors.brand, backgroundColor: iosColors.brandSoft, marginHorizontal: iosSpacing.lg, padding: iosSpacing.sm, borderRadius: iosRadius.control },

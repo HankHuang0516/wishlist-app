@@ -84,6 +84,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [composing, setComposing] = useState<'batch' | 'manual' | null>(null);
   const [managingListings, setManagingListings] = useState(false);
+  const listingCloseRequest=useRef<(()=>void)|null>(null);
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [exploreWishId, setExploreWishId] = useState<number | undefined>(undefined);
   const [focusListing, setFocusListing] = useState<PublicListing | null>(null);
@@ -246,7 +247,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
     {composing === 'batch' && token && <ListingBatchComposer api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setComposing(null)} onAdvanced={() => setComposing('manual')} onPublished={count => { setComposing(null); setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); Alert.alert('商品已刊登', `已確認 ${count} 件商品。可在我的商品分享連結，或手動同意本次地圖顯示。`, [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
     {notificationSettingsOpen&&<SafeAreaModal visible animationType="slide" onRequestClose={()=>setNotificationSettingsOpen(false)} contentStyle={styles.screen}><NotificationSettingsScreen api={api} apiUrl={apiUrl} userId={user.id} runtime={notificationRuntime} onClose={()=>setNotificationSettingsOpen(false)}/></SafeAreaModal>}
     {composing === 'manual' && <ListingComposer api={api} apiUrl={apiUrl} userId={user.id} onClose={() => setComposing(null)} onSaved={status => { setComposing(null); if (['ACTIVE', 'RESERVED'].includes(status)) { setExploreWishId(undefined); setFocusListing(null); setTab('我的'); setManagingListings(true); } Alert.alert(status === 'DRAFT' ? '草稿已儲存' : ['ACTIVE', 'RESERVED'].includes(status) ? '已確認商品刊登' : '已確認上次商品紀錄', status === 'DRAFT' ? '商品尚未公開。' : ['ACTIVE', 'RESERVED'].includes(status) ? '可在我的商品分享連結，或手動同意本次地圖顯示。' : '商品目前已停止公開刊登。', [{ text: '稍後', style: 'cancel' }, { text: '查看我的商品', onPress: () => { setTab('我的'); setManagingListings(true); } }]); }} />}
-    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => setManagingListings(false)}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
+    {managingListings && token && <Modal visible animationType="slide" onRequestClose={() => listingCloseRequest.current?.()}><SafeAreaProvider><MyListingsScreen key={user.id} api={api} apiUrl={apiUrl} userId={user.id} token={token} closeRequestRef={listingCloseRequest} onClose={() => setManagingListings(false)} /></SafeAreaProvider></Modal>}
     {!!authLink && <Modal visible animationType="slide" onRequestClose={closeRecovery}><SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} operationGate={recoveryOperation} onAuthenticated={authenticate} onClose={closeRecovery} onResetConfirmed={resetConfirmed} /></SafeAreaView></Modal>}
   </SafeAreaView></ProductInterestProvider>;
 }

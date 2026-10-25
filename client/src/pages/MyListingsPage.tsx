@@ -292,27 +292,26 @@ function MyListingsSession({ token, userId }: { token: string; userId: number })
         <ProductInterest kind="listing" id={item.id} compact readOnly/>{detailId === item.id && <div className="space-y-2"><p className="whitespace-pre-wrap">{item.description || t("尚未填寫說明")}</p><p className="text-xs text-gray-600 break-all">{t("分類：")}{item.category ?? t("未分類")}{t(" · 建立：")}{item.createdAt.slice(0, 10)}{t(" · 商品編號：")}{item.id}</p></div>}
         <p className="text-sm text-gray-600">{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > now ? t("地圖顯示至 {time}；不會自動續期。", {time:new Date(item.mapVisibleUntil).toLocaleTimeString(managementEnglish() ? 'en-US' : 'zh-TW')}) : t("目前不在地圖顯示；需手動確認這次顯示。")}</p>
         <div className="flex items-start gap-2">
-          <Button className="flex-1" variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
-          {item.status === 'ACTIVE' && !expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
-          {item.status === 'RESERVED' && !expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}
-          {item.status === 'DRAFT' && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
-          {expired && <Button className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
+          <Button className="min-h-11 flex-1" variant="outline" onClick={() => setDetailId(detailId === item.id ? null : item.id)}>{detailId === item.id ? t("收合詳情") : t("查看詳情")}</Button>
+          {editable && <Button className="min-h-11 flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setExpiryId(null); setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
+          {expired && <Button className="min-h-11 flex-1 bg-blue-600 hover:bg-blue-700" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
           <details data-listing-actions className="relative shrink-0" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
             <summary aria-label={t("更多操作")} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border text-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden"><span aria-hidden="true">⋯</span></summary>
             <div className="absolute right-0 top-12 z-20 flex max-h-[50dvh] w-64 max-w-[75vw] flex-col gap-2 overflow-y-auto rounded-xl border bg-white p-3 shadow-lg">
           {item.publishedAt && <><Button variant="outline" onClick={() => void share(item)}>{t("分享連結")}</Button><Link className="p-2 text-blue-700 underline" to={`/listings/${item.id}?v=${item.version}`}>{t("商品網址")}</Link></>}
           {['ACTIVE','RESERVED'].includes(item.status) && !expired && <><Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,true)}>{t("手動顯示地圖一小時")}</Button>{item.mapVisibleUntil && Date.parse(item.mapVisibleUntil)>now && <Button variant="outline" disabled={blocked} onClick={()=>void mapPresence(item,false)}>{t("停止地圖顯示")}</Button>}</>}
-          {editable && item.status !== 'DRAFT' && <Button variant="outline" disabled={blocked} onClick={() => { setPreparedEdit(undefined); setEditing(item.id); }}>{t("編輯資訊")}</Button>}
+          {item.status === 'ACTIVE' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'reserve', 'RESERVED', t("標記保留"))}>{t("標記保留")}</Button>}
+          {item.status === 'RESERVED' && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'release', 'ACTIVE', t("恢復在售"))}>{t("恢復在售")}</Button>}
           {['ACTIVE', 'RESERVED'].includes(item.status) && !expired && <Button variant="outline" disabled={blocked} onClick={() => statusAction(item, 'sold', 'SOLD', t("標記售出"))}>{t("標記售出")}</Button>}
           {!expired && ['ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="outline" disabled={blocked} onClick={() => { setExpiryId(item.id); setDate(earliestExtensionDate(item.expiresAt)); }}>{t("延長期限")}</Button>}
-          {['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="destructive" disabled={blocked} onClick={() => statusAction(item, 'remove', 'REMOVED', t("移除"))}>{t("移除")}</Button>}
+          {['DRAFT', 'ACTIVE', 'RESERVED', 'EXPIRED'].includes(item.status) && <Button variant="destructive" disabled={blocked} onClick={() => statusAction(item, 'remove', 'REMOVED', t("移除商品"))}>{t("移除商品")}</Button>}
             </div>
           </details>
         </div>
         {expired && <p className="text-sm text-gray-600">{t("此商品已失效；請先延長期限，再編輯或繼續刊登。")}</p>}
         {item.publishedAt && !['ACTIVE', 'RESERVED'].includes(item.status) && <p className="text-sm text-gray-600">{t("分享連結仍可複製，但其他人只會看到「已停止刊登」。")}</p>}
         {editing === item.id && <ListingEditForm key={`${item.id}:${preparedEdit?.draft.revision ?? 'normal'}`} item={item} token={token} userId={userId} locked={blocked} preparedDraft={preparedEdit}
-          onClose={() => setEditing(null)} onSave={changes => mutate(item, 'EDIT', changes)}
+          onClose={() => setEditing(null)} onRemove={() => statusAction(item, 'remove', 'REMOVED', t("移除商品"))} onSave={changes => mutate(item, 'EDIT', changes)}
           beforeApprove={async () => {
             const epoch = generation.current;
             if (!isCurrent(epoch) || running.current || unconfirmed || !pendingLoaded) return null;

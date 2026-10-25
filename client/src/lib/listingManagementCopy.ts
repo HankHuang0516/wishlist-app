@@ -1,6 +1,9 @@
 import { getUserLocale } from '../utils/localization';
 
 const english = {
+  "商品危險操作": "Listing danger zone",
+  "移除商品": "Remove listing",
+  "移除會停止刊登，未儲存的修改不會套用。此操作需再次確認。": "Removal stops this listing. Unsaved edits will not be applied. You will be asked to confirm.",
   "確認商品狀態": "Confirm listing status",
   "確認這次狀態變更": "Confirm this status change",
   "更多操作": "More actions",

@@ -13,11 +13,12 @@ import { Input } from './ui/Input';
 type Props = {
   item: ManagedListing; token: string; userId: number; locked: boolean; preparedDraft?: {raw: string; draft: ListingEditDraft};
   onClose(): void;
+  onRemove?(): void;
   onSave(changes: Record<string, unknown>): Promise<boolean>;
   beforeApprove(): Promise<(() => void) | null>;
   onApproved(): Promise<ManagedListing>;
 };
-export default function ListingEditForm({ item, token, userId, locked, preparedDraft, onClose, onSave, beforeApprove, onApproved }: Props) {
+export default function ListingEditForm({ item, token, userId, locked, preparedDraft, onClose, onRemove, onSave, beforeApprove, onApproved }: Props) {
   const [value, setValue] = useState<ListingEditFields>(preparedDraft?.draft.fields ?? listingFields(item));
   const [ready, setReady] = useState(false), [saving, setSaving] = useState(false), [issue, setIssue] = useState('');
   const [notice, setNotice] = useState(''), [baseVersion, setBaseVersion] = useState(item.version);
@@ -131,6 +132,7 @@ export default function ListingEditForm({ item, token, userId, locked, preparedD
     <div className="space-y-2"><label htmlFor={`description-${item.id}`}>{t("商品說明")}</label><textarea id={`description-${item.id}`} disabled={locked || !ready || sending} readOnly={stopped} className="w-full min-h-32 rounded-xl border p-3" value={value.description} onChange={event => change('description', event.target.value)} maxLength={3000} /></div>
     <div className="space-y-2"><label htmlFor={`price-${item.id}`}>{t("售價（NT$，0 代表免費贈送）")}</label><Input id={`price-${item.id}`} inputMode="decimal" disabled={locked || !ready || sending} readOnly={stopped} maxLength={128} value={value.price} onChange={event => change('price', event.target.value)} /></div>
     <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={locked || sending || saving} onClick={onClose}>{t("關閉編輯，保留草稿")}</Button><Button variant="outline" disabled={blocked || saving} onClick={() => void discard()}>{t("捨棄本機草稿")}</Button><Button disabled={blocked || stale} onClick={() => void submit()}>{t("儲存修改")}</Button></div>
+    {onRemove && <section aria-label={t("商品危險操作")} className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-2"><h3 className="font-semibold">{t("移除商品")}</h3><p className="text-sm text-gray-700">{t("移除會停止刊登，未儲存的修改不會套用。此操作需再次確認。")}</p><Button type="button" className="min-h-11 bg-red-700 hover:bg-red-800" variant="destructive" disabled={blocked || saving || stale} onClick={onRemove}>{t("移除商品")}</Button></section>}
     <h3 className="font-semibold">{t("額外選項")}</h3>
     {source && ['ACTIVE', 'RESERVED'].includes(item.status) && ready && <MarketingAssistantWeb token={token} userId={userId} sourceMediaId={source.id} listingId={item.id} getExpectedVersion={() => item.version}
       beforeStart={async () => { if (locked || dirty || stale || saving || stopped || sending) { setIssue(t("請先儲存商品資訊，再使用行銷小助手。")); return false; } return true; }}

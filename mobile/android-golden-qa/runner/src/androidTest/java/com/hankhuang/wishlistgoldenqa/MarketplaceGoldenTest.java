@@ -253,7 +253,8 @@ public class MarketplaceGoldenTest {
         wishMenu("Golden Edited Mug");click("取消完成");reveal("最高預算 TWD 42.5");
         checkpoint("security-and-deletion-preview");click("我的");
         android.content.pm.PackageInfo installed = InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
-        String installedVersion = "版本 " + installed.versionName + "（" + installed.getLongVersionCode() + "）";
+        long installedBuild = android.os.Build.VERSION.SDK_INT >= 28 ? installed.getLongVersionCode() : installed.versionCode;
+        String installedVersion = "版本 " + installed.versionName + "（" + installedBuild + "）";
         await(installedVersion);capture("my-native-version");
         click("通知設定");await(installedVersion);await("開啟／重新連線裝置通知");capture("notification-native-version");click("返回我的設定");
         reveal("帳號安全");click("帳號安全");

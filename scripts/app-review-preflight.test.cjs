@@ -133,3 +133,23 @@ for(const [name,change] of [
  ['wrong inventory count',s=>s.iapCount=1],
  ['missing inventory',s=>delete s.productInventory],
 ]) test('blocks disabled-draft business evidence: '+name,()=>{const s=disabledDrafts();change(s);assert.throws(()=>assertDemoReady(s,now));});
+
+const {assertPreparedVersionValidation}=require('./app-review-preflight.cjs');
+function preparedValidation() {
+ return {report:{appId:'6468950847',versionId:'v20',summary:{errors:1,blocking:1},checks:[{id:'version.state.editable',severity:'error',field:'appVersionState',message:'version is in non-editable state "READY_FOR_REVIEW"'}]},
+ version:{id:'v20',state:'READY_FOR_REVIEW'},submission:{data:{id:'submission',attributes:{state:'READY_FOR_REVIEW',platform:'IOS'},relationships:{appStoreVersionForReview:{data:{id:'v20'}},items:{data:[{type:'reviewSubmissionItems',id:'item'}]}}}}};
+}
+const validatePrepared=s=>assertPreparedVersionValidation(s.report,s.version,s.submission,'submission','item');
+test('validates an existing exact unsubmitted ready draft without recreating it or ignoring other errors',()=>assert.deepEqual(validatePrepared(preparedValidation()),{contextualizedReadyDraftDiagnostic:true}));
+test('ordinary zero-error validation still checks the actual draft and item',()=>{const s=preparedValidation();s.report.checks=[];s.report.summary={errors:0,blocking:0};s.version.state='PREPARE_FOR_SUBMISSION';assert.deepEqual(validatePrepared(s),{contextualizedReadyDraftDiagnostic:false});});
+for(const [name,change] of [
+ ['other app',s=>s.report.appId='other'],['other version',s=>s.report.versionId='other'],
+ ['already submitted version',s=>s.version.state='WAITING_FOR_REVIEW'],['already submitted draft',s=>s.submission.data.attributes.state='WAITING_FOR_REVIEW'],
+ ['canceled draft',s=>s.submission.data.attributes.state='CANCELED'],['other draft',s=>s.submission.data.id='other'],
+ ['other platform',s=>s.submission.data.attributes.platform='MAC_OS'],['other draft version',s=>s.submission.data.relationships.appStoreVersionForReview.data.id='other'],
+ ['other item',s=>s.submission.data.relationships.items.data[0].id='other'],['additional product item',s=>s.submission.data.relationships.items.data.push({type:'reviewSubmissionItems',id:'product'})],
+ ['real metadata error',s=>s.report.checks[0].id='build.processed'],['other noneditable state',s=>s.report.checks[0].message='version is in non-editable state "IN_REVIEW"'],
+ ['wrong field',s=>s.report.checks[0].field='build'],['missing errors',s=>s.report.summary.errors=0],['missing blocking',s=>s.report.summary.blocking=0],
+ ['duplicate diagnostic',s=>{s.report.checks.push({...s.report.checks[0]});s.report.summary={errors:2,blocking:2};}],
+ ['missing checks',s=>delete s.report.checks],['zero-error report but wrong actual item',s=>{s.report.checks=[];s.report.summary={errors:0,blocking:0};s.submission.data.relationships.items.data=[];}],
+])test('prepared validation fails closed: '+name,()=>{const s=preparedValidation();change(s);assert.throws(()=>validatePrepared(s));});

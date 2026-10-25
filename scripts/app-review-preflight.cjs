@@ -171,6 +171,48 @@ function selectedBuildId(version) {
     assert(typeof id === 'string' && id.length > 0, 'Cannot verify the selected App Store build');
     return id;
 }
+
+// asc validate checks editability for a new submission. An existing, unsubmitted
+// ready draft is already past that step. Verify that exact draft and item before
+// contextualizing ONLY this CLI state diagnostic; all other errors still fail.
+function assertPreparedVersionValidation(report, version, submission, submissionId, itemId) {
+    assert.equal(report.appId, '6468950847');
+    const v = version.data ? { id: version.data.id, state: version.data.attributes.appStoreState } : version;
+    assert.equal(report.versionId, v.id);
+    assert(['PREPARE_FOR_SUBMISSION', 'READY_FOR_REVIEW'].includes(v.state), 'Version is not an unsubmitted draft');
+    const s = submission.data;
+    assert.equal(s?.id, submissionId);
+    assert.equal(s.attributes?.state, 'READY_FOR_REVIEW', 'Never resubmit a submitted or canceled review');
+    assert.equal(s.attributes.platform, 'IOS');
+    assert.equal(s.relationships?.appStoreVersionForReview?.data?.id, v.id);
+    assert.deepEqual(s.relationships?.items?.data, [{ type: 'reviewSubmissionItems', id: itemId }], 'Recheck unexpected or additional submission items');
+    assert(Array.isArray(report.checks));
+    const errors = report.checks.filter(c => c.severity === 'error');
+    assert.equal(report.summary?.errors, errors.length, 'Incomplete validation error report');
+    assert.equal(report.summary?.blocking, errors.length, 'Unexpected blocking validation findings');
+    for (const e of errors) {
+        assert.equal(v.state, 'READY_FOR_REVIEW');
+        assert.equal(e.id, 'version.state.editable', 'Resolve every other App Store validation error');
+        assert.equal(e.field, 'appVersionState');
+        assert.equal(e.message, 'version is in non-editable state "READY_FOR_REVIEW"');
+    }
+    assert(errors.length <= 1, 'Unexpected repeated validation diagnostic');
+    return { contextualizedReadyDraftDiagnostic: errors.length === 1 };
+}
+
+function validatePreparedVersion(version, submissionId, itemId) {
+    let raw, failed = false;
+    try { raw = execFileSync('asc', ['--profile', 'Hank App Store Release', 'validate', '--app', '6468950847', '--version-id', version.id ?? version.data.id], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+    catch (error) {
+        if (error.status !== 1 || error.signal || !error.stdout) throw error;
+        failed = true;
+        raw = String(error.stdout);
+    }
+    const submission = asc('review', 'submissions-get', '--id', submissionId, '--include', 'items,appStoreVersionForReview');
+    const result = assertPreparedVersionValidation(JSON.parse(raw), version, submission, submissionId, itemId);
+    assert(!failed || result.contextualizedReadyDraftDiagnostic, 'Validator failed without the exact ready-draft diagnostic');
+    return result;
+}
 async function checkLive(versionId, expectedUserId, businessEvidence) {
     const { APP_CONSTANTS } = require('../server/dist/config/constants.js');
     const details = asc('review', 'details-for-version', '--version-id', versionId, '--include-sensitive').data.attributes;
@@ -245,7 +287,7 @@ async function main() {
         assertPrivacyEvidence(privacy, nativeTree, serverTree);
         assert.equal(hashFile(privacy.axPath), privacy.axSha256, 'App Privacy evidence changed');
         assert.equal(hashFile(privacy.screenshotPath), privacy.screenshotSha256, 'App Privacy screenshot changed');
-        asc('validate', '--app', '6468950847', '--version-id', result.versionId);
+        result.versionValidation = validatePreparedVersion(version, get('--submission-id'), get('--item-id'));
         if (args.includes('--submit')) {
             asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
             asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
@@ -254,7 +296,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDisabledDraftProducts, assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
+module.exports = { assertPreparedVersionValidation, assertDisabledDraftProducts, assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

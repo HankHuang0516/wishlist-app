@@ -55,3 +55,18 @@ This business receipt grants no exception for physical-device recording, current
 binary/UI evidence, App Privacy, attachments, demo readiness or CI. Historical
 recording approval remains bound to the exact19artifact;20requires its own scoped
 human decision when its concrete submission is prepared.
+
+
+### Existing unsubmitted ready review drafts
+
+`asc validate` treats `READY_FOR_REVIEW` as non-editable when checking a new
+submission. The current app already has an unsubmitted ready submission and
+version item. The preflight now reads that exact submission, requires IOS and
+READY_FOR_REVIEW, the same version and exactly the supplied item, and accepts
+only the single `version.state.editable` diagnostic for that exact state.
+Every other validation error, inconsistent summary, unknown CLI failure,
+submitted/canceled draft, extra item or changed identity still blocks. No item
+is removed/recreated and no submission is sent by validation. The native,
+physical-recording approval, attachment, App Privacy and disabled-checkout
+checks remain required.73 focused gate tests pass; no new physical-device
+recording or build20 historical-footage approval is implied.

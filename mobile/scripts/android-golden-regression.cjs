@@ -179,8 +179,8 @@ async function main(){
  for(const fixtureActor of Object.values(qa.actors))for(const value of [fixtureActor.email,fixtureActor.phoneNumber,fixtureActor.password])if(typeof value==='string'&&value.length>0)safeOutput=safeOutput.split(value).join('[synthetic credential redacted]');
  safeOutput=safeOutput.replace(/Bearer\s+[A-Za-z0-9._-]+/g,'Bearer [redacted]').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[token redacted]');
  fs.writeFileSync(path.join(evidence,'instrumentation-sanitized.log'),safeOutput.slice(0,100000),{flag:'wx',mode:0o600});
- report.checkpoints=[...output.matchAll(/INSTRUMENTATION_STATUS: goldenStage=([a-z-]+)/g)].map(x=>x[1]);
- const failure=output.match(/Golden regression failed at ([a-z-]+) type ([A-Za-z]+)/);if(failure)report.failure={stage:failure[1],type:failure[2]};
+ report.checkpoints=[...output.matchAll(/INSTRUMENTATION_STATUS: goldenStage=([a-z0-9-]+)/g)].map(x=>x[1]);
+ const failure=output.match(/Golden regression failed at ([a-z0-9-]+) type ([A-Za-z]+)/);if(failure)report.failure={stage:failure[1],type:failure[2]};
  if(!/OK \(1 test\)/.test(output)||/FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed/.test(output))throw Error('Native regression assertions failed');
  if(!brokerUsed)throw Error('Native test did not consume its synthetic fixture');
  stage='database-audit';const {PrismaClient}=require('../../server/node_modules/@prisma/client');const db=new PrismaClient({datasources:{db:{url:database}}});

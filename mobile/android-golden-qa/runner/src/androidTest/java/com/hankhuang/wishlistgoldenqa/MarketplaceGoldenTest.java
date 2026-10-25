@@ -90,7 +90,7 @@ public class MarketplaceGoldenTest {
     private void scrollOnPadding(boolean forward){
         for(int attempt=0;attempt<3;attempt++){
             foreground();
-            try{UiObject2 form=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),5000);assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
+            try{UiObject2 form=device.findObject(By.res("discovery-outer-scroll"));if(form==null)form=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),5000);assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
                 assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
                 boolean delivered=device.swipe(8,forward?area.bottom-32:area.top+48,8,forward?area.top+48:area.bottom-32,35);
                 if(delivered){device.waitForIdle(1000);SystemClock.sleep(100);return;}
@@ -432,17 +432,20 @@ public class MarketplaceGoldenTest {
         String label="選取商品："+title;
         UiScrollable canvas=new UiScrollable(new UiSelector().resourceId("discovery-map-scroll").scrollable(true));
         assertTrue("Explicit thumbnail canvas required",canvas.exists());
-        canvas.setMaxSearchSwipes(30);assertTrue("Every loaded product must be reachable",canvas.scrollIntoView(new UiSelector().description(label)));
-        // scrollIntoView may stop at a partially clipped descendant. Bring the
-        // whole real hit target inside the nested canvas before measuring it.
-        for(int attempt=0;attempt<10;attempt++){
-            Rect tile=await(label).getVisibleBounds();if(tile.height()>=48)break;
-            UiObject2 host=device.wait(Until.findObject(By.res("discovery-map-scroll")),5000);
-            assertNotNull("Thumbnail canvas remains present",host);Rect viewport=host.getVisibleBounds();
-            int distance=Math.min(72,Math.max(24,viewport.height()/3));
-            int y=viewport.centerY();boolean above=tile.centerY()<y;
-            assertTrue("Canvas scroll delivered",device.swipe(viewport.centerX(),y,viewport.centerX(),y+(above?distance:-distance),20));
-            device.waitForIdle(500);
+        // Bounded overlapping gestures avoid scrollIntoView stopping on a
+        // clipped transformed tile or skipping a row in this short viewport.
+        for(boolean forward:new boolean[]{true,false}){
+            for(int attempt=0;attempt<40&&!visible(label,48);attempt++){
+                UiObject2 host=device.wait(Until.findObject(By.res("discovery-map-scroll")),5000);
+                assertNotNull("Thumbnail canvas remains present",host);Rect viewport=host.getVisibleBounds();
+                // At the inner edge Android may hand the gesture to the outer
+                // page. Restore the frame, then search in the other direction.
+                if(viewport.height()<120){revealBackwards("本批 36 張商品縮圖",1);break;}
+                int distance=Math.min(64,viewport.height()-56),y=viewport.centerY();
+                assertTrue("Canvas scroll delivered",device.swipe(viewport.centerX(),y,viewport.centerX(),y+(forward?-distance:distance),12));
+                device.waitForIdle(300);
+            }
+            if(visible(label,48))break;
         }
         assertTrue("Thumbnail tap target is at least48dp",await(label).getVisibleBounds().height()>=48);
         click(label);assertNotNull("Clicked product must settle selected",device.wait(Until.findObject(By.desc(label).selected(true)),5000));
@@ -459,7 +462,7 @@ public class MarketplaceGoldenTest {
         assertTrue(device.wait(Until.gone(By.desc("返回探索")),10000));
         checkpoint("map-all-thirty-six");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
         reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("map-thirty-six-canvas-top");
-        for(int i=0;i<mapTitles.length();i++)selectMapTitle(mapTitles.getString(i));
+        for(int i=0;i<mapTitles.length();i++){checkpoint("map-select-item-"+(i+1));selectMapTitle(mapTitles.getString(i));}
         capture("map-thirty-six-canvas-selected");
         checkpoint("map-single-wishlist-add");String title=mapTitles.getString(35),add="加入願望清單："+title,remove="已加入願望，移除："+title;
         reveal(add);click(add);await(remove);capture("map-single-wishlist-saved");

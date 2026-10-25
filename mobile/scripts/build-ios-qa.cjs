@@ -28,7 +28,7 @@ if (resume) {
     !fs.existsSync(path.join(output, 'app-build.xcresult'))&&!ownedPartial) throw new Error('Only a failed isolated host build can be resumed');
 } else fs.mkdirSync(output, { mode: 0o700 });
 const env = iosHostEnvironment(process.execPath, os.homedir(), os.tmpdir());
-const sourceFiles = ['App.tsx', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.swift', 'ios/Wishlistai/Info.plist', 'ios/Wishlistai.xcodeproj/project.pbxproj',
+const sourceFiles = ['App.tsx', 'shared/tsconfig.json', 'shared/discoveryMapLayout.ts', 'shared/discoveryRange.ts', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.swift', 'ios/Wishlistai/Info.plist', 'ios/Wishlistai.xcodeproj/project.pbxproj',
   'ios/Wishlistai.xcodeproj/xcshareddata/xcschemes/Wishlistai.xcscheme', 'ios-native-qa/NativeQaTests.swift', 'ios-native-qa/PublicInputState.swift', 'ios-native-qa/HostPublicInputTests.swift',
   'ios-native-qa/WishlistNativeQa.xcodeproj/project.pbxproj', 'ios-native-qa/WishlistNativeQa.xcodeproj/xcshareddata/xcschemes/WishlistNativeQa.xcscheme',
   'scripts/ios-qa-build-guard.cjs', 'scripts/ios-qa-config.cjs', 'scripts/ios-simulator-entitlements.cjs', 'scripts/build-ios-qa.cjs',

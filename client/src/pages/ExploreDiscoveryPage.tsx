@@ -14,7 +14,7 @@ import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 import MarketplaceDialog from '../components/MarketplaceDialog';
 import {getDisplayLocale} from '../utils/localization';
 import './exploreDiscovery.css';
-import {readDiscoveryRange} from '../../../mobile/src/discoveryRange';
+import {readDiscoveryRange} from '../../../mobile/shared/discoveryRange';
 const DiscoveryMap=lazy(()=>import('../components/DiscoveryMap'));
 const say=(zh:string,en:string)=>getDisplayLocale().startsWith('zh')?zh:en;
 const price=(p:DiscoveryProduct)=>p.price!==null&&p.currency==='TWD'?'NT$ '+new Intl.NumberFormat(getDisplayLocale(),{maximumFractionDigits:2}).format(p.price):p.priceText||say('價格待詢問','Ask for price');

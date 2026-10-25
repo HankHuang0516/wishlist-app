@@ -6,10 +6,11 @@
 
 驗證紀錄保存在 `QA/golden-release-20261024/` 共用驗收資料區：
 
-- 完整 validator43：server1177通過/3略過，DB783，Web2244，native1006；64 migrations，schema drift0。
+- 整合 main205 後完整 validator45：server1185通過/3略過，DB789，Web2238，native1006；65 migrations，schema drift0。
 - Web實際 MapLibre/API/資料庫流程 `web-map14-actual-2224` 通過，包含36項選取、願望增刪、來源視窗、390/320/1440寬與放大字體／深色／減少動態效果。
 - Android `android-draft-removal-2250-pass` 通過取消、首次POST成功但回應遺失、唯讀恢復、三件移除及重新進入0件。消耗額度保留3次，測試帳號刪除後正確cascade。
 - Android 地圖實際流程已通過原價卡片與詳情，但36項選取仍有部分縮圖捲動後被裁切的驗收失敗，修正操作工具後待重驗。
-- iOS2325已通過原價卡片／來源／詳情及地圖進入；畫布AX類型查詢失敗，改為使用精確testID查找，待重驗。
+- iOS2348 實際流程通過原價卡片／來源／詳情、36件逐件選取、單願望增刪、三草稿取消／移除及重新進入0件；測試帳號、媒體與收據清理均0。這是隔離模擬器測試包，沒有 iOS 實機或商店包驗收宣稱。
+- PR203 CI 發現 Web import 的純計算檔誤讀 Expo tsconfig；純檔移至 mobile/shared 並使用獨立、無 Expo 相依的 tsconfig。無 mobile/node_modules 的獨立 Web 建置及149檔2238測試通過。隔離副本僅允許既有symlink的Web依賴路徑；初次缺少跨目錄固定fixtures的測試失敗紀錄亦保留。新CI仍待完成。
 
 以上不是新商店包交付，也不是四平台Golden14各85分通過。原生多清單、全部36項、深色／放大字體等最終驗收及新的商店產物仍未完成。iOS19與Android37不含本批新原生功能。

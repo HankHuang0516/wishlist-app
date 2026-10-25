@@ -153,5 +153,12 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
  expect(traffic.some(t=>t.path===`/api/chat/conversations/${rooms[0]}`&&t.status===404)).toBe(true);
  console.log(JSON.stringify({sameBrowserAccountSwitch:'PASS',oldProfileResponse:'held until normal UI logout/new login, then released',newBuyerWish:'Canon 相機',newBuyerResultCount:0,oldRoomReadHTTP:404,oldRoomContentLeak:false,sessionTransfer:false,productionWrites:0}));
 
- }catch(error){console.log(JSON.stringify({isolatedUiFailureUrl:page.url(),visibleSyntheticUi:(await page.evaluate(()=>document.body.innerText)).slice(0,4000)}));throw error;}finally{await browser.close();}
+ }catch(error){
+  const storageDiagnostics=await page.evaluate(()=>{
+   const bounded=(work:Promise<unknown>)=>Promise.race([work.catch(e=>({error:e?.name||'Error'})),new Promise(resolve=>setTimeout(()=>resolve({timedOut:true}),1500))]);
+   return Promise.all([bounded(crypto.subtle.digest('SHA-256',new TextEncoder().encode('synthetic-diagnostic')).then(b=>({bytes:b.byteLength}))),bounded(indexedDB.databases())]).then(([crypto,databases])=>({secureContext:isSecureContext,visibility:document.visibilityState,crypto,databases,
+    buttons:Array.from(document.querySelectorAll('[role="dialog"] button')).map(b=>({label:b.textContent,disabled:(b as HTMLButtonElement).disabled}))}));
+  }).catch(()=>({diagnosticFailed:true}));
+  console.log(JSON.stringify({isolatedUiFailureUrl:page.url(),visibleSyntheticUi:(await page.evaluate(()=>document.body.innerText)).slice(0,4000),storageDiagnostics}));throw error;
+ }finally{await browser.close();}
 },180000);

@@ -157,6 +157,9 @@ describe('private meetup web parity', () => {
     appointment = makeMeetup(); render(<MeetupWeb {...props} room={makeRoom({ blocked: true, blockedByMe: true, listingAvailable: false })} />);
     expect(await screen.findByRole('button', { name: '同意第1版時間與地點' })).toBeDisabled(); fireEvent.click(screen.getByRole('button', { name: '取消第1版預約' }));
     await screen.findByText('已取消 · 第1版'); expect(JSON.parse(posts()[0][2].body)).toMatchObject({ action: 'CANCEL', expectedVersion: 1 });
+    expect(screen.getByText('買家先前未同意 · 賣家先前已同意')).toBeInTheDocument();
+    expect(screen.getByText('此預約已取消；先前同意已不生效，重新提議須雙方再次同意。')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name:'重新提議面交'})).toBeDisabled();
   });
   it('does not call one participant completion a completed trade and hides repeat completion', async () => {
     appointment = makeMeetup({ status: 'CONFIRMED', startsAt: new Date(Date.now() - 3600000).toISOString(), endsAt: new Date(Date.now() - 1).toISOString(), buyerConfirmedAt: '2026-10-01T00:00:00.000Z' });

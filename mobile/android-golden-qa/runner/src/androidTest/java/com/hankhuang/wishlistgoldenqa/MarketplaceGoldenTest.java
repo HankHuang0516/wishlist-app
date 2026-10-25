@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class MarketplaceGoldenTest {
     private UiDevice device;
-    private String target, phase, stage = "setup";
+    private String target, phase, photoName, stage = "setup";
     private File evidence;
     private boolean loggedIn;
     private boolean credentialsEntered;
@@ -113,7 +113,7 @@ public class MarketplaceGoldenTest {
         byte[] data=bytes.toByteArray(); connection.disconnect();
         assertTrue(data.length<4096);
         JSONObject fixture=new JSONObject(new String(data,StandardCharsets.UTF_8));
-        target=fixture.getString("package");
+        target=fixture.getString("package");photoName=fixture.optString("photoName","");
         assertTrue(target.matches("com\\.hank_huang0516\\.snack425e646aa6a74ad8a964aadeb4741fc1\\.visualqa[0-9]{12}"));
         String email=fixture.getString("email");
         assertTrue("Synthetic account required",email.endsWith("@example.invalid"));
@@ -234,6 +234,78 @@ public class MarketplaceGoldenTest {
         reveal("本人檢舉紀錄");click("本人檢舉紀錄");reveal("已收件，待審核");capture("golden-09-received-pending");
         checkpoint("market-checks-complete");
     }
+    private void chat() throws Exception {
+        checkpoint("chat-history-and-reply");click("社交");await("聊天與面交");click("Native QA Switch OLED");
+        await("商品聊天訊息");await("週日下午可以，請先提出預約。");
+        capture("golden-11-chat-before-reply");await("商品聊天訊息").setText("Golden Native Chat Reply");click("傳送");
+        await("Golden Native Chat Reply");capture("golden-11-chat-reply");
+        checkpoint("photo-composer-empty-validation");click("補傳商品照片");await("傳送商品照片");await("從相簿選擇");
+        reveal("傳送照片");UiObject2 send=await("傳送照片");while(!send.isClickable()&&send.getParent()!=null)send=send.getParent();
+        assertFalse("No photo means send remains disabled",send.isEnabled());capture("golden-11-empty-photo-form");click("返回聊天");
+        checkpoint("meetup-proposal");await("查看或提議面交預約");click("查看或提議面交預約");
+        reveal("提出面交邀約");click("提出面交邀約");reveal("私密面交地點名稱");await("私密面交地點名稱").setText("GoldenStationQA");
+        reveal("送出面交邀約");click("送出面交邀約");
+        UiScrollable proposalScroll=new UiScrollable(new UiSelector().scrollable(true));proposalScroll.scrollToBeginning(10);
+        await("提議中");capture("golden-07-proposed");
+        checkpoint("synthetic-seller-consent");
+        String port=InstrumentationRegistry.getArguments().getString("inputPort","");
+        HttpURLConnection consent=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/counterpart/confirm-meetup").openConnection();
+        consent.setRequestMethod("POST");consent.setRequestProperty("X-Wishlist-Golden-Phase",phase);consent.setConnectTimeout(5000);consent.setReadTimeout(15000);consent.setInstanceFollowRedirects(false);
+        assertEquals("Only this fixture seller may consent",200,consent.getResponseCode());consent.disconnect();
+        reveal("更新預約狀態");click("更新預約狀態");
+        UiScrollable confirmedScroll=new UiScrollable(new UiSelector().scrollable(true));confirmedScroll.scrollToBeginning(10);
+        await("雙方已確認");await("GoldenStationQA");capture("golden-07-both-confirmed");
+        checkpoint("meetup-cancel-edit-and-cancel");reveal("提議改期或修改地點");click("提議改期或修改地點");
+        reveal("取消編輯");click("取消編輯");
+        UiScrollable cancelEditScroll=new UiScrollable(new UiSelector().scrollable(true));cancelEditScroll.scrollToBeginning(10);await("雙方已確認");
+        reveal("取消第1版預約");click("取消第1版預約");
+        UiScrollable cancelledScroll=new UiScrollable(new UiSelector().scrollable(true));cancelledScroll.scrollToBeginning(10);await("已取消");reveal("先前已同意");assertFalse("Cancelled consent is historical",has("已同意"));capture("golden-07-cancelled");
+        checkpoint("chat-checks-complete");
+    }
+    private void photo() throws Exception {
+        assertTrue("Only an exact owned synthetic photo",photoName.matches("wishlist-golden-[0-9a-f-]{36}\\.jpg"));
+        checkpoint("photo-open-chat");click("社交");click("Native QA Switch OLED");await("商品聊天訊息");click("補傳商品照片");await("傳送商品照片");
+        checkpoint("photo-picker-select-owned-file");click("從相簿選擇");
+        Set<String> pickerPackages=new HashSet<>(Arrays.asList("com.android.documentsui","com.google.android.documentsui","com.google.android.gms","com.google.android.packageinstaller","com.android.packageinstaller","com.android.permissioncontroller","com.google.android.permissioncontroller","com.google.android.providers.media.module","com.android.providers.media.module","android"));
+        boolean rootsOpened=false,downloadsOpened=false,chosen=false;long end=SystemClock.elapsedRealtime()+35000;
+        try{
+            while(SystemClock.elapsedRealtime()<end){
+                String current=device.getCurrentPackageName();
+                if(chosen&&target.equals(current)&&has("待傳送商品照片預覽"))break;
+                if(target.equals(current)){SystemClock.sleep(150);continue;}
+                assertTrue("Unexpected app during owned picker flow",pickerPackages.contains(current));
+                UiObject2 owned=node(photoName);
+                // DocumentsUI delegates row clicks through RecyclerView; its title
+                // and row may both report clickable=false. Tap the exact matched
+                // filename rather than climbing to the whole directory container.
+                if(!chosen&&owned!=null){assertTrue("Owned filename must be visible",owned.getVisibleBounds().width()>0&&owned.getVisibleBounds().height()>0);owned.click();chosen=true;device.waitForIdle(1000);continue;}
+                UiObject2 allow=node("ALLOW");if(allow!=null&&current.contains("packageinstaller")){allow.click();device.waitForIdle(1000);continue;}
+                if(!chosen&&!rootsOpened&&node("Show roots")!=null){node("Show roots").click();rootsOpened=true;device.waitForIdle(1000);continue;}
+                if(!chosen&&!downloadsOpened&&node("Downloads")!=null){node("Downloads").click();downloadsOpened=true;device.waitForIdle(1000);continue;}
+                if(chosen){UiObject2 open=device.findObject(By.text(java.util.regex.Pattern.compile("(?i)open|select|done")));if(open!=null&&open.isEnabled()){open.click();device.waitForIdle(1000);continue;}}
+                SystemClock.sleep(150);
+            }
+            assertTrue("Exact owned photo must be selected",chosen);foreground();await("待傳送商品照片預覽");
+        }catch(Throwable failure){
+            if(pickerPackages.contains(device.getCurrentPackageName())){device.takeScreenshot(new File(evidence,"owned-picker-diagnostic.png"));device.dumpWindowHierarchy(new File(evidence,"owned-picker-diagnostic.xml"));}
+            throw failure;
+        }
+        checkpoint("photo-preview-and-send");capture("golden-11-photo-preview");reveal("照片補充說明");await("照片補充說明").setText("GoldenAndroidPhoto");reveal("傳送照片");click("傳送照片");
+        if(phase.equals("photo-recovery")){
+            checkpoint("photo-lost-ack-recovery");
+            reveal("尚未確認照片送出。請先查核原回執；不會自動重送。");
+            reveal("照片補充說明");assertFalse("Pending caption cannot be edited",await("照片補充說明").isEnabled());
+            assertFalse("Pending photo cannot be removed",has("移除照片"));
+            reveal("尚未確認照片送出。請先查核原回執；不會自動重送。");capture("golden-08-photo-pending");
+            String port=InstrumentationRegistry.getArguments().getString("inputPort","");
+            HttpURLConnection check=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/photo/recovery-checkpoint").openConnection();
+            check.setRequestProperty("X-Wishlist-Golden-Phase",phase);check.setConnectTimeout(5000);check.setReadTimeout(5000);check.setInstanceFollowRedirects(false);
+            assertEquals("No resend or receipt read before the explicit lookup",200,check.getResponseCode());check.disconnect();
+            reveal("確認照片傳送結果");click("確認照片傳送結果");
+        }
+        assertTrue("Photo composer closes only after acknowledgment",device.wait(Until.gone(By.text("傳送商品照片")),20000));
+        await("放大商品照片");capture("golden-11-photo-sent");click("放大商品照片");await("商品照片放大檢視");capture("golden-11-photo-zoom");click("關閉商品照片");checkpoint("photo-checks-complete");
+    }
     private void logout() throws Exception {
         checkpoint("never-enabled-push-logout");click("我的");click("帳號安全");click("登出此裝置");
         long end=SystemClock.elapsedRealtime()+25000;
@@ -245,12 +317,12 @@ public class MarketplaceGoldenTest {
     @Test public void approvedMarketplaceRegression() throws Exception {
         device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         phase=InstrumentationRegistry.getArguments().getString("phase","");
-        assertTrue("Explicit bounded phase required",phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market"));
+        assertTrue("Explicit bounded phase required",phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
         File external=InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
         assertNotNull("Owned test-host storage unavailable",external);
         evidence=new File(external,"golden-"+phase);
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
-        try { login(); if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else logout(); }
+        try { login(); if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
         catch(Throwable failure){
             if(loggedIn||!credentialsEntered)try{capture("failed-"+stage);}catch(Throwable ignored){}
             String reason=failure instanceof AssertionError?String.valueOf(failure.getMessage()):"withheld";

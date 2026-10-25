@@ -323,9 +323,9 @@
   },
   "release": {
     "iosProduction": "2.0.17(20) WAITING_FOR_REVIEW; AFTER_APPROVAL",
-    "androidProduction": "2.0.17(38) COMMITTED; GOOGLE_QUICK_CHECKS_REVIEW_PENDING",
+    "androidProduction": "2.0.17(38) LIVE_ON_GOOGLE_PLAY; fresh Console observation2026-10-25T21:50:02Z",
     "androidInternal": "2.0.17(38) PUBLISHED",
-    "web": "2.0.820 LIVE"
+    "web": "2.0.820 LIVE snapshot;2.0.821 local candidate pending CI/publication (see post-submission audit)"
   },
   "supersededAssets": [
     {

@@ -38,7 +38,8 @@
     "freshEveryScreenStoreReleaseUi": false,
     "currentIosPhysicalRecording": false,
     "scoreChanges": false,
-    "postAuditTestOnlyDifference": {
+    "historicalWeb820Binding": true,
+    "preWeb821TestOnlyDifference": {
       "path": "client/src/pages/ChatPage.test.tsx",
       "basis": "git diff e6e488fcb34e45e097a80d93230b81986e68e470 -- client mobile; no runtime client/mobile source changes"
     }
@@ -58,7 +59,21 @@
     "settledScreenshot": "web-map-motion-audit-20261026-v7/map-1440-1-zh-TW-selected.png",
     "transientOverviewNotCreditedAsSettledLayout": true
   },
-  "nativeMotionSupplement": "Separate assigned-device supplemental runs are retained in QA evidence; they do not increase these scores. Original native hardware, accessibility and per-screen Release coverage limits remain.",
+  "nativeMotionSupplement": {
+    "evidence": "ios-map-motion-supplement-20261026.json",
+    "deviceTests": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "privacyConsoleActionAuditPassed": true,
+    "originalControllerPassed": false,
+    "offlineClosedArtifactAuditPassed": true,
+    "acceptedSafeAttachments": 15,
+    "automaticDebugTextsNotCredited": 8,
+    "scope": "Source-matched assigned iOS Simulator App0232/testhost0552; actual paused pixels unchanged for300ms, normal/interrupted motion, real OS reduce motion+acknowledged restoration, wishlist receipts and3draft removals. Reused-app scope has no fresh first-run-notice, hardware or per-screen signed-Release claim.",
+    "scoreChanges": false
+  },
   "ci": {
     "previousMainFailure": 40230918784,
     "fixPR": 208,
@@ -97,5 +112,26 @@
     ],
     "osSettingRestored": true,
     "scoreChanges": false
+  },
+  "web821Followup": {
+    "version": "2.0.821",
+    "status": "LOCAL_BUILD_AND_REGRESSION_PASSED_CI_PUBLICATION_PENDING",
+    "problem": "An IndexedDB open that never emitted a result left an indefinitely cached promise; explicit recovery could wait for it again.",
+    "behavior": "Bound opening to8seconds; preserve journals/keys/erasure markers, close late handles and abort late upgrades, guard connection generations. Recovery remains explicit and never sends a remote operation before durable local storage.",
+    "unitAndComponentTests": 117,
+    "fullWebTests": 2242,
+    "normalSourceInquiryBrowser": "PASS",
+    "forcedRealBrowserStorageTimeoutAndLateReply": "PASS; one explicit recovery before firstPOST; ASK/REVISE/CANCEL/REOPEN/REVISE exactlyonce each, lostACK recovered withoutresend",
+    "actualCompiledMapBrowser": "PASS36 realclicks/motion/wish/list/reference; live provider bytes through declared QA forwarding transport; no production writes, cleanup0",
+    "freshLocalIconVisualReview": "client/icon-source/reviews/2.0.821.json",
+    "reviewedBuildManifest": "web821-reviewed-build-manifest.json",
+    "publicationByteBinding": "PENDING; priorWeb820 binding does not claim821 is live or byte-matched.",
+    "nativeMobileTreeUnchanged": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc"
+  },
+  "androidProductionObserved": {
+    "state": "LIVE_ON_GOOGLE_PLAY",
+    "version": "2.0.17(38)",
+    "publishedLocalTime": "2026-10-26 04:41 Asia/Taipei",
+    "evidence": "android38-production-live-observed-20261026.json"
   }
 }

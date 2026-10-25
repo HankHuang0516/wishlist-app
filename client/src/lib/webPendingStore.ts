@@ -84,17 +84,41 @@ export function createDeletionRecoveryVault(dbName='wishlist-deletion-recovery-v
 }
 function createEncryptedPendingStore(dbName:string,factory:IDBFactory,crypt:Crypto,scopeForKey:(key:string)=>string) {
   let connection: Promise<IDBDatabase> | undefined;
-  const open = () => connection ??= new Promise<IDBDatabase>((resolve, reject) => {
-    if (!factory || !crypt?.subtle) { reject(new PendingStoreError()); return; }
-    const req = factory.open(dbName, 1);
-    req.onupgradeneeded = () => { for (const name of ['keys', 'pending', 'erased']) req.result.createObjectStore(name); };
-    req.onerror = req.onblocked = () => { connection = undefined; reject(new PendingStoreError()); };
-    req.onsuccess = () => {
-      const db = req.result;
-      db.onversionchange = () => { db.close(); connection = undefined; };
-      resolve(db);
-    };
-  }).catch(() => { connection = undefined; throw new PendingStoreError(); });
+  let generation = 0;
+  const open = () => {
+    if (connection) return connection;
+    const opening = ++generation;
+    connection = new Promise<IDBDatabase>((resolve, reject) => {
+      if (!factory || !crypt?.subtle) { reject(new PendingStoreError()); return; }
+      let settled = false;
+      const fail = () => {
+        if (settled) return;
+        settled = true; clearTimeout(deadline); reject(new PendingStoreError());
+      };
+      // A stalled browser storage service need not emit error/blocked. Release
+      // this attempt so an explicit recovery can open again, without erasing
+      // any journal, key or owner-erasure marker or starting a remote action.
+      const deadline = setTimeout(fail, 8_000);
+      let req: IDBOpenDBRequest;
+      try { req = factory.open(dbName, 1); } catch { fail(); return; }
+      req.onupgradeneeded = () => {
+        if (settled) { req.transaction?.abort(); return; }
+        for (const name of ['keys', 'pending', 'erased']) req.result.createObjectStore(name);
+      };
+      req.onerror = req.onblocked = fail;
+      req.onsuccess = () => {
+        const db = req.result;
+        if (settled) { db.close(); return; }
+        settled = true; clearTimeout(deadline);
+        db.onversionchange = () => { db.close(); if (generation === opening) connection = undefined; };
+        resolve(db);
+      };
+    }).catch(() => {
+      if (generation === opening) connection = undefined;
+      throw new PendingStoreError();
+    });
+    return connection;
+  };
   async function read(key: string): Promise<{ entry: Entry | undefined; secret: CryptoKey | undefined; erased: boolean }> {
     const scope = scopeForKey(key), db = await open(), tx = db.transaction(['pending', 'keys', 'erased'], 'readonly'), done = completed(tx);
     const [entry, secret, erased] = await Promise.all([

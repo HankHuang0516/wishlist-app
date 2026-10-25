@@ -7,6 +7,8 @@ import { listingCreationGate, ListingCreationError } from '../lib/listingCreatio
 import { MarketingInputError, marketingEnabledFor, marketingRequestId, marketingRevisionPrompt, marketingSnapshotHash } from '../lib/marketingAssistantAccess';
 import { freeMarketingWindow, MARKETING_FREE_MONTHLY_LIMIT, mayRequestFreeRevision } from '../lib/marketingAssistantRules';
 import { marketingSnapshot } from './marketingController';
+import { refreshBilling, verifiedPremium, reconcileMarketingCredits, reserveMarketingCredit } from '../lib/billingService';
+import { BillingError } from '../lib/billingCatalog';
 
 const select = { clientRequestId: true, sourceMediaId: true, requestHash: true, state: true, jobId: true, createdAt: true } satisfies Prisma.MarketingRequestReceiptSelect;
 const jobSelect = { id: true, status: true, sourceMediaId: true, listingId: true, parentJobId: true } satisfies Prisma.MarketingJobSelect;
@@ -35,8 +37,8 @@ const endpoint = (action:(req:AuthRequest,userId:number,clientRequestId:string)=
         if(Object.keys(req.query).length) throw new MarketingInputError('INVALID_REQUEST');
         return res.json(await action(req,req.user.id,marketingRequestId(req.params.clientRequestId)));
     } catch(error) {
-        const status=error instanceof MarketingInputError?error.status:error instanceof ListingCreationError?error.status:503;
-        return res.status(status).json({error:error instanceof MarketingInputError?error.message:'原行銷操作仍需查核',errorCode:error instanceof MarketingInputError||error instanceof ListingCreationError?error.code:'MARKETING_REQUEST_UNAVAILABLE'});
+        const status=error instanceof MarketingInputError||error instanceof BillingError?error.status:error instanceof ListingCreationError?error.status:503;
+        return res.status(status).json({error:error instanceof MarketingInputError?error.message:'原行銷操作仍需查核',errorCode:error instanceof MarketingInputError||error instanceof ListingCreationError||error instanceof BillingError?error.code:'MARKETING_REQUEST_UNAVAILABLE'});
     }
 };
 export const readMarketingRequest = endpoint(async(req,userId,clientRequestId)=>prisma.$transaction(async tx=>{
@@ -47,6 +49,8 @@ export const readMarketingRequest = endpoint(async(req,userId,clientRequestId)=>
 }));
 export const submitMarketingRequest = endpoint(async(req,userId,clientRequestId)=>{
     const body=marketingRequestBody(req.body), requestHash=marketingSnapshotHash(body);
+    const recorded = await prisma.marketingRequestReceipt.findUnique({where:{userId_clientRequestId:{userId,clientRequestId}},select:{id:true}});
+    if (!recorded && body.kind==='CREATE') await refreshBilling(userId);
     return prisma.$transaction(async tx=>{
         await listingCreationGate(tx,req,userId);
         const prior=await tx.marketingRequestReceipt.findUnique({where:{userId_clientRequestId:{userId,clientRequestId}},select});
@@ -58,6 +62,7 @@ export const submitMarketingRequest = endpoint(async(req,userId,clientRequestId)
         if(await tx.marketingJob.findUnique({where:{ownerUserId_clientRequestId:{ownerUserId:userId,clientRequestId}},select:{id:true}})) throw new MarketingInputError('REQUEST_CONFLICT',409);
         if(!marketingEnabledFor(userId)) throw new MarketingInputError('MARKETING_DISABLED',503);
         let data: Prisma.MarketingJobUncheckedCreateInput;
+        let paidCredit = false;
         if(body.kind==='CREATE') {
             await tx.$queryRaw`SELECT "id" FROM "ListingMedia" WHERE "id"=${body.sourceMediaId} FOR UPDATE`;
             if(body.listingId) await tx.$queryRaw`SELECT "id" FROM "Listing" WHERE "id"=${body.listingId} FOR UPDATE`;
@@ -66,7 +71,9 @@ export const submitMarketingRequest = endpoint(async(req,userId,clientRequestId)
             if(version!==body.expectedVersion) throw new MarketingInputError('STALE_DETAILS',409,'商品資料已變更，請先核對後再建立新工作');
             const period=freeMarketingWindow(new Date());
             const count=await marketingUsedInPeriod(tx,userId,period.startsAt);
-            if(count>=MARKETING_FREE_MONTHLY_LIMIT) throw new MarketingInputError('MONTHLY_LIMIT',429,'免費版每月 3 次已用完；付費方案尚未開放');
+            const premium = await verifiedPremium(tx,userId);
+            await reconcileMarketingCredits(tx,userId);
+            paidCredit = count >= (premium ? 100 : MARKETING_FREE_MONTHLY_LIMIT);
             data={ownerUserId:userId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,clientRequestId,requestHash,snapshot:facts as Prisma.InputJsonValue,quotaPeriodStart:period.startsAt,quotaPeriodEnd:period.endsAt};
         } else {
             const parent=await tx.marketingJob.findFirst({where:{id:body.parentJobId,ownerUserId:userId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,parentJobId:null,status:{in:['REVIEW','COMPLETED']}},include:{revisions:{select:{id:true}},generatedMedia:{select:{marketingSlot:true}}}});
@@ -74,6 +81,7 @@ export const submitMarketingRequest = endpoint(async(req,userId,clientRequestId)
             data={ownerUserId:userId,sourceMediaId:body.sourceMediaId,listingId:body.listingId,clientRequestId,requestHash,parentJobId:parent.id,snapshot:parent.snapshot as Prisma.InputJsonValue,revisionPrompt:body.prompt,revisionSlots:body.slots};
         }
         const job=await tx.marketingJob.create({data,select:jobSelect});
+        if(paidCredit) await reserveMarketingCredit(tx,userId,job.id);
         const receipt=await tx.marketingRequestReceipt.create({data:{userId,clientRequestId,sourceMediaId:body.sourceMediaId,requestHash,state:'QUEUED',jobId:job.id},select});
         return {receipt,job};
     });

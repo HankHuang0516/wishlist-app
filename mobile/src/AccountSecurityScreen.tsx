@@ -1,3 +1,4 @@
+import { NativeBilling } from './NativeBilling';
 import { SafeAreaModal } from './SafeAreaModal';
 import { AppVersionLabel } from './AppVersionLabel';
 import React, { useEffect, useRef, useState } from 'react';
@@ -10,24 +11,9 @@ export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRe
   const [securityAction,setSecurityAction]=useState<'password'|'sessions'|null>(null);
   const [current, setCurrent] = useState(''), [replacement, setReplacement] = useState(''), [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false), [issue, setIssue] = useState('');
-  const [securityOpen, setSecurityOpen] = useState(false), [benefits, setBenefits] = useState<{ freeMonthlyLimit: number; freeUsedThisMonth: number; permanentCreditsRemaining: number; paidPurchasesAvailable: boolean } | null>(null);
-  const [premium, setPremium] = useState<boolean | null>(null);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const active = useRef(true), running = useRef(false);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  useEffect(() => {
-    let mounted = true;
-    void Promise.all([api<unknown>('/marketing/availability'), api<{ isPremium: boolean }>('/users/me')])
-      .then(([allowance, profile]) => {
-        if (!mounted) return;
-        const value = allowance && typeof allowance === 'object' ? allowance as Record<string, unknown> : null;
-        const valid = value && ['freeMonthlyLimit', 'freeUsedThisMonth', 'permanentCreditsRemaining'].every(key =>
-          Number.isSafeInteger(value[key]) && Number(value[key]) >= 0) && typeof value.paidPurchasesAvailable === 'boolean';
-        setBenefits(valid ? value as typeof benefits : null);
-        setPremium(profile.isPremium === true);
-      })
-      .catch(() => { if (mounted) { setBenefits(null); setPremium(null); } });
-    return () => { mounted = false; };
-  }, [api]);
   async function submit(operation: SecurityOperation) {
     if (!active.current || running.current) return;
     let payload: ReturnType<typeof securityPayload>;
@@ -79,16 +65,7 @@ export function AccountSecurityScreen({ api, onPublish, onManage, onLogout, onRe
 </View>
     <Text style={styles.dangerSection}>危險操作</Text><View style={styles.actionGroup}><Pressable accessibilityRole="button" disabled={busy} style={styles.actionRow} onPress={()=>{setSecurityOpen(false);onDelete();}}><Ionicons name="trash-outline" size={25} color={iosColors.danger}/><View style={styles.actionCopy}><Text style={styles.dangerButtonText}>刪除帳號</Text><Text style={styles.note}>此操作無法復原，下一步會說明資料影響。</Text></View><Ionicons name="chevron-forward" size={19} color={iosColors.secondaryLabel}/></Pressable></View></>}
     </ScrollView></KeyboardAvoidingView></SafeAreaModal>}
-    <View style={styles.billingCard}>
-      <Text style={styles.billingHeading}>贊助與升級</Text>
-      <View style={styles.pausedNotice}><Ionicons name="ban-outline" size={20} color={iosColors.danger} /><View style={styles.actionCopy}><Text style={styles.pausedTitle}>購買與訂閱操作暫停</Text><Text style={styles.billingNote}>商店付款與後端驗單尚未開放；既有權益不受影響。</Text></View></View>
-      <View style={styles.billingRow}><Ionicons name="heart-outline" size={21} color={iosColors.label} /><View style={styles.actionCopy}><Text style={styles.fieldLabel}>贊助服務</Text><Text style={styles.billingNote}>目前未開放收款，不會導向付款頁。</Text></View></View>
-      <View style={styles.rowSeparator} />
-      <View style={styles.billingRow}><Ionicons name="ribbon-outline" size={21} color={iosColors.label} /><View style={styles.actionCopy}><Text style={styles.fieldLabel}>尊榮版訂閱 · NT$90／月</Text><Text style={styles.billingNote}>{premium === true ? '既有尊榮會員；請於原付款平台管理訂閱。' : premium === false ? '每月 100 次行銷額度；購買尚未開放。' : '會員狀態暫時無法確認。'}</Text></View></View>
-      <View style={styles.rowSeparator} />
-      <View style={styles.billingRow}><Ionicons name="sparkles-outline" size={21} color={iosColors.label} /><View style={styles.actionCopy}><Text style={styles.fieldLabel}>行銷小助手加值 · US$1／10 次</Text><Text style={styles.billingNote}>次數不限期；購買尚未開放。</Text><Text style={styles.creditBalance}>永久加值剩餘：{benefits ? `${benefits.permanentCreditsRemaining} 次` : '暫時無法核對'}{benefits && benefits.freeUsedThisMonth >= benefits.freeMonthlyLimit ? ' · 本月免費次數已用完' : ''}</Text></View></View>
-    </View>
-    <Text style={styles.note}>若有持續扣款，請由原付款平台管理；未驗證的商店交易不會開通權益。</Text>
+    <NativeBilling api={api}/>
   </ScrollView></KeyboardAvoidingView>;
 }
 const styles = StyleSheet.create({

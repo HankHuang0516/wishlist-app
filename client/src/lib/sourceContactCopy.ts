@@ -1,5 +1,6 @@
 import { getDisplayLocale } from '../utils/localization';
 const copy = {
+ weeklyLimit: ['本週 3 次免費代問已用完，可於每週一台灣時間 00:00 重置後使用，或升級尊榮版。原詢問與回覆仍可讀取，已保存操作仍需核對原回執。','Your 3 free inquiries this week are used. They reset Monday at 00:00 Taiwan time, or you can upgrade to Premium. Existing inquiries and replies remain readable; verify any saved operation by its original receipt.'],
  facebookRejected: ['這次代問留言未能通過 Facebook 發布，尚未成功送達賣家；不代表賣家已收到或同意價格。', 'Facebook did not accept the inquiry comment. It was not successfully delivered to the seller and does not mean the seller received it or agreed to a price.'],
  selfAskNotice: ['你可以開啟這件商品的 Facebook 原始貼文，自行向賣家詢問。商品狀態與交易條件仍待確認；不會自動替你傳訊。', 'You can open this item’s original Facebook post and ask the seller yourself. Availability and terms are unconfirmed; no message is sent automatically.'],
  selfAskOriginal: ['前往 Facebook 原文自行詢問', 'Open original Facebook post to ask yourself'],

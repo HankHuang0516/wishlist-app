@@ -1,4 +1,8 @@
 import { queuePush } from '../lib/pushOutbox';
+import { reserveInquiry, InquiryAllowanceError } from '../lib/inquiryAllowance';
+import { refreshBilling, verifiedPremium } from '../lib/billingService';
+import { BillingError } from '../lib/billingCatalog';
+import { listingCreationGate, ListingCreationError } from '../lib/listingCreation';
 import {createSourceReferenceEvidenceRoutes} from './sourceReferenceEvidenceRoutes';
 import {createSourceLeadRecordRoutes} from './sourceLeadRecordRoutes';
 import {beginInquiryFollowup,deliveryHistory,pendingRoundQuestions,findDeliveredRound,reopenInquiryDelivery} from '../lib/sourceInquiryRounds';
@@ -20,7 +24,12 @@ import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { isListingId } from '../lib/listingRules';
 import { LeadError, object, exact, parseLead, leadCurrent, leadDTO, digest, transferSnapshot, routeCurrent, contactRoutingDTO, publicUrl, ref, date, LeadEvent } from '../lib/sourceLeadRules';
 const enabled = () => process.env.SOURCE_LEADS_PUBLIC_ENABLED === '1';
-const fail = (res: Response, e: unknown) => res.status(e instanceof LeadError ? 409 : 503).json({ errorCode: e instanceof LeadError ? e.message : 'SOURCE_LEAD_UNAVAILABLE' });
+const fail = (res: Response, e: unknown) => {
+    if (e instanceof InquiryAllowanceError) return res.status(403).json({ error: e.message, errorCode: e.code, resetsAt: e.resetsAt.toISOString() });
+    if (e instanceof ListingCreationError) return res.status(e.status).json({ errorCode: e.code });
+    if (e instanceof BillingError) return res.status(e.status).json({ errorCode: e.code });
+    return res.status(e instanceof LeadError ? 409 : 503).json({ errorCode: e instanceof LeadError ? e.message : 'SOURCE_LEAD_UNAVAILABLE' });
+};
 // Preserve seller identity across renewed route checks without rewriting the original send receipt.
 const sellerBindingHash=(value:unknown)=>{const r=object(value);return digest(Object.fromEntries(['leadId','contentHash','sourceUrl','channel','publicRouteUrl','identityEvidenceRef'].map(k=>[k,r[k]])));};
 const dto = (r: any, l: any, presentation = false, progress = false) => ({ ...(progress && r.delivery?.transferIssue?.code === 'FACEBOOK_COMMENT_REJECTED' ? { transferIssue: { code: 'FACEBOOK_COMMENT_REJECTED', checkedAt: r.delivery.transferIssue.checkedAt, originalPostUrl: l.canonicalUrl } } : {}), id: r.id, leadId: r.leadId, state: r.state, available: enabled() && leadCurrent(l) && r.leadContentHash === l.contentHash, events: (r.events as LeadEvent[]).filter(e => presentation || e.action !== 'SELLER_REPLY').map(({ requestId, action, text, at, reservationId }) => ({ requestId, action, text, at, ...(presentation&&reservationId?{reservationId}:{}) })), transferHash: digest(transferSnapshot(l, r.events as LeadEvent[])), routeVerified: routeCurrent(l), delivered: !!r.delivery?.receipt, delivery: r.delivery?.receipt ? { at: r.delivery.receipt.sentAt, channel: r.delivery.receipt.channel, verification: 'MANUAL_UI_RECEIPT' } : null, checkoutEnabled: false, orderCreated: false, notice: 'Agent 只協助收件；未核原賣家路由前不發送，不代表在售或成交。' });
@@ -413,7 +422,14 @@ export function createSourceLeadRoutes() {
             const questionAction = ['ASK', 'REVISE', 'REOPEN'].includes(b.action);
             if (questionAction ? (typeof b.text !== 'string' || !b.text.trim() || b.text.length > 1500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(b.text) || !((b.action === 'ASK' && b.consent === undefined && b.transferHash === undefined) || (b.consent === true && typeof b.transferHash === 'string'))) : (b.text !== undefined || (b.action === 'CONSENT' ? (b.consent !== true || typeof b.transferHash !== 'string') : b.consent !== undefined || b.transferHash !== undefined)))
                 throw new LeadError('EXPLICIT_SCOPED_CONSENT_REQUIRED');
+            // Withdrawal and original-operation replay remain available even
+            // when a store is unavailable. Refresh only a potentially new round.
+            if (['ASK','CONSENT','REOPEN','REVISE'].includes(b.action)) {
+                const prior = await prisma.sourceLeadInquiry.findFirst({where:{id:String(req.params.roomId),leadId:String(req.params.id),buyerUserId:req.user!.id},select:{events:true,state:true}});
+                if (prior && (b.action!=='REVISE'||prior.state==='INQUIRY') && !(prior.events as unknown as LeadEvent[]).some(event=>event.requestId===b.requestId)) await refreshBilling(req.user!.id);
+            }
             const r = await prisma.$transaction(async (tx) => {
+                await listingCreationGate(tx, req, req.user!.id);
                 await tx.$executeRaw `SELECT id FROM "ExternalSourceLead" WHERE id=${req.params.id} FOR UPDATE`;
                 await tx.$executeRaw `SELECT id FROM "SourceLeadInquiry" WHERE id=${req.params.roomId} FOR UPDATE`;
                 const room = await tx.sourceLeadInquiry.findFirst({ where: { id: String(req.params.roomId), leadId: String(req.params.id), buyerUserId: req.user!.id }, include: { lead: true } });
@@ -458,6 +474,11 @@ export function createSourceLeadRoutes() {
                     state = room.state === 'TRANSFER_RESERVED' ? 'CANCEL_REQUESTED' : 'CANCELLED';
                     consentHash = null;
                 }
+                // Revising a queued, not-yet-delivered request stays in its
+                // original round. New consent/follow-up/reopen consumes once.
+                const newRound = state === 'WAITING_ROUTE' && room.state !== 'WAITING_ROUTE' &&
+                    ['CONSENT','ASK','REOPEN','REVISE'].includes(b.action);
+                if (newRound) await reserveInquiry(tx, req.user!.id, await verifiedPremium(tx, req.user!.id));
                 const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(questionAction && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: transferSnapshot(room.lead,events).questions.map(e => e.requestId), payloadHash: b.transferHash } : {}) };
                 const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(followupDelivery?{delivery:followupDelivery}:{}), ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });
                 return dto(saved, room.lead, req.query.presentation === '1', req.query.progress === '1');

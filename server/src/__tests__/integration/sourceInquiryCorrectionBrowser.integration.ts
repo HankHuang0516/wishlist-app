@@ -6,6 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../../lib/prisma';
 import authRoutes from '../../routes/authRoutes';
+import paymentRoutes from '../../routes/paymentRoutes';
+import {inquiryWeek} from '../../lib/inquiryAllowance';
 import chatRoutes from '../../routes/chatRoutes';
 import { authenticateToken } from '../../middleware/auth';
 import { getMe } from '../../controllers/userController';
@@ -18,7 +20,7 @@ const run=process.env.TEST_DATABASE_URL?describe:describe.skip;
 run('built source inquiry correction and restart',()=>{
  let buyer:number,leadId:string,browser:any;
  const origin='https://wishlist-inquiry-qa.invalid',key=randomUUID(),phone='synthetic-inquiry-correction',password='synthetic-local-only-pass';
-  const app=express();app.use(express.json());app.use('/api/auth',authRoutes);app.get('/api/users/me',authenticateToken,getMe);app.use('/api/chat',chatRoutes);app.use('/api/source-leads',createSourceLeadRoutes());const http=createLoopbackRequest(app);
+  const app=express();app.use(express.json());app.use('/api/auth',authRoutes);app.use('/api/payment',paymentRoutes);app.get('/api/users/me',authenticateToken,getMe);app.use('/api/chat',chatRoutes);app.use('/api/source-leads',createSourceLeadRoutes());const http=createLoopbackRequest(app);
  beforeAll(()=>{
   require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
   if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Explicit isolated database required');
@@ -31,7 +33,7 @@ run('built source inquiry correction and restart',()=>{
   await prisma.$disconnect();
  });
  test('desktop/mobile: normal login, correct, withdraw, reload, ask again and recover a lost correction receipt',async()=>{
-  buyer=(await prisma.user.create({data:{phoneNumber:phone,password:await bcrypt.hash(password,4),apiKey:key,name:'合成詢問測試帳號'}})).id;
+  buyer=(await prisma.user.create({data:{phoneNumber:phone,password:await bcrypt.hash(password,4),apiKey:key,name:'合成詢問測試帳號',inquiryWeekStart:inquiryWeek().startsAt,inquiryFreeUsed:1}})).id;
   const item=fixture().lead;item.archiveItemId='SYNTHETIC-INQUIRY-CORRECTION-BROWSER';leadId=(await prisma.externalSourceLead.create({data:item})).id;
   const qa=webQaBrowser();browser=await qa.puppeteer.launch({headless:true,executablePath:qa.executablePath,args:['--disable-background-networking']});
   const page=await browser.newPage();await page.setViewport({width:1280,height:1000});
@@ -59,7 +61,7 @@ run('built source inquiry correction and restart',()=>{
   const own=()=>prisma.sourceLeadInquiry.findUniqueOrThrow({where:{leadId_buyerUserId:{leadId,buyerUserId:buyer}},include:{lead:true}});
   const save=async(name:string)=>{await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:webQaEvidence(name),fullPage:true});};
   await page.goto(origin+'/login');await page.waitForSelector('#identifier');await page.type('#identifier',phone);await page.type('#password',password);await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
-  await page.goto(origin+'/chat?source='+leadId);await write('合成詢問：3000元可以嗎？');await click('送出並委託聯絡賣家');await page.waitForFunction(()=>document.body.innerText.includes('WAITING_ROUTE'));await save('inquiry-before-correction-desktop.png');
+  await page.goto(origin+'/chat?source='+leadId);await page.waitForFunction(()=>document.body.innerText.includes('本週免費代問剩 2／3 次'));await write('合成詢問：3000元可以嗎？');await click('送出並委託聯絡賣家');await page.waitForFunction(()=>document.body.innerText.includes('WAITING_ROUTE'));await save('inquiry-before-correction-desktop.png');
   const before=(await own()).events;
   await click('更正詢問');expect(await page.$eval('textarea',(e:HTMLTextAreaElement)=>e.value)).toBe('合成詢問：3000元可以嗎？');
   await write('合成更正：3500元可面交嗎？');await click('送出更正並重新委託');await page.waitForFunction(()=>document.body.innerText.includes('更正詢問：合成更正：3500元可面交嗎？'));await click('更新');
@@ -67,11 +69,11 @@ run('built source inquiry correction and restart',()=>{
   await click('撤回委託');await page.waitForFunction(()=>document.body.innerText.includes('CANCELLED'));await click('更新');await save('inquiry-cancelled-ask-again-desktop.png');
   const count=traffic.filter(r=>r.method==='POST'&&r.action).length;await page.reload();await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='再次發問'&&!b.disabled));expect(traffic.filter(r=>r.method==='POST'&&r.action)).toHaveLength(count);
   await click('再次發問');expect(await page.$eval('textarea',(e:HTMLTextAreaElement)=>e.value)).toBe('合成更正：3500元可面交嗎？');await write('合成重問：請確認3500元與時間');await click('送出新詢問並重新委託');await page.waitForFunction(()=>document.body.innerText.includes('再次發問：合成重問：請確認3500元與時間'));
-  saved=await own();expect(saved.state).toBe('WAITING_ROUTE');expect((saved.events as any[]).map(e=>e.action)).toEqual(['ASK','REVISE','CANCEL','REOPEN']);expect(transferSnapshot(saved.lead,saved.events as any).questions.map(q=>q.text)).toEqual(['合成重問：請確認3500元與時間']);await save('inquiry-reopened-desktop.png');
+  saved=await own();expect(saved.state).toBe('WAITING_ROUTE');expect((saved.events as any[]).map(e=>e.action)).toEqual(['ASK','REVISE','CANCEL','REOPEN']);expect(transferSnapshot(saved.lead,saved.events as any).questions.map(q=>q.text)).toEqual(['合成重問：請確認3500元與時間']);await page.waitForFunction(()=>document.body.innerText.includes('本週免費代問剩 0／3 次'));expect((await prisma.user.findUniqueOrThrow({where:{id:buyer}})).inquiryFreeUsed).toBe(3);await save('inquiry-reopened-desktop.png');
   await page.setViewport({width:390,height:844});await page.reload();await click('更正詢問');await write('合成手機更正：星期六面交可以嗎？');await save('inquiry-mobile-editing.png');loseCorrection=true;await click('送出更正並重新委託');await page.waitForSelector('[role="alert"]');
   const posts=traffic.filter(r=>r.method==='POST'&&r.action).length;await click('更新');await page.waitForFunction(()=>!document.querySelector('[role="alert"]'));expect(traffic.filter(r=>r.method==='POST'&&r.action)).toHaveLength(posts);
   saved=await own();expect((saved.events as any[]).filter(e=>e.action==='REVISE')).toHaveLength(2);expect(transferSnapshot(saved.lead,saved.events as any).questions.map(q=>q.text)).toEqual(['合成手機更正：星期六面交可以嗎？']);
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await save('inquiry-mobile-recovered.png');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect((await prisma.user.findUniqueOrThrow({where:{id:buyer}})).inquiryFreeUsed).toBe(3);await save('inquiry-mobile-recovered.png');
   await page.evaluate(()=>localStorage.setItem('user-locale','en-US'));await page.reload();await click('Correct question');expect(await page.$eval('textarea',(e:HTMLTextAreaElement)=>e.value)).toBe('合成手機更正：星期六面交可以嗎？');await save('inquiry-mobile-english.png');await click('Cancel editing');
   expect(errors).toEqual([]);expect(traffic.filter(r=>r.method==='POST'&&r.action).map(r=>r.action)).toEqual(['ASK','REVISE','CANCEL','REOPEN','REVISE']);
   console.log(JSON.stringify({inquiryCorrectionBrowser:'PASS',normalLogin:true,desktopAndMobile:true,locales:['zh-TW','en-US'],actionSequence:['ASK','REVISE','CANCEL','REOPEN','REVISE'],lostCorrectionRecoveredWithoutResend:true,historyPreserved:true,onlyNewQuestionInSnapshot:true,externalSellerActions:0,productionWrites:0}));

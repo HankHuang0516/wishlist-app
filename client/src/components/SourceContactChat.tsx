@@ -1,4 +1,5 @@
 import SourceReplyReadControls from './SourceReplyReadControls';
+import InquiryAllowance from './InquiryAllowance';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { ListingPhoto } from './ListingPhoto';
@@ -27,7 +28,7 @@ export default function SourceContactChat({ source: selected, onBack }: { source
    {pending && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4" role="status"><p>{text(pending.operation.version === 0 ? 'legacy' : 'pending')}</p>{recovery.inquiry?.operation.version === 1 && recovery.inquiry.operation.payload.text && <><p className="mt-2 font-semibold">{text('savedQuestion')}</p><p className="whitespace-pre-wrap">{recovery.inquiry.operation.payload.text}</p></>}</div>}
   </div>
   {room&&<SourceReplyReadControls roomId={room.id} loadedReplies={room.events.filter(e=>e.action==='SELLER_REPLY').length}/>}
-  <footer className="space-y-2 border-t bg-white p-4">{error && <p role="alert" className="text-red-700">{error}</p>}{notice && <p role="status">{notice}</p>}{waiting > 0 && <p role="status">{text('wait', { seconds: waiting })}</p>}
+  <footer className="space-y-2 border-t bg-white p-4"><InquiryAllowance revision={room?.events.length ?? 0}/>{error && <p role="alert" className="text-red-700">{error}</p>}{notice && <p role="status">{notice}</p>}{waiting > 0 && <p role="status">{text('wait', { seconds: waiting })}</p>}
    {!token ? <Link className="inline-flex min-h-12 items-center" to="/login">{text('login')}</Link> : <><button className={buttonClass} disabled={busy || waiting > 0} onClick={() => action('READ')}>{text(ready ? 'read' : 'restore')}</button>
     {pending?.operation.version === 1 && <button className={buttonClass + ' border border-amber-600'} disabled={busy || waiting > 0 || !ready} onClick={() => action('RETRY')}>{text('retry')}</button>}
     {editable && (correction || reopening) && !editing && <button className={buttonClass + ' bg-green-800 text-white'} disabled={locked} onClick={startEditing}>{text(reopening ? 'reopen' : 'revise')}</button>}

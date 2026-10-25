@@ -1,0 +1,82 @@
+{
+  "id": 14,
+  "name": "探索地圖全縮圖分類排位",
+  "approvedOn": "2026-10-25",
+  "timezone": "Asia/Taipei",
+  "status": "APPROVED_GOLDEN_IMPLEMENTATION_AND_ACCEPTANCE_PENDING",
+  "userInstruction": "判斷合理性再設為golden目標；功能與UIUX匹配度都至少85%後交給wishlist en/fix上傳更新版與內部測試版",
+  "releaseOwner": {"title": "wishlist en/fix", "threadId": "01a16dff-7604-7440-910a-9ff9ec1b1c6c"},
+  "scope": {
+    "platforms": ["Web desktop", "Web mobile", "iOS", "Android"],
+    "screen": "探索的地圖模式與其搜尋、篩選、商品預覽及願望清單互動",
+    "preserveExistingListGolden": true,
+    "defaultExploreRemainsApprovedList": true,
+    "prototypeListGridIsNotGolden": true,
+    "globalHeaderAndNavigationRemainApprovedStyles": true
+  },
+  "assetsDirectory": "/Volumes/codex_2T/codex_project/Wishlist/Design/explore-map-20261025/golden",
+  "primaryAsset": "14-explore-map.png",
+  "motionReference": "14-motion.html",
+  "pageReference": "14-page-preview.html",
+  "reasonableness": {
+    "decision": "APPROVE_WITH_REQUIRED_IMPLEMENTATION_CONDITIONS",
+    "accepted": [
+      "搜尋、篩選、地圖與清單切換分層集中，說明入口可達，商品預覽不遮住縮圖。",
+      "36筆有位置的已載入結果各有獨立可點縮圖，依主分類分區與子分類排序，全部共用動畫時間軸。",
+      "數字為分類與範圍的輔助資訊；不以每組6張、少量代表照或純數字群聚替代其他商品。"
+    ],
+    "requiredConditions": [
+      "正式版使用真正的地圖與API結果，不使用示意HTML中的截圖底圖、重複照片或合成商品。",
+      "分類排位只改顯示位置。清楚標示分類排列及概略位置，選取時能辨認原公開位置或連接關係，不改商品原座標與地理搜尋範圍。",
+      "窄螢幕、放大字體與安全區另驗：維持iOS約44pt、Android約48dp可點區，不以縮小、裁掉或任意隱藏商品通過。空間不足時提供明確的地圖平移／縮放或畫布調整。",
+      "來源參考、站內刊登、已載入數、未完整量測與庫存未知分開；真實錯誤在發生處顯示，不只藏在說明裡，不把失敗當0。",
+      "地圖與既有直向商品列表互切保留可支援的條件與選取；不支援的條件明示並保留，不能悄悄丟棄。",
+      "慢動作重播是示意／驗收控制；一般使用的動畫需可中斷、尊重減少動態效果，不能循環自動移動或觸發重新搜尋。",
+      "願望清單、檢舉、來源詳情與人氣功能沿用真實權限及回執規則；範例中的本機狀態不代表後端成功。"
+    ],
+    "prototypeEvidence": ["all-thumbnails-review.json", "before-after-review.json", "before-after-final-review.json"],
+    "prototypeEvidenceCountsAsProductionAcceptance": false,
+    "productionImplementationScores": null
+  },
+  "functionalWeights": {
+    "API與資料一致性": {"points": 25, "evidence": "真實各來源識別、數量、分類、位置與照片；無位置商品另列；36個ID逐件可追溯"},
+    "端到端主要流程": {"points": 30, "evidence": "真搜尋與篩選、36件同時呈現、列表切換、詳情；單清單／多清單加入移除及重新登入回讀"},
+    "權限與失敗恢復": {"points": 25, "evidence": "跨帳號隔離、過期或移除資料、照片失敗、部分讀取、429與Retry After、取消或晚到回覆不重送"},
+    "跨平台與回歸": {"points": 20, "evidence": "Web與兩原生平台的同資料流程、型別／單元／整合／E2E與CI、既有列表及來源功能保持"}
+  },
+  "uiuxWeights": {
+    "Golden結構與層級": {"points": 40, "evidence": "頂部操作、主子分類、所有商品縮圖、預覽位置與來源資訊；保留既有列表Golden與導覽"},
+    "互動狀態與可達性": {"points": 25, "evidence": "同步排位、暫停／中斷及減少動態、鍵盤／讀屏、選取與願望確認、可辨識的原位置"},
+    "排版對比字級及安全區": {"points": 20, "evidence": "相同畫布對照、窄螢幕、1.5倍及系統大字、44pt／48dp、深色、頁籤與OS安全區"},
+    "跨平台與語言一致性": {"points": 15, "evidence": "桌面／手機Web、iOS、Android以及所有啟用語言的真實輸出，不以另一平台或語言代替"}
+  },
+  "acceptance": {
+    "functionalMinimum": 85,
+    "uiuxMinimum": 85,
+    "perPlatformRequired": true,
+    "averagingBetweenMetricsOrPlatformsAllowed": false,
+    "unverifiedCriteriaScore": 0,
+    "currentImplementationScores": null,
+    "currentReleaseGate": "HOLD_PENDING_IMPLEMENTATION_AND_EVIDENCE",
+    "mandatoryCases": [
+      "1、2、6、36及較密集結果；穩定唯一ID、不漏商品、不靜默截斷；36件預設情境需逐件可選。",
+      "正常／部分／空結果／無位置／照片失敗／查詢失敗／429等待與明確重試；讀取失敗不產生假0件。",
+      "搜尋、分類與價格篩選、清除、列表切換、商品預覽及來源說明；原清單與我的檢舉仍可達。",
+      "真實單清單直接加入移除；多清單選擇確認；連點、失聯及重啟不重複寫入或跨帳號。",
+      "正常動畫、慢動作觀察、中斷、減少動態、視窗改變、地圖平移縮放與選取原位置；不額外發出搜尋請求。",
+      "桌面與手機Web、iOS、Android；小螢幕、大字、深色及所有啟用語言的實際截圖與操作證據。"
+    ],
+    "hardBlockers": [
+      "權限或私人資料洩漏、原座標被分類排位改寫、錯誤庫存／數量宣稱、資料遺失或不確定結果自動重送。",
+      "缺少36件中的任一有效縮圖節點、僅用代表照／純數字／每組6件冒稱全部顯示，或點選區被裁切而無可達方式。",
+      "相關CI、建置簽章或必要商店檢查不通過；未改動H沿用既有紀錄，不要求重複檢查。"
+    ]
+  },
+  "releaseSequence": [
+    "整合最新main及既有列表Golden，不覆蓋其他工作副本的未提交修改。",
+    "完成正式Web與iOS／Android地圖實作，以真正API及受控測試帳號產生證據。",
+    "功能與UIUX分別逐項審查，各平台兩項均至少85且無hard blocker後才建立可上傳交付。",
+    "由wishlist en/fix接手版本／build、CI與包體核對後，依既有授權上傳網站更新版與內部測試版。",
+    "回報網站版本、測試連結、build號及上傳回執；現有舊候選版不能冒充含Golden14的新版本。"
+  ]
+}

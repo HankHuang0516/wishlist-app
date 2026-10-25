@@ -1,3 +1,9 @@
+<!-- WISHLIST_EXPLORE_MAP_REFERENCE_20261025_BEGIN -->
+## 探索地圖 APP 與網頁共用參考
+
+Hank 已將 36 張縮圖全部同時顯示、依主／子分類自動排位及慢動作暫停／繼續的地圖方向納入 Golden 14。工作先查 `docs/explore-map-golden-20261025.json`、`docs/explore-map-design-reference.md` 與共用資料區 `Design/explore-map-20261025/golden/`。保留既有探索預設直向列表 Golden。各平台正式實作的功能與 UIUX 分別至少85且無阻擋項後，才由「wishlist en/fix」上傳更新版與內部測試版；原型測試及舊包不算達標。不以每組6張、代表照或純數字標記冒稱全數呈現。
+<!-- WISHLIST_EXPLORE_MAP_REFERENCE_20261025_END -->
+
 <!-- HANK_H_RECHECK_ONLY_WHEN_CHANGED_20261025_BEGIN -->
 ## H 浮水印：未改動時沿用既有檢查（Hank，2026-10-25 最新）
 Hank 直接要求：「H浮水印不用一直檢查 沒改就不用再檢查了」。本節覆蓋舊文件每版強制重檢頻率。H 原圖層、圖示合成與構圖未變時沿用既有驗收，不重複擷取／遮罩、不因未重檢阻擋發布，也不冒稱已新檢查。實際修改時才檢查受影響項目；指定樣式、自然融入、不自成一排及不遮擋主體等要求不變。其餘功能、UI、文字與發布驗收仍須完成。

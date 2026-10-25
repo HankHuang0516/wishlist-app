@@ -1,3 +1,4 @@
+import { NativeInquiryAllowance } from './NativeBilling';
 import {SourceLeadDetailContent} from './SourceLeadDetailContent';
 import {ProductInterest} from './ProductInterestView';
 import {useNativeSourceInquiry} from './useNativeSourceInquiry';
@@ -139,6 +140,7 @@ export function SourceLeadInquiry({api,apiUrl,userId,context,onBack}:{api:Return
  {context.locationPrecision==='CONTACT_FOR_LOCATION'&&<Text style={chatPresentation.meta}>{t('contactLocation')}</Text>}
  {room?.transferIssue&&<View style={{padding:16,backgroundColor:'#fff4d6',borderRadius:12}}><Text>{t('selfAskNotice')}</Text><Pressable accessibilityRole="link" style={{minHeight:48,justifyContent:'center'}} onPress={()=>void Linking.openURL(room.transferIssue!.originalPostUrl)}><Text>{t('selfAskOriginal')}</Text></Pressable></View>}
  {room&&<><NativeDisclosure title="對話資訊"><Text style={chatPresentation.meta}>{t('receipt')}{room.id} · {room.state==='DELIVERED'&&room.delivered?t('delivered'):room.delivered?t('evidence'):t('notSent')}</Text></NativeDisclosure>{room.events.map(e=><ChatMessageBubble key={e.requestId} mine={e.action!=='SELLER_REPLY'} label={e.action==='SELLER_REPLY'?t('seller'):e.action==='REVISE'?t('revisedEvent'):e.action==='REOPEN'?t('reopenedEvent'):'你'} time={e.at} text={e.text??(e.action==='CONSENT'?t('consentEvent'):t('cancelEvent'))}/>)}</>}
+ <NativeInquiryAllowance api={api} revision={room?.events.length??0}/>
  {pending&&<View accessibilityRole="summary" style={{padding:16,backgroundColor:'#fff4d6',borderRadius:12}}><Text>{t(pending.operation.version===0?'legacy':'pending')}</Text><NativeDisclosure title={t('savedQuestion')}><Text>{recovery.inquiry?.operation.version===1?recovery.inquiry.operation.payload.text:recovery.inquiry?.operation.legacyPayload?.text}</Text>{pending.operation.version===1&&button(t('retry'),()=>void action('RETRY'),busy||waiting>0||!ready)}</NativeDisclosure></View>}
  {!!error&&<Text accessibilityRole="alert">{error}</Text>}{!!notice&&<Text>{notice}</Text>}{waiting>0&&<Text>{t('wait',{seconds:waiting})}</Text>}
  {pending||!ready?button(t(ready?'read':'restore'),()=>void action('READ'),busy||waiting>0):null}

@@ -31,6 +31,7 @@ const AUTHENTICATED_FLOWS = {
   'home-visual': AUTHENTICATED_HOME_VISUAL_TESTS,
   'golden-wishes': ['NativeQaTests/test16RealLoginGoldenWishTransitions'],
   'golden-discovery': ['NativeQaTests/test17RealLoginGoldenDiscoveryAndDetail'],
+  'golden-map': ['NativeQaTests/test18RealLoginGoldenMapAndPrice'],
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||
@@ -68,7 +69,7 @@ function destinationTestRun(template, label, testRoot, inputPort, flow) {
   qa.OnlyTestIdentifiers = [...(inputPort === undefined ? TESTS : AUTHENTICATED_FLOWS[flow])];
   qa.ParallelizationEnabled = false;
   qa.TestTimeoutsEnabled = true; qa.DefaultTestExecutionTimeAllowance = 180;
-  qa.MaximumTestExecutionTimeAllowance = flow === 'listing-batch-two-ai-publish-one' ? 620 :
+  qa.MaximumTestExecutionTimeAllowance = flow === 'golden-map' ? 480 : flow === 'listing-batch-two-ai-publish-one' ? 620 :
     flow === 'listing-batch-two-ai-photos' ? 500 : 240;
   qa.SystemAttachmentLifetime = 'keepNever';
   qa.UserAttachmentLifetime = 'keepAlways';

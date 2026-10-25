@@ -36,6 +36,7 @@ type Entry = { version: number; persisted: string | null; latest: string | null;
 export class SellerDraftSync {
   private entries = new Map<string, Entry>();
   constructor(private save: Save, private onError: (error: unknown) => void, private delayMs = 500) {}
+  version(mediaId:string) {const entry=this.entries.get(mediaId);if(!entry)throw new Error('PRIVATE_DRAFT_NOT_READY');return entry.version;}
   has(mediaId: string) { return this.entries.has(mediaId); }
   hydrate(mediaId: string, version: number, draft: SellerDraft | null) {
     if (!uuid(mediaId) || !Number.isSafeInteger(version) || version < 0 || this.entries.has(mediaId)) throw new Error('PRIVATE_DRAFT_INVALID');

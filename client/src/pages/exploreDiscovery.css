@@ -37,3 +37,9 @@
 .discovery-cp-records summary,.discovery-detail-actions a,.explore-discovery button:not(.discovery-open-photo){min-height:44px}
 .discovery-heading h1{line-height:1.3}
 @media(max-width:700px){.discovery-heading h1{font-size:28px}.discovery-card-category,.discovery-cp-score{font-size:12px}}
+
+.discovery-map-scope{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:10px 0}.discovery-map-scope strong{font-size:16px}
+
+.in-map .discovery-eyebrow,.in-map .discovery-tabs,.in-map .discovery-display{display:none}.in-map .discovery-heading{margin-bottom:12px}.in-map .discovery-heading h1{font-size:28px}.in-map .discovery-toolbar{padding-top:6px;padding-bottom:6px}.in-map .discovery-results-heading{margin-top:4px;margin-bottom:8px}.in-map .discovery-results-heading h2{font-size:16px}
+
+.in-map .discovery-toolbar,.in-map .discovery-results-heading{display:none}.in-map .discovery-heading h1{font-size:20px}.in-map .discovery-heading{min-height:44px;margin-top:0;margin-bottom:8px}.in-map .discovery-map-link{min-height:44px;font-size:13px}.in-map .discovery-search-row{margin-bottom:8px}

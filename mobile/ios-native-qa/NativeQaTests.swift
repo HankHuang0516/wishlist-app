@@ -27,7 +27,12 @@ final class NativeQaTests: XCTestCase {
         // Dismissing the keyboard can expand the viewport while keeping the
         // old content offset. An offscreen field may then be above us; blindly
         // swiping up makes it impossible to reach.
-        if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
+        if scroller.identifier == "discovery-outer-scroll" || scroller.frame.minX <= app.frame.minX + 8 && scroller.frame.width >= app.frame.width - 16 {
+            let up = !(control.exists && !target.isEmpty && target.maxY <= viewport.minY)
+            let start=scroller.coordinate(withNormalizedOffset:CGVector(dx:0.02,dy:up ? 0.8:0.2))
+            let end=scroller.coordinate(withNormalizedOffset:CGVector(dx:0.02,dy:up ? 0.2:0.8))
+            start.press(forDuration:0.05,thenDragTo:end)
+        } else if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
             scroller.swipeDown()
         } else {
             scroller.swipeUp()
@@ -37,7 +42,9 @@ final class NativeQaTests: XCTestCase {
         // A horizontal status-tab strip can be the first accessibility
         // ScrollView. Swiping it vertically may tap another status instead of
         // exposing an offscreen field in the product list below.
-        (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
+        let outer=app.scrollViews.matching(identifier:"discovery-outer-scroll").firstMatch
+        if outer.exists {return outer}
+        return (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
             .filter { $0.exists && $0.isHittable && $0.frame.height >= 120 }
             .max { $0.frame.height < $1.frame.height }
     }
@@ -162,7 +169,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -1089,13 +1096,66 @@ final class NativeQaTests: XCTestCase {
             checkpoint("golden-discovery-map")
             try required("切換地圖瀏覽", scroll: true, kind: .any)
             try tap("切換地圖瀏覽", kind: .any)
-            try required("返回商品瀏覽")
+            try required("本批 3 張商品縮圖")
             try safeScreenshot("qa-golden-discovery-map")
-            try tap("返回商品瀏覽", kind: .any)
+            try tap("商品列表", kind: .any)
             try required("3 筆商品與來源", scroll: true)
             checkpoint("golden-discovery-complete")
             app.terminate()
         } catch { reportFailure() }
+    }
+
+    func test18RealLoginGoldenMapAndPrice() {
+        executionTimeAllowance = 420
+        do {
+            try prepare();try loginBuyerAndRequireTabs();try tapTab("探索");try required("39 筆商品與來源",scroll:true)
+            checkpoint("map-original-price-card")
+            try publicText("搜尋商品名稱與說明",value:"地圖驗收 01 Samsung Galaxy Buds3")
+            try required("1 筆商品與來源",scroll:true)
+            let fold="約參考原價 5 折，查看參考原價與來源"
+            try required(fold,scroll:true,kind:.button);try safeScreenshot("qa-map-price-card");try tap(fold)
+            try required("參考原價：NT$ 4,990");try required("原廠建議售價");try required("原價資料期間：2025-04",scroll:true)
+            try safeScreenshot("qa-map-price-source");try tap("關閉原價參考")
+            try required("查看商品：地圖驗收 01 Samsung Galaxy Buds3",scroll:true,kind:.button);try tap("查看商品：地圖驗收 01 Samsung Galaxy Buds3")
+            try required("商品詳情");try required(fold,scroll:true,kind:.button);try tap(fold);try required("參考原價：NT$ 4,990");try safeScreenshot("qa-map-price-detail");try tap("關閉原價參考");try tap("返回探索")
+            checkpoint("map-thirty-six-selectors")
+            try required("清除搜尋文字",scroll:true,kind:.button);try tap("清除搜尋文字");try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true)
+            try tap("切換地圖瀏覽",kind:.any);try required("本批 36 張商品縮圖",scroll:true)
+            try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+            // React Native exposes testID on the canvas host view on iOS.
+            // Gestures target that exact host; its AX type need not be ScrollView.
+            let canvas=element("discovery-map-scroll")
+            guard canvas.exists else{throw Failure.missingControl}
+            for i in 1...36 {
+                let name=i<=9 ? "Samsung Galaxy Buds3":i<=18 ? "陶瓷馬克杯":i<=27 ? "童書繪本":"棉質襯衫"
+                let label=String(format:"選取商品：地圖驗收 %02d %@",i,name)
+                var control=element(label,kind:.button)
+                for _ in 0..<24 {
+                    if control.exists && control.isHittable && control.frame.height>=48 {break}
+                    scrollToward(control,in:canvas);control=element(label,kind:.button)
+                }
+                guard control.exists,control.isHittable,control.frame.height>=48 else{throw Failure.unstableControl}
+                try tap(label)
+                let selectionDeadline=Date().addingTimeInterval(3)
+                while !element(label,kind:.button).isSelected && Date()<selectionDeadline {Thread.sleep(forTimeInterval:0.1)}
+                guard element(label,kind:.button).isSelected else{throw Failure.unstableControl}
+            }
+            try safeScreenshot("qa-map-thirty-six")
+            checkpoint("map-wishlist-add-remove")
+            let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
+            try required(add,scroll:true,kind:.button);try tap(add);try required(remove,scroll:true,kind:.button);try safeScreenshot("qa-map-wishlist-saved");try tap(remove);try required(add)
+            checkpoint("batch-private-draft-removal")
+            try tapTab("我的");try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物")
+            try required("商品草稿 3/12",scroll:true);try required("移除第1件草稿與照片",scroll:true,kind:.button);try tap("移除第1件草稿與照片")
+            try required("移除這件草稿？");try safeScreenshot("qa-batch-draft-confirm");try tap("保留草稿")
+            try required("商品草稿 3/12",scroll:true)
+            for remaining in (0...2).reversed(){
+                try required("移除第1件草稿與照片",scroll:true,kind:.button);try tap("移除第1件草稿與照片");try tap("移除草稿與照片")
+                try required("商品草稿 \(remaining)/12",scroll:true)
+            }
+            try safeScreenshot("qa-batch-draft-empty");try tap("稍後繼續");try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物");try required("商品草稿 0/12",scroll:true);try safeScreenshot("qa-batch-draft-reopened")
+            checkpoint("map-acceptance-complete");app.terminate()
+        } catch {reportFailure()}
     }
 
 }

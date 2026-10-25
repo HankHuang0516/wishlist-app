@@ -21,7 +21,7 @@ export function createDiscoveryRoutes() {
       if(wish!==undefined&&(!recommended||typeof wish!=='string'||! /^[1-9]\d{0,9}$/.test(wish)||Number(wish)>2147483647))throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
       const query=discoveryQuery(raw);
       if(query.sort==='cp'&&!cp)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
-      let products=await loadDiscovery();
+      let products=await loadDiscovery(new Date(),query.presentation==='map');
       if(recommended){ products=await recommendDiscovery(products,req.user!.id,wish===undefined?undefined:Number(wish));if(req.query.sort===undefined)query.sort='recommended'; }
       if(cp){
         const evaluated=await attachCp(products),scoped=discoveryPage(evaluated,{...query,cursor:'',limit:60}),scopeProducts=filterDiscovery(evaluated,query);
@@ -48,7 +48,7 @@ export function createDiscoveryRoutes() {
   router.post('/cp-evaluations',authenticateToken,rateLimit({windowMs:10*60_000,limit:2,keyGenerator:(req:AuthRequest)=>'cp-owner-'+req.user!.id,standardHeaders:true,legacyHeaders:false,message:{errorCode:'CP_RATE_LIMIT'}}),async(req:AuthRequest,res)=>{
     try{
       if(Object.keys(req.query).length)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
-      const query=discoveryQuery(req.body),all=await loadDiscovery(),matching=filterDiscovery(all,query);
+      const query=discoveryQuery(req.body),all=await loadDiscovery(new Date(),query.presentation==='map'),matching=filterDiscovery(all,query);
       return res.json(await evaluateCp(matching));
     }catch(e){return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'CP_EVALUATION_UNAVAILABLE'});}
   });

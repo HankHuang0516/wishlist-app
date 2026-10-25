@@ -300,7 +300,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     const current = sequence.current;
     const request = ++detailSequence.current;
     try {
-      const fresh = parsePublicListing(await api<unknown>('/listings/' + item.id), apiUrl, __DEV__);
+      const fresh = parsePublicListing(await api<unknown>('/listings/' + item.id), apiUrl, __DEV__, true);
       if (Date.parse(fresh.expiresAt) <= Date.now()) throw new ListingSearchError('商品已失效，請重新搜尋');
       if (mounted.current && current === sequence.current && request === detailSequence.current) { setDetail(fresh); return true; }
     } catch { if (mounted.current && current === sequence.current && request === detailSequence.current) { setError('商品已停止刊登，或目前無法取得最新資料。'); setSelected(null); return true; } }
@@ -310,7 +310,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   async function openDiscovery(product:DiscoveryProduct){
     if(product.kind==='source'){if(!await leads.open(product.id))throw new Error('來源無法開啟');return;}
     const request=++detailSequence.current;setError('');
-    if(product.kind==='listing'){const fresh=parsePublicListing(await api<unknown>('/listings/'+product.id),apiUrl,__DEV__);if(fresh.id!==product.id||Date.parse(fresh.expiresAt)<=Date.now())throw new Error('商品已失效');if(mounted.current&&request===detailSequence.current)setDetail(fresh);}
+    if(product.kind==='listing'){const fresh=parsePublicListing(await api<unknown>('/listings/'+product.id),apiUrl,__DEV__,true);if(fresh.id!==product.id||Date.parse(fresh.expiresAt)<=Date.now())throw new Error('商品已失效');if(mounted.current&&request===detailSequence.current)setDetail(fresh);}
     else{const fresh=parseExternalListing(await api<unknown>('/external-listings/'+product.id));if(fresh.id!==product.id)throw new Error('來源識別不符');if(mounted.current&&request===detailSequence.current)setExternalDetail(fresh);}
   }
   function openChatAfterDismiss(id:string){
@@ -374,7 +374,7 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   const options = <K extends 'condition' | 'delivery' | 'category'>(key: K, values: readonly (readonly [SearchFilters[K], string])[]) => <View style={s.wrap}>{values.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: filters[key] === value }} style={[s.chip, filters[key] === value && s.activeChip]} onPress={() => setFilters(old => ({ ...old, [key]: value }))}><Text style={s.text}>{label}</Text></Pressable>)}</View>;
 
   return <View style={s.screen} pointerEvents={leavingForChat?'none':'auto'} accessibilityState={{busy:leavingForChat}}>
-    <View style={[s.flex,mapMode&&{display:'none'}]}><NativeDiscovery api={api} apiUrl={apiUrl} active={!mapMode} wishItemId={wishItemId} onClearWish={onClearWish} onMap={enterMap} onOpen={openDiscovery} onReports={()=>openReport(null)}/></View>
+    <View style={[s.flex,mapMode&&{display:'none'}]}><NativeDiscovery api={api} apiUrl={apiUrl} userId={userId} active={!mapMode} wishItemId={wishItemId} onClearWish={onClearWish} onMap={enterMap} onOpen={openDiscovery} onReports={()=>openReport(null)}/></View>
     {mapMode&&<>
     <View style={s.nativeMapHeader}><View><Text style={s.nativeBrand}>Wishlist.ai</Text><Text style={s.small}>願望市集</Text></View><Text accessibilityRole="header" style={s.heading}>探索</Text>
       <View style={s.nativeMapSearch}><TextInput accessibilityLabel="地圖搜尋商品名稱與說明" placeholderTextColor={iosColors.secondaryLabel} placeholder="想找什麼好物？" value={filters.q} onChangeText={q=>setFilters(old=>({...old,q}))} returnKeyType="search" onSubmitEditing={apply} style={s.searchInput}/><Pressable accessibilityRole="button" accessibilityLabel="搜尋地圖商品" style={s.chip} onPress={apply}><Ionicons name="search-outline" size={22} color={iosColors.tint}/></Pressable></View>

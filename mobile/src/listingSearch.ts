@@ -52,7 +52,7 @@ export function listingSearchPath(filters: SearchFilters, bounds: Bounds, cursor
   return '/listings?' + params.toString().replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase());
 }
 
-export function parsePublicListing(value: unknown, apiUrl: string, local = false): PublicListing {
+export function parsePublicListing(value: unknown, apiUrl: string, local = false, allowMissingPhotos = false): PublicListing {
   const row = object(value);
   if (!(row.mapVisibleUntil === undefined || row.mapVisibleUntil === null || typeof row.mapVisibleUntil === 'string' && Number.isFinite(Date.parse(row.mapVisibleUntil)))) throw new ListingSearchError('地圖顯示期限不正確');
   const owner = object(row.owner); const location = object(row.location);
@@ -64,7 +64,7 @@ export function parsePublicListing(value: unknown, apiUrl: string, local = false
       !text(location.county, 30) || !text(location.district, 30) || !finite(location.publicLatitude) || location.publicLatitude < 20 || location.publicLatitude > 26.6 ||
       !finite(location.publicLongitude) || location.publicLongitude < 117 || location.publicLongitude > 123.8 || !finite(location.precisionMeters) || location.precisionMeters < 1000 ||
       !Array.isArray(row.deliveryMethods) || row.deliveryMethods.length < 1 || row.deliveryMethods.length > 2 || row.deliveryMethods.some(v => !['MEETUP', 'SHIPPING'].includes(v)) || new Set(row.deliveryMethods).size !== row.deliveryMethods.length ||
-      !Array.isArray(row.media) || row.media.length < 1 || row.media.length > 8) throw new ListingSearchError('商品資料回應不正確');
+      !Array.isArray(row.media) || !allowMissingPhotos && row.media.length < 1 || row.media.length > 8) throw new ListingSearchError('商品資料回應不正確');
   const base = validateApiUrl(apiUrl, local);
   const media = row.media.map(value => {
     const image = object(value);

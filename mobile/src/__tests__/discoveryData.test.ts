@@ -38,3 +38,14 @@ it('retains verified model-bound retail evidence while ignoring malformed option
  expect(read(retail).retail?.price).toBe(4990);
  for(const r of [{...retail,price:0},{...retail,productKey:'source:'+id},{...retail,sourceUrl:'javascript:alert(1)'}]){expect(read(r).retail).toBeUndefined();expect(read(r).title).toBe(product().title);}
 });
+
+it('sends map presentation without losing any shared filters or the owned-wish scope',()=>{
+ const f={...defaultDiscovery,q:'螢幕',main:'electronics',sub:'monitors',county:'臺南市',source:'source' as const,condition:'UNKNOWN',min:'0',max:'1500',feed:'for-you' as const,sort:'recommended' as const};
+ const path=nativeDiscoveryPath(f,'',42,{bbox:[120,22,121,24]}),p=new URLSearchParams(path.split('?')[1]);
+ for(const [key,value]of Object.entries({presentation:'map',q:'螢幕',main:'electronics',sub:'monitors',county:'臺南市',source:'source',condition:'UNKNOWN',min:'0',max:'1500',wish:'42',bbox:'120,22,121,24'}))expect(p.get(key)).toBe(value);
+});
+it('does not invent zero map results for missing geometry or inconsistent map totals',()=>{
+ const map={...page(),mapTotals:{located:1,unmapped:0},items:[{...product(),mapLocation:{coordinates:[120.236,23],precision:'PUBLIC_MEETING_POINT'}}]};
+ expect(parseNativeDiscovery(map,api,false,true).items[0].mapLocation?.coordinates).toEqual([120.236,23]);
+ for(const v of [{...page()},{...map,mapTotals:{located:0,unmapped:0}},{...map,items:[product()]},{...map,items:[{...product(),mapLocation:{coordinates:[0,0],precision:'PUBLIC_MEETING_POINT'}}]}])expect(()=>parseNativeDiscovery(v,api,false,true)).toThrow();
+});

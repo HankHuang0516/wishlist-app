@@ -16,6 +16,8 @@ const { buyerErasureProof } = require('./android-qa-config.cjs');
 const { startNativeQa } = require('./native-qa.cjs');
 const { seedNativeMarketplace } = require('./native-qa-marketplace-fixture.cjs');
 const { seedUiuxHomeQa } = require('./seed-uiux-home-qa.cjs');
+const { seedBatchRemovalQa } = require('./seed-batch-removal-qa.cjs');
+const { seedDiscoveryMapQa } = require('./seed-discovery-map-qa.cjs');
 const { fixtureDistance } = require('./native-qa-photo-fingerprint.cjs');
 const { assertTestDatabase } = require('../../scripts/assert-test-database.cjs');
 const mobile = path.resolve(__dirname, '..');
@@ -69,6 +71,7 @@ let stopping = false, child, metro, metroExit, qa, requestedStop = false, instal
 let stage = 'fresh-app-guard', passed = false, summary, screenshot = false, cleanup;
 let broker, qaDeadline = 0, qaEnded = false, buyerErasureVerified = false, privacyAuditPassed = false;
 let nativeFailureStage = null, marketplaceFixtureSeeded = false, listingPhotoVerified = false, listingPhotoPrivacyVerified = false, listingPhotoCount = 0, sellerDraftVerified = false;
+let mapFixture=null,batchRemovalFixture=null;
 let homeVisualFixtureSeeded = false, homeVisualMatchScores = null;
 let originalContentSize = null, contentSizeActiveVerified = false, contentSizeRestored = false;
 let listingPhotoFixtureVerified = false, listingAiDraftVerified = false, listingAiTask = null, listingAiTaskFailed = false;
@@ -284,14 +287,15 @@ async function main() {
     server.once('error', () => reject(new Error('Private Metro port occupied; no existing server changed')));
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
-  const serviceLifetimeSeconds = publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
+  const serviceLifetimeSeconds = flow==='golden-map'?600:publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
-    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery'].includes(flow) });
-  if (['home-visual','golden-wishes','golden-discovery'].includes(flow)) {
+    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) });
+  if (['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow)) {
     stage = 'isolated-home-visual-fixture';
-    const seeded = await seedUiuxHomeQa(qa);
+    const seeded = flow==='golden-map'?(mapFixture=await seedDiscoveryMapQa(qa,database)).base:await seedUiuxHomeQa(qa);
+    if(flow==='golden-map')batchRemovalFixture=await seedBatchRemovalQa(qa,database,{existingBase:seeded,generatedSlots:1});
     homeVisualMatchScores = seeded.scores.map(item => item.score);
     homeVisualFixtureSeeded = homeVisualMatchScores.join(',') === '73,46,41';
     if (!homeVisualFixtureSeeded) throw new Error('Home visual QA scores differ from fixed fixture');
@@ -359,8 +363,8 @@ async function main() {
       '-collect-test-diagnostics', 'never',
       '-maximum-concurrent-test-simulator-destinations', '1', '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '180', '-maximum-test-execution-time-allowance',
-      publishOneAiFlow ? '620' : twoPhotoFlow && listingAiFlow ? '500' : '240', 'test-without-building'],
-    publishOneAiFlow ? 650000 : twoPhotoFlow && listingAiFlow ? 520000 : 300000);
+      flow==='golden-map'?'480':publishOneAiFlow ? '620' : twoPhotoFlow && listingAiFlow ? '500' : '240', 'test-without-building'],
+    flow==='golden-map'?510000:publishOneAiFlow ? 650000 : twoPhotoFlow && listingAiFlow ? 520000 : 300000);
     testCommandSucceeded = true;
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));
@@ -375,14 +379,14 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       ((flow === 'listing-batch-photo' || listingAiFlow) && !sellerDraftVerified) ||
       (listingAiFlow && (!listingAiDraftVerified || listingAiTaskFailed)) ||
       (publishOneAiFlow && !listingPublicationVerified) ||
-      (['home-visual','golden-wishes','golden-discovery'].includes(flow) && !homeVisualFixtureSeeded) ||
+      (['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) && !homeVisualFixtureSeeded) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -414,6 +418,7 @@ async function main() {
     'home-visual': ['product-notice', 'home', 'home-visual-collapsed', 'home-visual-expanded', 'home-visual-scrolled'],
     'golden-wishes': ['product-notice', 'home', 'golden-wish-cards', 'golden-wish-editor', 'golden-wish-currency'],
     'golden-discovery': ['product-notice', 'home', 'golden-discovery-list', 'golden-discovery-detail', 'golden-discovery-map'],
+    'golden-map': ['product-notice','home','map-price-card','map-price-source','map-price-detail','map-thirty-six','map-wishlist-saved','batch-draft-confirm','batch-draft-empty','batch-draft-reopened'],
     'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
@@ -457,6 +462,8 @@ async function main() {
     }
   });
   await attempt(async () => { if (metro?.exitCode === null) metro.kill('SIGTERM'); if (metroExit) await metroExit; });
+  if(batchRemovalFixture)await attempt(()=>batchRemovalFixture.cleanup());
+  if(mapFixture)await attempt(()=>mapFixture.cleanup());
   if (qa) await attempt(async () => { requestedStop = true; cleanup = await qa.stop(); });
   if (originalContentSize) await attempt(async () => {
     await simctl(['ui', 'content_size', originalContentSize], 10000, true);
@@ -470,7 +477,7 @@ async function main() {
     safeProductNoticeScreenshot: screenshot, cleanup: cleanup || null, hashes: metadata.hashes,
     nativeFailureStage, authenticatedFlow: flow, buyerErasureVerified, listingPhotoVerified, listingPhotoPrivacyVerified, listingPhotoFixtureVerified, listingPhotoCount, sellerDraftVerified,
     listingAiDraftVerified, listingAiTaskFailed, listingPublicationVerified,
-    privacyAuditPassed, marketplaceFixtureSeeded, homeVisualFixtureSeeded, homeVisualMatchScores,
+    privacyAuditPassed,batchRemovalFixture:batchRemovalFixture?{syntheticOnly:true,sources:batchRemovalFixture.sourceIds,generated:batchRemovalFixture.generatedIds}:null,mapFixture:mapFixture?{syntheticOnly:true,products:mapFixture.listingIds.length,photoCases:mapFixture.photoCases}:null, marketplaceFixtureSeeded, homeVisualFixtureSeeded, homeVisualMatchScores,
     inputActionsCompleted: broker?.completed || [], inputStages: broker?.stages || [],
     contentSize: requestedContentSize ? { requested: requestedContentSize, before: originalContentSize, activeVerified: contentSizeActiveVerified, restored: contentSizeRestored } : null,
     accessibilityAuditRequested: accessibilityAudit,

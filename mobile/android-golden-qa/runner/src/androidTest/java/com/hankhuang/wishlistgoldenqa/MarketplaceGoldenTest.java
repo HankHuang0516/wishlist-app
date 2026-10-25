@@ -31,6 +31,7 @@ public class MarketplaceGoldenTest {
     private String target, phase, photoName, stage = "setup";
     private File evidence;
     private boolean loggedIn;
+    private JSONArray mapTitles;
     private boolean credentialsEntered;
 
     private void checkpoint(String value) {
@@ -91,7 +92,7 @@ public class MarketplaceGoldenTest {
             foreground();
             try{UiObject2 form=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),5000);assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
                 assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
-                boolean delivered=device.swipe(area.left+12,forward?area.bottom-32:area.top+48,area.left+12,forward?area.top+48:area.bottom-32,35);
+                boolean delivered=device.swipe(8,forward?area.bottom-32:area.top+48,8,forward?area.top+48:area.bottom-32,35);
                 if(delivered){device.waitForIdle(1000);SystemClock.sleep(100);return;}
             }catch(StaleObjectException refreshedTree){/* Re-query after a committed React layout. */}
             device.waitForIdle(500);SystemClock.sleep(100);
@@ -173,6 +174,7 @@ public class MarketplaceGoldenTest {
         byte[] data=bytes.toByteArray(); connection.disconnect();
         assertTrue(data.length<4096);
         JSONObject fixture=new JSONObject(new String(data,StandardCharsets.UTF_8));
+        mapTitles=fixture.optJSONArray("mapTitles");
         target=fixture.getString("package");photoName=fixture.optString("photoName","");
         assertTrue(target.matches("com\\.hank_huang0516\\.snack425e646aa6a74ad8a964aadeb4741fc1\\.visualqa[0-9]{12}"));
         String email=fixture.getString("email");
@@ -414,13 +416,79 @@ public class MarketplaceGoldenTest {
         checkpoint("filter-invalid-price");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");checkpoint("filter-price-entry");reveal("探索最低價格");await("探索最低價格").setText("100");reveal("探索最高價格");await("探索最高價格").setText("50");checkpoint("filter-price-validation");click("套用篩選");reveal("價格需為有效的新臺幣金額，最低價不能高於最高價。");capture("explore-filter-validation");
         reveal("探索最低價格");await("探索最低價格").setText("0");reveal("探索最高價格");await("探索最高價格").setText("100");checkpoint("category-keeps-price-draft");revealBackwards("分類目錄 ▾");click("分類目錄 ▾");await("商品分類");click("家具家居");reveal("全部家具家居");click("全部家具家居");await("篩選商品");reveal("探索最高價格");assertEquals("Changing category retains the price draft","100",readText("探索最高價格"));click("套用篩選");reveal("查看商品：二手深藍色陶瓷馬克杯");
         checkpoint("listing-photo-first-detail");click("查看商品：二手深藍色陶瓷馬克杯");await("商品詳情");capture("listing-detail-photo-first");reveal("聊聊詢問");assertTrue("Contact action stays reachable",await("聊聊詢問").getVisibleBounds().height()>=48);click("返回探索");assertTrue("Detail window must dismiss before browse gestures",device.wait(Until.gone(By.text("商品詳情")),5000));device.waitForIdle(1000);
-        checkpoint("explicit-map-navigation");revealBackwards("切換地圖瀏覽");click("切換地圖瀏覽");await("返回商品瀏覽");capture("explore-explicit-map");click("返回商品瀏覽");await("探索");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        checkpoint("explicit-map-navigation");revealBackwards("切換地圖瀏覽");click("切換地圖瀏覽");await("本批 3 張商品縮圖");capture("explore-explicit-map");reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("explore-map-canvas");revealBackwards("地圖來源與排列說明");click("地圖來源與排列說明");await("關閉地圖說明");capture("explore-map-information");click("關閉地圖說明");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");assertTrue("Map must expose the current shared source filters",has("來源"));capture("explore-map-shared-filters");click("關閉探索選項");revealBackwards("商品列表");click("商品列表");await("探索");reveal("查看商品：二手深藍色陶瓷馬克杯");
         checkpoint("wish-context-preserves-new-filters");click("首頁");reveal("尋找深藍色陶瓷馬克杯的符合商品");click("尋找深藍色陶瓷馬克杯的符合商品");await("正在配對你選擇的願望");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");click("最新上架");reveal("探索最高價格");await("探索最高價格").setText("55");click("套用篩選");await("2 筆商品與來源");assertFalse("Leaving a wish scope removes its banner",has("正在配對你選擇的願望"));capture("explore-wish-cleared-price-retained");
         checkpoint("native-version-settings");click("我的");
         android.content.pm.PackageInfo installed=InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
         long build=android.os.Build.VERSION.SDK_INT>=28?installed.getLongVersionCode():installed.versionCode;
         String version="版本 "+installed.versionName+"（"+build+"）";await(version);reveal("通知設定");click("通知設定");await(version);capture("notification-native-version");click("返回我的設定");
         checkpoint("discovery-checks-complete");
+    }
+    private void mapSearch(String text) throws Exception {
+        revealBackwards("搜尋商品名稱與說明",48);await("搜尋商品名稱與說明").setText(text);click("搜尋商品");
+        for(AccessibilityWindowInfo w:InstrumentationRegistry.getInstrumentation().getUiAutomation().getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD){device.pressBack();break;}
+    }
+    private void selectMapTitle(String title) throws Exception {
+        String label="選取商品："+title;
+        UiScrollable canvas=new UiScrollable(new UiSelector().resourceId("discovery-map-scroll").scrollable(true));
+        assertTrue("Explicit thumbnail canvas required",canvas.exists());
+        canvas.setMaxSearchSwipes(30);assertTrue("Every loaded product must be reachable",canvas.scrollIntoView(new UiSelector().description(label)));
+        // scrollIntoView may stop at a partially clipped descendant. Bring the
+        // whole real hit target inside the nested canvas before measuring it.
+        for(int attempt=0;attempt<10;attempt++){
+            Rect tile=await(label).getVisibleBounds();if(tile.height()>=48)break;
+            UiObject2 host=device.wait(Until.findObject(By.res("discovery-map-scroll")),5000);
+            assertNotNull("Thumbnail canvas remains present",host);Rect viewport=host.getVisibleBounds();
+            int distance=Math.min(72,Math.max(24,viewport.height()/3));
+            int y=viewport.centerY();boolean above=tile.centerY()<y;
+            assertTrue("Canvas scroll delivered",device.swipe(viewport.centerX(),y,viewport.centerX(),y+(above?distance:-distance),20));
+            device.waitForIdle(500);
+        }
+        assertTrue("Thumbnail tap target is at least48dp",await(label).getVisibleBounds().height()>=48);
+        click(label);assertNotNull("Clicked product must settle selected",device.wait(Until.findObject(By.desc(label).selected(true)),5000));
+    }
+    private void map() throws Exception {
+        assertNotNull("Map fixtures required",mapTitles);assertEquals(36,mapTitles.length());
+        checkpoint("native-original-price-card");click("探索");await("39 筆商品與來源");
+        mapSearch(mapTitles.getString(0));await("1 筆商品與來源");
+        String fold="約參考原價 5 折，查看參考原價與來源";
+        reveal(fold);capture("discount-native-card");click(fold);await("參考原價與來源");await("參考原價：NT$ 4,990");await("原廠建議售價");
+        reveal("原價資料期間：2025-04");await("查看原價來源 · images.samsung.com");capture("discount-native-source-evidence");click("關閉原價參考");
+        checkpoint("native-original-price-detail");reveal("查看商品："+mapTitles.getString(0));click("查看商品："+mapTitles.getString(0));await("商品詳情");
+        reveal(fold);click(fold);await("參考原價：NT$ 4,990");capture("discount-native-detail");click("關閉原價參考");click("返回探索");
+        assertTrue(device.wait(Until.gone(By.desc("返回探索")),10000));
+        checkpoint("map-all-thirty-six");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("map-thirty-six-canvas-top");
+        for(int i=0;i<mapTitles.length();i++)selectMapTitle(mapTitles.getString(i));
+        capture("map-thirty-six-canvas-selected");
+        checkpoint("map-single-wishlist-add");String title=mapTitles.getString(35),add="加入願望清單："+title,remove="已加入願望，移除："+title;
+        reveal(add);click(add);await(remove);capture("map-single-wishlist-saved");
+        checkpoint("map-single-wishlist-remove");click(remove);await(add);
+        checkpoint("map-create-second-fixture-list");
+        String port=InstrumentationRegistry.getArguments().getString("inputPort","");
+        HttpURLConnection create=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/map/second-list").openConnection();create.setRequestMethod("POST");create.setRequestProperty("X-Wishlist-Golden-Phase",phase);create.setConnectTimeout(5000);create.setReadTimeout(15000);create.setInstanceFollowRedirects(false);assertEquals(200,create.getResponseCode());create.disconnect();
+        click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(add);
+        checkpoint("map-multiple-wishlist-confirm");click(add);await("加入願望清單");click("第二份地圖願望");capture("map-multiple-wishlist-confirm");click("確認加入");await(remove);
+        checkpoint("map-wishlist-reentry-readback");click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(remove);capture("map-wishlist-server-readback");click(remove);await("從願望清單移除");capture("map-multiple-wishlist-remove");click("確認移除");await(add);
+        checkpoint("map-checks-complete");
+    }
+    private void batchCount(int count) throws Exception {
+        String label="商品草稿 "+count+"/12";
+        if(!visible(label,1)){
+            new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(15);
+            reveal(label);
+        }
+        await(label);
+    }
+    private void batchRemove() throws Exception {
+        checkpoint("batch-removal-open");click("我的");reveal("刊登好物");click("刊登好物");batchCount(3);
+        checkpoint("batch-removal-cancel");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");await("移除這件草稿？");click("保留草稿");batchCount(3);
+        checkpoint("batch-removal-lost-ack");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");
+        revealBackwards("查核原草稿移除");capture("batch-removal-unknown-result");click("查核原草稿移除");batchCount(2);
+        checkpoint("batch-removal-remaining-drafts");for(int remaining=1;remaining>=0;remaining--){reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");batchCount(remaining);}
+        capture("batch-removal-empty");click("稍後繼續");await("首頁");click("刊登好物");batchCount(0);capture("batch-removal-reopened-empty");checkpoint("batch-removal-checks-complete");
     }
     private void source() throws Exception {
         checkpoint("unlocated-source-discovery");click("探索");await("4 筆商品與來源");reveal("查看商品：隔離合成公開來源馬克杯");click("查看商品：隔離合成公開來源馬克杯");await("商品詳情");await("尚無可公開的商品照片");capture("source-detail-photo-unavailable");
@@ -438,12 +506,12 @@ public class MarketplaceGoldenTest {
     @Test public void approvedMarketplaceRegression() throws Exception {
         device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         phase=InstrumentationRegistry.getArguments().getString("phase","");
-        assertTrue("Explicit bounded phase required",phase.equals("source")||phase.equals("discovery")||phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
+        assertTrue("Explicit bounded phase required",phase.equals("batch-remove")||phase.equals("map")||phase.equals("source")||phase.equals("discovery")||phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
         File external=InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
         assertNotNull("Owned test-host storage unavailable",external);
         evidence=new File(external,"golden-"+phase);
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
-        try { login(); if(phase.equals("source"))source();else if(phase.equals("discovery"))discovery();else if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
+        try { login(); if(phase.equals("batch-remove"))batchRemove();else if(phase.equals("map"))map();else if(phase.equals("source"))source();else if(phase.equals("discovery"))discovery();else if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
         catch(Throwable failure){
             try{saveLoginStructure();}catch(Throwable ignored){}
             try{clearLoginForDiagnostic();}catch(Throwable ignored){}

@@ -43,6 +43,16 @@ test('searches an explicitly stated brand even when it is absent from the produc
  expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:'BenQ'})],discoveryQuery({q:'benq'})).total).toBe(1);
  expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:null})],discoveryQuery({q:'benq'})).total).toBe(0);
 });
+test('map presentation keeps the shared filters and original public coordinates, with unplaced results separate',()=>{
+ const original:[number,number]=[120.236,23];
+ const all=[product(1,{condition:'USED',price:1000,mapLocation:{coordinates:original,precision:'PUBLIC_MEETING_POINT'}}),product(2,{condition:'USED',price:1000,mapLocation:null}),product(3,{condition:'NEW',price:1000,mapLocation:{coordinates:[121,25],precision:'APPROXIMATE_2KM'}})];
+ const query=discoveryQuery({presentation:'map',main:'electronics',sub:'monitors',county:'臺北市',condition:'USED',source:'source',min:'999',max:'1001',bbox:'120,22,120.5,23.5'});
+ const page=discoveryPage(all,query);expect(page.items.map(p=>p.id)).toEqual(['1','2']);expect(page.mapTotals).toEqual({located:1,unmapped:1});expect(page.items[0].mapLocation?.coordinates).toEqual(original);
+ const outside=discoveryPage(all,discoveryQuery({...query,min:'999',max:'1001',limit:'24',presentation:'map',bbox:'-20,-10,0,10',cursor:''} as any));
+ expect(outside.items.map(p=>p.id)).toEqual(['2']);expect(outside.mapTotals).toEqual({located:0,unmapped:1});
+ expect(all[0].mapLocation?.coordinates).toBe(original);
+});
+test.each([{bbox:'120,22,121,24'},{presentation:'grid'},{presentation:'map',bbox:'NaN,22,121,24'},{presentation:'map',bbox:'121,22,120,24'},{presentation:'map',bbox:'-181,22,121,24'}])('rejects ambiguous map presentation or bounds %j',q=>expect(()=>discoveryQuery(q as any)).toThrow());
 
 test.each([
  ['Samsung Galaxy S22+（螢幕有三條線，白／綠兩支，單價）','phones'],

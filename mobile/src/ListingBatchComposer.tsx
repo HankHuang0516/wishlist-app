@@ -1,3 +1,4 @@
+import {batchRemovalJournal,parseBatchRemoval,readBatchRemoval,sendBatchRemoval,type BatchRemovalResult} from './batchDraftRemoval';
 import { ListingLocationPicker } from './ListingLocationPicker';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -49,6 +50,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const aiAvailableRef = useRef<boolean | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [removalRaw,setRemovalRaw]=useState<string|null>(null),[removalKnown,setRemovalKnown]=useState<BatchRemovalResult|null>(null),[removalNotice,setRemovalNotice]=useState(''),[reloadNonce,setReloadNonce]=useState(0);
+  const removalRef=useRef<string|null>(null),removalKey=useRef<string|null>(null),scopeEpoch=useRef(0);
   const [expiryPicker, setExpiryPicker] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const offsets = useRef<Record<string, number>>({});
@@ -84,7 +87,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const end = () => { busyRef.current = false; setBusy(false); };
 
   useEffect(() => {
-    active.current = true;
+    active.current = true;++scopeEpoch.current;busyRef.current=false;setBusy(false);const epoch=scopeEpoch.current;
+    removalRef.current=null;removalKey.current=null;setRemovalRaw(null);setRemovalKnown(null);setRemovalNotice('');
     let scopeActive = true;
     keyRef.current = null; setReady(false); setCards([]); setPending(null); setAiAvailable(null); aiAvailableRef.current = null;
     setLegacyPhotos([]); setLegacyRecoveryError(false); setError('');
@@ -102,11 +106,17 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         const key = await pendingRequestKey(apiUrl, userId, 'listing');
         const loadBatch = () => loadPrivateMediaPages(cursor => api<unknown>('/listing-media/unused?purpose=BATCH_ITEM' +
           (cursor ? `&cursor=${cursor}` : '')));
-        const [journal, batchItems, legacy, localCaptures, availability] = await Promise.all([privatePendingStore.get(key),
+        const removeKey=await pendingRequestKey(apiUrl,userId,'listing-photo-remove');
+        const [journal, loadedBatchItems, legacy, loadedCaptures, availability, storedRemoval] = await Promise.all([privatePendingStore.get(key),
           loadBatch(),
           api<{ items: unknown[] }>('/listing-media/unused?purpose=LEGACY_UNKNOWN').catch(() => null),
           listPrivateCaptures(apiUrl, userId),
-          api<{ available: boolean }>('/listing-media/ai-availability').catch(() => null)]);
+          api<{ available: boolean }>('/listing-media/ai-availability').catch(() => null),privatePendingStore.get(removeKey)]);
+        let batchItems=loadedBatchItems,localCaptures=loadedCaptures,restoredResult:BatchRemovalResult|null=null;
+        if(storedRemoval){const op=await parseBatchRemoval(storedRemoval);try{restoredResult=await readBatchRemoval(api,storedRemoval,userId);}catch{/* Read only; never resend an unknown removal on restart. */}
+          if(!scopeActive||epoch!==scopeEpoch.current)return;
+          if(restoredResult?.state==='REMOVED'){await releasePrivateCapture(apiUrl,userId,op.captureKey);batchItems=batchItems.filter(v=>(v as {id?:unknown})?.id!==op.mediaId);localCaptures=localCaptures.filter(c=>c.clientUploadId!==op.captureKey);}
+        }
         let olderPhotos: PhotoRecord[] = [], olderFailed = !legacy;
         try {
           if (legacy && !Array.isArray(legacy.items)) throw new Error('LEGACY_MEDIA_RESPONSE');
@@ -142,15 +152,15 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         }));
         for (const clientUploadId of captureRecovery.releaseUploadIds)
           try { await releasePrivateCapture(apiUrl, userId, clientUploadId); } catch { /* retry cleanup on next open */ }
-        if (scopeActive && active.current) { keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards]);
+        if (scopeActive && active.current) { removalKey.current=removeKey;removalRef.current=storedRemoval;setRemovalRaw(storedRemoval);setRemovalKnown(restoredResult);setRemovalNotice(storedRemoval?restoredResult?.state==='REMOVED'?'原草稿移除已確認，請完成本機紀錄清理。':restoredResult?'原移除未套用；請結束這次操作後重新讀取草稿。':'草稿移除結果尚未確認，請查核原結果，不會自動重送。':'');keyRef.current = key; setPending(journal); setCards([...recovered, ...localCards]);
           const enabled = typeof availability?.available === 'boolean' ? availability.available : null;
           aiAvailableRef.current = enabled; setAiAvailable(enabled);
           setLegacyPhotos(olderPhotos); setLegacyRecoveryError(olderFailed);
           setReady(true); }
       } catch { if (scopeActive && active.current) setError('暫時無法安全恢復先前的商品照片或待確認刊登，請稍後重試。'); }
     })();
-    return () => { scopeActive = false; active.current = false; sync.dispose(); if (sellerSync.current === sync) sellerSync.current = null; };
-  }, [api, apiUrl, userId]);
+    return () => { scopeActive = false; active.current = false;scopeEpoch.current++; sync.dispose(); if (sellerSync.current === sync) sellerSync.current = null; };
+  }, [api, apiUrl, userId,reloadNonce]);
 
   useEffect(() => {
     if (!ready || !sellerSync.current) return;
@@ -169,7 +179,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
             const state = parseListingAiState(raw, card.record!.id);
             if (active.current) setCards(old => old.map(current => {
               if (current.key !== card.key) return current;
-              const update = polledReviewStateAfterAi(current, state, busyRef.current);
+              const update = polledReviewStateAfterAi(current, state, busyRef.current||!!removalRef.current);
               return update ? { ...current, ...update, error: '' } : current;
             }));
           } catch { /* retain queue state; explicit retry remains available */ }
@@ -218,7 +228,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     }
   }
   async function select(camera: boolean) {
-    if (!ready || pending || !begin()) return;
+    if (!ready || pending || removalRef.current || !begin()) return;
     try {
       if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) throw new ListingFormError('未授予相機權限；也可以批次選擇相簿照片。');
       let remaining = MAX_ITEMS - cards.filter(card => !card.published).length;
@@ -253,7 +263,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     finally { setCaptureProgress(''); end(); }
   }
   async function retry(card: Card) {
-    if (card.record && aiAvailableRef.current === false) return;
+    if (pending||removalRef.current||card.record && aiAvailableRef.current === false) return;
     if (!begin()) return;
     setCards(old => old.map(current => current.key === card.key ? { ...current, confirmed: false } : current));
     try {
@@ -265,7 +275,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     } catch { setError('辨識重試未成功，照片仍保留在私人草稿。'); } finally { end(); }
   }
   async function adoptLegacy(record: PhotoRecord) {
-    if (!ready || pending || cards.filter(card => !card.published).length >= MAX_ITEMS || !begin()) return;
+    if (!ready || pending || removalRef.current || cards.filter(card => !card.published).length >= MAX_ITEMS || !begin()) return;
     try {
       const adopted = await api<{ mediaId: string; capturePurpose: string }>(`/listing-media/${record.id}/capture-purpose`,
         { method: 'PUT', body: JSON.stringify({ capturePurpose: 'BATCH_ITEM' }) });
@@ -286,17 +296,46 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         : '舊照片加入狀態未確認；請重新開啟後檢查，避免重複操作。');
     } finally { end(); }
   }
-  async function remove(card: Card) {
-    if (!begin()) return;
-    try {
-      if (card.record) await api(`/listing-media/${card.record.id}`, { method: 'DELETE' });
-      if (card.record) sellerSync.current?.discard(card.record.id);
-      if (card.local) await releasePrivateCapture(apiUrl, userId, card.key);
-      setCards(old => old.filter(current => current.key !== card.key));
-    } catch { setError('尚未確認照片已移除；請稍後重試。'); } finally { end(); }
+  const removalCurrent=(epoch:number)=>active.current&&scopeEpoch.current===epoch;
+  async function finishRemoval(raw:string,result:BatchRemovalResult,epoch:number){
+    if(!removalCurrent(epoch))return;
+    setRemovalKnown(result);const op=await parseBatchRemoval(raw);if(!removalCurrent(epoch))return;
+    if(result.state==='REMOVED'){
+      await releasePrivateCapture(apiUrl,userId,op.captureKey);if(!removalCurrent(epoch))return;
+      sellerSync.current?.discard(op.mediaId);setCards(old=>old.filter(c=>c.key!==op.captureKey&&c.record?.id!==op.mediaId));
+      setRemovalNotice(result.cleanupPending?'草稿與照片已移除；後台檔案清理中。':'草稿與照片已移除。');
+      await privatePendingStore.clear(removalKey.current!,raw);if(!removalCurrent(epoch))return;
+      const remaining=await privatePendingStore.get(removalKey.current!);if(!removalCurrent(epoch))return;
+      removalRef.current=remaining;setRemovalRaw(remaining);if(remaining)setRemovalNotice('另一份移除紀錄仍待確認。');
+    }else setRemovalNotice('原移除未套用：草稿已更新、正在生成或已使用。請結束這次操作並重新讀取，不會自動再次移除。');
+  }
+  async function recoverRemoval(retry=false,close=false){
+    const raw=removalRef.current,key=removalKey.current;if(!raw||!key||!begin())return;const epoch=scopeEpoch.current;
+    try{
+      if(close){if(!removalKnown)throw Error('Unknown removal');await privatePendingStore.clear(key,raw);if(!removalCurrent(epoch))return;const left=await privatePendingStore.get(key);if(!removalCurrent(epoch))return;removalRef.current=left;setRemovalRaw(left);setRemovalKnown(null);if(left){setRemovalNotice('另一份移除紀錄仍待確認。');return;}setReloadNonce(n=>n+1);return;}
+      const result=removalKnown??(retry?await sendBatchRemoval(api,raw,userId,()=>privatePendingStore.save(key,raw),()=>removalCurrent(epoch)):await readBatchRemoval(api,raw,userId));
+      await finishRemoval(raw,result,epoch);
+    }catch{if(removalCurrent(epoch))setRemovalNotice('草稿移除仍待確認；請查核原結果，照片不會被自動重新上傳。');}finally{if(removalCurrent(epoch))end();}
+  }
+  function askRemove(card:Card,index:number){
+    if(busyRef.current||pending||removalRef.current)return;
+    Alert.alert('移除這件草稿？',`將移除第 ${index+1} 件商品的私人照片、草稿與尚未使用的 AI 行銷圖，無法復原。已使用的生成額度不會退回。`,[
+      {text:'保留草稿',style:'cancel'},{text:'移除草稿與照片',style:'destructive',onPress:()=>void remove(card)}]);
+  }
+  async function remove(card:Card){
+    if(pending||removalRef.current||!begin())return;const epoch=scopeEpoch.current;let raw='';
+    try{
+      if(sellerSync.current&&!await sellerSync.current.flushAll())throw Error('Draft edits unsaved');
+      if(!removalCurrent(epoch))return;
+      if(!card.record){await releasePrivateCapture(apiUrl,userId,card.key);if(removalCurrent(epoch))setCards(old=>old.filter(c=>c.key!==card.key));return;}
+      raw=await batchRemovalJournal(card.record.id,sellerSync.current!.version(card.record.id),Crypto.randomUUID(),card.key);if(!removalCurrent(epoch))return;
+      const key=removalKey.current;if(!key)throw Error('Removal journal not ready');
+      const result=await sendBatchRemoval(api,raw,userId,async()=>{await privatePendingStore.save(key,raw);if(removalCurrent(epoch)){removalRef.current=raw;setRemovalRaw(raw);setRemovalKnown(null);setRemovalNotice('正在移除草稿與照片…');}},()=>removalCurrent(epoch));
+      await finishRemoval(raw,result,epoch);
+    }catch{if(removalCurrent(epoch)){const message=removalRef.current?'移除結果尚未確認，請查核原回執；不會自動重送。':'草稿目前無法安全移除，內容仍保留，請稍後重試。';setCards(old=>old.map(c=>c.key===card.key?{...c,error:message}:c));setRemovalNotice(message);}}finally{if(removalCurrent(epoch))end();}
   }
   async function locate() {
-    if (!begin()) return;
+    if (removalRef.current || !begin()) return;
     try {
       if (!(await Location.requestForegroundPermissionsAsync()).granted) throw new ListingFormError('未授予定位；可在下方手動填寫縣市與行政區。');
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -339,7 +378,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
     }
   }
   async function publishAll() {
-    if (!ready || pending || !keyRef.current || !begin()) return;
+    if (!ready || pending || removalRef.current || !keyRef.current || !begin()) return;
     let count = 0, candidate: string | null = null;
     try {
       for (const card of cards) if (card.record && !card.published)
@@ -402,7 +441,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   const input = (value: string, label: string, onChangeText: (text: string) => void, numeric = false, multiline = false, targetKey?: string) =>
     <View style={s.inputGroup} onLayout={event => { if (targetKey && !/:(?:brand|price)$/.test(targetKey)) offsets.current[targetKey] = event.nativeEvent.layout.y; }}>
       <Text style={s.fieldLabel}>{label}</Text>
-      <TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={value} onChangeText={onChangeText} editable={!busy && !pending}
+      <TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={numeric ? '請輸入數字' : '請輸入'} value={value} onChangeText={onChangeText} editable={!busy && !pending && !removalRaw}
         keyboardType={numeric ? 'decimal-pad' : 'default'} multiline={multiline}
         style={[s.input, multiline && s.multiline, highlightKey === targetKey && s.highlight]} />
     </View>;
@@ -413,17 +452,18 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
       <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。照片先成為私人草稿，你確認後才會公開。</Text>
       {aiAvailable === false && <Text accessibilityRole="alert" style={s.small}>此帳號的 AI 辨識尚未開放；照片仍可私密上傳、手動填寫並刊登，不會進入 AI 隊列。</Text>}
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
-      {!!pending && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}
-      <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
+      {!!pending||!!removalRaw && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}
+      <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
       {!!captureProgress && <Text accessibilityLiveRegion="polite" style={s.small}>{captureProgress}</Text>}
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onAdvanced)} style={s.modeAlternative}><Text style={s.modeAlternativeTitle}>進階模式 · 選用  ↗</Text><Text style={s.small}>同一件商品多角度拍攝，或自行逐欄精細刊登</Text></Pressable>
+      {!!removalNotice&&<View style={s.card}><Text accessibilityRole="alert" style={s.small}>{removalNotice}</Text>{removalRaw&&<><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval()} style={s.chip}><Text style={s.text}>{removalKnown?.state==='REMOVED'?'完成移除紀錄清理':'查核原草稿移除'}</Text></Pressable>{!removalKnown&&<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval(true)} style={s.chip}><Text style={s.text}>明確重試原移除</Text></Pressable>}{removalKnown&&removalKnown.state!=='REMOVED'&&<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval(false,true)} style={s.chip}><Text style={s.text}>結束這次移除並重新讀取</Text></Pressable>}</>}</View>}
       <Text style={s.section}>商品草稿 {cards.filter(card => !card.published).length}/{MAX_ITEMS}</Text>
       {legacyRecoveryError && <Text style={s.error}>舊版未分類照片暫時無法讀取；批次照片仍可使用。請稍後重開再檢查舊照片。</Text>}
       {legacyPhotos.length > 0 && <View style={s.card}><Text style={s.cardTitle}>舊版未分類照片</Text>
         <Text style={s.small}>舊版照片可能是同件商品的多角度照；只有你明確選擇後，才會當成一件批次商品。</Text>
         {legacyPhotos.map(photo => <View key={photo.id} style={s.row}><PrivateListingPhoto thumbnailUrl={photo.thumbnailUrl}
           apiUrl={apiUrl} token={token} style={s.image} label="舊版未分類商品照片" />
-          <Pressable accessibilityRole="button" disabled={busy || !!pending || cards.filter(card => !card.published).length >= MAX_ITEMS}
+          <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw || cards.filter(card => !card.published).length >= MAX_ITEMS}
             onPress={() => void adoptLegacy(photo)} style={s.chip}><Text style={s.text}>將此照片作為一件商品</Text></Pressable></View>)}
       </View>}
       {cards.map((card, index) => <View key={card.key} onLayout={event => { offsets.current[`card:${card.key}`] = event.nativeEvent.layout.y; }} style={s.card}>
@@ -431,7 +471,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
           thumbnailUrl={card.record?.thumbnailUrl} apiUrl={apiUrl} token={token} style={s.image} label={`第${index + 1}件商品照片`} />
           <View style={s.grow}><Text style={s.cardTitle}>第 {index + 1} 件 {card.published ? '· 已刊登' : ''}</Text><Text style={s.small}>{card.ai === 'COMPLETED' ? 'AI 草稿已完成，請確認' : card.ai === 'PENDING' ? 'AI 排隊中' : card.ai === 'PROCESSING' ? 'AI 辨識中' : card.ai === 'FAILED' ? 'AI 未完成，可重試或手動修正' : card.record ? aiAvailable === false ? '照片已私密保存，可手動編輯' : '照片已私密保存，可開始 AI 辨識' : '等待上傳'}</Text></View></View>
         {issueText(`${card.key}:photo`)}
-        {!!card.draft && <><Text accessibilityLabel={`第${index + 1}件 AI 二手參考價：${card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}`} style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
+        {!!card.draft && <><Text accessibilityLabel={`第${index + 1}件 AI 二手參考價：${card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}`} style={s.small}>AI 二手參考價：{card.draft.estimatedPriceLowTwd === null ? '無法可靠估價' : `NT$ ${card.draft.estimatedPriceLowTwd}–${card.draft.estimatedPriceHighTwd}`}</Text><Text style={s.small}>{card.draft.priceBasis || '圖片不足以推定市場價格'}</Text><Text style={s.small}>待確認：{card.draft.uncertainties.join('、') || '請仍確認實際商品狀況'}</Text>{Object.keys(card.touched).length > 0 && <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} style={s.chip} onPress={() => setCards(old => old.map(current => current.key === card.key ? applyAi({ ...current, touched: {} }, { mediaId: card.record!.id, status: 'COMPLETED', draft: card.draft }) : current))}><Text style={s.text}>重新套用 AI 建議</Text></Pressable>}</>}
         {input(card.form.title, `第${index + 1}件商品名稱`, value => changeCard(card.key, 'title', value), false, false, `${card.key}:title`)}
         {issueText(`${card.key}:title`)}
         {input(card.form.description, `第${index + 1}件商品描述`, value => changeCard(card.key, 'description', value), false, true, `${card.key}:description`)}
@@ -443,46 +483,46 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         {issueText(`${card.key}:brand`)}{issueText(`${card.key}:price`)}
         {!!card.draft && !card.touched.price && card.draft.estimatedPriceLowTwd !== null &&
           <Text style={s.small}>目前售價由 AI 參考區間中間值預填，不是已驗證行情；刊登前請確認或修改。</Text>}
-        <View onLayout={event => { offsets.current[`${card.key}:condition`] = event.nativeEvent.layout.y; }} style={[s.row, highlightKey === `${card.key}:condition` && s.highlight]}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.condition === value }} disabled={busy || !!pending} style={[s.chip, card.form.condition === value && s.selected]} onPress={() => changeCard(card.key, 'condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
+        <View onLayout={event => { offsets.current[`${card.key}:condition`] = event.nativeEvent.layout.y; }} style={[s.row, highlightKey === `${card.key}:condition` && s.highlight]}>{(['USED', 'NEW'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.condition === value }} disabled={busy || !!pending||!!removalRaw} style={[s.chip, card.form.condition === value && s.selected]} onPress={() => changeCard(card.key, 'condition', value)}><Text style={s.text}>{value === 'USED' ? '二手' : '新品'}</Text></Pressable>)}</View>
         {issueText(`${card.key}:condition`)}
-        <View onLayout={event => { offsets.current[`${card.key}:category`] = event.nativeEvent.layout.y; }} style={[s.wrap, highlightKey === `${card.key}:category` && s.highlight]}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.category === value }} disabled={busy || !!pending} style={[s.chip, card.form.category === value && s.selected]} onPress={() => changeCard(card.key, 'category', value)}><Text style={s.small}>{label}</Text></Pressable>)}</View>
+        <View onLayout={event => { offsets.current[`${card.key}:category`] = event.nativeEvent.layout.y; }} style={[s.wrap, highlightKey === `${card.key}:category` && s.highlight]}>{CATEGORIES.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: card.form.category === value }} disabled={busy || !!pending||!!removalRaw} style={[s.chip, card.form.category === value && s.selected]} onPress={() => changeCard(card.key, 'category', value)}><Text style={s.small}>{label}</Text></Pressable>)}</View>
         {issueText(`${card.key}:category`)}
         {!!card.error && <Text style={s.error}>{card.error}</Text>}
         {!card.published && card.record && card.ai === 'COMPLETED' && <MarketingAssistant api={api} apiUrl={apiUrl}
           token={token} sourceMediaId={card.record.id} beforeStart={async () => {
-            if (busy || !!pending || card.form.title.trim().length < 3 || card.form.description.trim().length < 10 || !card.form.price.trim()) return false;
+            if (busy || !!pending||!!removalRaw || card.form.title.trim().length < 3 || card.form.description.trim().length < 10 || !card.form.price.trim()) return false;
             sellerSync.current?.queue(card.record!.id, sellerDraftFromCard(card));
             return await sellerSync.current!.flush(card.record!.id);
           }} onApproved={() => refreshMarketingDraft(card.record!.id)} />}
-        {!card.published && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: card.confirmed, disabled: busy || !!pending || !card.record }}
-          disabled={busy || !!pending || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
-        {!card.published && <View style={s.row}>{(!card.record || aiAvailable !== false) && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void remove(card)} style={s.chip}><Text style={s.text}>移除照片</Text></Pressable></View>}
+        {!card.published && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: card.confirmed, disabled: busy || !!pending||!!removalRaw || !card.record }}
+          disabled={busy || !!pending||!!removalRaw || !card.record} onPress={() => confirmCard(card)} style={s.chip}><Text style={s.text}>{card.confirmed ? '☑' : '☐'} 我已逐欄確認第 {index + 1} 件商品的照片、內容及售價</Text></Pressable>}
+        {!card.published && <View style={s.row}>{(!card.record || aiAvailable !== false) && <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} onPress={() => void retry(card)} style={s.chip}><Text style={s.text}>{card.record ? '重試 AI' : '重試儲存照片'}</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} accessibilityLabel={`移除第${index+1}件草稿與照片`} onPress={() => askRemove(card,index)} style={s.chip}><Text style={s.text}>移除這件草稿</Text></Pressable></View>}
       </View>)}
       <View onLayout={event => { offsets.current['shared:location'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:location' && s.highlight]}>
         <Text style={s.section}>商品地點 · 刊登必要</Text>
-        <ListingLocationPicker value={shared} disabled={busy||!!pending} onChange={value=>{setShared(old=>({...old,...value,consent:false}));setCards(old=>old.map(card=>({...card,confirmed:false})));setFieldIssue(null);}}/>
-        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置協助選位</Text></Pressable>
+        <ListingLocationPicker value={shared} disabled={busy||!!pending||!!removalRaw} onChange={value=>{setShared(old=>({...old,...value,consent:false}));setCards(old=>old.map(card=>({...card,confirmed:false})));setFieldIssue(null);}}/>
+        <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} onPress={() => void locate()} style={s.chip}><Text style={s.text}>使用目前位置協助選位</Text></Pressable>
         {issueText('shared:location')}
       </View>
       <View onLayout={event => { offsets.current['shared:delivery'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:delivery' && s.highlight]}>
         <Text style={s.section}>交付方式 · 至少選一項</Text>
-        {(['meetup', 'shipping', 'negotiable'] as const).map(key => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: shared[key] }} disabled={busy || !!pending} onPress={() => changeShared(key, !shared[key])} style={s.chip}><Text style={s.text}>{shared[key] ? '☑' : '☐'} {key === 'meetup' ? '可面交' : key === 'shipping' ? '可寄送' : '價格可議'}</Text></Pressable>)}
+        {(['meetup', 'shipping', 'negotiable'] as const).map(key => <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: shared[key] }} disabled={busy || !!pending||!!removalRaw} onPress={() => changeShared(key, !shared[key])} style={s.chip}><Text style={s.text}>{shared[key] ? '☑' : '☐'} {key === 'meetup' ? '可面交' : key === 'shipping' ? '可寄送' : '價格可議'}</Text></Pressable>)}
         {issueText('shared:delivery')}
       </View>
       <View onLayout={event => { offsets.current['shared:expiryDate'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:expiryDate' && s.highlight]}>
         <Text style={s.section}>失效日期 · 選用</Text><Text style={s.defaultBadge}>{shared.expiryDate ? `已自訂：${shared.expiryDate}` : '預設：刊登後 30 天'}</Text>
-        <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => setExpiryPicker(true)} style={s.chip}><Text style={s.text}>自訂失效日期</Text></Pressable>
-        {!!shared.expiryDate && <Pressable accessibilityRole="button" disabled={busy || !!pending} onPress={() => changeShared('expiryDate', '')} style={s.chip}><Text style={s.text}>改用預設 30 天</Text></Pressable>}
-        {expiryPicker && !busy && !pending && <ListingExpiryPicker value={shared.expiryDate} onApply={date => { changeShared('expiryDate', date); setExpiryPicker(false); }} onCancel={() => setExpiryPicker(false)} />}
+        <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} onPress={() => setExpiryPicker(true)} style={s.chip}><Text style={s.text}>自訂失效日期</Text></Pressable>
+        {!!shared.expiryDate && <Pressable accessibilityRole="button" disabled={busy || !!pending||!!removalRaw} onPress={() => changeShared('expiryDate', '')} style={s.chip}><Text style={s.text}>改用預設 30 天</Text></Pressable>}
+        {expiryPicker && !busy && !pending && !removalRaw && <ListingExpiryPicker value={shared.expiryDate} onApply={date => { changeShared('expiryDate', date); setExpiryPicker(false); }} onCancel={() => setExpiryPicker(false)} />}
         {issueText('shared:expiryDate')}
       </View>
       <View onLayout={event => { offsets.current['shared:consent'] = event.nativeEvent.layout.y; }} style={[s.group, highlightKey === 'shared:consent' && s.highlight]}>
-        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 本次同意這批商品約略位置在地圖顯示一小時（選填）</Text></Pressable>
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shared.consent }} disabled={busy || !!pending||!!removalRaw} onPress={() => changeShared('consent', !shared.consent)} style={s.chip}><Text style={s.text}>{shared.consent ? '☑' : '☐'} 本次同意這批商品約略位置在地圖顯示一小時（選填）</Text></Pressable>
         <Text style={s.small}>可不勾選並繼續刊登；一小時後停止顯示。重開 App 或延長刊登不會自動續期，可在我的商品手動確認或停止。</Text>{issueText('shared:consent')}
       </View>
       <Text style={s.small}>重新開啟草稿時，位置、交付方式與失效日期需再次確認；精確定位不保存在私人商品草稿。</Text>
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{busy && <ActivityIndicator accessibilityLabel="處理照片或刊登中" />}
-      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}
+      {cards.some(card => !card.published) && <Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw || confirmedBatchCandidates(cards).length === 0} onPress={() => void publishAll()} style={s.button}><Text style={s.white}>刊登已逐件確認的商品（{confirmedBatchCandidates(cards).length}）</Text></Pressable>}
       <Text style={s.small}>AI 參考價不是已驗證行情；無法可靠估價的商品仍須由賣家決定售價。未刊登照片只對本人可見，稍後可恢復或刪除。</Text>
     </ScrollView>
   </KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal>;

@@ -6,8 +6,10 @@ const {assertTestDatabase}=require('../../scripts/assert-test-database.cjs');
 const {startNativeQa}=require('./native-qa.cjs');
 const {seedNativeMarketplace}=require('./native-qa-marketplace-fixture.cjs');
 const {seedUiuxHomeQa}=require('./seed-uiux-home-qa.cjs');
+const {seedBatchRemovalQa}=require('./seed-batch-removal-qa.cjs');
+const {seedDiscoveryMapQa}=require('./seed-discovery-map-qa.cjs');
 const mobile=path.resolve(__dirname,'..'),[appLabel,hostLabel,phase]=process.argv.slice(2);
-qaLabel(appLabel);qaLabel(hostLabel);if(process.argv.length!==5||!['buyer','seller','logout','market','chat','photo','photo-recovery','discovery','source'].includes(phase))throw Error('Exact app/host labels and bounded buyer/seller/logout/market/chat/photo phase required');
+qaLabel(appLabel);qaLabel(hostLabel);if(process.argv.length!==5||!['buyer','seller','logout','market','chat','photo','photo-recovery','discovery','source','map','batch-remove'].includes(phase))throw Error('Exact app/host labels and bounded regression phase required');
 const isPhoto=['photo','photo-recovery'].includes(phase),recovery=phase==='photo-recovery';
 const requestedFontScale=process.env.WISHLIST_GOLDEN_FONT_SCALE;
 if(requestedFontScale!==undefined&&requestedFontScale!=='1.5')throw Error('Only the bounded enlarged-font scenario is supported');
@@ -23,7 +25,7 @@ for(const[k,v]of Object.entries(host.sourceHashes))if(hash(path.join(mobile,k))!
 for(const k of ['host','test'])if(hash(path.join(hostBuild,k+'.apk'))!==host.hashes[k])throw Error('Test APK changed');
 const evidence=path.join(mobile,'build','android-golden-regression-'+randomUUID());fs.mkdirSync(evidence,{mode:0o700});
 const report={kind:'actual-android-golden-regression',phase,appLabel,hostLabel,serial,package:app.package,apkSha256:app.apkSha256,passed:false,checkpoints:[],screenshots:[],storeDeliverable:false};
-const adbPath='/Users/hank/Library/Android/sdk/platform-tools/adb';let child,stopping=false,qa,broker,observer,brokerUsed=false,counterpartUsed=false,installedHost=false,installedTest=false,stage='preflight',ownedPhoto=null,originalFontScale=null,fontScaleChanged=false;const reverses=[],observedCalls=[];const photoRecovery={posts:0,lookups:0,checkpoint:false,dropped:false};let recoveryPath='',uploadObservation=Promise.resolve();
+const adbPath='/Users/hank/Library/Android/sdk/platform-tools/adb';let child,stopping=false,qa,broker,observer,brokerUsed=false,counterpartUsed=false,installedHost=false,installedTest=false,stage='preflight',ownedPhoto=null,originalFontScale=null,fontScaleChanged=false;const reverses=[],observedCalls=[];const photoRecovery={posts:0,lookups:0,checkpoint:false,dropped:false};let recoveryPath='',uploadObservation=Promise.resolve(),mapFixture=null,batchFixture=null;
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;child?.kill('SIGTERM');});
 function adb(args,timeout=30000,cleanup=false){return new Promise((resolve,reject)=>{
  if(stopping&&!cleanup)return reject(Error('Interrupted'));
@@ -91,8 +93,9 @@ async function main(){
  if(!/^package:\/data\/app\/[A-Za-z0-9_./+=~-]+\/base\.apk$/.test(apkPath))throw Error('Exact installed QA APK path unavailable');
  report.installedApkSha256=(await adb(['shell','sha256sum',apkPath.slice('package:'.length)])).trim().split(/\s+/)[0];
  if(report.installedApkSha256!==app.apkSha256)throw Error('Installed QA APK differs from reviewed build');
- stage='isolated-api';qa=await startNativeQa(database,300,{visualHomeFixture:true,sourceLeadsPilot:phase==='source'});
- const fixture=['chat','photo','photo-recovery'].includes(phase)?await seedNativeMarketplace(qa,'seller','switch',{seedChatForVisualQa:true}):phase!=='seller'?await seedUiuxHomeQa(qa):await seedNativeMarketplace(qa,'seller','visual-mug');
+ stage='isolated-api';qa=await startNativeQa(database,phase==='map'?600:300,{visualHomeFixture:true,sourceLeadsPilot:phase==='source'});
+ const fixture=phase==='batch-remove'?await seedBatchRemovalQa(qa,database):phase==='map'?await seedDiscoveryMapQa(qa,database):['chat','photo','photo-recovery'].includes(phase)?await seedNativeMarketplace(qa,'seller','switch',{seedChatForVisualQa:true}):phase!=='seller'?await seedUiuxHomeQa(qa):await seedNativeMarketplace(qa,'seller','visual-mug');
+ if(phase==='map')mapFixture=fixture;if(phase==='batch-remove')batchFixture=fixture;
  report.fixture=fixture;const actor=qa.actors[phase==='seller'?'seller':'buyer'];
  if(recovery){const {PrismaClient}=require('../../server/node_modules/@prisma/client');const db=new PrismaClient({datasources:{db:{url:database}}});try{const room=await db.conversation.findFirst({where:{listingId:fixture.listingId,buyerUserId:actor.id,sellerUserId:qa.actors.seller.id}});if(!room)throw Error('Recovery fixture missing');recoveryPath='/api/chat/conversations/'+room.id+'/photo-messages';}finally{await db.$disconnect();}}
  if(isPhoto){stage='owned-photo-fixture';await preparePhoto();}
@@ -117,6 +120,10 @@ async function main(){
  }
  broker=http.createServer((req,res)=>{
   const local=req.socket.remoteAddress==='127.0.0.1'&&!req.headers.origin&&req.headers['x-wishlist-golden-phase']===phase&&req.headers.host==='127.0.0.1:'+broker.address().port;
+  if(local&&!stopping&&phase==='map'&&brokerUsed&&!counterpartUsed&&req.method==='POST'&&req.url==='/map/second-list'){
+   counterpartUsed=true;res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
+   void fixture.secondList().then(value=>{report.secondList=value;res.statusCode=200;res.end(JSON.stringify(value));}).catch(()=>{res.statusCode=409;res.end('{}');});return;
+  }
   if(local&&!stopping&&phase==='chat'&&brokerUsed&&!counterpartUsed&&req.method==='POST'&&req.url==='/counterpart/confirm-meetup'){
    counterpartUsed=true;res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
    void confirmCounterpart().then(value=>{res.statusCode=200;res.end(JSON.stringify(value));}).catch(()=>{res.statusCode=409;res.end('{}');});return;
@@ -126,13 +133,14 @@ async function main(){
   }
   const allowed=!stopping&&!brokerUsed&&req.method==='GET'&&req.url==='/fixture'&&req.socket.remoteAddress==='127.0.0.1'&&!req.headers.origin&&req.headers['x-wishlist-golden-phase']===phase&&req.headers.host==='127.0.0.1:'+broker.address().port;
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.statusCode=allowed?200:403;
-  if(allowed){brokerUsed=true;res.end(JSON.stringify({package:app.package,email:actor.email,password:actor.password,...(ownedPhoto?{photoName:ownedPhoto.name}:{})}));}else res.end('{}');
+  if(allowed){brokerUsed=true;res.end(JSON.stringify({package:app.package,email:actor.email,password:actor.password,...(ownedPhoto?{photoName:ownedPhoto.name}:{}),...(phase==='map'?{mapTitles:fixture.titles}:{})}));}else res.end('{}');
  });await new Promise((resolve,reject)=>{broker.once('error',reject);broker.listen(0,'127.0.0.1',resolve);});
  let apiPort=18889;
- if(phase==='logout'||recovery){
+ if(phase==='logout'||recovery||phase==='map'||phase==='batch-remove'){
   observer=http.createServer((req,res)=>{
    if(req.socket.remoteAddress!=='127.0.0.1'||!req.url?.startsWith('/api/')){res.writeHead(400);res.end();return;}
    const pathname=req.url.split('?')[0];if(pathname==='/api/notifications/devices'||pathname==='/api/auth/login')observedCalls.push({method:req.method,path:pathname});
+   if((phase==='map'||phase==='batch-remove')&&(pathname==='/api/discovery'||pathname.startsWith('/api/product-wishes')||pathname.startsWith('/api/listing-media/photo-removals/')))observedCalls.push({method:req.method,path:pathname,query:pathname==='/api/discovery'?req.url.split('?')[1]:undefined});
    if(recovery&&req.method==='POST'&&pathname===recoveryPath){
     photoRecovery.posts++;
     const parser=require('../../server/node_modules/busboy')({headers:req.headers,limits:{files:1,fileSize:5242880,fields:3,fieldSize:2000,parts:4}}),fields={};let photoBytes,fileCount=0;
@@ -147,7 +155,7 @@ async function main(){
    const lookupPrefix=recoveryPath.replace(/photo-messages$/,'messages/by-client-id/');
    if(recovery&&req.method==='GET'&&pathname.startsWith(lookupPrefix)){photoRecovery.lookups++;photoRecovery.lookupId=pathname.slice(lookupPrefix.length);}
    const upstream=http.request({hostname:'127.0.0.1',port:18889,path:req.url,method:req.method,headers:{...req.headers,host:'127.0.0.1:18889'}},reply=>{
-    if(recovery&&req.method==='POST'&&pathname===recoveryPath&&!photoRecovery.dropped&&reply.statusCode===201){
+    if((recovery&&req.method==='POST'&&pathname===recoveryPath&&!photoRecovery.dropped&&reply.statusCode===201)||(phase==='batch-remove'&&req.method==='POST'&&pathname.startsWith('/api/listing-media/photo-removals/')&&!photoRecovery.dropped&&reply.statusCode===200)){
      photoRecovery.dropped=true;photoRecovery.serverStatus=reply.statusCode;reply.resume();reply.once('end',()=>{res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'private, no-store'});res.end('{"error":"Synthetic lost acknowledgment"}');});return;
     }
     res.writeHead(reply.statusCode||502,reply.headers);reply.pipe(res);
@@ -166,7 +174,7 @@ async function main(){
  report.fontScale=(await adb(['shell','settings','get','system','font_scale'])).trim();
  if(requestedFontScale&&report.fontScale!==requestedFontScale)throw Error('Enlarged-font setup failed');
  stage='native-instrumentation';
- const output=await adb(['shell','am','instrument','-w','-e','class','com.hankhuang.wishlistgoldenqa.MarketplaceGoldenTest#approvedMarketplaceRegression','-e','phase',phase,'-e','inputPort',String(broker.address().port),host.package+'.test/androidx.test.runner.AndroidJUnitRunner'],240000);
+ const output=await adb(['shell','am','instrument','-w','-e','class','com.hankhuang.wishlistgoldenqa.MarketplaceGoldenTest#approvedMarketplaceRegression','-e','phase',phase,'-e','inputPort',String(broker.address().port),host.package+'.test/androidx.test.runner.AndroidJUnitRunner'],phase==='map'?480000:240000);
  let safeOutput=output;
  for(const fixtureActor of Object.values(qa.actors))for(const value of [fixtureActor.email,fixtureActor.phoneNumber,fixtureActor.password])if(typeof value==='string'&&value.length>0)safeOutput=safeOutput.split(value).join('[synthetic credential redacted]');
  safeOutput=safeOutput.replace(/Bearer\s+[A-Za-z0-9._-]+/g,'Bearer [redacted]').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[token redacted]');
@@ -176,7 +184,7 @@ async function main(){
  if(!/OK \(1 test\)/.test(output)||/FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed/.test(output))throw Error('Native regression assertions failed');
  if(!brokerUsed)throw Error('Native test did not consume its synthetic fixture');
  stage='database-audit';const {PrismaClient}=require('../../server/node_modules/@prisma/client');const db=new PrismaClient({datasources:{db:{url:database}}});
- try{report.databaseAudit={actorStillExists:!!await db.user.findUnique({where:{id:actor.id}})};if(!report.databaseAudit.actorStillExists)throw Error('Non-deleting phase unexpectedly erased fixture');if(phase==='buyer'){const items=await db.item.findMany({where:{wishlist:{userId:actor.id},name:'Golden Edited Mug'},select:{id:true,name:true,maxPrice:true,priceCurrency:true,isHidden:true,isPurchased:true}});report.databaseAudit.manualWishes=items;if(items.length!==1||items[0].maxPrice!==42.5||items[0].priceCurrency!=='TWD'||items[0].isHidden||items[0].isPurchased)throw Error('Native wish persistence mismatch');const originalNameRemaining=await db.item.count({where:{wishlist:{userId:actor.id},name:'Golden Manual Mug'}});const totalWishes=await db.item.count({where:{wishlist:{userId:actor.id}}});const creationReceipts=await db.wishCreateReceipt.count({where:{userId:actor.id,kind:'ITEM',resourceId:items[0].id}});report.databaseAudit.wishIdentity={originalNameRemaining,totalWishes,creationReceipts};if(originalNameRemaining!==0||totalWishes!==3||creationReceipts!==1)throw Error('Native wish identity or duplicate audit mismatch');}if(phase==='seller'){const listing=await db.listing.findUnique({where:{id:fixture.listingId},select:{status:true,version:true}});report.databaseAudit.listing=listing;if(listing?.status!=='ACTIVE'||listing.version!==3)throw Error('Native reserve/restore DB mismatch');}if(isPhoto){
+ try{report.databaseAudit={actorStillExists:!!await db.user.findUnique({where:{id:actor.id}})};if(!report.databaseAudit.actorStillExists)throw Error('Non-deleting phase unexpectedly erased fixture');if(phase==='batch-remove'){const receipts=await db.photoRemovalReceipt.findMany({where:{userId:actor.id},select:{state:true,mediaId:true,clientActionId:true}});const remaining=await db.listingMedia.count({where:{id:{in:[...fixture.sourceIds,...fixture.generatedIds]}}}),usage=await db.removedMarketingUsage.count({where:{userId:actor.id}});report.databaseAudit.batchRemoval={receipts,remaining,usage};report.observedCalls=observedCalls;const posts=observedCalls.filter(c=>c.method==='POST'&&c.path.startsWith('/api/listing-media/photo-removals/'));if(receipts.length!==3||receipts.some(r=>r.state!=='REMOVED')||remaining!==0||usage!==3||posts.length!==3||!photoRecovery.dropped)throw Error('Native draft removal or unknown-result audit mismatch');}if(phase==='map'){const receipts=await db.productWishReceipt.findMany({where:{userId:actor.id,productKey:'listing:'+fixture.wishProductId},select:{action:true,wishlistId:true,clientRequestId:true},orderBy:{createdAt:'asc'}});const links=await db.productWishLink.count({where:{userId:actor.id,itemId:{not:null}}}),items=await db.item.count({where:{wishlist:{userId:actor.id}}});report.databaseAudit.map={receipts,links,items,distinctProducts:fixture.listingIds.length,photoCases:fixture.photoCases};report.observedCalls=observedCalls;if(receipts.map(r=>r.action).join(',')!=='ADD,REMOVE,ADD,REMOVE'||new Set(receipts.map(r=>r.clientRequestId)).size!==4||links!==0||items!==2||!report.secondList?.created||receipts[2].wishlistId!==report.secondList.wishlistId)throw Error('Native map wishlist audit mismatch');}if(phase==='buyer'){const items=await db.item.findMany({where:{wishlist:{userId:actor.id},name:'Golden Edited Mug'},select:{id:true,name:true,maxPrice:true,priceCurrency:true,isHidden:true,isPurchased:true}});report.databaseAudit.manualWishes=items;if(items.length!==1||items[0].maxPrice!==42.5||items[0].priceCurrency!=='TWD'||items[0].isHidden||items[0].isPurchased)throw Error('Native wish persistence mismatch');const originalNameRemaining=await db.item.count({where:{wishlist:{userId:actor.id},name:'Golden Manual Mug'}});const totalWishes=await db.item.count({where:{wishlist:{userId:actor.id}}});const creationReceipts=await db.wishCreateReceipt.count({where:{userId:actor.id,kind:'ITEM',resourceId:items[0].id}});report.databaseAudit.wishIdentity={originalNameRemaining,totalWishes,creationReceipts};if(originalNameRemaining!==0||totalWishes!==3||creationReceipts!==1)throw Error('Native wish identity or duplicate audit mismatch');}if(phase==='seller'){const listing=await db.listing.findUnique({where:{id:fixture.listingId},select:{status:true,version:true}});report.databaseAudit.listing=listing;if(listing?.status!=='ACTIVE'||listing.version!==3)throw Error('Native reserve/restore DB mismatch');}if(isPhoto){
  const room=await db.conversation.findFirst({where:{listingId:fixture.listingId,buyerUserId:actor.id,sellerUserId:qa.actors.seller.id}});if(!room)throw Error('Photo room missing');
  const photos=await db.message.findMany({where:{conversationId:room.id,photoHash:{not:null}}});const total=await db.message.count({where:{conversationId:room.id}}),photo=photos[0];
  if(photos.length!==1||total!==6||photo.text!=='GoldenAndroidPhoto'||photo.senderUserId!==actor.id||!photo.photoBytes)throw Error('Photo persistence mismatch');
@@ -212,6 +220,8 @@ async function main(){
   if(broker)await new Promise(resolve=>{broker.close(resolve);broker.closeAllConnections();});
   if(observer)await new Promise(resolve=>{observer.close(resolve);observer.closeAllConnections();});
   if(ownedPhoto)try{await cleanupPhoto();}catch{report.photoFixtureCleanupIncomplete=true;}
+  if(batchFixture)try{await batchFixture.cleanup();report.batchFixtureOutboxCleanup=true;}catch{report.fixtureCleanupFailed=true;}
+  if(mapFixture)try{await mapFixture.cleanup();report.mapReferenceCleanup=true;}catch{report.fixtureCleanupFailed=true;}
   if(qa)try{report.fixtureCleanup=await qa.stop();}catch{report.fixtureCleanupFailed=true;}
   for(const [pkg,owned]of [[host.package+'.test',installedTest],[host.package,installedHost]])if(owned)try{await adb(['uninstall',pkg],20000,true);}catch{report.testHostCleanupIncomplete=true;}
   report.interrupted=stopping;if(stopping||report.fontScaleCleanupIncomplete||report.photoFixtureCleanupIncomplete||report.captureCopyIncomplete||report.reverseCleanupIncomplete||report.fixtureCleanupFailed||report.nativeStopIncomplete||report.testHostCleanupIncomplete)report.passed=false;

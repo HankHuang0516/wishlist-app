@@ -63,3 +63,20 @@ it('uses only external original-new evidence, invalidates expired or changed inp
  const key=scored[0].key;const priceChanged=await attachCp(all.map(p=>p.key===key?{...p,price:999999}:p));expect(priceChanged.find(p=>p.key===key)?.cp).toBeUndefined();
  await prisma.retailPriceObservation.update({where:{id:scored[0].cp!.retail.id},data:{expiresAt:new Date(0)}});expect((await attachCp(all)).find(p=>p.key===key)?.cp).toBeUndefined();
 });
+
+it('applies the same category/area/source/condition/budget filters to every map page and respects map consent',async()=>{
+ const query='main=electronics&sub=monitors&county='+encodeURIComponent('臺南市')+'&source=source&condition=USED&min=1000&max=1000&limit=60';
+ async function collect(map:boolean){let cursor='',first:any;const products:any[]=[];do{const r=await http.get('/discovery?'+query+(map?'&presentation=map':'')+(cursor?'&cursor='+cursor:''));expect(r.status).toBe(200);first??=r.body;products.push(...r.body.items);cursor=r.body.nextCursor??'';}while(cursor);return{page:first,products};}
+ const list=await collect(false),map=await collect(true);
+ expect(map.products.map(p=>p.key)).toEqual(list.products.map(p=>p.key));expect(map.products.length).toBeGreaterThan(500);
+ expect(map.page.mapTotals).toEqual({located:map.products.length,unmapped:0});
+ expect(map.products.every(p=>p.mapLocation?.coordinates[0]===120.236&&p.mapLocation.coordinates[1]===23&&p.mapLocation.precision==='PUBLIC_MEETING_POINT')).toBe(true);
+ expect(list.products.every(p=>p.mapLocation===undefined)).toBe(true);
+ const listing=await prisma.listing.update({where:{id:listingId},data:{location:{create:{county:'臺南市',district:'永康區',publicLatitude:23.01,publicLongitude:120.23,precisionMeters:2200}},mapVisibleUntil:new Date(Date.now()+60000)}});
+ try{
+  const own=await http.get('/discovery?presentation=map&source=listing');expect(own.body.items.find((p:any)=>p.id===listing.id).mapLocation).toMatchObject({coordinates:[120.23,23.01],precision:'APPROXIMATE_2KM'});
+  const scoped=await http.get('/discovery?presentation=map&source=listing&bbox=121,24,122,26');expect(scoped.body.items.some((p:any)=>p.id===listing.id)).toBe(false);
+  await prisma.listing.update({where:{id:listing.id},data:{mapVisibleUntil:new Date(0)}});
+  const expired=await http.get('/discovery?presentation=map&source=listing');expect(expired.body.items.find((p:any)=>p.id===listing.id).mapLocation).toBeNull();expect(expired.body.mapTotals.unmapped).toBeGreaterThan(0);
+ }finally{await prisma.listing.update({where:{id:listing.id},data:{mapVisibleUntil:null,location:{delete:true}}});}
+});

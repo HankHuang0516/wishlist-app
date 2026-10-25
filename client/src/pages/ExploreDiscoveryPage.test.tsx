@@ -3,6 +3,7 @@ import {MemoryRouter,useLocation} from 'react-router-dom';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {AuthContext} from '../context/AuthContext';
 import ExploreDiscoveryPage from './ExploreDiscoveryPage';
+vi.mock('../components/DiscoveryMap',()=>({default:({page,onSearchBounds}:any)=><div data-testid="shared-discovery-map">{page.items.map((p:any)=><span key={p.key}>{p.title}</span>)}<button onClick={()=>onSearchBounds([120,22,121,24])}>查詢合成範圍</button></div>}));
 import {ApiFailure} from '../lib/marketplaceApi';
 import {isLegacyExplore,readDiscovery} from '../lib/discovery';
 import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
@@ -110,4 +111,19 @@ it.each([['zh-TW','查看 Facebook 原文','請 Wishlist AI 代問'],['en-US','V
  expect(within(dialog).getByRole('link',{name:inquire})).toHaveAttribute('href','/chat?source='+p.id);
  expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
  fireEvent.click(within(dialog).getByRole('button',{name:locale==='zh-TW'?'關閉':'Close'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('keeps every shared filter bidirectionally between map and list and searches bounds only on an explicit action',async()=>{
+ const mapPage={...page,mapTotals:{located:1,unmapped:0},items:[{...p,mapLocation:{coordinates:[120.236,23],precision:'PUBLIC_MEETING_POINT'}}]};
+ publicApi.mockImplementation(async(path:string)=>path.includes('presentation=map')?mapPage:page);
+ render(view('/explore?q=BenQ&main=electronics&sub=monitors&county='+encodeURIComponent('臺北市')+'&source=source&condition=UNKNOWN&min=0&max=1500&sort=price-asc&display=list'));
+ await screen.findByText('BenQ 合成螢幕');fireEvent.click(screen.getByRole('button',{name:'探索地圖'}));
+ await screen.findByTestId('shared-discovery-map');
+ let params=new URLSearchParams(publicApi.mock.calls.at(-1)![0].split('?')[1]);
+ for(const [key,value]of Object.entries({presentation:'map',q:'BenQ',main:'electronics',sub:'monitors',county:'臺北市',source:'source',condition:'UNKNOWN',min:'0',max:'1500',sort:'price-asc'}))expect(params.get(key)).toBe(value);
+ expect(params.has('bbox')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'查詢合成範圍'}));
+ await waitFor(()=>expect(publicApi.mock.calls.at(-1)![0]).toContain('bbox=120%2C22%2C121%2C24'));
+ fireEvent.click(screen.getByRole('button',{name:'商品列表',exact:true}));await waitFor(()=>expect(screen.queryByTestId('shared-discovery-map')).not.toBeInTheDocument());
+ params=new URLSearchParams(publicApi.mock.calls.at(-1)![0].split('?')[1]);
+ expect(params.has('presentation')).toBe(false);expect(params.get('condition')).toBe('UNKNOWN');expect(params.get('sub')).toBe('monitors');expect(params.get('max')).toBe('1500');
 });

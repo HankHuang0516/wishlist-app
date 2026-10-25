@@ -90,17 +90,18 @@ public class MarketplaceGoldenTest {
         }
         await(label);
     }
-    private void revealBackwards(String label) throws Exception {
+    private void revealBackwards(String label) throws Exception { revealBackwards(label,44); }
+    private void revealBackwards(String label,int minimumHeight) throws Exception {
         for(int attempt=0;attempt<10;attempt++){
             UiObject2 match=node(label);
-            if(match!=null&&match.getVisibleBounds().height()>=44)return;
+            if(match!=null&&match.getVisibleBounds().height()>=minimumHeight)return;
             foreground();UiObject2 form=device.findObject(By.clazz("android.widget.ScrollView"));
             assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
             assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
             assertTrue("Padding swipe must be delivered",device.swipe(area.left+12,area.top+48,area.left+12,area.bottom-32,35));
             device.waitForIdle(1000);
         }
-        assertTrue("Backward-revealed control must be reachable",await(label).getVisibleBounds().height()>=44);
+        assertTrue("Backward-revealed control must be reachable",await(label).getVisibleBounds().height()>=minimumHeight);
     }
     private void capture(String name) throws Exception {
         foreground();
@@ -370,15 +371,18 @@ public class MarketplaceGoldenTest {
         checkpoint("photo-preview-and-send");capture("golden-11-photo-preview");reveal("照片補充說明");await("照片補充說明").setText("GoldenAndroidPhoto");reveal("傳送照片");click("傳送照片");
         if(phase.equals("photo-recovery")){
             checkpoint("photo-lost-ack-recovery");
-            reveal("尚未確認照片送出。請先查核原回執；不會自動重送。");
+            await("照片傳送結果尚未確認");
+            capture("golden-08-photo-pending-top");
             reveal("照片補充說明");assertFalse("Pending caption cannot be edited",await("照片補充說明").isEnabled());
             assertFalse("Pending photo cannot be removed",has("移除照片"));
-            reveal("尚未確認照片送出。請先查核原回執；不會自動重送。");capture("golden-08-photo-pending");
+            revealBackwards("確認照片傳送結果",48);
+            assertTrue("Receipt action remains fully reachable",await("確認照片傳送結果").getVisibleBounds().height()>=48);
+            assertFalse("Secondary retry stays collapsed",has("重試相同照片"));capture("golden-08-photo-pending");
             String port=InstrumentationRegistry.getArguments().getString("inputPort","");
             HttpURLConnection check=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/photo/recovery-checkpoint").openConnection();
             check.setRequestProperty("X-Wishlist-Golden-Phase",phase);check.setConnectTimeout(5000);check.setReadTimeout(5000);check.setInstanceFollowRedirects(false);
             assertEquals("No resend or receipt read before the explicit lookup",200,check.getResponseCode());check.disconnect();
-            reveal("確認照片傳送結果");click("確認照片傳送結果");
+            revealBackwards("確認照片傳送結果",48);click("確認照片傳送結果");
         }
         assertTrue("Photo composer closes only after acknowledgment",device.wait(Until.gone(By.text("傳送商品照片")),20000));
         await("放大商品照片");capture("golden-11-photo-sent");click("放大商品照片");await("商品照片放大檢視");capture("golden-11-photo-zoom");click("關閉商品照片");checkpoint("photo-checks-complete");

@@ -27,9 +27,9 @@ const adbPath='/Users/hank/Library/Android/sdk/platform-tools/adb';let child,sto
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;child?.kill('SIGTERM');});
 function adb(args,timeout=30000,cleanup=false){return new Promise((resolve,reject)=>{
  if(stopping&&!cleanup)return reject(Error('Interrupted'));
- const p=spawn(adbPath,['-s',serial,...args],{stdio:['ignore','pipe','pipe']});child=p;let out='';const timer=setTimeout(()=>p.kill('SIGTERM'),timeout);
- p.stdout.on('data',b=>{if(out.length<2000000)out+=b.toString();});p.stderr.on('data',()=>{});
- p.on('error',()=>{clearTimeout(timer);reject(Error('ADB unavailable'));});p.on('close',code=>{clearTimeout(timer);if(child===p)child=null;if(code!==0&&!report.firstDeviceFailure)report.firstDeviceFailure={stage,command:args[0],operation:args[0]==='shell'?args[1]:null,exitCode:code};code===0?resolve(out):reject(Error('Device command failed; raw output withheld'));});
+ const p=spawn(adbPath,['-s',serial,...args],{stdio:['ignore','pipe','pipe']});child=p;let out='',installDiagnostic='';const timer=setTimeout(()=>p.kill('SIGTERM'),timeout);
+ p.stdout.on('data',b=>{if(out.length<2000000)out+=b.toString();});p.stderr.on('data',b=>{if(args[0]==='install'&&installDiagnostic.length<8192)installDiagnostic+=b.toString();});
+ p.on('error',()=>{clearTimeout(timer);reject(Error('ADB unavailable'));});p.on('close',code=>{clearTimeout(timer);if(child===p)child=null;if(code!==0&&!report.firstDeviceFailure)report.firstDeviceFailure={stage,command:args[0],operation:args[0]==='shell'?args[1]:null,exitCode:code,...(args[0]==='install'?{installFailureCode:(out+installDiagnostic).match(/\b(?:INSTALL_FAILED|INSTALL_PARSE_FAILED)_[A-Z_]+\b/)?.[0]??null}:{})};code===0?resolve(out):reject(Error('Device command failed; raw output withheld'));});
 });}
 async function reverse(port,hostPort=port){const endpoint='tcp:'+port;const current=await adb(['reverse','--list']);if(current.split(/\r?\n/).some(l=>l.split(/\s+/).includes(endpoint)))throw Error('Own reverse endpoint occupied; not replacing');await adb(['reverse',endpoint,'tcp:'+hostPort]);reverses.push(endpoint);}
 function shellQuote(value){return "'"+value.replaceAll("'","'\\''")+"'";}
@@ -74,6 +74,9 @@ async function cleanupPhoto(){
  if(rows!==0)throw Error('Fixture index remains');report.photoFixtureCleanup={indexRowsRemaining:0,fileRemoved:true};
 }
 async function main(){
+ const sdk=(await adb(['shell','getprop','ro.build.version.sdk'])).trim(),abis=(await adb(['shell','getprop','ro.product.cpu.abilist'])).trim();
+ if(!/^[0-9]{1,3}$/.test(sdk)||!/^[a-zA-Z0-9_,.-]{1,100}$/.test(abis))throw Error('Assigned device compatibility metadata unavailable');
+ report.device={apiLevel:Number(sdk),abis:abis.split(',')};
  for(const pkg of [host.package,host.package+'.test'])if((await adb(['shell','pm','list','packages','-u',pkg])).split(/\r?\n/).includes('package:'+pkg))throw Error('Test host already installed; preserve it');
  const installed=(await adb(['shell','pm','list','packages','-u',app.package])).split(/\r?\n/).includes('package:'+app.package);
  const ownerDirectory=path.join(mobile,'..','android-golden-owners',appLabel),owner=path.join(ownerDirectory,serial+'.json');

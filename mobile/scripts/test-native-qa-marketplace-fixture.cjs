@@ -55,8 +55,18 @@ async function main() {
       assert.equal((await blockedWrite.json()).errorCode, 'QA_ROUTE_DISABLED');
     } finally { visualCleanup = await visualQa.stop(); }
     assert.ok(Object.values(visualCleanup).every(value => value === 0));
+    const profileQa=await startNativeQa(process.env.TEST_DATABASE_URL,60,{visualHomeFixture:true});let profileCleanup;
+    try{
+      const login=await fetch(profileQa.apiUrl+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phoneNumber:profileQa.actors.buyer.email,password:profileQa.actors.buyer.password})});assert.equal(login.status,200);const token=(await login.json()).token;
+      const headers={Authorization:'Bearer '+token},benefits=await fetch(profileQa.apiUrl+'/api/payment/benefits',{headers});assert.equal(benefits.status,200);assert.equal(benefits.headers.get('cache-control'),'private, no-store');
+      const value=await benefits.json();assert.equal(value.inquiry.freeWeeklyLimit,3);assert.equal(value.inquiry.freeRemaining,3);assert.deepEqual(value.availability,{apple:false,google:false,web:false});
+      assert.equal((await fetch(profileQa.apiUrl+'/api/payment/benefits')).status,401);
+      const availability=await fetch(profileQa.apiUrl+'/api/marketing/availability',{headers});assert.equal(availability.status,200);assert.equal(availability.headers.get('cache-control'),'private, no-store');const allowance=await availability.json();assert.equal(allowance.permanentCreditsRemaining,0);assert.equal(allowance.paidPurchasesAvailable,false);
+      for(const route of ['/api/payment/verify','/api/marketing/jobs']){const blocked=await fetch(profileQa.apiUrl+route,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,404);assert.equal((await blocked.json()).errorCode,'QA_ROUTE_DISABLED');}
+    }finally{profileCleanup=await profileQa.stop();}
+    assert.ok(Object.values(profileCleanup).every(value=>value===0));
     console.log(JSON.stringify({ kind: 'isolated-native-marketplace-fixture', passed: true, cleanup,
-      marketingVisualCleanup: visualCleanup, marketingVisualReadOnly: true, credentialsSerialized: false, productionMutations: 0 }));
+      marketingVisualCleanup: visualCleanup, profileCleanup, ownBenefitsReadVerified:true, paidWritesStillBlocked:true, marketingVisualReadOnly: true, credentialsSerialized: false, productionMutations: 0 }));
   } finally { await qa.stop(); }
 }
 

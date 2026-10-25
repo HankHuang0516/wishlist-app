@@ -19,8 +19,8 @@ export function parsePublicMapLocation(value:unknown):PublicMapLocation|null {
  * Large/narrow layouts grow the explicit canvas rather than shrinking targets. */
 export function discoveryMapLayout(items:readonly Item[],catalog:readonly MapCatalog[],requestedWidth:number,fontScale=1){
  if(!Number.isFinite(requestedWidth)||requestedWidth<=0||!Number.isFinite(fontScale)||fontScale<=0||new Set(items.map(p=>p.key)).size!==items.length)throw Error('Invalid map layout input');
- const width=Math.max(280,Math.floor(requestedWidth)),scale=Math.max(1,fontScale),size=52,gap=8,pad=12;
- const regions=width>=304&&scale<1.3?2:width>=720?2:1;
+ const width=Math.max(280,Math.floor(requestedWidth)),scale=Math.max(1,fontScale),size=52,gap=3,pad=4;
+ const regions=width>=351&&scale<1.3?2:width>=720?2:1;
  const groupWidth=(width-pad*2-gap*(regions-1))/regions;
  const columns=Math.max(1,Math.floor((groupWidth-pad*2+gap)/(size+gap)));
  const nodes:ThumbnailNode[]=[],headings:MapHeading[]=[],boxes:MapGroupBox[]=[];

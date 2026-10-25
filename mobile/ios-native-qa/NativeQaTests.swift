@@ -43,7 +43,7 @@ final class NativeQaTests: XCTestCase {
         // ScrollView. Swiping it vertically may tap another status instead of
         // exposing an offscreen field in the product list below.
         let outer=app.scrollViews.matching(identifier:"discovery-outer-scroll").firstMatch
-        if outer.exists {return outer}
+        if outer.exists && outer.isHittable {return outer}
         return (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
             .filter { $0.exists && $0.isHittable && $0.frame.height >= 120 }
             .max { $0.frame.height < $1.frame.height }
@@ -169,7 +169,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -1121,6 +1121,11 @@ final class NativeQaTests: XCTestCase {
             checkpoint("map-thirty-six-selectors")
             try required("清除搜尋文字",scroll:true,kind:.button);try tap("清除搜尋文字");try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true)
             try tap("切換地圖瀏覽",kind:.any);try required("本批 36 張商品縮圖",scroll:true)
+            checkpoint("map-information-accessible")
+            try required("地圖來源與排列說明",scroll:true,kind:.button);try tap("地圖來源與排列說明")
+            let closeInfo=try required("關閉地圖說明",kind:.button)
+            guard closeInfo.isHittable,closeInfo.frame.width>=44,closeInfo.frame.height>=44,app.frame.contains(closeInfo.frame) else{throw Failure.unstableControl}
+            try safeScreenshot("qa-map-information");try tap("關閉地圖說明")
             try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
             // React Native exposes testID on the canvas host view on iOS.
             // Gestures target that exact host; its AX type need not be ScrollView.
@@ -1143,7 +1148,20 @@ final class NativeQaTests: XCTestCase {
             try safeScreenshot("qa-map-thirty-six")
             checkpoint("map-wishlist-add-remove")
             let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
-            try required(add,scroll:true,kind:.button);try tap(add);try required(remove,scroll:true,kind:.button);try safeScreenshot("qa-map-wishlist-saved");try tap(remove);try required(add)
+            try required(add,scroll:true,kind:.button);try tap(add)
+            try required("第二份地圖願望",scroll:true);try tap("第二份地圖願望");try safeScreenshot("qa-map-wishlist-choice");try tap("確認加入")
+            guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
+            try required(remove,scroll:true,kind:.button)
+            checkpoint("map-wishlist-server-readback")
+            try tapTab("首頁");try tapTab("探索");try required("39 筆商品與來源",scroll:true)
+            try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true);try tap("切換地圖瀏覽",kind:.any)
+            try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+            let lastLabel="選取商品："+title
+            for _ in 0..<24 {let control=element(lastLabel,kind:.button);if control.exists&&control.isHittable&&control.frame.height>=48 {break};scrollToward(control,in:element("discovery-map-scroll"))}
+            try required(lastLabel,kind:.button);try tap(lastLabel);try required(remove,scroll:true,kind:.button);try safeScreenshot("qa-map-wishlist-saved")
+            try tap(remove);try required("確認移除",scroll:true,kind:.button);try tap("確認移除")
+            guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
+            try required(add,scroll:true,kind:.button)
             checkpoint("batch-private-draft-removal")
             try tapTab("我的");try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物")
             try required("商品草稿 3/12",scroll:true);try required("移除第1件草稿與照片",scroll:true,kind:.button);try tap("移除第1件草稿與照片")

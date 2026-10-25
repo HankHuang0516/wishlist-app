@@ -92,7 +92,8 @@ public class MarketplaceGoldenTest {
             foreground();
             try{UiObject2 form=device.findObject(By.res("discovery-outer-scroll"));if(form==null)form=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),5000);assertNotNull("Scroll container required at "+stage,form);Rect area=form.getVisibleBounds();
                 assertTrue("Scroll viewport must remain usable",area.height()>100&&area.width()>24);
-                boolean delivered=device.swipe(8,forward?area.bottom-32:area.top+48,8,forward?area.top+48:area.bottom-32,35);
+                int distance=Math.min(160,Math.max(64,area.height()/3)),middle=area.centerY();
+                boolean delivered=device.swipe(8,middle+(forward?distance/2:-distance/2),8,middle+(forward?-distance/2:distance/2),80);
                 if(delivered){device.waitForIdle(1000);SystemClock.sleep(100);return;}
             }catch(StaleObjectException refreshedTree){/* Re-query after a committed React layout. */}
             device.waitForIdle(500);SystemClock.sleep(100);
@@ -101,12 +102,12 @@ public class MarketplaceGoldenTest {
     }
     private void scrollForwardOnPadding(){scrollOnPadding(true);}
     private void reveal(String label) throws Exception {
-        for(int attempt=0;attempt<10&&!visible(label,1);attempt++)scrollOnPadding(true);
+        for(int attempt=0;attempt<24&&!visible(label,1);attempt++)scrollOnPadding(true);
         assertTrue("Revealed control must be visible at "+stage,visible(label,1));
     }
     private void revealBackwards(String label) throws Exception {revealBackwards(label,44);}
     private void revealBackwards(String label,int minimumHeight) throws Exception {
-        for(int attempt=0;attempt<10&&!visible(label,minimumHeight);attempt++)scrollOnPadding(false);
+        for(int attempt=0;attempt<24&&!visible(label,minimumHeight);attempt++)scrollOnPadding(false);
         assertTrue("Backward-revealed control must be reachable at "+stage,visible(label,minimumHeight));
     }
     private void capture(String name) throws Exception {
@@ -472,9 +473,9 @@ public class MarketplaceGoldenTest {
         HttpURLConnection create=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/map/second-list").openConnection();create.setRequestMethod("POST");create.setRequestProperty("X-Wishlist-Golden-Phase",phase);create.setConnectTimeout(5000);create.setReadTimeout(15000);create.setInstanceFollowRedirects(false);assertEquals(200,create.getResponseCode());create.disconnect();
         click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
         reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(add);
-        checkpoint("map-multiple-wishlist-confirm");click(add);await("加入願望清單");click("第二份地圖願望");capture("map-multiple-wishlist-confirm");click("確認加入");await(remove);
+        checkpoint("map-multiple-wishlist-confirm");click(add);await("加入願望清單");click("第二份地圖願望");capture("map-multiple-wishlist-confirm");click("確認加入");reveal(remove);await(remove);
         checkpoint("map-wishlist-reentry-readback");click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
-        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(remove);capture("map-wishlist-server-readback");click(remove);await("從願望清單移除");capture("map-multiple-wishlist-remove");click("確認移除");await(add);
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(remove);capture("map-wishlist-server-readback");click(remove);await("從願望清單移除");capture("map-multiple-wishlist-remove");click("確認移除");reveal(add);await(add);
         checkpoint("map-checks-complete");
     }
     private void batchCount(int count) throws Exception {
@@ -486,10 +487,10 @@ public class MarketplaceGoldenTest {
         await(label);
     }
     private void batchRemove() throws Exception {
-        checkpoint("batch-removal-open");click("我的");reveal("刊登好物");click("刊登好物");batchCount(3);
+        checkpoint("batch-removal-my-entry");click("我的");new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToBeginning(15);capture("batch-removal-my-entry");reveal("刊登好物");click("刊登好物");checkpoint("batch-removal-private-drafts");batchCount(3);
         checkpoint("batch-removal-cancel");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");await("移除這件草稿？");click("保留草稿");batchCount(3);
         checkpoint("batch-removal-lost-ack");reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");
-        revealBackwards("查核原草稿移除");capture("batch-removal-unknown-result");click("查核原草稿移除");batchCount(2);
+        revealBackwards("查核原草稿移除");assertFalse("Photo-removal recovery must not offer a publication-recovery action",has("確認先前未完成的刊登"));capture("batch-removal-unknown-result");click("查核原草稿移除");batchCount(2);
         checkpoint("batch-removal-remaining-drafts");for(int remaining=1;remaining>=0;remaining--){reveal("移除第1件草稿與照片");click("移除第1件草稿與照片");click("移除草稿與照片");batchCount(remaining);}
         capture("batch-removal-empty");click("稍後繼續");await("首頁");click("刊登好物");batchCount(0);capture("batch-removal-reopened-empty");checkpoint("batch-removal-checks-complete");
     }

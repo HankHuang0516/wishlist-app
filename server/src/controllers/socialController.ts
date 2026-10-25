@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 import { API_ERROR_CODES } from '../lib/errorCodes';
 import { socialCard, socialCardSelect, socialSearchQuery, socialSearchWhere } from '../lib/socialPrivacy';
 import { legacyFollow } from './followOperationController';

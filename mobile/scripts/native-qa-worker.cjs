@@ -307,7 +307,8 @@ async function main() {
         req.path === '/api/users/me/sessions/revoke' && req.method === 'POST' ||
         /^\/api\/users\/me\/deletion-operations\/[0-9a-f-]+(?:\/abandon)?$/.test(req.path) && ['GET', 'POST'].includes(req.method);
       const sourceRead=sourceLeadsPilot&&req.method==='GET'&&/^\/api\/source-leads\/[0-9a-f-]{36}(?:\/inquiry)?$/.test(req.path)&&leadIds.includes(req.path.split('/')[3]);
-      const goldenRoute=sourceRead||visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
+      const ownBenefitsRead=visualHomeFixture&&req.method==='GET'&&['/api/payment/benefits','/api/marketing/availability'].includes(req.path);
+      const goldenRoute=sourceRead||ownBenefitsRead||visualHomeFixture&&/^\/api\/(?:notifications|product-interest|discovery|product-wishes)(?:\/|$)/.test(req.path);
       const marketRoute = /^\/api\/(?:native-wishes|listings|listing-media|listing-reports|chat)(?:\/|$)/.test(req.path) ||
         !!marketingVisualOwnerRole && req.method === 'GET' && /^\/api\/marketing\/(?:availability|jobs(?:\/[0-9a-f-]{36})?)$/.test(req.path) ||
         externalListingsPilot && /^\/api\/external-listings(?:\/|$)/.test(req.path);
@@ -347,6 +348,11 @@ async function main() {
   }
   if(sourceLeadsPilot)app.use('/api/source-leads',require('../../server/dist/routes/sourceLeadRoutes').createSourceLeadRoutes());
   if(visualHomeFixture){
+    // Production authenticated reads only. Purchase verification and all new
+    // marketing writes stay blocked by the fixture route allowlist.
+    const ownAuth=require('../../server/dist/middleware/auth').authenticateToken;
+    app.get('/api/payment/benefits',ownAuth,require('../../server/dist/controllers/billingController').billingBenefits);
+    app.get('/api/marketing/availability',ownAuth,require('../../server/dist/controllers/marketingController').marketingAvailability);
     app.use('/api/notifications',require('../../server/dist/routes/notificationRoutes').default);
     app.use('/api/product-interest',require('../../server/dist/routes/productInterestRoutes').default);
     app.use('/api/discovery',require('../../server/dist/routes/discoveryRoutes').createDiscoveryRoutes());

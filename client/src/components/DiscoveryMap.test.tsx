@@ -17,7 +17,7 @@ beforeEach(()=>{
  vi.stubGlobal('ResizeObserver',class{observe(){}disconnect(){}});
  Element.prototype.animate=vi.fn(()=>({finished:new Promise(()=>{}),pause:vi.fn(),play:vi.fn(),cancel:vi.fn()} as unknown as Animation));
 });
-afterEach(()=>{Element.prototype.animate=oldAnimate;vi.unstubAllGlobals();vi.restoreAllMocks();localStorage.clear();});
+afterEach(()=>{vi.useRealTimers();Element.prototype.animate=oldAnimate;vi.unstubAllGlobals();vi.restoreAllMocks();localStorage.clear();});
 const items=Array.from({length:36},(_,i)=>({kind:'source',id:String(i),key:'source:'+i,title:'合成地圖商品 '+i,mainId:'main'+i%4,subId:'a',price:500,currency:'TWD',priceText:'500',priceUnitVerified:true,thumbnailUrl:'https://example.invalid/'+i,photos:[],county:'臺南市',district:'永康區',sourceLabel:'公開測試來源',mapLocation:{coordinates:[120.236+i/1000,23],precision:'PUBLIC_MEETING_POINT'}} as DiscoveryProduct));
 const page={items,categories:Array.from({length:4},(_,i)=>({id:'main'+i,label:'分類 '+i,en:'Category '+i,children:[{id:'a',label:'商品',en:'Items'}]})),total:36,mapTotals:{located:36,unmapped:0},nextCursor:null} as DiscoveryPage;
 it('retains 36 individually selectable thumbnails, keeps their real locations, and searches only on an explicit button',()=>{
@@ -40,4 +40,12 @@ it('respects reduced motion and never automatically searches on selection, repla
  vi.stubGlobal('matchMedia',()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()}));
  const search=vi.fn();render(<DiscoveryMap page={page} onOpen={vi.fn()} onSearchBounds={search}/>);act(()=>mocks.maps[0].handlers.load());
  expect(Element.prototype.animate).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'來源與排列說明'}));expect(screen.getByRole('button',{name:'慢速重播排列'})).toBeDisabled();fireEvent(window,new Event('resize'));expect(search).not.toHaveBeenCalled();
+});
+
+it('keeps36 products and an explicit basemap retry when live tile loading never settles',()=>{
+ vi.useFakeTimers();const search=vi.fn(),view=render(<DiscoveryMap page={page} onOpen={vi.fn()} onSearchBounds={search}/>);
+ expect(screen.getByRole('status')).toHaveTextContent('底圖載入中');
+ act(()=>vi.advanceTimersByTime(15000));expect(screen.getByRole('alert')).toHaveTextContent('底圖尚未完整載入');
+ expect(view.container.querySelectorAll('.discovery-map-thumbnail')).toHaveLength(36);expect(search).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'重新載入底圖'}));expect(mocks.maps).toHaveLength(2);expect(search).not.toHaveBeenCalled();
 });

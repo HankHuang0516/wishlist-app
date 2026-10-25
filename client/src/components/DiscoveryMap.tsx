@@ -31,7 +31,7 @@ export default function DiscoveryMap({page,onOpen,onSearchBounds,initialSelectio
  const project=()=>{const p=selectedRef.current,m=mapRef.current;if(!p?.mapLocation||!m){setPoint(null);return;}const xy=m.project(p.mapLocation.coordinates);setPoint([xy.x,xy.y]);};
  const fit=()=>{const m=mapRef.current,ps=latest.current.items.filter(p=>p.mapLocation);if(!m||!ps.length)return;const xs=ps.map(p=>p.mapLocation!.coordinates[0]),ys=ps.map(p=>p.mapLocation!.coordinates[1]);m.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],{padding:48,maxZoom:10,duration:0});};
  const searchHere=()=>{const b=mapRef.current?.getBounds();if(!b)return;const bounds:Bounds=[Math.max(-180,b.getWest()),Math.max(-85,b.getSouth()),Math.min(180,b.getEast()),Math.min(85,b.getNorth())].map(n=>Number(n.toFixed(8))) as Bounds;if(bounds[0]>=bounds[2]||bounds[1]>=bounds[3]){setMapIssue(say('此地圖範圍目前無法查詢，請縮小範圍後再試。','This map area cannot be searched. Zoom in and try again.'));return;}onSearchBounds(bounds);};
- useEffect(()=>{const host=frame.current;if(!host)return;const resize=()=>{setWidth(Math.max(280,Math.floor(host.clientWidth)));setFrameHeight(Math.min(520,Math.max(360,window.innerHeight*.54)));setFontScale(Math.max(1,(parseFloat(getComputedStyle(host).fontSize)||16)/16));mapRef.current?.resize();};const observer=new ResizeObserver(resize),rootObserver=new MutationObserver(resize);observer.observe(host);rootObserver.observe(document.documentElement,{attributes:true,attributeFilter:['style','class']});window.addEventListener('resize',resize);resize();return()=>{observer.disconnect();rootObserver.disconnect();window.removeEventListener('resize',resize);};},[]);
+ useEffect(()=>{const host=frame.current;if(!host)return;const resize=()=>{setWidth(Math.max(280,Math.floor(host.clientWidth)));setFrameHeight(Math.min(560,Math.max(480,window.innerHeight*.64)));setFontScale(Math.max(1,(parseFloat(getComputedStyle(host).fontSize)||16)/16));mapRef.current?.resize();};const observer=new ResizeObserver(resize),rootObserver=new MutationObserver(resize);observer.observe(host);rootObserver.observe(document.documentElement,{attributes:true,attributeFilter:['style','class']});window.addEventListener('resize',resize);resize();return()=>{observer.disconnect();rootObserver.disconnect();window.removeEventListener('resize',resize);};},[]);
  useEffect(()=>{const media=matchMedia('(prefers-reduced-motion: reduce)'),change=()=>setReduced(media.matches);change();media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
  useEffect(()=>{const future=page.items.map(p=>p.mapLocation?.visibleUntil?Date.parse(p.mapLocation.visibleUntil):Infinity).filter(t=>t>now&&Number.isFinite(t));if(!future.length)return;const timer=setTimeout(()=>setNow(Date.now()),Math.min(2147483647,Math.max(1,Math.min(...future)-now+5)));return()=>clearTimeout(timer);},[page.items,now]);
  useEffect(()=>{if(selected&&!selectedItem){setSelected(null);setPoint(null);}},[selected,selectedItem]);
@@ -40,10 +40,11 @@ export default function DiscoveryMap({page,onOpen,onSearchBounds,initialSelectio
   let m:MapLibreMap;
   try{m=new MapLibreMap({container:surface.current,style:libertyZhHantStyle,center:[120.9,23.7],zoom:6,renderWorldCopies:false,attributionControl:false});}catch{setMapIssue(say('目前無法啟動地圖底圖，商品縮圖與原篩選仍保留，也可返回商品列表。','The basemap cannot start. Product thumbnails and filters are preserved; you can return to the list.'));return;}
   mapRef.current=m;
-  m.on('load',()=>{setReady(true);fit();project();});
+  let loaded=false;const loadingDeadline=window.setTimeout(()=>{if(!loaded)setMapIssue(say('底圖尚未完整載入，商品與篩選仍保留。可手動重新載入底圖。','The basemap has not finished loading. Products and filters are preserved. Reload the basemap explicitly.'));},15000);
+  m.on('load',()=>{loaded=true;window.clearTimeout(loadingDeadline);setMapIssue('');setReady(true);fit();project();});
   m.on('move',project);m.on('movestart',stop);
   m.on('error',()=>setMapIssue(say('地圖底圖暫時無法完整載入，商品與篩選仍保留。','The basemap could not fully load. Products and filters are preserved.')));
-  return()=>{animations.current.forEach(a=>a.cancel());animations.current=[];m.remove();mapRef.current=null;};
+  return()=>{window.clearTimeout(loadingDeadline);animations.current.forEach(a=>a.cancel());animations.current=[];m.remove();mapRef.current=null;};
  },[attempt]);
  useEffect(()=>{mapRef.current?.resize();project();},[layout.height,width,selected,frameHeight]);
  useEffect(()=>{
@@ -58,10 +59,11 @@ export default function DiscoveryMap({page,onOpen,onSearchBounds,initialSelectio
  useEffect(()=>onSelection?.(selected),[selected,onSelection]);
  const node=selected?positions.get(selected):undefined;
  const tileRect=selected?tiles.current.get(selected)?.getBoundingClientRect():undefined,frameRect=frame.current?.getBoundingClientRect();
- const anchor=tileRect&&frameRect?[tileRect.left-frameRect.left+26,tileRect.top-frameRect.top+26]:node?[node.x+26,node.y+26]:null;
+ const anchor=tileRect&&frameRect?[tileRect.left-frameRect.left+tileRect.width/2,tileRect.top-frameRect.top+tileRect.height/2]:node?[node.x+node.size/2,node.y+node.size/2]:null;
  return <section className="discovery-map" aria-label={say('依分類排列的地圖商品','Map products arranged by category')}>
   <div className="discovery-map-intro"><strong>{say(`本批 ${located.length} 張縮圖`,`${located.length} loaded thumbnails`)}</strong><span>{[located.filter(p=>p.kind==='listing').length?say(`站內 ${located.filter(p=>p.kind==='listing').length}`,`${located.filter(p=>p.kind==='listing').length} on-site`):'',located.some(p=>p.kind!=='listing')?say(`公開來源 ${located.filter(p=>p.kind!=='listing').length}`,`${located.filter(p=>p.kind!=='listing').length} public references`):''].filter(Boolean).join(' · ')}</span></div>
   <div className="discovery-map-controls"><button disabled={!ready} onClick={()=>{stop();setInteraction(v=>!v);}}>{interaction?say('捲動畫布','Scroll thumbnails'):say('移動地圖','Pan the map')}</button><button disabled={!ready} onClick={searchHere}>{say('搜尋目前地圖範圍','Search this map area')}</button><button onClick={()=>setInfo(true)}>{say('來源與排列說明','Sources & arrangement')}</button>{animating&&<button disabled={reduced} onClick={()=>{animations.current.forEach(a=>paused?a.play():a.pause());setPaused(p=>!p);}}>{paused?say('繼續排列','Resume arrangement'):say('暫停排列','Pause arrangement')}</button>}</div>
+  {!ready&&!mapIssue&&<p role="status" className="discovery-map-note">{say('底圖載入中；商品縮圖和篩選仍可使用。','Loading the basemap; product thumbnails and filters remain available.')}</p>}
   {!located.length&&<div className="discovery-map-error" role="status">{say('這批沒有可放置的公開位置；不代表沒有商品。','This batch has no usable public map locations; it does not mean there are no products.')}{onList&&<button onClick={onList}>{say('返回同條件商品列表','Return to the filtered list')}</button>}</div>}
   {mapIssue&&<div role="alert" className="discovery-map-error">{mapIssue}<button onClick={()=>setAttempt(a=>a+1)}>{say('重新載入底圖','Reload basemap')}</button></div>}
   <div ref={frame} className="discovery-map-frame" style={{height:frameHeight}}>

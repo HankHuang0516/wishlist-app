@@ -17,3 +17,10 @@ it('does not replace unknown categories with representative thumbnails and rejec
  expect(layout.nodes).toHaveLength(36);expect(layout.headings[0].label).toBe('未分類');
  expect(()=>discoveryMapLayout([items[0],items[0]],catalog,320)).toThrow();
 });
+
+it('fits the normal36-item four-category Golden in a typical phone map without shrinking48px targets',()=>{
+ const items=make(36).map(p=>({...p,subId:'a'}));
+ const layout=discoveryMapLayout(items,catalog,358,1);
+ expect(layout.boxes).toHaveLength(4);expect(layout.nodes).toHaveLength(36);
+ expect(layout.nodes.every(n=>n.size>=48)).toBe(true);expect(layout.width).toBe(358);expect(layout.height).toBeLessThanOrEqual(480);
+});

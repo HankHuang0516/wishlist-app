@@ -25,12 +25,14 @@ let qa,fixture,browser,page;const reads=[],tiles=[],errors=[],reports=[];
   await request.respond({status:200,contentType:({'.js':'application/javascript','.mjs':'application/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.webp':'image/webp','.woff2':'font/woff2'})[path.extname(file)]||'text/html',body:fs.readFileSync(file)});
  }catch{try{await request.abort();}catch{}}});
  page.on('response',r=>{if(new URL(r.url()).hostname==='tiles.openfreemap.org')tiles.push({path:new URL(r.url()).pathname,status:r.status()});});
- await page.evaluateOnNewDocument(host=>{if(window===window.top&&location.origin===host)localStorage.setItem('user-locale','zh-TW');},origin);
+ await page.evaluateOnNewDocument(host=>{if(window===window.top&&location.origin===host&&!localStorage.getItem('user-locale'))localStorage.setItem('user-locale','zh-TW');},origin);
  await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});await page.waitForSelector('#identifier');await page.type('#identifier',qa.actors.buyer.email);await page.type('#password',qa.actors.buyer.password);await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');
  async function click(selector){await page.$eval(selector,e=>e.scrollIntoView({block:'center'}));await page.click(selector);}
  const discoveryReads=()=>reads.filter(r=>r.path==='/api/discovery').length;
  const capture=async name=>page.screenshot({path:path.join(evidence,name+'.png')});
- for(const scenario of [{width:1440,font:1,dark:false,reduced:false},{width:390,font:1,dark:false,reduced:false},{width:320,font:1.5,dark:true,reduced:true}]){
+ for(const scenario of [{width:1440,font:1,dark:false,reduced:false},{width:390,font:1,dark:false,reduced:false},{width:320,font:1.5,dark:true,reduced:true},{width:390,font:1,dark:false,reduced:false,locale:'en-US'}]){
+  const locale=scenario.locale||'zh-TW',prefix=locale==='en-US'?'Select item: ':'選取商品：';
+  await page.evaluate(value=>localStorage.setItem('user-locale',value),locale);
   await page.setViewport({width:scenario.width,height:900});await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:scenario.reduced?'reduce':'no-preference'},{name:'prefers-color-scheme',value:scenario.dark?'dark':'light'}]);
   await page.goto(origin+'/explore?mode=map&q='+encodeURIComponent('地圖驗收'),{waitUntil:'domcontentloaded'});await page.waitForSelector('.discovery-map-thumbnail');await page.waitForFunction(()=>document.querySelectorAll('.discovery-map-thumbnail').length===36);
   if(scenario.font!==1)await page.evaluate(font=>document.documentElement.style.fontSize=(font*16)+'px',scenario.font);
@@ -39,21 +41,29 @@ let qa,fixture,browser,page;const reads=[],tiles=[],errors=[],reports=[];
   await page.waitForFunction(()=>document.querySelector('.discovery-map-controls button')?.disabled===false,{timeout:45000});
   await new Promise(r=>setTimeout(r,1000));
   assert.equal(await page.$$eval('.discovery-map-thumbnail',es=>new Set(es.map(e=>e.dataset.productKey)).size),36);
+  const fullyVisible=await page.$eval('.discovery-map-canvas-scroll',host=>{const r=host.getBoundingClientRect();return [...host.querySelectorAll('.discovery-map-thumbnail')].every(e=>{const b=e.getBoundingClientRect();return b.left>=r.left-1&&b.top>=r.top-1&&b.right<=r.right+1&&b.bottom<=r.bottom+1;});});
+  if(scenario.font===1)assert(fullyVisible,'Normal phone/desktop map must show all36 targets together');
+  await capture('map-'+scenario.width+'-'+locale+'-overview');
   const before=discoveryReads();
-  for(const title of fixture.titles){const selector='.discovery-map-thumbnail[aria-label='+JSON.stringify('選取商品：'+title)+']';await click(selector);assert.equal(await page.$eval(selector,e=>e.getAttribute('aria-pressed')),'true');const box=await page.$eval(selector,e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height}));assert(box.w>=48&&box.h>=48);}
+  await click('.discovery-map-controls button');
+  await page.$eval('.discovery-map-frame',e=>e.scrollIntoView({block:'center'}));
+  const frame=await page.$('.discovery-map-frame'),bounds=await frame.boundingBox();assert(bounds);
+  await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.down();await page.mouse.move(bounds.x+bounds.width/2+32,bounds.y+bounds.height/2+24,{steps:12});await page.mouse.up();
+  await new Promise(r=>setTimeout(r,400));assert.equal(discoveryReads(),before,'A real map pan must not search automatically');await click('.discovery-map-controls button');
+  for(const title of fixture.titles){const selector='.discovery-map-thumbnail[aria-label='+JSON.stringify(prefix+title)+']';await click(selector);assert.equal(await page.$eval(selector,e=>e.getAttribute('aria-pressed')),'true');const box=await page.$eval(selector,e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height}));assert(box.w>=48&&box.h>=48);}
   assert.equal(discoveryReads(),before,'Selection and canvas scrolling must not search');
   assert(await page.$('.discovery-map-leader'),'Original-coordinate connection must be visible');
-  await page.$eval('.discovery-map-frame',e=>e.scrollIntoView({block:'center'}));await capture('map-'+scenario.width+'-'+scenario.font+'-selected');
+  await page.$eval('.discovery-map-frame',e=>e.scrollIntoView({block:'center'}));await capture('map-'+scenario.width+'-'+scenario.font+'-'+locale+'-selected');
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal page overflow');
   await click('.discovery-map-preview .product-wish-heart:not(:disabled)');await page.waitForSelector('.discovery-map-preview .product-wish-heart[aria-pressed="true"]');
-  await capture('map-'+scenario.width+'-wish-saved');await click('.discovery-map-preview .product-wish-heart');await page.waitForSelector('.discovery-map-preview .product-wish-heart[aria-pressed="false"]:not(:disabled)');
+  await capture('map-'+scenario.width+'-'+locale+'-wish-saved');await click('.discovery-map-preview .product-wish-heart');await page.waitForSelector('.discovery-map-preview .product-wish-heart[aria-pressed="false"]:not(:disabled)');
   await click('.discovery-map-link');await page.waitForSelector('[data-testid="discovery-products"] article');assert.equal(new URL(page.url()).searchParams.get('q'),'地圖驗收');
-  await click('.discovery-map-link');await page.waitForSelector('.discovery-map-thumbnail.selected');assert.equal(await page.$eval('.discovery-map-thumbnail.selected',e=>e.getAttribute('aria-label')),'選取商品：'+fixture.wishProductTitle);
-  await click('.discovery-map-thumbnail[aria-label='+JSON.stringify('選取商品：'+fixture.retailProductTitle)+']');await click('.discovery-map-preview .discovery-retail-trigger');await page.waitForSelector('[data-testid="retail-price-evidence"]');
-  assert((await page.$eval('[data-testid="retail-price-evidence"]',e=>e.textContent)).includes('4,990'));assert.equal(await page.$eval('[data-testid="retail-price-evidence"] a',e=>new URL(e.href).hostname),'images.samsung.com');await capture('map-'+scenario.width+'-price-source');await click('[aria-label="關閉原價參考"]');
-  reports.push({...scenario,selectors:36,allActualClicks:true,selectionSurvivesModeSwitch:true,priceModal:true,extraSearchFromSelection:0});
+  await click('.discovery-map-link');await page.waitForSelector('.discovery-map-thumbnail.selected');assert.equal(await page.$eval('.discovery-map-thumbnail.selected',e=>e.getAttribute('aria-label')),prefix+fixture.wishProductTitle);
+  await click('.discovery-map-thumbnail[aria-label='+JSON.stringify(prefix+fixture.retailProductTitle)+']');await click('.discovery-map-preview .discovery-retail-trigger');await page.waitForSelector('[data-testid="retail-price-evidence"]');
+  assert((await page.$eval('[data-testid="retail-price-evidence"]',e=>e.textContent)).includes('4,990'));assert.equal(await page.$eval('[data-testid="retail-price-evidence"] a',e=>new URL(e.href).hostname),'images.samsung.com');await capture('map-'+scenario.width+'-'+locale+'-price-source');await click('[aria-label='+JSON.stringify(locale==='en-US'?'Close price reference':'關閉原價參考')+']');
+  reports.push({...scenario,locale,all36InCanvasViewport:fullyVisible,realPanWithoutSearch:true,selectors:36,allActualClicks:true,selectionSurvivesModeSwitch:true,priceModal:true,extraSearchFromSelection:0});
  }
- assert(tiles.some(t=>t.status===200),'Live map source must load');assert.deepEqual(errors,[]);assert.equal(await page.$('[aria-label="喜歡操作待核對"]'),null,'No unresolved like journal from the HTTPS test origin');
+ assert(tiles.some(t=>t.status===200),'Live map source must load');assert.deepEqual(errors,[]);assert.equal(await page.$('[aria-label="喜歡操作待核對"],[aria-label="Like operation needs checking"]'),null,'No unresolved like journal from the HTTPS test origin');
  fs.writeFileSync(path.join(evidence,'result.json'),JSON.stringify({passed:true,syntheticOnly:true,httpsReverseProxy:true,rebasedOwnedFixtureImageOrigin:true,fixtureKind:fixture.fixtureKind,photoCases:fixture.photoCases,productionWrites:0,reports,tiles,errors},null,2));console.log(JSON.stringify({passed:true,evidence,reports}));
  }catch(e){if(page&&!page.isClosed()&&!/login/.test(page.url()))await page.screenshot({path:path.join(evidence,'failed.png')}).catch(()=>{});fs.writeFileSync(path.join(evidence,'failure.json'),JSON.stringify({message:e.message,errors,tiles,reads},null,2));throw e;}
  finally{if(browser)await browser.close();if(fixture)await fixture.cleanup();if(qa)fs.writeFileSync(path.join(evidence,'cleanup.json'),JSON.stringify(await qa.stop(),null,2));}

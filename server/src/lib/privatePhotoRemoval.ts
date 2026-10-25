@@ -18,12 +18,17 @@ export const photoRemovalHash = (payload: ReturnType<typeof photoRemovalPayload>
 export async function removeUnusedMediaTx(tx: Prisma.TransactionClient, userId: number, mediaId: string, expectedVersion?: number) {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ListingMedia" WHERE "id" = ${mediaId} FOR UPDATE`);
     const media = await tx.listingMedia.findFirst({where:{id:mediaId,ownerUserId:userId},select:{capturePurpose:true,listingId:true,wishItemId:true,sellerDraftVersion:true,flickrPhotoId:true,
-        marketingJobsAsSource:{select:{id:true,status:true}}}});
+        marketingJobsAsSource:{select:{id:true,status:true,parentJobId:true,quotaPeriodStart:true,quotaPeriodEnd:true,listingId:true}}}});
     if (!media) return {state:'UNAVAILABLE' as const, removedIds:[]};
     if (media.listingId !== null || media.wishItemId !== null || media.capturePurpose === 'AI_MARKETING' ||
         expectedVersion !== undefined && (media.capturePurpose !== 'BATCH_ITEM' || media.sellerDraftVersion !== expectedVersion) ||
-        media.marketingJobsAsSource.some(job=>['PENDING','PROCESSING','REVIEW'].includes(job.status))) return {state:'CONFLICT' as const,removedIds:[]};
+        media.marketingJobsAsSource.some(job=>['PENDING','PROCESSING'].includes(job.status)||job.listingId!==null)) return {state:'CONFLICT' as const,removedIds:[]};
     const jobIds = media.marketingJobsAsSource.map(job=>job.id);
+    // Review is a completed private generation awaiting seller selection, not
+    // an active worker. Never remove selected images already used elsewhere.
+    if(jobIds.length&&await tx.listingMedia.count({where:{marketingJobId:{in:jobIds},OR:[{listingId:{not:null}},{wishItemId:{not:null}}]}}))return {state:'CONFLICT' as const,removedIds:[]};
+    const charged=media.marketingJobsAsSource.filter(job=>job.parentJobId===null&&['REVIEW','COMPLETED'].includes(job.status)&&job.quotaPeriodStart&&job.quotaPeriodEnd);
+    if(charged.length)await tx.removedMarketingUsage.createMany({data:charged.map(job=>({jobId:job.id,userId,quotaPeriodStart:job.quotaPeriodStart!,quotaPeriodEnd:job.quotaPeriodEnd!})),skipDuplicates:true});
     const generated = jobIds.length ? await tx.listingMedia.findMany({where:{ownerUserId:userId,marketingJobId:{in:jobIds},listingId:null,wishItemId:null},select:{id:true,flickrPhotoId:true}}) : [];
     if (generated.length) await tx.listingMedia.deleteMany({where:{id:{in:generated.map(item=>item.id)},ownerUserId:userId,listingId:null,wishItemId:null}});
     if (jobIds.length) await tx.marketingJob.deleteMany({where:{id:{in:jobIds},ownerUserId:userId}});

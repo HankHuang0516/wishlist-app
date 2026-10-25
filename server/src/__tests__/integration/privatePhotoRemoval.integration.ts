@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import routes from '../../routes/listingMediaRoutes';
 import { photoRemovalHash, photoRemovalPayload } from '../../lib/privatePhotoRemoval';
+import {marketingUsedInPeriod} from '../../lib/marketingUsage';
+import {freeMarketingWindow} from '../../lib/marketingAssistantRules';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if(process.env.TEST_DATABASE_URL!==process.env.DATABASE_URL)throw Error('Equal isolated database URLs required');
 process.env.JWT_SECRET='isolated-private-photo-removal-only';
@@ -19,7 +21,7 @@ const read=(id:string,user=users[0])=>http('get','/photo-removals/'+id,user);
 const stop=(id:string,hash=photoRemovalHash(photoRemovalPayload(payload())))=>http('post','/photo-removals/'+id+'/abandon').send({requestHash:hash});
 const photo=(id:string,extra:Record<string,any>={})=>prisma.listingMedia.create({data:{id,ownerUserId:users[0],capturePurpose:'BATCH_ITEM',imageUrl:'https://example.invalid/photo',thumbnailUrl:'https://example.invalid/thumb',contentHash:'synthetic-no-provider',...extra}});
 beforeAll(async()=>{await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const run=randomUUID();users=(await Promise.all(['owner','other'].map(role=>prisma.user.create({data:{phoneNumber:run+role,password:'synthetic-unused',isEmailVerified:true},select:{id:true}})))).map(row=>row.id);});
-beforeEach(async()=>{await prisma.photoRemovalReceipt.deleteMany({where:{userId:{in:users}}});await prisma.marketingJob.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listingMedia.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listing.deleteMany({where:{ownerUserId:{in:users}}});await prisma.user.updateMany({where:{id:{in:users}},data:{authVersion:0}});mediaId=randomUUID();erasureIds.push(mediaId);await photo(mediaId);});
+beforeEach(async()=>{await prisma.removedMarketingUsage.deleteMany({where:{userId:{in:users}}});await prisma.photoRemovalReceipt.deleteMany({where:{userId:{in:users}}});await prisma.marketingJob.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listingMedia.deleteMany({where:{ownerUserId:{in:users}}});await prisma.listing.deleteMany({where:{ownerUserId:{in:users}}});await prisma.user.updateMany({where:{id:{in:users}},data:{authVersion:0}});mediaId=randomUUID();erasureIds.push(mediaId);await photo(mediaId);});
 afterEach(()=>jest.restoreAllMocks());
 afterAll(async()=>{try{if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));await prisma.mediaErasureTask.deleteMany({where:{mediaId:{in:erasureIds}}});if(users.length)await prisma.user.deleteMany({where:{id:{in:users}}});}finally{await prisma.$disconnect();}});
 describe('durable batch photo removal and legacy compatibility',()=>{
@@ -51,9 +53,32 @@ describe('durable batch photo removal and legacy compatibility',()=>{
   it.each(['MANUAL_PHOTO','LEGACY_UNKNOWN','AI_MARKETING'] as const)('does not remove a %s source through the batch receipt',async capturePurpose=>{
     await prisma.listingMedia.update({where:{id:mediaId},data:{capturePurpose}});expect((await send(randomUUID())).body.receipt.state).toBe('CONFLICT');expect(await prisma.listingMedia.findUnique({where:{id:mediaId}})).not.toBeNull();
   });
-  it.each(['PENDING','PROCESSING','REVIEW'] as const)('blocks a source used by a %s marketing job through either endpoint',async status=>{
+  it.each(['PENDING','PROCESSING'] as const)('blocks a source used by a %s marketing job through either endpoint',async status=>{
     await prisma.marketingJob.create({data:{ownerUserId:users[0],sourceMediaId:mediaId,status,clientRequestId:randomUUID(),snapshot:{},requestHash:'a'.repeat(64)}});
     expect((await send(randomUUID())).body.receipt.state).toBe('CONFLICT');expect((await http('delete','/'+mediaId)).status).toBe(404);expect(await prisma.marketingJob.count({where:{sourceMediaId:mediaId}})).toBe(1);
+  });
+  it.each(['legacy','receipt'] as const)('removes the seller draft and unselected REVIEW images through %s without refunding consumed usage',async endpoint=>{
+    const period=freeMarketingWindow(new Date()),sourceIds=[mediaId,randomUUID(),randomUUID()];
+    for(const id of sourceIds.slice(1)){erasureIds.push(id);await photo(id);}
+    const jobs=await Promise.all(sourceIds.map(id=>prisma.marketingJob.create({data:{ownerUserId:users[0],sourceMediaId:id,status:'REVIEW',clientRequestId:randomUUID(),snapshot:{},requestHash:'b'.repeat(64),quotaPeriodStart:period.startsAt,quotaPeriodEnd:period.endsAt}})));
+    const generated=randomUUID();erasureIds.push(generated);await photo(generated,{capturePurpose:'AI_MARKETING',marketingJobId:jobs[0].id,marketingSlot:1});
+    await prisma.listingMedia.update({where:{id:mediaId},data:{sellerDraftVersion:18}});
+    const used=()=>prisma.$transaction(tx=>marketingUsedInPeriod(tx,users[0],period.startsAt));
+    expect(await used()).toBe(3);
+    const id=randomUUID(),result=endpoint==='legacy'?await http('delete','/'+mediaId):await send(id,payload(18));
+    expect(result.status).toBe(endpoint==='legacy'?204:200);
+    if(endpoint==='receipt'){expect(result.body.receipt.state).toBe('REMOVED');expect((await send(id,payload(18))).body.receipt.state).toBe('REMOVED');}
+    expect(await prisma.listingMedia.findUnique({where:{id:mediaId}})).toBeNull();expect(await prisma.listingMedia.findUnique({where:{id:generated}})).toBeNull();
+    expect(await prisma.marketingJob.count({where:{ownerUserId:users[0]}})).toBe(2);expect(await used()).toBe(3);
+    expect(await prisma.removedMarketingUsage.count({where:{userId:users[0]}})).toBe(1);
+    expect(await prisma.removedMarketingUsage.count({where:{userId:users[1]}})).toBe(0);
+  });
+  it('keeps REVIEW sources when any generated image is already attached to a listing',async()=>{
+    const job=await prisma.marketingJob.create({data:{ownerUserId:users[0],sourceMediaId:mediaId,status:'REVIEW',clientRequestId:randomUUID(),snapshot:{},requestHash:'a'.repeat(64)}});
+    const listing=await prisma.listing.create({data:{ownerUserId:users[0],clientListingId:randomUUID(),requestHash:'a'.repeat(64),title:'synthetic',status:'DRAFT'}});
+    const generated=randomUUID();erasureIds.push(generated);await photo(generated,{capturePurpose:'AI_MARKETING',marketingJobId:job.id,marketingSlot:1,listingId:listing.id});
+    expect((await send(randomUUID())).body.receipt.state).toBe('CONFLICT');expect((await http('delete','/'+mediaId)).status).toBe(404);
+    expect(await prisma.listingMedia.count({where:{id:{in:[mediaId,generated]}}})).toBe(2);expect(await prisma.removedMarketingUsage.count({where:{userId:users[0]}})).toBe(0);
   });
   it('removes inactive source/jobs and unbound generated photos, retaining original proof and outbox tasks',async()=>{
     const job=await prisma.marketingJob.create({data:{ownerUserId:users[0],sourceMediaId:mediaId,status:'FAILED',clientRequestId:randomUUID(),snapshot:{},requestHash:'a'.repeat(64)}});

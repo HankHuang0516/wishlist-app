@@ -32,7 +32,7 @@ const listingAiFlow = flow === 'listing-batch-ai-photo' || flow === 'listing-bat
 const twoPhotoFlow = flow === 'listing-batch-two-photos' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
 const authenticated = flow !== null;
 if ((option && (!authenticated || !Object.hasOwn(AUTHENTICATED_FLOWS, flow))) ||
-  process.argv[4] && (!requestedContentSize || !['marketplace-my-listings', 'marketplace-meetup', 'golden-map'].includes(flow)) || process.argv[5]) throw new Error('Unexpected runtime option');
+  process.argv[4] && (!requestedContentSize || !['marketplace-my-listings', 'marketplace-meetup', 'golden-map', 'listing-batch-entry'].includes(flow)) || process.argv[5]) throw new Error('Unexpected runtime option');
 if (process.env.NATIVE_QA_ACCESSIBILITY_AUDIT !== undefined && !accessibilityAudit ||
     accessibilityAudit && flow !== 'marketplace-meetup') throw new Error('Unsupported accessibility audit route');
 if (visualFixture && (visualFixture !== 'visual-mug' || flow !== 'marketplace-my-listings')) throw new Error('Unsupported visual QA fixture');
@@ -291,8 +291,8 @@ async function main() {
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
-    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) });
-  if (['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow)) {
+    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery','golden-map','listing-batch-entry'].includes(flow) });
+  if (['home-visual','golden-wishes','golden-discovery','golden-map','listing-batch-entry'].includes(flow)) {
     stage = 'isolated-home-visual-fixture';
     const seeded = flow==='golden-map'?(mapFixture=await seedDiscoveryMapQa(qa,database)).base:await seedUiuxHomeQa(qa);
     if(flow==='golden-map'){mapSecondList=await mapFixture.secondList();batchRemovalFixture=await seedBatchRemovalQa(qa,database,{existingBase:seeded,generatedSlots:1});}
@@ -388,14 +388,14 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery','golden-map','listing-batch-entry'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? 1 : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
       ((flow === 'listing-batch-photo' || listingAiFlow) && !sellerDraftVerified) ||
       (listingAiFlow && (!listingAiDraftVerified || listingAiTaskFailed)) ||
       (publishOneAiFlow && !listingPublicationVerified) ||
-      (['home-visual','golden-wishes','golden-discovery','golden-map'].includes(flow) && !homeVisualFixtureSeeded) ||
+      (['home-visual','golden-wishes','golden-discovery','golden-map','listing-batch-entry'].includes(flow) && !homeVisualFixtureSeeded) ||
       broker.completed.join(',') !== expectedInput))) throw new Error('iOS assertions failed');
   for (const source of metadata.sourceFiles) {
     if (hash(path.join(mobile, source)) !== metadata.sourceHashes[source]) throw new Error('QA source changed during runtime; no completion claimed');
@@ -428,7 +428,7 @@ async function main() {
     'golden-wishes': ['product-notice', 'home', 'golden-wish-cards', 'golden-wish-editor', 'golden-wish-currency'],
     'golden-discovery': ['product-notice', 'home', 'golden-discovery-list', 'golden-discovery-detail', 'golden-discovery-map'],
     'golden-map': ['product-notice','home','map-price-card','map-price-source','map-price-detail','map-information','map-wishlist-choice','map-thirty-six','map-wishlist-saved','batch-draft-confirm','batch-draft-empty','batch-draft-reopened'],
-    'listing-batch-entry': ['product-notice', 'home', 'listing-batch'],
+    'listing-batch-entry': ['product-notice', 'home', 'listing-batch-header', 'listing-batch'],
     'listing-batch-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'listing-photo', 'listing-resumed'],
     'listing-batch-two-photos': ['product-notice', 'home', 'photo-picker', 'two-selected', 'two-listing'],
     'listing-batch-ai-photo': ['product-notice', 'home', 'photo-picker', 'photo-selected', 'ai-photo', 'ai-resumed'],

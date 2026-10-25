@@ -1,7 +1,7 @@
 import {batchRemovalJournal,parseBatchRemoval,readBatchRemoval,sendBatchRemoval,type BatchRemovalResult} from './batchDraftRemoval';
 import { ListingLocationPicker } from './ListingLocationPicker';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -38,6 +38,8 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
   api: ReturnType<typeof createApi>; apiUrl: string; userId: number; token: string;
   onClose: () => void; onAdvanced: () => void; onPublished: (count: number) => void;
 }) {
+  const {width,fontScale}=useWindowDimensions();
+  const stackedControls=fontScale>=1.3||width<350;
   const [leaving, setLeaving] = useState(false);
   const exitAction = useRef<(() => void) | null>(null);
   function afterDismiss(action: () => void) { if (Platform.OS === 'ios') { exitAction.current = action; setLeaving(true); } else action(); }
@@ -446,14 +448,14 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
         style={[s.input, multiline && s.multiline, highlightKey === targetKey && s.highlight]} />
     </View>;
   return <Modal visible={!leaving} onDismiss={()=>{const action=exitAction.current;exitAction.current=null;action?.();}} animationType="slide" onRequestClose={() => void leave(onClose)}><SafeAreaProvider><SafeAreaView style={s.screen}><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={s.header}><Text accessibilityRole="header" testID="listing-batch-title" style={s.title}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onClose)} style={s.chip}><Text style={s.text}>稍後繼續</Text></Pressable></View>
+    <View style={[s.header,stackedControls&&s.stackedHeader]}><Text accessibilityRole="header" testID="listing-batch-title" style={[s.title,s.headerTitle]}>連續拍照刊登</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onClose)} style={[s.chip,stackedControls&&s.stackedClose]}><Text style={s.text}>稍後繼續</Text></Pressable></View>
     <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'} contentContainerStyle={s.content}>
       <View style={s.modeCurrent}><Text style={s.modeLabel}>目前模式 · 快速刊登</Text><Text style={s.small}>每張照片建立一件商品，AI 分別補齊資訊；刊登前仍要逐件確認。</Text></View>
       <Text style={s.text}>一件商品拍一張照片；相機可連續拍到按取消，相簿可一次選多張。照片先成為私人草稿，你確認後才會公開。</Text>
       {aiAvailable === false && <Text accessibilityRole="alert" style={s.small}>此帳號的 AI 辨識尚未開放；照片仍可私密上傳、手動填寫並刊登，不會進入 AI 隊列。</Text>}
       {!ready && <Text style={s.small}>正在恢復私密照片與待確認操作…</Text>}
       {!!pending && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void reconcile()} style={s.button}><Text style={s.white}>確認先前未完成的刊登</Text></Pressable>}
-      <View style={s.row}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(true)} style={s.button}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(false)} style={s.button}><Text style={s.white}>批次選照片</Text></Pressable></View>
+      <View style={[s.row,stackedControls&&s.stackedRow]}><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(true)} style={[s.button,stackedControls&&s.stackedButton]}><Text style={s.white}>連續拍照</Text></Pressable><Pressable accessibilityRole="button" disabled={busy || !ready || !!pending||!!removalRaw} onPress={() => void select(false)} style={[s.button,stackedControls&&s.stackedButton]}><Text style={s.white}>批次選照片</Text></Pressable></View>
       {!!captureProgress && <Text accessibilityLiveRegion="polite" style={s.small}>{captureProgress}</Text>}
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void leave(onAdvanced)} style={s.modeAlternative}><Text style={s.modeAlternativeTitle}>進階模式 · 選用  ↗</Text><Text style={s.small}>同一件商品多角度拍攝，或自行逐欄精細刊登</Text></Pressable>
       {!!removalNotice&&<View style={s.card}><Text accessibilityRole="alert" style={s.small}>{removalNotice}</Text>{removalRaw&&<><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval()} style={s.chip}><Text style={s.text}>{removalKnown?.state==='REMOVED'?'完成移除紀錄清理':'查核原草稿移除'}</Text></Pressable>{!removalKnown&&<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval(true)} style={s.chip}><Text style={s.text}>明確重試原移除</Text></Pressable>}{removalKnown&&removalKnown.state!=='REMOVED'&&<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void recoverRemoval(false,true)} style={s.chip}><Text style={s.text}>結束這次移除並重新讀取</Text></Pressable>}</>}</View>}
@@ -531,6 +533,7 @@ export function ListingBatchComposer({ api, apiUrl, userId, token, onClose, onAd
 
 const s = StyleSheet.create({ screen: { flex: 1, backgroundColor: iosColors.background }, flex: { flex: 1 },
   header: { minHeight: 56, paddingHorizontal: iosSpacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: iosColors.separator },
+  headerTitle:{flexShrink:1,minWidth:0},stackedHeader:{flexDirection:'column',alignItems:'stretch',gap:8,paddingVertical:8},stackedClose:{alignSelf:'flex-end',maxWidth:'100%'},stackedRow:{flexDirection:'column',alignItems:'stretch'},stackedButton:{flex:0,width:'100%'},
   content: { padding: iosSpacing.lg, gap: iosSpacing.md, paddingBottom: 48 }, title: { ...iosType.title, color: iosColors.label },
   text: { ...iosType.body, color: iosColors.label }, small: { ...iosType.subheadline, color: iosColors.secondaryLabel },
   section: { ...iosType.headline, color: iosColors.label, marginTop: iosSpacing.md }, row: { flexDirection: 'row', alignItems: 'center', gap: iosSpacing.sm }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: iosSpacing.xs }, grow: { flex: 1 },

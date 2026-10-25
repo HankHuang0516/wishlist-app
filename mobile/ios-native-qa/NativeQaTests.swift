@@ -184,7 +184,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -679,21 +679,28 @@ final class NativeQaTests: XCTestCase {
         } catch { reportFailure() }
     }
     func test07RealLoginListingBatchEntry() {
-        executionTimeAllowance = 120
+        executionTimeAllowance = 180
         do {
             try prepare()
             try loginBuyerAndRequireTabs()
             checkpoint("listing-batch-account-entry")
             try tapTab("我的")
-            try tap("刊登好物")
-            checkpoint("listing-batch-screen")
-            try safeScreenshot("qa-listing-batch")
+            try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物")
+            checkpoint("listing-batch-header-bounds")
+            let title=try required("listing-batch-title")
+            let later=try required("稍後繼續",kind:.button)
+            guard title.isHittable,app.frame.contains(title.frame),later.isHittable,
+                  later.frame.width>=44,later.frame.height>=44,app.frame.contains(later.frame) else{throw Failure.unstableControl}
+            try safeScreenshot("qa-listing-batch-header")
             checkpoint("listing-batch-controls")
-            for label in ["listing-batch-title", "連續拍照", "批次選照片", "共用刊登位置與交付方式", "商品草稿 0/12"] {
-                try required(label, scroll: true)
+            for label in ["連續拍照","批次選照片"] {
+                let button=try required(label,scroll:true,kind:.button)
+                guard button.isEnabled,button.frame.height>=44,button.frame.width>=44,
+                      button.frame.minX>=app.frame.minX,button.frame.maxX<=app.frame.maxX else{throw Failure.unstableControl}
             }
-            guard try required("連續拍照", kind: .button).isEnabled,
-                  try required("批次選照片", kind: .button).isEnabled else { throw Failure.unstableControl }
+            try safeScreenshot("qa-listing-batch")
+            try required("商品草稿 0/12",scroll:true)
+            try tap("稍後繼續");try required("刊登好物",scroll:true,kind:.button)
             checkpoint("listing-batch-entry-complete")
             app.terminate()
         } catch { reportFailure() }

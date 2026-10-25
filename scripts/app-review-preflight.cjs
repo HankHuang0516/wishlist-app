@@ -81,7 +81,7 @@ function assertApprovedHistoricalRecording(receipt, native, ageRating, approval,
     assert.equal(selectedBuildId(acceptedVersion), 'a79db7d4-f26a-475e-9ba3-986a9e5e4e30');
     const prior = acceptedVersion.data?.attributes ?? acceptedVersion;
     assert.equal(prior.versionString, '2.0.16');
-    assert.equal(prior.appStoreState ?? prior.state, 'READY_FOR_SALE');
+    assert(['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(prior.appStoreState ?? prior.state), 'Prior recording must belong to the released approved build');
     assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Reverify the existing recording and delivery');
     assert(receipt.videoPath && /^[a-f0-9]{64}$/.test(receipt.videoSha256));
     assert(receipt.videoAttachment?.id && receipt.videoAttachment?.fileName);
@@ -104,6 +104,41 @@ function assertRecordingDelivery(receipt, notes, attachment, reviewDetailId, vid
     } else assert(receipt.notesVideoUrl?.startsWith('https://') && notes.includes(receipt.notesVideoUrl), 'Include the actual recording link in App Review notes');
 }
 
+// Unsubmitted draft products must be disclosed and audited against the live
+// inventory; their existence is not evidence that checkout is enabled.
+function assertDisabledDraftProducts(snapshot, now = Date.now()) {
+    const r = snapshot.businessEvidence, context = snapshot.businessContext;
+    assert(r && context, 'Configured products require current disabled-draft business evidence');
+    assert.equal(r.appId, '6468950847');
+    assert.equal(r.mode, 'disabled-draft-products');
+    for (const field of ['versionId', 'nativeTree', 'serverTree']) {
+        assert(context[field], 'Missing current business context');
+        assert.equal(r[field], context[field], `Business evidence differs from current ${field}`);
+    }
+    assert(Date.parse(r.verifiedAt) > now - 24 * 60 * 60 * 1000 && Date.parse(r.verifiedAt) <= now + 60000,
+        'Disabled-draft business evidence is stale or future-dated');
+    assert.equal(r.paidPurchasesAvailable, false);
+    assert.equal(r.productsRequestedForReview, false);
+    assert(typeof r.disclosureText === 'string' && r.disclosureText.length >= 80 && snapshot.notes.includes(r.disclosureText),
+        'Review notes must include the complete disabled-product disclosure');
+    const inventory = snapshot.productInventory;
+    assert(Array.isArray(inventory) && inventory.length > 0);
+    assert.equal(inventory.filter(p => p.kind === 'iap').length, snapshot.iapCount);
+    assert.equal(inventory.filter(p => p.kind === 'subscription').length, snapshot.subscriptionCount);
+    const expected = {wishlist_marketing_10:'iap', wishlist_sponsor_90:'iap', wishlist_premium_monthly:'subscription'};
+    assert.equal(new Set(inventory.map(p => p.id)).size, inventory.length);
+    assert.equal(new Set(inventory.map(p => p.productId)).size, inventory.length);
+    for (const p of inventory) {
+        assert(p.id && expected[p.productId] === p.kind, 'Unexpected configured purchase product');
+        assert.equal(p.state, 'MISSING_METADATA', 'Only currently unsubmitted, unavailable drafts are covered');
+        assert(r.disclosureText.includes(p.productId), 'Disclose every configured draft product');
+    }
+    const canonical = items => items.map(p => ({id:p.id, kind:p.kind, productId:p.productId, state:p.state}))
+        .sort((a,b) => a.id.localeCompare(b.id));
+    assert(Array.isArray(r.products));
+    assert.deepEqual(canonical(r.products), canonical(inventory), 'Live product inventory changed after business review');
+}
+
 function assertDemoReady(snapshot, now = Date.now()) {
     assert.equal(snapshot.userId, snapshot.expectedUserId, 'Review login must use the intended demo identity');
     assert(snapshot.wishCount >= 2, 'Prepopulate at least two wishes');
@@ -119,8 +154,11 @@ function assertDemoReady(snapshot, now = Date.now()) {
     assert.equal(snapshot.marketing.paidPurchasesAvailable, false, 'Reassess business answers before enabling payments');
     assert.equal(snapshot.marketing.freeMonthlyLimit, 3, 'Reassess business answers if free limits change');
     assert(snapshot.marketing.freeUsedThisMonth < 3, 'Leave free generations available to the reviewer');
-    assert.equal(snapshot.iapCount, 0, 'Update business answers for any IAP product');
-    assert.equal(snapshot.subscriptionCount, 0, 'Update business answers for any subscription');
+    if (snapshot.iapCount || snapshot.subscriptionCount) assertDisabledDraftProducts(snapshot, now);
+    else {
+        assert.equal(snapshot.iapCount, 0, 'Missing actual IAP inventory');
+        assert.equal(snapshot.subscriptionCount, 0, 'Missing actual subscription inventory');
+    }
     for (let i = 1; i <= 5; i++) assert(new RegExp(`Business model Q${i}:\\s+\\S`).test(snapshot.notes), `Missing business answer ${i}`);
 }
 
@@ -133,7 +171,7 @@ function selectedBuildId(version) {
     assert(typeof id === 'string' && id.length > 0, 'Cannot verify the selected App Store build');
     return id;
 }
-async function checkLive(versionId, expectedUserId) {
+async function checkLive(versionId, expectedUserId, businessEvidence) {
     const { APP_CONSTANTS } = require('../server/dist/config/constants.js');
     const details = asc('review', 'details-for-version', '--version-id', versionId, '--include-sensitive').data.attributes;
     assert(details.demoAccountRequired && details.demoAccountName && details.demoAccountPassword, 'Missing actual App Store review credentials');
@@ -153,12 +191,20 @@ async function checkLive(versionId, expectedUserId) {
     for (const room of inbox.items) rooms.push({ ...room,
         messages: (await api(`/chat/conversations/${room.id}/messages?limit=50`, login.token)).items,
         appointment: (await api(`/chat/conversations/${room.id}/meetup`, login.token)).appointment });
+    const inventory = [
+        ...asc('iap', 'list', '--app', '6468950847', '--paginate').data.map(p => ({id:p.id,kind:'iap',productId:p.attributes.productId,state:p.attributes.state})),
+        ...asc('subscriptions', 'list', '--app', '6468950847', '--paginate').data.map(p => ({id:p.id,kind:'subscription',productId:p.attributes.productId,state:p.attributes.state})),
+    ];
+    const businessContext = {versionId,
+        nativeTree:execFileSync('git', ['rev-parse', 'HEAD:mobile'], {encoding:'utf8'}).trim(),
+        serverTree:execFileSync('git', ['rev-parse', 'HEAD:server'], {encoding:'utf8'}).trim()};
     const snapshot = { expectedUserId, userId: login.user.id,
         wishCount: lists.reduce((n, l) => n + (l.items?.length || 0), 0),
         ownListings: (await api('/listings/mine?limit=100', login.token)).items, rooms,
         marketing: await api('/marketing/availability', login.token), notes: details.notes || '',
-        iapCount: asc('iap', 'list', '--app', '6468950847', '--paginate').data.length,
-        subscriptionCount: asc('subscriptions', 'list', '--app', '6468950847', '--paginate').data.length };
+        productInventory: inventory, businessEvidence, businessContext,
+        iapCount: inventory.filter(p => p.kind === 'iap').length,
+        subscriptionCount: inventory.filter(p => p.kind === 'subscription').length };
     assertDemoReady(snapshot);
     return { checkedAt: new Date().toISOString(), versionId, demoUserId: login.user.id,
         wishCount: snapshot.wishCount, conversationCount: rooms.length, freeGenerationsRemaining: 3 - snapshot.marketing.freeUsedThisMonth };
@@ -170,7 +216,8 @@ async function main() {
     assert(args.includes('--version-id') && args.includes('--demo-user-id'), 'Required: --version-id ID --demo-user-id ID');
     const id = Number(get('--demo-user-id'));
     assert(Number.isSafeInteger(id) && id > 0, 'Invalid demo user ID');
-    const result = await checkLive(get('--version-id'), id);
+    const businessEvidence = args.includes('--business-receipt') ? JSON.parse(fs.readFileSync(get('--business-receipt'), 'utf8')) : undefined;
+    const result = await checkLive(get('--version-id'), id, businessEvidence);
     if (args.includes('--submit') || args.includes('--prepare-submission')) {
         assert(args.includes('--submission-id') && args.includes('--item-id') && args.includes('--ui-receipt') && args.includes('--privacy-receipt'), 'Submission requires item, submission, binary and published App Privacy evidence');
         const receipt = JSON.parse(fs.readFileSync(get('--ui-receipt'), 'utf8'));
@@ -207,7 +254,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
+module.exports = { assertDisabledDraftProducts, assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

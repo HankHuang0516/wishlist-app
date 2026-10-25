@@ -13,6 +13,14 @@ const raw = {
 const filters = () => ({ ...emptySearchFilters });
 const now = Date.parse('2026-09-15T08:00:00.000Z');
 
+it('opens legacy details without photos while photo-dependent old map pages remain strict',()=>{
+  const missing={...raw,media:[]};
+  expect(parsePublicListing(missing,apiUrl,false,true).media).toEqual([]);
+  expect(()=>parsePublicListing(missing,apiUrl)).toThrow();
+  expect(()=>parsePublicListing({...missing,media:[{...raw.media[0],imageUrl:'https://attacker.example/image'}]},apiUrl,false,true)).toThrow();
+  expect(()=>parsePublicListing({...missing,currency:'USD'},apiUrl,false,true)).toThrow();
+});
+
 describe('shared map/list query', () => {
   it('uses a bounded viewport query with no all-country original image request', () => {
     const query = new URLSearchParams(listingSearchPath(filters(), [121, 24, 122, 25]).split('?')[1]);

@@ -1,4 +1,5 @@
 import ProductInterest from '../components/ProductInterest';
+import ProductRetailPriceNote from '../components/ProductRetailPriceNote';
 import { ListingPhoto } from '../components/ListingPhoto';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -110,7 +111,7 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
         {listing.status === 'RESERVED' && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{text('已保留')}</span>}
       </div>
       <h1 className="break-words text-2xl font-bold text-stone-900 sm:text-3xl">{listing.title}</h1>
-      <p className="text-2xl font-semibold text-blue-700">{publicListingPrice(listing.price)}</p>
+      <p className="text-2xl font-semibold text-blue-700">{publicListingPrice(listing.price)}</p><ProductRetailPriceNote kind="listing" id={listing.id} title={listing.title} price={listing.price}/>
       {listing.location && <p className="flex items-center gap-2 text-stone-600"><MapPin className="h-4 w-4" aria-hidden="true" />{listing.location.county}{listing.location.district}{text('（約略地區）')}</p>}
       <ProductInterest kind="listing" id={listing.id} readOnly={userId===listing.owner.id}/>
       <Link className="inline-flex min-h-11 items-center text-blue-800 underline" to={'/users/'+listing.owner.id+'/storefront'}>{text('刊登者：')}{listing.owner?.name || text('用戶')}</Link>

@@ -37,14 +37,19 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
  const page=await browser.newPage();await page.evaluateOnNewDocument(()=>{Object.defineProperty(navigator,'language',{get:()=> 'zh-TW'});Object.defineProperty(navigator,'languages',{get:()=>['zh-TW','zh']});});await page.setViewport({width:1440,height:900});await page.setBypassServiceWorker(true);await page.setRequestInterception(true);
  const origin='https://wishlist-qa.invalid'; const dist=path.resolve(__dirname,'../../../../client/dist');
  const faults:{path:string;method:string;kind:'FAIL'|'DROP_ACK'|'HOLD';remaining:number;wait?:Promise<void>;started?:()=>void}[]=[];const traffic:{path:string;method:string;status:number}[]=[];
+ const bridgeReads=new Map<any,{path:string;method:string;stage:string;started:number}>();
+ const failedReads:{path:string;reason:string}[]=[];
+ page.on('requestfailed',(req:any)=>{const u=new URL(req.url());if(u.origin===origin&&u.pathname.startsWith('/api/'))failedReads.push({path:u.pathname,reason:req.failure()?.errorText??'unknown'});});
  const bridge=async(req:any)=>{
   try{const u=new URL(req.url());if(u.origin!==origin){await req.abort();return;}
+   if(u.pathname.startsWith('/api/'))bridgeReads.set(req,{path:u.pathname,method:req.method(),stage:'intercepted',started:performance.now()});
    if(/^\/api\/listing-media\/.+\/(image|thumbnail)$/.test(u.pathname)){await req.respond({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#cfe8da"/><text x="10" y="100">SYNTHETIC LOCAL QA</text></svg>'});return;}
    if(u.pathname.startsWith('/api/')){const method=req.method().toLowerCase();if(!['get','post','options','head'].includes(method))throw new Error('Unsupported isolated request');
     const fault=faults.find(f=>f.remaining>0&&f.path===u.pathname&&f.method===method);if(fault){fault.remaining--;fault.started?.();if(fault.kind==='FAIL'){traffic.push({path:u.pathname,method,status:503});await req.respond({status:503,contentType:'application/json',body:'{"error":"synthetic injected failure"}'});return;}}
-    let q=(http as any)[method](u.pathname+u.search);const h=req.headers();if(h.authorization)q=q.set('Authorization',h.authorization);if(h['content-type'])q=q.set('Content-Type',h['content-type']);if(req.postData())q=q.send(req.postData());const r=await q;traffic.push({path:u.pathname,method,status:r.status});if(fault?.kind==='HOLD')await fault.wait;if(fault?.kind==='DROP_ACK'){await req.abort('failed');return;}await req.respond({status:r.status,contentType:r.headers['content-type']||'application/json',body:r.text??JSON.stringify(r.body)});return;}
+    let q=(http as any)[method](u.pathname+u.search);const h=req.headers();if(h.authorization)q=q.set('Authorization',h.authorization);if(h['content-type'])q=q.set('Content-Type',h['content-type']);if(req.postData())q=q.send(req.postData());bridgeReads.get(req)!.stage='http';const r=await q;bridgeReads.get(req)!.stage='respond';traffic.push({path:u.pathname,method,status:r.status});if(fault?.kind==='HOLD')await fault.wait;if(fault?.kind==='DROP_ACK'){await req.abort('failed');return;}await req.respond({status:r.status,contentType:r.headers['content-type']||'application/json',body:r.text??JSON.stringify(r.body)});return;}
    const filename=u.pathname.startsWith('/assets/')?path.join(dist,u.pathname):path.join(dist,'index.html');if(!filename.startsWith(dist+path.sep))throw new Error('Asset outside compiled client');const ext=path.extname(filename);await req.respond({status:200,contentType:ext==='.js'?'application/javascript':ext==='.css'?'text/css':'text/html',body:readFileSync(filename)});
   }catch{if(!req.isInterceptResolutionHandled())try{await req.respond({status:503,contentType:'application/json',body:'{"error":"isolated UI bridge failed"}'});}catch{/* Browser aborted an obsolete or timed-out request. */}}
+  finally{bridgeReads.delete(req);}
  }; page.on('request',bridge);
  try{
  let seeded=0;
@@ -159,6 +164,6 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
    return Promise.all([bounded(crypto.subtle.digest('SHA-256',new TextEncoder().encode('synthetic-diagnostic')).then(b=>({bytes:b.byteLength}))),bounded(indexedDB.databases())]).then(([crypto,databases])=>({secureContext:isSecureContext,visibility:document.visibilityState,crypto,databases,
     buttons:Array.from(document.querySelectorAll('[role="dialog"] button')).map(b=>({label:b.textContent,disabled:(b as HTMLButtonElement).disabled}))}));
   }).catch(()=>({diagnosticFailed:true}));
-  console.log(JSON.stringify({isolatedUiFailureUrl:page.url(),visibleSyntheticUi:(await page.evaluate(()=>document.body.innerText)).slice(0,4000),storageDiagnostics}));throw error;
+  console.log(JSON.stringify({isolatedUiFailureUrl:page.url(),visibleSyntheticUi:(await page.evaluate(()=>document.body.innerText)).slice(0,4000),storageDiagnostics,traffic:traffic.slice(-60),pendingBridge:[...bridgeReads.values()].map(r=>({...r,ageMs:Math.round(performance.now()-r.started),started:undefined})),failedReads:failedReads.slice(-30)}));throw error;
  }finally{await browser.close();}
 },180000);

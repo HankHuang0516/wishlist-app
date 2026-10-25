@@ -16,7 +16,7 @@ import Foundation
             guard PublicInputState.classify(observed, label: label, expected: expected) == state else { fatalError("Public input enum host check failed; values withheld") }
         }
         for (otherLabel, value) in [("清單名稱", "Native QA wishlist"), ("願望名稱", "Nintendo Switch OLED"), ("最高預算", "8000"),
-          ("搜尋商品名稱與說明", "Native QA Switch OLED"), ("商品聊天訊息", "NativeQAChatSmoke"), ("私密面交地點名稱", "TaipeiStationQA"),
+          ("搜尋商品名稱與說明", "Native QA Switch OLED"),("搜尋商品名稱與說明", "地圖驗收"),("搜尋商品名稱與說明", "地圖驗收 01 Samsung Galaxy Buds3"), ("商品聊天訊息", "NativeQAChatSmoke"), ("私密面交地點名稱", "TaipeiStationQA"),
           ("第1件商品名稱", "Native QA Blue Mug"), ("縣市", "台北市"), ("行政區", "中正區"),
           ("位置緯度", "25.033"), ("位置經度", "121.565"), ("第1件售價 TWD", "450")] {
             guard PublicInputState.classify(value, label: otherLabel, expected: value) == .matched else { fatalError("Public input whitelist check failed") }
@@ -26,6 +26,6 @@ import Foundation
           PublicInputState.classify("SHANCHUZHANGHAO", label: label, expected: expected) != .matched,
           PublicInputState.classify("删除账号", label: label, expected: expected) != .matched,
           PublicInputState.classify("Native Qa wishlist", label: "清單名稱", expected: "Native QA wishlist") == .caseSubstitution else { fatalError("Public input strict boundary check failed") }
-        print("{\"kind\":\"host-public-input-enum\",\"checks\":37,\"passed\":true,\"rawValuesSerialized\":false,\"deviceOperations\":0}")
+        print("{\"kind\":\"host-public-input-enum\",\"checks\":39,\"passed\":true,\"rawValuesSerialized\":false,\"deviceOperations\":0}")
     }
 }

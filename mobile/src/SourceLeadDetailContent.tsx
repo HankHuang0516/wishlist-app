@@ -1,3 +1,5 @@
+import {createApi} from './api';
+import {ProductRetailPriceInfo} from './ProductRetailPriceInfo';
 import React,{useRef,useState} from 'react';
 import {Pressable,ScrollView,StyleSheet,Text,View,useWindowDimensions} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
@@ -7,7 +9,7 @@ import {ProductInterest} from './ProductInterestView';
 import {sourceLocationLabel,type SourceLead} from './sourceLeadData';
 import {iosColors,iosRadius,iosType} from './iosTheme';
 
-export function SourceLeadDetailContent({detail,error,onBack,onOriginal,onContact,onAttribution}:{detail:SourceLead;error:string;onBack:()=>void;onOriginal:()=>Promise<void>;onContact:()=>void;onAttribution:()=>void}){
+export function SourceLeadDetailContent({api,apiUrl,detail,error,onBack,onOriginal,onContact,onAttribution}:{api:ReturnType<typeof createApi>;apiUrl:string;detail:SourceLead;error:string;onBack:()=>void;onOriginal:()=>Promise<void>;onContact:()=>void;onAttribution:()=>void}){
  const {width}=useWindowDimensions(),[page,setPage]=useState(0),[opening,setOpening]=useState(false),lock=useRef(false);
  const photos=detail.media??[],facts=detail.publicFacts,location=[detail.county,detail.district].filter(Boolean).join(' ');
  async function original(){if(lock.current)return;lock.current=true;setOpening(true);try{await onOriginal();}finally{lock.current=false;setOpening(false);}}
@@ -19,7 +21,7 @@ export function SourceLeadDetailContent({detail,error,onBack,onOriginal,onContac
    </ScrollView>{photos.length>1&&<Text style={s.counter}>{page+1}/{photos.length}</Text>}</View>
    <View style={s.body}>
     <Text style={s.badge}>{new URL(detail.canonicalUrl).hostname.replace(/^www\./,'')} · 庫存待確認</Text>
-    <Text accessibilityRole="header" style={s.title}>{detail.title}</Text><Text style={s.price}>{facts?.priceText||'售價待詢問'}</Text>
+    <Text accessibilityRole="header" style={s.title}>{detail.title}</Text><Text style={s.price}>{facts?.priceText||'售價待詢問'}</Text><ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind="source" id={detail.id} title={detail.title} priceText={facts?.priceText}/>
     <Text style={s.secondary}>{location?location+' · ':''}{sourceLocationLabel(detail)}，非現貨所在地</Text>
     <View style={s.interest}><ProductInterest kind="source" id={detail.id}/></View>
     <View style={s.notice}><Ionicons name="information-circle-outline" size={21} color={iosColors.warning}/><Text style={s.noticeText}>這是公開商品線索。現貨、品況與交易方式需向原賣家確認。</Text></View>

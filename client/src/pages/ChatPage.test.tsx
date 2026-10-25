@@ -287,8 +287,12 @@ describe('private chat web parity', () => {
   it('keeps chat usable in English when locale storage fails and localizes validation without sending', async () => {
     vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('locale unavailable'); });
     render(roomView()); await screen.findByText('No messages yet. Say hello.');
-    fireEvent.change(screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' }), { target: { value: 'invalid\u0000text' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    const field=screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' });
+    // History can render before the separate pending-journal restore settles.
+    // Submit only after the actual input is ready, as a user would.
+    await waitFor(()=>expect(field).toBeEnabled());
+    fireEvent.change(field, { target: { value: 'invalid\u0000text' } });
+    const send=screen.getByRole('button', { name: 'Send message' });await waitFor(()=>expect(send).toBeEnabled());fireEvent.click(send);
     await screen.findByText('Enter 1–2000 characters without invalid control characters.'); expect(posts()).toHaveLength(0); expect(data.size).toBe(0);
   });
   it('shows authenticated inbox identity, price, unread count and keeps legacy friends reachable', async () => {

@@ -1,6 +1,6 @@
 // Host-only isolated simulator compilation. No lease, credentials, store upload,
 // original bundle installation or fixture credentials are involved.
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -18,18 +18,24 @@ if (process.argv[3] && !resume) throw new Error('Unknown QA build option');
 if (resume) {
   // Host compilation only: reuse its own failed output, never rerun a device
   // test or overwrite a successful build manifest. Xcode must revalidate both.
+  // A storage-protection interruption can stop Xcode before its App result
+  // bundle is finalized. In that case require the exact isolated bundle ID
+  // in the partial product; all compilation/signature checks still run anew.
+  const partialInfo=path.join(output,'app-derived/Build/Products/Debug-iphonesimulator/Wishlistai.app/Info.plist');
+  const partialIdentity=fs.existsSync(partialInfo)?spawnSync('/usr/libexec/PlistBuddy',['-c','Print :CFBundleIdentifier',partialInfo],{encoding:'utf8'}):null;
+  const ownedPartial=partialIdentity?.status===0&&partialIdentity.stdout.trim()===iosQaBundle(label);
   if (fs.existsSync(path.join(output, 'build.json')) || !fs.existsSync(path.join(output, 'runner-build.xcresult')) ||
-    !fs.existsSync(path.join(output, 'app-build.xcresult'))) throw new Error('Only a failed host build can be resumed');
+    !fs.existsSync(path.join(output, 'app-build.xcresult'))&&!ownedPartial) throw new Error('Only a failed isolated host build can be resumed');
 } else fs.mkdirSync(output, { mode: 0o700 });
 const env = iosHostEnvironment(process.execPath, os.homedir(), os.tmpdir());
-const sourceFiles = ['App.tsx', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.swift', 'ios/Wishlistai/Info.plist', 'ios/Wishlistai.xcodeproj/project.pbxproj',
+const sourceFiles = ['App.tsx', 'shared/tsconfig.json', 'shared/discoveryMapLayout.ts', 'shared/discoveryRange.ts', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.swift', 'ios/Wishlistai/Info.plist', 'ios/Wishlistai.xcodeproj/project.pbxproj',
   'ios/Wishlistai.xcodeproj/xcshareddata/xcschemes/Wishlistai.xcscheme', 'ios-native-qa/NativeQaTests.swift', 'ios-native-qa/PublicInputState.swift', 'ios-native-qa/HostPublicInputTests.swift',
   'ios-native-qa/WishlistNativeQa.xcodeproj/project.pbxproj', 'ios-native-qa/WishlistNativeQa.xcodeproj/xcshareddata/xcschemes/WishlistNativeQa.xcscheme',
   'scripts/ios-qa-build-guard.cjs', 'scripts/ios-qa-config.cjs', 'scripts/ios-simulator-entitlements.cjs', 'scripts/build-ios-qa.cjs',
   'scripts/ios-qa-input.cjs', 'scripts/ios-qa-result-privacy.cjs', 'scripts/ios-xctestrun-config.cjs', 'scripts/ios-native-qa.cjs',
   'scripts/native-qa.cjs', 'scripts/native-qa-migrations.cjs', 'scripts/native-qa-worker.cjs',
   'scripts/native-qa-marketplace-fixture.cjs', 'scripts/test-native-qa-marketplace-fixture.cjs', 'scripts/test-ios-public-input.cjs',
-  'scripts/seed-uiux-home-qa.cjs', 'qa-fixtures/uiux-home-multiple-blue-mug-v2.json', 'qa-fixtures/synthetic-used-blue-mug.png',
+  'scripts/seed-uiux-home-qa.cjs', 'scripts/seed-discovery-map-qa.cjs', 'scripts/seed-batch-removal-qa.cjs', 'qa-fixtures/uiux-home-multiple-blue-mug-v2.json', 'qa-fixtures/synthetic-used-blue-mug.png',
   'scripts/native-qa-photo-fingerprint.cjs', 'scripts/check-native-qa-photo-fingerprint.cjs',
   'app.config.js', 'plugins/withIsolatedDebugQa.js', 'plugins/iosQaInputBridge.swift', 'package.json', 'package-lock.json', 'tsconfig.json',
   ...fs.readdirSync(path.join(mobile, 'src')).filter(name => /\.(?:ts|tsx)$/.test(name)).sort().map(name => 'src/' + name)];

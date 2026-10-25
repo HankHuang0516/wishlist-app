@@ -131,16 +131,19 @@ jobs:
       if: always()
       timeout-minutes: 5
       run: |
-        # Runner package lists are pre-populated. Avoid refreshing unrelated
-        # third-party repositories unless the required package cannot install.
-        install_fonts() {
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends fonts-noto-cjk
-        }
-        if ! install_fonts; then
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
-          install_fonts
-        fi
-        fc-list :lang=zh-tw family | grep -q 'Noto.*CJK'
+        set -euo pipefail
+        # This CI-only font replaces a 61MB mirror package that can stall the
+        # runner. Pin the smaller official TC font and verify every byte.
+        font_dir="$HOME/.local/share/fonts/wishlist-ci"
+        font_file="$font_dir/NotoSansCJKtc-Regular.otf"
+        mkdir -p "$font_dir"
+        curl --fail --location --retry 2 --retry-all-errors --retry-delay 1 \
+          --retry-max-time 150 --connect-timeout 10 --max-time 45 \
+          --output "$font_file" \
+          https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Regular.otf
+        printf '%s  %s\n' dce08bd4fd91aa8aa76ed8fea4b694c2dfb8550f67871e326843212ddbeb88b4 "$font_file" | sha256sum --check --strict
+        fc-cache --force "$font_dir"
+        fc-list :lang=zh-tw family | grep -q 'Noto Sans CJK TC'
 
     - name: Real marketplace HTTP and database tests
       run: npm test -- --config jest.marketplace.config.js --runInBand

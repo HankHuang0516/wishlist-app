@@ -3,11 +3,19 @@
   "name": "探索地圖全縮圖分類排位",
   "approvedOn": "2026-10-25",
   "timezone": "Asia/Taipei",
-  "status": "APPROVED_GOLDEN_IMPLEMENTATION_AND_ACCEPTANCE_PENDING",
+  "status": "IMPLEMENTED_LOCAL_ACCEPTANCE_PASSED_SIGNED_RELEASE_PENDING",
   "userInstruction": "判斷合理性再設為golden目標；功能與UIUX匹配度都至少85%後交給wishlist en/fix上傳更新版與內部測試版",
-  "releaseOwner": {"title": "wishlist en/fix", "threadId": "01a16dff-7604-7440-910a-9ff9ec1b1c6c"},
+  "releaseOwner": {
+    "title": "wishlist en/fix",
+    "threadId": "01a16dff-7604-7440-910a-9ff9ec1b1c6c"
+  },
   "scope": {
-    "platforms": ["Web desktop", "Web mobile", "iOS", "Android"],
+    "platforms": [
+      "Web desktop",
+      "Web mobile",
+      "iOS",
+      "Android"
+    ],
     "screen": "探索的地圖模式與其搜尋、篩選、商品預覽及願望清單互動",
     "preserveExistingListGolden": true,
     "defaultExploreRemainsApprovedList": true,
@@ -34,21 +42,66 @@
       "慢動作重播是示意／驗收控制；一般使用的動畫需可中斷、尊重減少動態效果，不能循環自動移動或觸發重新搜尋。",
       "願望清單、檢舉、來源詳情與人氣功能沿用真實權限及回執規則；範例中的本機狀態不代表後端成功。"
     ],
-    "prototypeEvidence": ["all-thumbnails-review.json", "before-after-review.json", "before-after-final-review.json"],
+    "prototypeEvidence": [
+      "all-thumbnails-review.json",
+      "before-after-review.json",
+      "before-after-final-review.json"
+    ],
     "prototypeEvidenceCountsAsProductionAcceptance": false,
-    "productionImplementationScores": null
+    "productionImplementationScores": {
+      "Web desktop": {
+        "function": 93,
+        "uiux": 89
+      },
+      "Web mobile": {
+        "function": 93,
+        "uiux": 90
+      },
+      "iOS": {
+        "function": 95,
+        "uiux": 86
+      },
+      "Android": {
+        "function": 95,
+        "uiux": 87
+      }
+    }
   },
   "functionalWeights": {
-    "API與資料一致性": {"points": 25, "evidence": "真實各來源識別、數量、分類、位置與照片；無位置商品另列；36個ID逐件可追溯"},
-    "端到端主要流程": {"points": 30, "evidence": "真搜尋與篩選、36件同時呈現、列表切換、詳情；單清單／多清單加入移除及重新登入回讀"},
-    "權限與失敗恢復": {"points": 25, "evidence": "跨帳號隔離、過期或移除資料、照片失敗、部分讀取、429與Retry After、取消或晚到回覆不重送"},
-    "跨平台與回歸": {"points": 20, "evidence": "Web與兩原生平台的同資料流程、型別／單元／整合／E2E與CI、既有列表及來源功能保持"}
+    "API與資料一致性": {
+      "points": 25,
+      "evidence": "真實各來源識別、數量、分類、位置與照片；無位置商品另列；36個ID逐件可追溯"
+    },
+    "端到端主要流程": {
+      "points": 30,
+      "evidence": "真搜尋與篩選、36件同時呈現、列表切換、詳情；單清單／多清單加入移除及重新登入回讀"
+    },
+    "權限與失敗恢復": {
+      "points": 25,
+      "evidence": "跨帳號隔離、過期或移除資料、照片失敗、部分讀取、429與Retry After、取消或晚到回覆不重送"
+    },
+    "跨平台與回歸": {
+      "points": 20,
+      "evidence": "Web與兩原生平台的同資料流程、型別／單元／整合／E2E與CI、既有列表及來源功能保持"
+    }
   },
   "uiuxWeights": {
-    "Golden結構與層級": {"points": 40, "evidence": "頂部操作、主子分類、所有商品縮圖、預覽位置與來源資訊；保留既有列表Golden與導覽"},
-    "互動狀態與可達性": {"points": 25, "evidence": "同步排位、暫停／中斷及減少動態、鍵盤／讀屏、選取與願望確認、可辨識的原位置"},
-    "排版對比字級及安全區": {"points": 20, "evidence": "相同畫布對照、窄螢幕、1.5倍及系統大字、44pt／48dp、深色、頁籤與OS安全區"},
-    "跨平台與語言一致性": {"points": 15, "evidence": "桌面／手機Web、iOS、Android以及所有啟用語言的真實輸出，不以另一平台或語言代替"}
+    "Golden結構與層級": {
+      "points": 40,
+      "evidence": "頂部操作、主子分類、所有商品縮圖、預覽位置與來源資訊；保留既有列表Golden與導覽"
+    },
+    "互動狀態與可達性": {
+      "points": 25,
+      "evidence": "同步排位、暫停／中斷及減少動態、鍵盤／讀屏、選取與願望確認、可辨識的原位置"
+    },
+    "排版對比字級及安全區": {
+      "points": 20,
+      "evidence": "相同畫布對照、窄螢幕、1.5倍及系統大字、44pt／48dp、深色、頁籤與OS安全區"
+    },
+    "跨平台與語言一致性": {
+      "points": 15,
+      "evidence": "桌面／手機Web、iOS、Android以及所有啟用語言的真實輸出，不以另一平台或語言代替"
+    }
   },
   "acceptance": {
     "functionalMinimum": 85,
@@ -56,8 +109,25 @@
     "perPlatformRequired": true,
     "averagingBetweenMetricsOrPlatformsAllowed": false,
     "unverifiedCriteriaScore": 0,
-    "currentImplementationScores": null,
-    "currentReleaseGate": "HOLD_PENDING_IMPLEMENTATION_AND_EVIDENCE",
+    "currentImplementationScores": {
+      "Web desktop": {
+        "function": 93,
+        "uiux": 89
+      },
+      "Web mobile": {
+        "function": 93,
+        "uiux": 90
+      },
+      "iOS": {
+        "function": 95,
+        "uiux": 86
+      },
+      "Android": {
+        "function": 95,
+        "uiux": 87
+      }
+    },
+    "currentReleaseGate": "LOCAL_PASSED_PENDING_SIGNED_ARTIFACT_AND_STORE_CHECKS",
     "mandatoryCases": [
       "1、2、6、36及較密集結果；穩定唯一ID、不漏商品、不靜默截斷；36件預設情境需逐件可選。",
       "正常／部分／空結果／無位置／照片失敗／查詢失敗／429等待與明確重試；讀取失敗不產生假0件。",
@@ -70,7 +140,19 @@
       "權限或私人資料洩漏、原座標被分類排位改寫、錯誤庫存／數量宣稱、資料遺失或不確定結果自動重送。",
       "缺少36件中的任一有效縮圖節點、僅用代表照／純數字／每組6件冒稱全部顯示，或點選區被裁切而無可達方式。",
       "相關CI、建置簽章或必要商店檢查不通過；未改動H沿用既有紀錄，不要求重複檢查。"
-    ]
+    ],
+    "localReview": {
+      "at": "2026-10-25T19:02:03.157163+00:00",
+      "sourceCommit": "ee4bb064a1bfd773afe597f5ff8cf2f21f04822e",
+      "nativeTree": "54d40389cb885b92a318ff4c05f0ef7b9a242cbc",
+      "clientTree": "265c175904706cc76ccf83516e484a50f7a58066",
+      "serverTree": "e3cbf9cb0f357f685260c4515ede7a38bce0f86b",
+      "report": "/Volumes/codex_2T/codex_project/Wishlist/QA/golden-release-20261024/golden-integrated-local-review-20261026.json",
+      "ciRun": 40223424764,
+      "allThreeChecks": "SUCCESS",
+      "method": "逐平台工程評分，不是像素相似度；未驗子條件不給分，保留扣分與限制，不平均兩指標或平台。",
+      "limitations": "9張合成核准杯圖與27缺圖驗證密度／失效狀態，不是真實庫存。沒有本輪iOS／Android實機、完整讀屏或平板橫向驗收。舊37／19不含14；新簽章包仍待核對。"
+    }
   },
   "releaseSequence": [
     "整合最新main及既有列表Golden，不覆蓋其他工作副本的未提交修改。",

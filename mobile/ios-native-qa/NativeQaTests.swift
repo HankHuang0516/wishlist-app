@@ -22,12 +22,17 @@ final class NativeQaTests: XCTestCase {
         app.descendants(matching: kind).matching(identifier: label).firstMatch
     }
     private func scrollToward(_ control: XCUIElement, in scroller: XCUIElement) {
-        let target = control.frame
+        let target = control.exists ? control.frame : CGRect.null
         let viewport = scroller.frame
         // Dismissing the keyboard can expand the viewport while keeping the
         // old content offset. An offscreen field may then be above us; blindly
         // swiping up makes it impossible to reach.
-        if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
+        if scroller.identifier == "discovery-outer-scroll" || scroller.frame.minX <= app.frame.minX + 8 && scroller.frame.width >= app.frame.width - 16 {
+            let up = !(control.exists && !target.isEmpty && target.maxY <= viewport.minY)
+            let start=scroller.coordinate(withNormalizedOffset:CGVector(dx:0.02,dy:up ? 0.8:0.2))
+            let end=scroller.coordinate(withNormalizedOffset:CGVector(dx:0.02,dy:up ? 0.2:0.8))
+            start.press(forDuration:0.05,thenDragTo:end)
+        } else if control.exists && !target.isEmpty && target.maxY <= viewport.minY {
             scroller.swipeDown()
         } else {
             scroller.swipeUp()
@@ -37,12 +42,14 @@ final class NativeQaTests: XCTestCase {
         // A horizontal status-tab strip can be the first accessibility
         // ScrollView. Swiping it vertically may tap another status instead of
         // exposing an offscreen field in the product list below.
-        (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
+        let outer=app.scrollViews.matching(identifier:"discovery-outer-scroll").firstMatch
+        if outer.exists && outer.isHittable {return outer}
+        return (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
             .filter { $0.exists && $0.isHittable && $0.frame.height >= 120 }
             .max { $0.frame.height < $1.frame.height }
     }
-    @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any) throws -> XCUIElement {
-        let deadline = Date().addingTimeInterval(12)
+    @discardableResult private func required(_ label: String, scroll: Bool = false, kind: XCUIElement.ElementType = .any, timeout: TimeInterval = 12) throws -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
         repeat {
             let control = element(label, kind: kind)
             if control.exists && (!scroll || control.isHittable) { return control }
@@ -96,6 +103,21 @@ final class NativeQaTests: XCTestCase {
             }
             checkpoint("my-listings-marketing-not-visible")
         }
+        throw Failure.missingControl
+    }
+    private func selectWishlistChoice(_ title: String) throws {
+        // RN radio rows combine the list title and privacy/capacity text into
+        // one public AX label. Match the known synthetic title prefix rather
+        // than assuming its nested Text is an independent UIKit button.
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        let deadline = Date().addingTimeInterval(20)
+        repeat {
+            if row.exists && row.isEnabled && row.isHittable && row.frame.height >= 44 {
+                row.tap(); return
+            }
+            if let scroller = visibleVerticalScroller() { scrollToward(row, in: scroller) }
+            Thread.sleep(forTimeInterval: 0.12)
+        } while Date() < deadline
         throw Failure.missingControl
     }
     private func publicInputControl(_ label: String) throws -> XCUIElement {
@@ -162,7 +184,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -444,7 +466,14 @@ final class NativeQaTests: XCTestCase {
         // never manufacture a stored acceptance or bypass the auth UI.
         if element("使用條款與社群安全").waitForExistence(timeout: 3) {
             checkpoint("synthetic-terms-visible-confirmation")
+            // System accessibility sizes make the complete policy much longer.
+            // Read through the real scroll view before requiring the checkbox;
+            // keep the ordinary control deadline unchanged everywhere else.
+            try required("☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。", scroll: true, timeout: 45)
+            checkpoint("synthetic-terms-checkbox-visible")
             try tap("☐ 我已年滿 18 歲，已閱讀並同意使用條款及社群規範，並知悉隱私政策。", kind: .any)
+            checkpoint("synthetic-terms-checked")
+            try required("同意並繼續", scroll: true)
             try tap("同意並繼續")
         }
         checkpoint("real-login-native-input")
@@ -650,21 +679,28 @@ final class NativeQaTests: XCTestCase {
         } catch { reportFailure() }
     }
     func test07RealLoginListingBatchEntry() {
-        executionTimeAllowance = 120
+        executionTimeAllowance = 180
         do {
             try prepare()
             try loginBuyerAndRequireTabs()
             checkpoint("listing-batch-account-entry")
             try tapTab("我的")
-            try tap("刊登好物")
-            checkpoint("listing-batch-screen")
-            try safeScreenshot("qa-listing-batch")
+            try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物")
+            checkpoint("listing-batch-header-bounds")
+            let title=try required("listing-batch-title")
+            let later=try required("稍後繼續",kind:.button)
+            guard title.isHittable,app.frame.contains(title.frame),later.isHittable,
+                  later.frame.width>=44,later.frame.height>=44,app.frame.contains(later.frame) else{throw Failure.unstableControl}
+            try safeScreenshot("qa-listing-batch-header")
             checkpoint("listing-batch-controls")
-            for label in ["listing-batch-title", "連續拍照", "批次選照片", "共用刊登位置與交付方式", "商品草稿 0/12"] {
-                try required(label, scroll: true)
+            for label in ["連續拍照","批次選照片"] {
+                let button=try required(label,scroll:true,kind:.button)
+                guard button.isEnabled,button.frame.height>=44,button.frame.width>=44,
+                      button.frame.minX>=app.frame.minX,button.frame.maxX<=app.frame.maxX else{throw Failure.unstableControl}
             }
-            guard try required("連續拍照", kind: .button).isEnabled,
-                  try required("批次選照片", kind: .button).isEnabled else { throw Failure.unstableControl }
+            try safeScreenshot("qa-listing-batch")
+            try required("商品草稿 0/12",scroll:true)
+            try tap("稍後繼續");try required("刊登好物",scroll:true,kind:.button)
             checkpoint("listing-batch-entry-complete")
             app.terminate()
         } catch { reportFailure() }
@@ -1089,13 +1125,88 @@ final class NativeQaTests: XCTestCase {
             checkpoint("golden-discovery-map")
             try required("切換地圖瀏覽", scroll: true, kind: .any)
             try tap("切換地圖瀏覽", kind: .any)
-            try required("返回商品瀏覽")
+            try required("本批 3 張商品縮圖")
             try safeScreenshot("qa-golden-discovery-map")
-            try tap("返回商品瀏覽", kind: .any)
+            try tap("商品列表", kind: .any)
             try required("3 筆商品與來源", scroll: true)
             checkpoint("golden-discovery-complete")
             app.terminate()
         } catch { reportFailure() }
+    }
+
+    func test18RealLoginGoldenMapAndPrice() {
+        executionTimeAllowance = 420
+        do {
+            try prepare();try loginBuyerAndRequireTabs();try tapTab("探索");try required("39 筆商品與來源",scroll:true)
+            checkpoint("map-original-price-card")
+            try publicText("搜尋商品名稱與說明",value:"地圖驗收 01 Samsung Galaxy Buds3")
+            try required("1 筆商品與來源",scroll:true)
+            let fold="約參考原價 5 折，查看參考原價與來源"
+            try required(fold,scroll:true,kind:.button);try safeScreenshot("qa-map-price-card");try tap(fold)
+            try required("參考原價：NT$ 4,990");try required("原廠建議售價");try required("原價資料期間：2025-04",scroll:true)
+            try safeScreenshot("qa-map-price-source");try tap("關閉原價參考")
+            try required("查看商品：地圖驗收 01 Samsung Galaxy Buds3",scroll:true,kind:.button);try tap("查看商品：地圖驗收 01 Samsung Galaxy Buds3")
+            try required("商品詳情");try required(fold,scroll:true,kind:.button);try tap(fold);try required("參考原價：NT$ 4,990");try safeScreenshot("qa-map-price-detail");try tap("關閉原價參考");try tap("返回探索")
+            checkpoint("map-thirty-six-selectors")
+            try required("清除搜尋文字",scroll:true,kind:.button);try tap("清除搜尋文字");try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true)
+            try tap("切換地圖瀏覽",kind:.any);try required("本批 36 張商品縮圖",scroll:true)
+            checkpoint("map-information-accessible")
+            try required("地圖來源與排列說明",scroll:true,kind:.button);try tap("地圖來源與排列說明")
+            let closeInfo=try required("關閉地圖說明",kind:.button)
+            guard closeInfo.isHittable,closeInfo.frame.width>=44,closeInfo.frame.height>=44,app.frame.contains(closeInfo.frame) else{throw Failure.unstableControl}
+            try safeScreenshot("qa-map-information");try tap("關閉地圖說明")
+            try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+            // React Native exposes testID on the canvas host view on iOS.
+            // Gestures target that exact host; its AX type need not be ScrollView.
+            let canvas=element("discovery-map-scroll")
+            guard canvas.exists else{throw Failure.missingControl}
+            for i in 1...36 {
+                let name=i<=9 ? "Samsung Galaxy Buds3":i<=18 ? "陶瓷馬克杯":i<=27 ? "童書繪本":"棉質襯衫"
+                let label=String(format:"選取商品：地圖驗收 %02d %@",i,name)
+                var control=element(label,kind:.button)
+                for _ in 0..<24 {
+                    if control.exists && control.isHittable && control.frame.height>=48 {break}
+                    scrollToward(control,in:canvas);control=element(label,kind:.button)
+                }
+                guard control.exists,control.isHittable,control.frame.height>=48 else{throw Failure.unstableControl}
+                try tap(label)
+                let selectionDeadline=Date().addingTimeInterval(3)
+                while !element(label,kind:.button).isSelected && Date()<selectionDeadline {Thread.sleep(forTimeInterval:0.1)}
+                guard element(label,kind:.button).isSelected else{throw Failure.unstableControl}
+            }
+            try safeScreenshot("qa-map-thirty-six")
+            checkpoint("map-wishlist-add-remove")
+            let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
+            try required(add,scroll:true,kind:.button);try tap(add)
+            checkpoint("map-wishlist-choice-open")
+            try safeScreenshot("qa-map-wishlist-choice")
+            try selectWishlistChoice("第二份地圖願望")
+            checkpoint("map-wishlist-second-list-selected")
+            try tap("確認加入")
+            guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
+            try required(remove,scroll:true,kind:.button)
+            checkpoint("map-wishlist-server-readback")
+            try tapTab("首頁");try tapTab("探索");try required("39 筆商品與來源",scroll:true)
+            try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true);try tap("切換地圖瀏覽",kind:.any)
+            try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+            let lastLabel="選取商品："+title
+            for _ in 0..<24 {let control=element(lastLabel,kind:.button);if control.exists&&control.isHittable&&control.frame.height>=48 {break};scrollToward(control,in:element("discovery-map-scroll"))}
+            try required(lastLabel,kind:.button);try tap(lastLabel);try required(remove,scroll:true,kind:.button);try safeScreenshot("qa-map-wishlist-saved")
+            try tap(remove);try required("確認移除",scroll:true,kind:.button);try tap("確認移除")
+            guard element("關閉願望選擇",kind:.button).waitForNonExistence(timeout:5) else{throw Failure.unstableControl}
+            try required(add,scroll:true,kind:.button)
+            checkpoint("batch-private-draft-removal")
+            try tapTab("我的");try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物")
+            try required("商品草稿 3/12",scroll:true);try required("移除第1件草稿與照片",scroll:true,kind:.button);try tap("移除第1件草稿與照片")
+            try required("移除這件草稿？");try safeScreenshot("qa-batch-draft-confirm");try tap("保留草稿")
+            try required("商品草稿 3/12",scroll:true)
+            for remaining in (0...2).reversed(){
+                try required("移除第1件草稿與照片",scroll:true,kind:.button);try tap("移除第1件草稿與照片");try tap("移除草稿與照片")
+                try required("商品草稿 \(remaining)/12",scroll:true)
+            }
+            try safeScreenshot("qa-batch-draft-empty");try tap("稍後繼續");try required("刊登好物",scroll:true,kind:.button);try tap("刊登好物");try required("商品草稿 0/12",scroll:true);try safeScreenshot("qa-batch-draft-reopened")
+            checkpoint("map-acceptance-complete");app.terminate()
+        } catch {reportFailure()}
     }
 
 }

@@ -19,7 +19,7 @@ enum PublicInputState: String {
           "搜尋商品名稱與說明": "Native QA Switch OLED", "商品聊天訊息": "NativeQAChatSmoke", "私密面交地點名稱": "TaipeiStationQA",
           "第1件商品名稱": "Native QA Blue Mug", "縣市": "台北市", "行政區": "中正區",
           "位置緯度": "25.033", "位置經度": "121.565", "第1件售價 TWD": "450"]
-        guard publicValues[label] == expected else { return .invalidExpected }
+        guard publicValues[label] == expected || label == "搜尋商品名稱與說明" && ["地圖驗收", "地圖驗收 01 Samsung Galaxy Buds3"].contains(expected) else { return .invalidExpected }
         guard let observed = observed else { return .missing }
         if observed == expected { return .matched }
         if observed.isEmpty { return .empty }

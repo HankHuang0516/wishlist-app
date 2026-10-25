@@ -31,3 +31,21 @@ describe('native discovery contract and safe navigation',()=>{
   const p=parseNativeDiscovery(page(),api).items[0];expect(discoveryPrice({...p,price:0})).toBe('免費贈送');expect(discoveryPrice({...p,price:null,priceText:'',currency:null})).toBe('價格待詢問');expect(discoveryPrice({...p,price:null,currency:'USD',priceText:'20'})).toBe('USD 20');
  });
 });
+
+it('retains verified model-bound retail evidence while ignoring malformed optional evidence',()=>{
+ const retail={productKey:'listing:'+id,currency:'TWD',price:4990,priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.benq.com/zh-tw/',sourceTitle:'同型號原價',sourcePeriod:null,checkedAt:'2026-10-25T00:00:00Z'};
+ const read=(reference:unknown)=>parseNativeDiscovery({...page(),items:[{...product(),retail:reference}]},api).items[0];
+ expect(read(retail).retail?.price).toBe(4990);
+ for(const r of [{...retail,price:0},{...retail,productKey:'source:'+id},{...retail,sourceUrl:'javascript:alert(1)'}]){expect(read(r).retail).toBeUndefined();expect(read(r).title).toBe(product().title);}
+});
+
+it('sends map presentation without losing any shared filters or the owned-wish scope',()=>{
+ const f={...defaultDiscovery,q:'螢幕',main:'electronics',sub:'monitors',county:'臺南市',source:'source' as const,condition:'UNKNOWN',min:'0',max:'1500',feed:'for-you' as const,sort:'recommended' as const};
+ const path=nativeDiscoveryPath(f,'',42,{bbox:[120,22,121,24]}),p=new URLSearchParams(path.split('?')[1]);
+ for(const [key,value]of Object.entries({presentation:'map',q:'螢幕',main:'electronics',sub:'monitors',county:'臺南市',source:'source',condition:'UNKNOWN',min:'0',max:'1500',wish:'42',bbox:'120,22,121,24'}))expect(p.get(key)).toBe(value);
+});
+it('does not invent zero map results for missing geometry or inconsistent map totals',()=>{
+ const map={...page(),mapTotals:{located:1,unmapped:0},items:[{...product(),mapLocation:{coordinates:[120.236,23],precision:'PUBLIC_MEETING_POINT'}}]};
+ expect(parseNativeDiscovery(map,api,false,true).items[0].mapLocation?.coordinates).toEqual([120.236,23]);
+ for(const v of [{...page()},{...map,mapTotals:{located:0,unmapped:0}},{...map,items:[product()]},{...map,items:[{...product(),mapLocation:{coordinates:[0,0],precision:'PUBLIC_MEETING_POINT'}}]}])expect(()=>parseNativeDiscovery(v,api,false,true)).toThrow();
+});

@@ -16,7 +16,7 @@ vi.mock('expo-secure-store', () => ({
 
 const api = 'https://example.test/api';
 const room = 'c373af4c-cfe6-4475-b3f7-0c218efdec45';
-const resources = ['seller-report','social-follow','notification-preferences','product-like.pending',`message-photo.${room}`,`source-lead.${room}`,`source-inquiry.${room}`,`source-cancel.${room}`,'listing', 'wish-create', 'listing-report', `message.${room}`, `meetup.${room}`, `chat-report.${room}`];
+const resources = ['listing-photo-remove','seller-report','social-follow','notification-preferences','product-like.pending','product-wish.pending',`message-photo.${room}`,`source-lead.${room}`,`source-inquiry.${room}`,`source-cancel.${room}`,'listing', 'wish-create', 'listing-report', `message.${room}`, `meetup.${room}`, `chat-report.${room}`];
 
 describe('native pending request keys through the real privacy index and chunk store', () => {
   beforeEach(() => {

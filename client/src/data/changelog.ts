@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.820',date:'2026-10-26',title:'探索地圖與參考原價說明',type:'Fullstack',items:[{type:'Enhancement',content:'探索列表與地圖共用搜尋及篩選；依分類排列已載入商品縮圖，選取後可辨認原公開概略位置，沒有有效公開位置的商品另外列出。'},{type:'Enhancement',content:'商品以約參考原價幾折呈現比較，點擊可查看參考原價及來源；沒有足夠依據時不顯示折數。'},{type:'Fix',content:'私人草稿的照片與未使用行銷圖可一併移除，保留已使用生成額度；地圖讀取失敗時明確提示並可手動重載。'}]},
  {version:'2.0.819',date:'2026-10-25',title:'每週代問額度與分開的贊助方案',type:'Fullstack',items:[{type:'New',content:'未訂閱者每週一台灣時間 00:00 重新取得 3 次免費代問；同筆重試與同輪更正不重複扣次，原詢問與回覆仍可查閱。'},{type:'Security',content:'贊助、尊榮訂閱與行銷加值使用獨立商品及驗單帳本，贊助不會開通尊榮；購買依各平台實際開放狀態顯示。'}]},
  {version:'2.0.745',date:'2026-10-24',title:'代問身分核對與未送達進度',type:'Fullstack',items:[{type:'Enhancement',content:'代問工具逐次核對指定專頁與原帖，保留歷史回執；未成功發布的代問顯示進度及原文連結，供買家自行詢問，不冒稱賣家已收到或同意價格。'}]},
  {version:'2.0.739',date:'2026-10-24',title:'探索公開商品與來源分頁修正',type:'Frontend',items:[{type:'Fix',content:'探索預設列表可查看目前公開的站內刊登，未在地圖顯示的商品不再被誤隱藏；地圖仍遵守原顯示同意與期限。'},{type:'Fix',content:'公開來源採分頁載入，超過500筆也保留已讀結果並可繼續載入，不再整批報錯歸零。'}]},

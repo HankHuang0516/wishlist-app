@@ -20,21 +20,32 @@ export type DiscoveryProduct = {
   date: string; dateBasis: 'PUBLISHED' | 'SOURCE_POST_RANGE' | 'COLLECTED'; dateEarliest: string | null;
   match?: { wishItemId: number; reasons: ('NAME' | 'BUDGET')[]; score: number };
   cpAllowed?: boolean;
+  // Only populated for an explicit map presentation, using existing public coordinates.
+  mapLocation?: {coordinates:[number,number];precision:'APPROXIMATE_2KM'|'COUNTY_ILLUSTRATION'|'PUBLIC_MEETING_POINT'|'DISTRICT_CENTER';visibleUntil?:string}|null;
   retail?: import('./retailPrices').RetailReference;
   cp?: {retail?:import('./retailPrices').RetailReference;conversion?:{originalPrice:number;priceRatio:number;savingsPercent:number;pricePoints:number};score:number|null;confidence:string;reasons:{zh:string;en:string}[];limitations:{zh:string;en:string}[];basis:{key:string;hash:string}[];model:string;evaluatedAt:string;dimensions:{price:number;specification:number;condition:number;evidence:number}|null};
 };
-export type DiscoveryQuery = { q: string; main: string; sub: string; source: string; condition: string; county: string; min?: number; max?: number; sort: string; cursor: string; limit: number };
+export type DiscoveryQuery = { q: string; main: string; sub: string; source: string; condition: string; county: string; min?: number; max?: number; sort: string; cursor: string; limit: number;presentation?:'map';bbox?:[number,number,number,number] };
 export class DiscoveryError extends Error { constructor(public status: number, public code: string) { super(code); } }
 export const discoveryHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export function discoveryQuery(v: Record<string, unknown>): DiscoveryQuery {
-  if (!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k => !['q','main','sub','source','condition','county','min','max','sort','cursor','limit'].includes(k)) || Object.values(v).some(x => typeof x !== 'string')) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+  if (!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k => !['q','main','sub','source','condition','county','min','max','sort','cursor','limit','presentation','bbox'].includes(k)) || Object.values(v).some(x => typeof x !== 'string')) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
   const q = String(v.q ?? '').trim(), main = String(v.main ?? ''), sub = String(v.sub ?? ''), source = String(v.source ?? 'all'), condition = String(v.condition ?? ''), county = String(v.county ?? ''), sort = String(v.sort ?? 'newest'), cursor = String(v.cursor ?? '');
   const group = discoveryCatalog.find(c => c.id === main);
   if (q.length > 80 || /[\u0000-\u001f\u007f]/.test(q) || main && !group || sub && !group?.children.some(s => s.id === sub) || !['all','listing','source','external'].includes(source) || !['','NEW','USED','UNKNOWN'].includes(condition) || county && !/^[\p{Script=Han}]{2,8}[市縣區鄉鎮里]$/u.test(county) || !['newest','price-asc','price-desc','recommended','cp'].includes(sort) || cursor.length > 600) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
   const number = (key: string) => { if (v[key] === undefined || v[key] === '') return undefined; if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(v[key] as string)) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY'); return Number(v[key]); };
   const min = number('min'), max = number('max'), limit = v.limit === undefined ? 24 : Number(v.limit);
   if (min !== undefined && max !== undefined && min > max || !Number.isInteger(limit) || limit < 1 || limit > 60) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
-  return {q,main,sub,source,condition,county,min,max,sort,cursor,limit};
+  if(v.presentation!==undefined&&v.presentation!=='map'||v.bbox!==undefined&&v.presentation!=='map')throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+  let bbox:DiscoveryQuery['bbox'];
+  if(v.bbox!==undefined){
+    const parts=String(v.bbox).split(',');
+    const values=parts.map(Number);
+    if(parts.length!==4||parts.some(p=>! /^-?\d{1,3}(?:\.\d{1,8})?$/.test(p))||values.some(n=>!Number.isFinite(n))||
+       values[0]<-180||values[2]>180||values[1]<-85||values[3]>85||values[0]>=values[2]||values[1]>=values[3])throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+    bbox=values as DiscoveryQuery['bbox'];
+  }
+  return {q,main,sub,source,condition,county,min,max,sort,cursor,limit,...(v.presentation==='map'?{presentation:'map' as const,bbox}:{})};
 }
 
 // Scan every eligible public row, in bounded batches. Filtering never happens
@@ -50,7 +61,7 @@ async function scan<T extends {id: string}>(read: (cursor?: string) => Promise<T
     cursor = next;
   }
 }
-export async function loadDiscovery(now = new Date()) {
+export async function loadDiscovery(now = new Date(), mapPresentation=false) {
   const products: DiscoveryProduct[] = [];
   await prisma.$transaction(async tx => {
     const listings = await scan(cursor => tx.listing.findMany({where:{id:{notIn:privateReviewListingIds()},status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
@@ -60,7 +71,8 @@ export async function loadDiscovery(now = new Date()) {
         brand:r.brand,price:r.currency==='TWD'&&r.price!==null?Number(r.price):null,priceText:r.price?.toString()??'',currency:r.currency,priceUnitVerified:true,
         thumbnailUrl:r.media[0]?.thumbnailUrl??null,photos:r.media.map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),
         county:r.location?.county??null,district:r.location?.district??null,condition:r.condition,sourceLabel:'Wishlist',stockStatus:r.status,canonicalUrl:null,detailPath:'/listings/'+r.id,
-        date:(r.publishedAt??r.createdAt).toISOString(),dateBasis:r.publishedAt?'PUBLISHED':'COLLECTED',dateEarliest:null});
+        date:(r.publishedAt??r.createdAt).toISOString(),dateBasis:r.publishedAt?'PUBLISHED':'COLLECTED',dateEarliest:null,
+        ...(mapPresentation?{mapLocation:r.location&&r.mapVisibleUntil&&r.mapVisibleUntil>now?{coordinates:[r.location.publicLongitude,r.location.publicLatitude] as [number,number],precision:'APPROXIMATE_2KM' as const,visibleUntil:r.mapVisibleUntil.toISOString()}:null}:{})});
     }
     if (process.env.SOURCE_LEADS_PUBLIC_ENABLED === '1') {
       const leads = await scan(cursor=>tx.externalSourceLead.findMany({where:{status:'PUBLISHED'},orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
@@ -72,7 +84,8 @@ export async function loadDiscovery(now = new Date()) {
           photos:(d.media??[]).map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),county:r.county,district:r.district,
           condition:statedCondition(r.title),sourceLabel:new URL(r.canonicalUrl).hostname.replace(/^www\./,''),stockStatus:'UNKNOWN',canonicalUrl:r.canonicalUrl,
           detailPath:'/explore?view=source-leads&source='+r.id+'&presentation=1&photos=2&approximate=1&unlocated=1',
-          date:d.firstObservedAt??(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null});
+          date:d.firstObservedAt??(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null,
+          ...(mapPresentation?{mapLocation:d.locationPrecision!=='CONTACT_FOR_LOCATION'&&d.longitude!==null&&d.latitude!==null?{coordinates:[d.longitude,d.latitude] as [number,number],precision:d.locationPrecision==='COUNTY_ILLUSTRATION'?'COUNTY_ILLUSTRATION' as const:'PUBLIC_MEETING_POINT' as const}:null}:{})});
       }
     }
     if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED === '1') {
@@ -83,7 +96,8 @@ export async function loadDiscovery(now = new Date()) {
           price:d.priceTwd===undefined?null:Number(d.priceTwd),priceText:d.priceTwd??'',currency:'TWD',priceUnitVerified:true,thumbnailUrl:d.thumbnailUrl,
           photos:d.imageUrl?[{id:d.id,url:d.imageUrl,thumbnailUrl:d.thumbnailUrl??d.imageUrl}]:[],county:d.county,district:d.district,condition:d.condition,
           sourceLabel:d.source.host,stockStatus:'UNKNOWN',canonicalUrl:d.canonicalUrl,cpAllowed:row.source.aiProcessingAllowed,detailPath:'/explore?view=external&external='+d.id,
-          date:d.observedAt.toISOString(),dateBasis:'COLLECTED',dateEarliest:null});
+          date:d.observedAt.toISOString(),dateBasis:'COLLECTED',dateEarliest:null,
+          ...(mapPresentation?{mapLocation:{coordinates:[d.location.longitude,d.location.latitude] as [number,number],precision:'DISTRICT_CENTER' as const}}:{})});
       }
     }
   },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead,timeout:20_000});
@@ -106,19 +120,20 @@ export async function recommendDiscovery(products: DiscoveryProduct[], userId: n
 }
 export function filterDiscovery(all: DiscoveryProduct[], query: DiscoveryQuery,category=true) {
   const words=normalizeWish(query.q).split(' ').filter(Boolean);
-  return all.filter(p=>(!category||(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub))&&(query.source==='all'||p.kind===query.source)&&(!query.condition||p.condition===query.condition)&&(!query.county||p.county===query.county)&&words.every(w=>normalizeWish(p.title+' '+p.description+' '+(p.brand??'')).includes(w))&&(query.min===undefined||p.price!==null&&p.price>=query.min)&&(query.max===undefined||p.price!==null&&p.price<=query.max));
+  return all.filter(p=>(!category||(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub))&&(query.source==='all'||p.kind===query.source)&&(!query.condition||p.condition===query.condition)&&(!query.county||p.county===query.county)&&words.every(w=>normalizeWish(p.title+' '+p.description+' '+(p.brand??'')).includes(w))&&(query.min===undefined||p.price!==null&&p.price>=query.min)&&(query.max===undefined||p.price!==null&&p.price<=query.max)&&(!query.bbox||!p.mapLocation||p.mapLocation.coordinates[0]>=query.bbox[0]&&p.mapLocation.coordinates[0]<=query.bbox[2]&&p.mapLocation.coordinates[1]>=query.bbox[1]&&p.mapLocation.coordinates[1]<=query.bbox[3]));
 }
 export function discoveryPage(all: DiscoveryProduct[], query: DiscoveryQuery) {
   const base=filterDiscovery(all,query,false);
   const categories=discoveryCatalog.map(c=>({...c,count:base.filter(p=>p.mainId===c.id).length,children:c.children.map(s=>({...s,count:base.filter(p=>p.mainId===c.id&&p.subId===s.id).length,thumbnailUrl:base.find(p=>p.mainId===c.id&&p.subId===s.id&&p.thumbnailUrl)?.thumbnailUrl??null}))}));
   const rows=base.filter(p=>(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub));
   const newest=(a:DiscoveryProduct,b:DiscoveryProduct)=>Date.parse(b.date)-Date.parse(a.date)||a.key.localeCompare(b.key);
-  rows.sort((a,b)=>query.sort.startsWith('price-')?(a.price===null?b.price===null?newest(a,b):1:b.price===null?-1:(query.sort==='price-asc'?a.price-b.price:b.price-a.price)||newest(a,b)):query.sort==='cp'?(b.cp?.score??0)-(a.cp?.score??0)||newest(a,b):query.sort==='recommended'?(b.match?.score??0)-(a.match?.score??0)||newest(a,b):newest(a,b));
+  rows.sort((a,b)=>query.presentation==='map'&&!!a.mapLocation!==!!b.mapLocation?(a.mapLocation?-1:1):query.sort.startsWith('price-')?(a.price===null?b.price===null?newest(a,b):1:b.price===null?-1:(query.sort==='price-asc'?a.price-b.price:b.price-a.price)||newest(a,b)):query.sort==='cp'?(b.cp?.score??0)-(a.cp?.score??0)||newest(a,b):query.sort==='recommended'?(b.match?.score??0)-(a.match?.score??0)||newest(a,b):newest(a,b));
   const signature=discoveryHash(rows), queryHash=discoveryHash({...query,cursor:'',limit:0});
   let start=0;
   if(query.cursor){try{const c=JSON.parse(Buffer.from(query.cursor,'base64url').toString());if(c.snapshot!==signature||c.query!==queryHash||typeof c.after!=='string')throw Error();start=rows.findIndex(r=>r.key===c.after)+1;if(!start)throw Error();}catch{throw new DiscoveryError(409,'DISCOVERY_RESULTS_CHANGED');}}
   const items=rows.slice(start,start+query.limit), more=start+items.length<rows.length;
   return {items,categories,nextCursor:more?Buffer.from(JSON.stringify({snapshot:signature,query:queryHash,after:items[items.length-1].key})).toString('base64url'):null,
     snapshot:signature,total:rows.length,counts:{listing:rows.filter(p=>p.kind==='listing').length,source:rows.filter(p=>p.kind==='source').length,external:rows.filter(p=>p.kind==='external').length},
-    counties:[...new Set(all.map(p=>p.county).filter((v):v is string=>!!v))].sort(),complete:true,generatedAt:new Date().toISOString(),unknownPriceExcluded:query.min!==undefined||query.max!==undefined};
+    counties:[...new Set(all.map(p=>p.county).filter((v):v is string=>!!v))].sort(),complete:true,generatedAt:new Date().toISOString(),unknownPriceExcluded:query.min!==undefined||query.max!==undefined,
+    ...(query.presentation==='map'?{mapTotals:{located:rows.filter(p=>!!p.mapLocation).length,unmapped:rows.filter(p=>!p.mapLocation).length},geographicScope:query.bbox??null}:{})};
 }

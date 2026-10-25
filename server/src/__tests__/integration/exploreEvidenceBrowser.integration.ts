@@ -188,8 +188,30 @@ describe('actual Explore query evidence display and download',()=>{
   await db.retailPriceObservation.create({data:retailLib.retailObservation({requestId:retailId,productKey:retailProduct.key,bindingHash:retailLib.retailBinding(retailProduct),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original-price UI evidence',sourceProductTitle:'Samsung Galaxy Buds3',sourcePeriod:'2025-04',evidenceQuote:'Galaxy Buds3 建議售價 NT$4,990',checkedAt:new Date().toISOString()},retailProduct)});
   const previousCpModel=process.env.DISCOVERY_CP_MODEL;process.env.DISCOVERY_CP_MODEL=retailModel;
   try{await cpLib.evaluateCp([retailProduct],async(targets:any[])=>targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價，依明示規格比較。',en:'Same-model original-new reference and stated specifications.'}],limitations:[{zh:'庫存、品況仍需確認。',en:'Stock and condition require confirmation.'}]})));}finally{if(previousCpModel===undefined)delete process.env.DISCOVERY_CP_MODEL;else process.env.DISCOVERY_CP_MODEL=previousCpModel;}
-  await page.goto(origin+'/explore?feed=cp',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.body.textContent?.includes('約 5.0 折，比原價低 49.9%'));expect(await page.$eval('.discovery-price',(el:Element)=>el.textContent)).toContain('2,500');expect(await page.$eval('.discovery-retail-price',(el:Element)=>el.textContent)).toContain('4,990');expect(await page.$eval('.discovery-retail-price a',(el:Element)=>el.getAttribute('href'))).toBe('https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf');
-  await page.screenshot({path:webQaEvidence('discovery-original-retail-price.png'),fullPage:true});reports.push({scenario:'same-model-original-new-price',originalPrice:4990,askingPrice:2500,priceRatio:5,savingsPercent:49.9,injectedProvider:true,productionWrites:0});
+  for(const width of [1440,390]){
+   await page.setViewport({width,height:900});await page.goto(origin+'/explore?feed=cp',{waitUntil:'domcontentloaded'});
+   await page.waitForSelector('.discovery-card .discovery-retail-trigger');
+   expect(await page.$eval('.discovery-card .discovery-retail-trigger',(el:Element)=>el.textContent)).toContain('約參考原價 5 折');
+   expect(await page.$eval('.discovery-card .discovery-retail-trigger',(el:Element)=>el.getAttribute('aria-expanded')==='true')).toBe(false);
+   expect(await page.$eval('.discovery-price',(el:Element)=>el.textContent)).toContain('2,500');
+   expect(await page.$eval('body',(el:Element)=>el.textContent)).not.toMatch(/AI CP|CP 分數優先|價差 40/);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await page.screenshot({path:webQaEvidence('discovery-discount-collapsed-'+width+'.png'),fullPage:true});
+   await page.click('.discovery-card .discovery-retail-trigger');
+   expect(await page.$eval('.discovery-card .discovery-retail-trigger',(el:Element)=>el.getAttribute('aria-expanded')==='true')).toBe(true);
+   expect(await page.$eval('[data-testid="retail-price-evidence"]',(el:Element)=>el.textContent)).toContain('4,990');
+   expect(await page.$eval('[data-testid="retail-price-evidence"] a',(el:Element)=>el.getAttribute('href'))).toBe('https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf');
+   await page.screenshot({path:webQaEvidence('discovery-discount-evidence-'+width+'.png'),fullPage:true});
+   await page.click('[aria-label="關閉原價參考"]');
+   await page.click('.discovery-product-title');await page.waitForSelector('[role="dialog"] .discovery-retail-trigger');
+   expect(await page.$eval('[role="dialog"] .discovery-retail-trigger',(el:Element)=>el.getAttribute('aria-expanded')==='true')).toBe(false);
+   await page.click('[role="dialog"] .discovery-retail-trigger');
+   expect(await page.$eval('[data-testid="retail-price-evidence"]',(el:Element)=>el.textContent)).toContain('4,990');
+   await page.screenshot({path:webQaEvidence('discovery-discount-detail-'+width+'.png'),fullPage:true});
+   await page.click('[aria-label="關閉原價參考"]');await page.click('[aria-label="關閉"]');
+   reports.push({width,scenario:'clickable-same-model-original-price',originalPrice:4990,askingPrice:2500,label:'約參考原價 5 折',closedInitially:true,detailAndCard:true,injectedProvider:true,productionWrites:0});
+  }
+
   expect(errors).toEqual([]);
   // Built assets must retain the existing public icon bytes; no redesign or H editing.
   const crypto=require('crypto'),publicRoot=path.resolve(root,'../public'),icons:any[]=[];

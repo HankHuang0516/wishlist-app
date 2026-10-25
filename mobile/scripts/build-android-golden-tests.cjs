@@ -13,7 +13,7 @@ const java='/Applications/Android Studio.app/Contents/jbr/Contents/Home',sdk='/U
 const env=hostEnvironment(process.execPath,java,sdk,os.homedir());
 const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 function sourceFiles(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?['build','.gradle'].includes(e.name)?[]:sourceFiles(path.join(dir,e.name)):[path.relative(mobile,path.join(dir,e.name))]);}
-const sources=[...sourceFiles(path.join(mobile,'android-golden-qa')),'scripts/build-android-golden-tests.cjs','scripts/android-golden-regression.cjs'].sort();
+const sources=[...sourceFiles(path.join(mobile,'android-golden-qa')),'scripts/build-android-golden-tests.cjs','scripts/android-golden-regression.cjs','scripts/seed-discovery-map-qa.cjs','scripts/seed-batch-removal-qa.cjs','scripts/seed-uiux-home-qa.cjs'].sort();
 const fingerprint=()=>Object.fromEntries(sources.map(p=>[p,hash(path.join(mobile,p))]));
 const before=fingerprint();fs.mkdirSync(output,{mode:0o700});
 const result=spawnSync(path.join(mobile,'android/gradlew'),['-p',path.join(mobile,'android-golden-qa'),':runner:assembleDebug',':runner:assembleDebugAndroidTest','-PgoldenTestLabel='+label,'--console=plain','--max-workers=2'],{env,stdio:'inherit'});

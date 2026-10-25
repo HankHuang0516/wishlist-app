@@ -28,3 +28,28 @@ test('does not invent prices when no exact reference was found and binds immutab
   expect(retailIdentity({...shoe,title:'Nike CK6357-006'})).toBe(retailIdentity(shoe));
   expect(retailIdentity({...p,title:'iPhone 15 256GB 手機殼'})).toBeNull();
  });
+
+const calculator = {...p,title:'CASIO fx-991CW 工程計算機（二手、功能正常）',mainId:'other',subId:'misc'} as DiscoveryProduct;
+const pchomeCalculatorInput = () => ({...input(),productKey:calculator.key,bindingHash:retailBinding(calculator),originalPrice:'1190',priceType:'RETAIL_REGULAR',sourceUrl:'https://24h.pchome.com.tw/prod/DCBAJI-A900G6O6T',sourceTitle:'CASIO 卡西歐 工程計算機/fX-991CW - PChome 24h購物',sourceProductTitle:'CASIO 卡西歐 工程計算機/fX-991CW',sourcePeriod:null,evidenceQuote:'CASIO 卡西歐 工程計算機/fX-991CW 網路價 $1,190'});
+test('accepts exact PChome regular network price and preserves immutable replay',()=>{
+ const body=pchomeCalculatorInput();const result=retailObservation(body,calculator);
+ expect(Number(result.originalPrice)).toBe(1190);
+ expect(result.sourcePeriod).toBeNull();
+ expect(result.payloadHash).toBe(retailObservation(body,calculator).payloadHash);
+ expect(Number(retailObservation({...body,evidenceQuote:body.evidenceQuote+'；折扣價 $1,130'},calculator).originalPrice)).toBe(1190);
+});
+test.each([
+ {originalPrice:'1130',evidenceQuote:'CASIO fx-991CW 網路價 $1,190；折扣價 $1,130'},
+ {evidenceQuote:'CASIO fx-991CW 折扣價 $1,190'},
+ {evidenceQuote:'CASIO fx-991CW 促銷網路價 $1,190'},
+ {evidenceQuote:'CASIO fx-991CW 券後網路價 $1,190'},
+ {evidenceQuote:'CASIO fx-991CW 促銷： 網路價 $1,190'},
+ {evidenceQuote:'CASIO fx-991CW 優惠 網路價 $1,190'},
+ {sourceUrl:'https://www.momoshop.com.tw/product/1'},
+ {sourceUrl:'https://pchome.com.tw.attacker.invalid/prod/1'},
+ {priceType:'MANUFACTURER_MSRP'},
+ {evidenceQuote:'CASIO fx-991CW 網路價 USD1190'},
+ {sourceProductTitle:'CASIO fx-991CW-PK'},
+])('keeps PChome price-label support scoped to the exact variant and non-promotion %p',patch=>{
+ expect(()=>retailObservation({...pchomeCalculatorInput(),...patch},calculator)).toThrow();
+});

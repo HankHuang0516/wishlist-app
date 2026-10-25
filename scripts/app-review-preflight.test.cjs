@@ -74,3 +74,24 @@ test('checks the actual completed review attachment, exact inspected video and n
  assert.throws(()=>assertRecordingDelivery(receipt,'No recording',attachment,'detail','c'.repeat(32)));
  assert.throws(()=>assertRecordingDelivery(receipt,'physical-device-proof.mp4',attachment,'wrong-detail','c'.repeat(32)));
 });
+
+const {assertApprovedHistoricalRecording}=require('./app-review-preflight.cjs');
+test('only the explicitly approved19 artifact can reuse accepted historical physical footage with honest notes',()=>{
+ const scope={versionId:'00d4ab78-c004-4d89-a537-2399e54ae16f',buildId:'496d770a-b640-434b-a887-cdceb1233459',buildNumber:'19',nativeGitTree:'b699abd83d9c6c0ead7800bb4931a53eab87b60e',artifactSha256:'b9a86bc946ff69c0a471c561b47242aebb2b7f794bb4e200b9983e4732765baf'};
+ const {receipt:base,age}=remediationFixture();
+ const receipt={...base,...scope,mode:'approved-historical-recording',recordedVersion:'2.0.16',currentBuildPhysicalRecording:false,disclosureText:'This is the previously accepted2.0.16 physical footage, not a recording of19.',videoAttachment:{id:'attachment',fileName:'historical.mp4'}};
+ const approval={...scope,approved:true,questionRef:'call_958c08f13f2e4d74ac306241a9540c2f'};
+ const prior={versionString:'2.0.16',state:'READY_FOR_SALE',buildId:'a79db7d4-f26a-475e-9ba3-986a9e5e4e30'};
+ const verify=(r=receipt,n=scope,a=approval,v=prior,notes=receipt.disclosureText)=>assertApprovedHistoricalRecording(r,n,age,a,v,notes);
+ assert.doesNotThrow(()=>verify());
+ for(const [k,v] of Object.entries(scope)){assert.throws(()=>verify({...receipt,[k]:'wrong'}));assert.throws(()=>verify(receipt,{...scope,[k]:'wrong'}));assert.throws(()=>verify(receipt,scope,{...approval,[k]:'wrong'}));}
+ assert.throws(()=>verify(receipt,scope,{...approval,approved:false}));
+ assert.throws(()=>verify(receipt,scope,{...approval,questionRef:'unrelated'}));
+ assert.throws(()=>verify({...receipt,currentBuildPhysicalRecording:true}));
+ assert.throws(()=>verify({...receipt,recordedVersion:'2.0.17'}));
+ assert.throws(()=>verify({...receipt,verifiedAt:'2020-01-01'}));
+ assert.throws(()=>verify(receipt,scope,approval,{...prior,state:'REJECTED'}));
+ assert.throws(()=>verify(receipt,scope,approval,{...prior,buildId:'unreviewed'}));
+ assert.throws(()=>verify(receipt,scope,approval,prior,'A current physical recording.'));
+ assert.throws(()=>verify({...receipt,checks:{...receipt.checks,mapStop:false}}));
+});

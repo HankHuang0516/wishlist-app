@@ -1,3 +1,5 @@
+import {createApi} from './api';
+import {ProductRetailPriceInfo} from './ProductRetailPriceInfo';
 import React from 'react';
 import {Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
@@ -5,9 +7,9 @@ import {ProductInterest} from './ProductInterestView';
 import {NativeDisclosure} from './NativeDisclosure';
 import {externalPrice,type ExternalListing} from './externalListingSearch';
 import {iosColors,iosType} from './iosTheme';
-export function ExternalListingDetailContent({detail,photo,opening,error,onBack,onOriginal}:{detail:ExternalListing;photo:React.ReactNode;opening:boolean;error:string;onBack:()=>void;onOriginal:()=>void}){
+export function ExternalListingDetailContent({api,apiUrl,detail,photo,opening,error,onBack,onOriginal}:{api:ReturnType<typeof createApi>;apiUrl:string;detail:ExternalListing;photo:React.ReactNode;opening:boolean;error:string;onBack:()=>void;onOriginal:()=>void}){
  return <View style={s.screen}><View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel="返回探索" style={s.back} onPress={onBack}><Ionicons name="chevron-back" size={25} color={iosColors.tint}/></Pressable><Text accessibilityRole="header" style={s.heading}>商品詳情</Text><Text style={s.badge}>合作來源</Text></View>
- <ScrollView contentContainerStyle={s.content}>{photo}<View style={s.body}><Text style={s.badge}>{detail.source.host} · 庫存待確認</Text><Text accessibilityRole="header" style={s.title}>{detail.title}</Text><Text style={s.price}>{externalPrice(detail)}</Text><Text style={s.secondary}>二手 · {detail.county} {detail.district}</Text><ProductInterest kind="external" id={detail.id}/><View style={s.notice}><Text style={s.secondary}>請到原站確認現貨、狀態與交易方式。Wishlist.ai 並非此商品賣家。</Text></View><Text style={s.label}>商品說明</Text><Text style={s.text}>{detail.description}</Text>
+ <ScrollView contentContainerStyle={s.content}>{photo}<View style={s.body}><Text style={s.badge}>{detail.source.host} · 庫存待確認</Text><Text accessibilityRole="header" style={s.title}>{detail.title}</Text><Text style={s.price}>{externalPrice(detail)}</Text><ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind="external" id={detail.id} title={detail.title} price={detail.priceTwd}/><Text style={s.secondary}>二手 · {detail.county} {detail.district}</Text><ProductInterest kind="external" id={detail.id}/><View style={s.notice}><Text style={s.secondary}>請到原站確認現貨、狀態與交易方式。Wishlist.ai 並非此商品賣家。</Text></View><Text style={s.label}>商品說明</Text><Text style={s.text}>{detail.description}</Text>
  {detail.aiSupplement&&<NativeDisclosure title="AI 補充說明 · 已人工審核"><Text style={s.text}>{detail.aiSupplement}</Text><Text style={s.secondary}>AI 依授權圖片產生的補充資訊，可能有誤；商品現況與售價仍以來源網站為準。</Text></NativeDisclosure>}
  <NativeDisclosure title="來源與交易資訊"><Text style={s.secondary}>地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與原始描述由來源提供。</Text><Text style={s.secondary}>來源最後確認：{new Date(detail.observedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}</Text><Text style={s.secondary}>這是外部導流商品，不提供站內賣家聊天或面交預約。</Text></NativeDisclosure></View></ScrollView>
  <View style={s.footer}>{!!error&&<Text accessibilityRole="alert" style={s.error}>{error}</Text>}<Pressable accessibilityRole="button" accessibilityLabel="前往來源網站查看" disabled={opening} style={s.contact} onPress={onOriginal}><Ionicons name="open-outline" size={21} color="white"/><Text style={s.contactText}>{opening?'重新確認來源中…':'前往來源網站查看'}</Text></Pressable></View></View>;

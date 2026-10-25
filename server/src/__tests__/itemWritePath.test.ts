@@ -37,6 +37,7 @@ jest.mock('../lib/prisma', () => ({
 }));
 
 // --- Spy on the EClaw verify callback + the P1 network verifier ---
+import {createLoopbackRequest} from './integration/loopbackHttp';
 import * as verifyLib from '../lib/eclawVerify';
 const verifyAgentSpy = jest.spyOn(verifyLib, 'verifyEclawAgent');
 
@@ -195,8 +196,6 @@ describe('upsertEclawListing — bound to the verified agent code', () => {
 describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to-end', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const express = require('express');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const request = require('supertest');
 
     function appWith() {
         const app = express();
@@ -204,6 +203,8 @@ describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to
         app.use('/api/items', require('../routes/itemRoutes').default);
         return app;
     }
+
+    const http=createLoopbackRequest(appWith());
 
     it('verified agent → 201, and the bot secret is NEVER persisted or logged', async () => {
         const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -213,7 +214,7 @@ describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to
         mockItemCreate.mockResolvedValue({ id: 9, name: 'thing' });
 
         const SECRET = 'super-secret-bot-value';
-        const res = await request(appWith())
+        const res = await http
             .post('/api/items/upsert-listing')
             .set('x-eclaw-device-id', 'dev-1')
             .set('x-eclaw-entity-id', '2')
@@ -237,7 +238,7 @@ describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to
 
     it('spoofed / unverified identity → 403, no write', async () => {
         verifyAgentSpy.mockResolvedValue({ ok: false, reason: 'invalid' });
-        const res = await request(appWith())
+        const res = await http
             .post('/api/items/upsert-listing')
             .set('x-eclaw-agent-token', 'v1.forged.sig')
             .send({ wishlistId: 1, name: 'thing' });
@@ -247,7 +248,7 @@ describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to
 
     it('EClaw verify DOWN → 503 fail-closed, no write', async () => {
         verifyAgentSpy.mockResolvedValue({ ok: false, reason: 'upstream_error' });
-        const res = await request(appWith())
+        const res = await http
             .post('/api/items/upsert-listing')
             .set('x-eclaw-agent-token', 'v1.whatever.sig')
             .send({ wishlistId: 1, name: 'thing' });
@@ -256,7 +257,7 @@ describe('upsert-listing ROUTE — authenticateEclawAgent gates the write end-to
     });
 
     it('no EClaw credentials at all → 401, no verify call, no write', async () => {
-        const res = await request(appWith())
+        const res = await http
             .post('/api/items/upsert-listing')
             .send({ wishlistId: 1, name: 'thing' });
         expect(res.status).toBe(401);

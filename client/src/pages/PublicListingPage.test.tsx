@@ -6,6 +6,9 @@ import PublicListingPage from './PublicListingPage';
 import { API_URL } from '../config';
 import { AuthContext } from '../context/AuthContext';
 import { makeListing, responseOk } from '../__tests__/fixtures/marketplace';
+// These cases isolate public-product/share requests; price evidence has its own
+// stale-response, current-price and public-API tests in ProductRetailPriceNote.
+vi.mock('../components/ProductRetailPriceNote',()=>({default:()=>null}));
 
 const id = 'b5abf861-a66d-4072-876b-4f0ab3172dac';
 const anonymous = { token: null, user: null, login: vi.fn(), logout: vi.fn(), refreshUser: vi.fn(), isAuthenticated: false };

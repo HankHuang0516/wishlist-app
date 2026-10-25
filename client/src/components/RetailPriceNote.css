@@ -1,0 +1,8 @@
+.discovery-retail-price{margin-top:8px;font-size:13px;line-height:1.65;color:#424b57}
+.discovery-retail-price strong{font-weight:600}
+.discovery-retail-trigger{min-height:44px;display:flex;align-items:center;gap:6px;cursor:pointer;color:#006bd6;font-size:13px;text-align:left;font-weight:600;overflow-wrap:anywhere}
+.discovery-retail-trigger:focus-visible{outline:2px solid #006bd6;outline-offset:3px;border-radius:6px}
+.discovery-retail-details{padding:12px;background:#f2f6fb;border:1px solid #d8e4f2;border-radius:12px;overflow-wrap:anywhere;color:#424b57}
+.discovery-retail-details p{margin:0 0 14px;font-size:15px;line-height:1.7}
+.discovery-retail-details a{display:inline-flex;align-items:center;gap:4px;min-height:44px;color:#0063c6;text-decoration:underline}
+.discovery-retail-details small{display:block;font-size:13px;color:#636366}

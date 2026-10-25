@@ -1,3 +1,5 @@
+import {createApi} from './api';
+import {ProductRetailPriceInfo} from './ProductRetailPriceInfo';
 import React, {useRef, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
@@ -8,6 +10,7 @@ import {listingPrice, type PublicListing} from './listingSearch';
 import {iosColors, iosRadius, iosType} from './iosTheme';
 
 type Props = {
+  api:ReturnType<typeof createApi>;apiUrl:string;
   listing: PublicListing;
   userId: number;
   error: string;
@@ -18,7 +21,7 @@ type Props = {
   onContact: () => Promise<void>;
 };
 
-export function ListingDetailContent({listing, userId, error, reasons, onBack, onStorefront, onReport, onContact}: Props) {
+export function ListingDetailContent({api,apiUrl,listing, userId, error, reasons, onBack, onStorefront, onReport, onContact}: Props) {
   const {width} = useWindowDimensions();
   const [page, setPage] = useState(0), [contacting, setContacting] = useState(false);
   const contactLock = useRef(false);
@@ -46,7 +49,7 @@ export function ListingDetailContent({listing, userId, error, reasons, onBack, o
       </View>
       <View style={s.body}>
         <Text accessibilityRole="header" style={s.title}>{listing.title}</Text>
-        <Text style={s.price}>{listingPrice(listing)}</Text>
+        <Text style={s.price}>{listingPrice(listing)}</Text><ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind="listing" id={listing.id} title={listing.title} price={listing.price}/>
         <Text style={s.secondary}>{listing.condition==='NEW'?'新品':'二手'} · {listing.location.county} {listing.location.district}{listing.status==='RESERVED'?' · 已保留':''}</Text>
         <View style={s.interest}><ProductInterest kind="listing" id={listing.id} readOnly={own}/></View>
         <View style={s.seller}>

@@ -31,3 +31,10 @@ describe('native discovery contract and safe navigation',()=>{
   const p=parseNativeDiscovery(page(),api).items[0];expect(discoveryPrice({...p,price:0})).toBe('免費贈送');expect(discoveryPrice({...p,price:null,priceText:'',currency:null})).toBe('價格待詢問');expect(discoveryPrice({...p,price:null,currency:'USD',priceText:'20'})).toBe('USD 20');
  });
 });
+
+it('retains verified model-bound retail evidence while ignoring malformed optional evidence',()=>{
+ const retail={productKey:'listing:'+id,currency:'TWD',price:4990,priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.benq.com/zh-tw/',sourceTitle:'同型號原價',sourcePeriod:null,checkedAt:'2026-10-25T00:00:00Z'};
+ const read=(reference:unknown)=>parseNativeDiscovery({...page(),items:[{...product(),retail:reference}]},api).items[0];
+ expect(read(retail).retail?.price).toBe(4990);
+ for(const r of [{...retail,price:0},{...retail,productKey:'source:'+id},{...retail,sourceUrl:'javascript:alert(1)'}]){expect(read(r).retail).toBeUndefined();expect(read(r).title).toBe(product().title);}
+});

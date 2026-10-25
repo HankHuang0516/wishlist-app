@@ -9,7 +9,7 @@ import DiscoveryCategoryPicker from '../components/DiscoveryCategoryPicker';
 const {publicApi,api}=vi.hoisted(()=>({publicApi:vi.fn(),api:vi.fn()}));
 vi.mock('../lib/marketplaceApi',async original=>({...await original<typeof import('../lib/marketplaceApi')>(),publicApi,api}));
 const auth={token:'fixture',user:{id:42,phoneNumber:'synthetic'},isAuthenticated:true,login:vi.fn(),logout:vi.fn(),refreshUser:vi.fn()};
-const p={kind:'source',id:'ab427730-60af-40c4-b568-37170d93e605',key:'source:ab427730-60af-40c4-b568-37170d93e605',title:'BenQ 合成螢幕',description:'公開來源參考',mainId:'electronics',subId:'monitors',price:1200,priceText:'1200',currency:'TWD',photos:[{id:'a',url:'https://example.invalid/a',thumbnailUrl:'https://example.invalid/a'},{id:'b',url:'https://example.invalid/b',thumbnailUrl:'https://example.invalid/b'}],thumbnailUrl:null,county:'臺北市',district:null,condition:'UNKNOWN',stockStatus:'UNKNOWN',canonicalUrl:'https://example.invalid/product',date:'2026-10-24T00:00:00Z',dateBasis:'SOURCE_POST_RANGE',dateEarliest:null};
+const p={kind:'source',id:'ab427730-60af-40c4-b568-37170d93e605',key:'source:ab427730-60af-40c4-b568-37170d93e605',title:'BenQ 合成螢幕',description:'公開來源參考',mainId:'electronics',subId:'monitors',price:1200,priceText:'1200',currency:'TWD',priceUnitVerified:true,photos:[{id:'a',url:'https://example.invalid/a',thumbnailUrl:'https://example.invalid/a'},{id:'b',url:'https://example.invalid/b',thumbnailUrl:'https://example.invalid/b'}],thumbnailUrl:null,county:'臺北市',district:null,condition:'UNKNOWN',stockStatus:'UNKNOWN',canonicalUrl:'https://example.invalid/product',date:'2026-10-24T00:00:00Z',dateBasis:'SOURCE_POST_RANGE',dateEarliest:null};
 const categories=[{id:'electronics',label:'3C數位',en:'Electronics',icon:'monitor',count:1,children:[{id:'monitors',label:'電腦螢幕',en:'Monitors',count:1,thumbnailUrl:null}]}];
 const page={items:[p],categories,nextCursor:null,snapshot:'fixed',total:1,counts:{listing:0,source:1,external:0},counties:['臺北市'],complete:true,generatedAt:'2026-10-24T00:00:00Z',unknownPriceExcluded:false};
 function Location(){return <output data-testid="location">{useLocation().search}</output>;}
@@ -50,8 +50,8 @@ it('reads CP results without triggering AI and evaluates only after an explicit 
  publicApi.mockResolvedValue({...page,items:[],total:0,counts:{listing:0,source:0,external:0},cpStatus:{evaluated:0,scored:0,pending:3,providerConfigured:true,threshold:75}});
  api.mockImplementation(async(_token,path,o)=>path==='/product-wishes'?{lists:[],saved:[]}:o?.method==='POST'?{state:'COMPLETE',evaluated:3}:publicApi(path,o));
  render(view('/explore?feed=cp&main=electronics'));
- await screen.findByRole('button',{name:'評估這批商品的 CP 值'});expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
- fireEvent.click(screen.getByRole('button',{name:'評估這批商品的 CP 值'}));await screen.findByText('已完成 3 件商品的比較，資料不足的商品保留未評分。');
+ await screen.findByRole('button',{name:'核對這批商品的比較依據'});expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+ fireEvent.click(screen.getByRole('button',{name:'核對這批商品的比較依據'}));await screen.findByText('已完成 3 件商品的比較，資料不足的商品暫不提供比較。');
  const post=api.mock.calls.find(c=>c[2]?.method==='POST');expect(post?.[1]).toBe('/discovery/cp-evaluations');expect(JSON.parse(post?.[2].body)).toMatchObject({main:'electronics'});expect(post?.[2].body).not.toMatch(/user|token|wish|display|feed/);
 });
 
@@ -97,7 +97,7 @@ it('keeps a 429 inside the page, disables repeated retries, then allows one expl
 it('shows same-model original-new price and deterministic savings with an attributable source',async()=>{
  const retail={price:4990,priceType:'MANUFACTURER_MSRP',sourceUrl:'https://images.samsung.com/is/content/samsung/assets/tw/downloads/2025-ses-apr-event-guidelines.pdf',sourceTitle:'Synthetic original price',sourcePeriod:'2025-04',checkedAt:'2026-10-24T00:00:00Z'};
  publicApi.mockResolvedValue({...page,items:[{...p,title:'Samsung Galaxy Buds3',price:2500,cp:{score:80,confidence:'MEDIUM',reasons:[],limitations:[],basis:[],model:'synthetic',evaluatedAt:'2026-10-24T00:00:00Z',dimensions:null,retail,conversion:{originalPrice:4990,priceRatio:5,savingsPercent:49.9,pricePoints:20}}}],cpStatus:{evaluated:1,scored:1,pending:0,providerConfigured:true,threshold:75}});
- render(view('/explore?feed=cp'));await screen.findByText(/約 5\.0 折，比原價低 49\.9%/);expect(screen.getByText('NT$ 4,990')).toBeVisible();expect(screen.getByRole('link',{name:'原廠建議售價依據'})).toHaveAttribute('href',retail.sourceUrl);expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
+ render(view('/explore?feed=cp'));const badge=await screen.findByText('約參考原價 5 折');expect(screen.queryByText(/AI CP|CP 分數|價差 40/)).not.toBeInTheDocument();expect(screen.queryByText('NT$ 4,990')).not.toBeInTheDocument();fireEvent.click(badge);expect(screen.getByText('NT$ 4,990')).toBeVisible();expect(screen.getByRole('link',{name:'原廠建議售價依據'})).toHaveAttribute('href',retail.sourceUrl);expect(api.mock.calls.some(c=>c[2]?.method==='POST')).toBe(false);
 });
 it.each([['zh-TW','查看 Facebook 原文','請 Wishlist AI 代問'],['en-US','View original Facebook post','Ask Wishlist AI to inquire']])('keeps the exact FB original visible on the card and above photos in %s without starting an inquiry',async(locale,original,inquire)=>{
  localStorage.setItem('user-locale',locale);

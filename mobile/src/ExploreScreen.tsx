@@ -451,13 +451,13 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
     </ScrollView></View></Modal>
     <Modal visible={!!detail || reporting || sellerId!==null} onDismiss={finishChatRoute} animationType="slide" onRequestClose={() => { if(sellerId!==null)setSellerId(null);else if (reporting) closeReport(); else { detailSequence.current++; setDetail(null); } }}>
       {sellerId!==null ? <View style={[s.screen,{paddingTop:insets.top,paddingBottom:insets.bottom}]}><SellerStorefront key={sellerId} api={api} apiUrl={apiUrl} userId={userId} sellerId={sellerId} onClose={()=>setSellerId(null)} onOpenChat={openChatAfterDismiss} onOpenListing={item=>{setSellerId(null);setDetail(item);}}/></View> : reporting ? <ListingReportSheet api={api} apiUrl={apiUrl} userId={userId} listing={reportTarget} onClose={closeReport} onBusyChange={value => { reportBusy.current = value; }} /> : <View style={[s.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        {detail && <ListingDetailContent key={detail.id} listing={detail} userId={userId} error={error} reasons={matchReasons[detail.id]??[]}
+        {detail && <ListingDetailContent api={api} apiUrl={apiUrl} key={detail.id} listing={detail} userId={userId} error={error} reasons={matchReasons[detail.id]??[]}
           onBack={()=>{detailSequence.current++;setDetail(null);}} onStorefront={()=>setSellerId(detail.owner.id)}
           onReport={()=>openReport(detail)} onContact={()=>contactSeller(detail)}/>}
       </View>}
     </Modal>
     <Modal visible={!!externalDetail} animationType="slide" onRequestClose={() => { detailSequence.current++; setExternalDetail(null); }}>
-      <View style={[s.screen,{paddingTop:insets.top,paddingBottom:insets.bottom}]}>{externalDetail&&<ExternalListingDetailContent key={externalDetail.id} detail={externalDetail} opening={externalOpening} error={externalError} photo={<ExternalDetailPhoto imageUrl={externalDetail.imageUrl} thumbnailUrl={externalDetail.thumbnailUrl}/>} onBack={()=>{detailSequence.current++;setExternalDetail(null);}} onOriginal={()=>void openExternalSource(externalDetail)}/>}</View>
+      <View style={[s.screen,{paddingTop:insets.top,paddingBottom:insets.bottom}]}>{externalDetail&&<ExternalListingDetailContent api={api} apiUrl={apiUrl} key={externalDetail.id} detail={externalDetail} opening={externalOpening} error={externalError} photo={<ExternalDetailPhoto imageUrl={externalDetail.imageUrl} thumbnailUrl={externalDetail.thumbnailUrl}/>} onBack={()=>{detailSequence.current++;setExternalDetail(null);}} onOriginal={()=>void openExternalSource(externalDetail)}/>}</View>
     </Modal>
 
   </View>;

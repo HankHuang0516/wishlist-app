@@ -175,6 +175,25 @@
         "title": "wishlist en/fix",
         "threadId": "01a16dff-7604-7440-910a-9ff9ec1b1c6c"
       }
+    },
+    {
+      "date": "2026-10-25",
+      "userInstruction": "cp參考數值可以不要列出 用更易懂的方式 例如原價的幾折 點擊該UI會出現原價值與參考來源",
+      "relatedGoldenIds": [
+        2,
+        5,
+        13,
+        14
+      ],
+      "requirements": [
+        "不公開數字CP分數及評分權重；列表、地圖預覽與商品詳情以原價折數入口呈現。",
+        "折數由當前商品售價／同型號規格的已核實參考原價計算，不從CP分數轉換。",
+        "點擊後顯示參考原價、原廠建議售價或一般新品價類型、來源連結、資料期及查核時間。",
+        "缺原價、幣別或計價單位未確認、證據過期或型號已變更時不顯示虛構折數。",
+        "免費商品與極低正價分開；等於或高於原價不宣稱折扣。",
+        "沿用各平台功能與UIUX分別至少85%的驗收門檻；舊37／19不含此變更。"
+      ],
+      "status": "IMPLEMENTATION_IN_PROGRESS_NATIVE_VISUAL_ACCEPTANCE_AND_NEW_RELEASE_PENDING"
     }
   ]
 }

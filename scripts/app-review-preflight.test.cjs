@@ -84,6 +84,8 @@ test('only the explicitly approved19 artifact can reuse accepted historical phys
  const prior={versionString:'2.0.16',state:'READY_FOR_SALE',buildId:'a79db7d4-f26a-475e-9ba3-986a9e5e4e30'};
  const verify=(r=receipt,n=scope,a=approval,v=prior,notes=receipt.disclosureText)=>assertApprovedHistoricalRecording(r,n,age,a,v,notes);
  assert.doesNotThrow(()=>verify());
+ assert.doesNotThrow(()=>verify(receipt,scope,approval,{...prior,state:'READY_FOR_DISTRIBUTION'}));
+ assert.throws(()=>verify(receipt,scope,approval,{...prior,state:'PENDING_DEVELOPER_RELEASE'}));
  for(const [k,v] of Object.entries(scope)){assert.throws(()=>verify({...receipt,[k]:'wrong'}));assert.throws(()=>verify(receipt,{...scope,[k]:'wrong'}));assert.throws(()=>verify(receipt,scope,{...approval,[k]:'wrong'}));}
  assert.throws(()=>verify(receipt,scope,{...approval,approved:false}));
  assert.throws(()=>verify(receipt,scope,{...approval,questionRef:'unrelated'}));

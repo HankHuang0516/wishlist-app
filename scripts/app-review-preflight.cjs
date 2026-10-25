@@ -81,7 +81,7 @@ function assertApprovedHistoricalRecording(receipt, native, ageRating, approval,
     assert.equal(selectedBuildId(acceptedVersion), 'a79db7d4-f26a-475e-9ba3-986a9e5e4e30');
     const prior = acceptedVersion.data?.attributes ?? acceptedVersion;
     assert.equal(prior.versionString, '2.0.16');
-    assert.equal(prior.appStoreState ?? prior.state, 'READY_FOR_SALE');
+    assert(['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(prior.appStoreState ?? prior.state), 'Prior recording must belong to the released approved build');
     assert(Date.parse(receipt.verifiedAt) > Date.now() - 24 * 60 * 60 * 1000, 'Reverify the existing recording and delivery');
     assert(receipt.videoPath && /^[a-f0-9]{64}$/.test(receipt.videoSha256));
     assert(receipt.videoAttachment?.id && receipt.videoAttachment?.fileName);

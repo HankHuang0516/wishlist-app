@@ -71,3 +71,31 @@ test.each([
 ])('keeps PChome price-label support scoped to the exact variant and non-promotion %p',patch=>{
  expect(()=>retailObservation({...pchomeCalculatorInput(),...patch},calculator)).toThrow();
 });
+
+const ipad={...p,title:'Apple iPad 7 10.2吋 128GB Wi-Fi 太空灰 二手 C級'};
+test('binds seventh-generation iPad capacity and connectivity across retailer spellings',()=>{
+ expect(retailIdentity(ipad)).toBe('ipad:7:wifi:128gb');
+ expect(retailIdentity({...ipad,title:'Apple iPad 10.2 7代 wifi (128G)'})).toBe(retailIdentity(ipad));
+ for(const title of ['iPad 7 32GB Wi-Fi','iPad 7 128GB Wi-Fi LTE','iPad Air 7 128GB Wi-Fi','iPad 8 128GB Wi-Fi'])expect(retailIdentity({...ipad,title})).not.toBe(retailIdentity(ipad));
+ expect(retailIdentity({...ipad,title:'iPad 7 128GB'})).toBeNull();
+});
+const ipadInput=()=>({...input(),productKey:ipad.key,bindingHash:retailBinding(ipad),originalPrice:'13900',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.jyes.com.tw/product/APPLE平板-iPad-10-2-wifi-128GB',sourceTitle:'傑昇通信商品頁',sourceProductTitle:'Apple iPad 10.2 7代 wifi (128G)',sourcePeriod:'2026-04-24',evidenceQuote:'Apple iPad 10.2 7代 wifi (128G) 原廠建議售價 $13,900'});
+test('accepts the reviewed retailer original price and refuses promotion or lookalike hosts',()=>{
+ expect(Number(retailObservation(ipadInput(),ipad).originalPrice)).toBe(13900);
+ for(const patch of [{originalPrice:'12990'},{evidenceQuote:'Apple iPad 10.2 7代 wifi (128G) 網購優惠價 $13,900'},{sourceProductTitle:'Apple iPad 7 32GB Wi-Fi'},{sourceUrl:'https://www.jyes.com.tw.attacker.invalid/product/ipad'},{priceType:'MANUFACTURER_MSRP'}])expect(()=>retailObservation({...ipadInput(),...patch},ipad)).toThrow();
+});
+
+test('accepts real short Panasonic EH models while retaining exact variants and price evidence',()=>{
+ const beauty={...p,title:'Panasonic EH-SR86 日本製美容儀（二手，賣家稱功能正常）',mainId:'beauty',subId:'devices'} as DiscoveryProduct;
+ expect(retailIdentity(beauty)).toBe('panasonic:eh-model:ehsr86');
+ const body={...input(),productKey:beauty.key,bindingHash:retailBinding(beauty),originalPrice:'26000',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.momoshop.com.tw/TP/TP0009010/goodsDetail/TP00090100000199',sourceTitle:'Panasonic VITALIFT EH-SR86',sourceProductTitle:'Panasonic 國際牌VITALIFT EH-SR86 2024款 終極一隻 附凝膠',evidenceQuote:'Panasonic VITALIFT EH-SR86 附凝膠 市售價26,000元',sourcePeriod:null};
+ expect(Number(retailObservation(body,beauty).originalPrice)).toBe(26000);
+ expect(retailIdentity({...beauty,title:'國際牌 eh-sr86 美容儀'})).toBe(retailIdentity(beauty));
+ for(const title of ['Panasonic EH-SR85','Panasonic EH-SR86-T','Panasonic EH-SR86K','Panasonic EH-SR860']) {
+  expect(retailIdentity({...beauty,title})).not.toBe(retailIdentity(beauty));
+  expect(()=>retailObservation({...body,sourceProductTitle:title},beauty)).toThrow();
+ }
+ expect(retailIdentity({...beauty,title:'無品牌 EH-SR86'})).toBeNull();
+ expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR85 市售價26,000元'},beauty)).toThrow();
+ expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR86 促銷價17,577元',originalPrice:'17577'},beauty)).toThrow();
+});

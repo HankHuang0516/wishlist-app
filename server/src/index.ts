@@ -2,6 +2,7 @@ import productInterestRoutes from './routes/productInterestRoutes';
 import { startPushWorker } from './lib/pushOutbox';
 import notificationRoutes from './routes/notificationRoutes';
 import {createRetailPriceAdmin} from './routes/retailPriceRoutes';
+import {startBillingWorker} from './lib/billingWorker';
 import {createSourceManagerRoutes} from './routes/sourceManagerRoutes';
 import { authenticateToken } from './middleware/auth';
 import { createProductWishRoutes } from './routes/productWishRoutes';
@@ -251,7 +252,8 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`[server]: Server is running at http://0.0.0.0:${port}`);
 });
 const stopPushWorker = startPushWorker();
+const stopBillingWorker = startBillingWorker();
 const stopMediaErasureWorker = startMediaErasureWorker();
 const stopEclawRecognitionWorker = startEclawRecognitionWorker();
 const stopExternalCandidateExpiryWorker = startExternalCandidateExpiryWorker();
-server.once('close', () => { stopPushWorker(); stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });
+server.once('close', () => { stopBillingWorker(); stopPushWorker(); stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });

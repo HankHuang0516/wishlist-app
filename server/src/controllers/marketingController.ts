@@ -9,6 +9,8 @@ import { freeMarketingWindow, MARKETING_FREE_MONTHLY_LIMIT, mayRequestFreeRevisi
 import { MarketingInputError, marketingEnabledFor, marketingRequestId, marketingRevisionPrompt, marketingSnapshotHash } from '../lib/marketingAssistantAccess';
 import { forbiddenListingField, privateContactField } from '../lib/listingPolicy';
 import { listingCreationGate, ListingCreationError } from '../lib/listingCreation';
+import { refreshBilling, verifiedPremium, reconcileMarketingCredits, reserveMarketingCredit } from '../lib/billingService';
+import { BillingError, billingPurchasesAvailable } from '../lib/billingCatalog';
 
 const MARKETING_HEADING = '\n\n【行銷小助手文案】\n';
 function descriptionWithCopy(original: string, copy: string) {
@@ -42,6 +44,7 @@ async function effectiveMedia(job: { id: string; parentJobId: string | null }, d
 }
 
 function fail(res: Response, error: unknown) {
+    if (error instanceof BillingError) return res.status(error.status).json({ error: '行銷額度暫時無法使用，請重新核對權益。', errorCode: error.code });
     if(error instanceof ListingCreationError) return res.status(error.status).json({error:'登入或原操作仍需查核',errorCode:error.code});
     if (error instanceof MarketingInputError) return res.status(error.status).json({ error: error.message, errorCode: error.code });
     if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code))
@@ -54,15 +57,17 @@ export async function marketingAvailability(req: AuthRequest, res: Response) {
     try {
         const period = freeMarketingWindow(new Date());
         const userId=req.user.id;
-        const usedThisMonth = await prisma.$transaction(async tx=>{
+        await refreshBilling(userId);
+        const allowance = await prisma.$transaction(async tx=>{
           await listingCreationGate(tx,req,userId);
-          return marketingUsedInPeriod(tx,userId,period.startsAt);
+          const premium = await verifiedPremium(tx,userId);
+          const credits = await reconcileMarketingCredits(tx,userId);
+          const used = await marketingUsedInPeriod(tx,userId,period.startsAt);
+          return {premium, used, credits:credits._sum.creditRemaining ?? 0};
         });
-        // No verified paid-credit ledger exists yet. Do not infer entitlement
-        // from the legacy isPremium flag or an unverified client receipt.
         return res.set('Cache-Control', 'private, no-store').json({ available: marketingEnabledFor(req.user.id),
-            freeMonthlyLimit: MARKETING_FREE_MONTHLY_LIMIT, freeUsedThisMonth: usedThisMonth,
-            permanentCreditsRemaining: 0, paidPurchasesAvailable: false });
+            freeMonthlyLimit: allowance.premium ? 100 : MARKETING_FREE_MONTHLY_LIMIT, freeUsedThisMonth: allowance.used,
+            permanentCreditsRemaining: allowance.credits, paidPurchasesAvailable: billingPurchasesAvailable('APPLE',userId) || billingPurchasesAvailable('GOOGLE',userId) });
     } catch (error) { return fail(res, error); }
 }
 
@@ -115,6 +120,7 @@ export async function createMarketingJob(req: AuthRequest, res: Response) {
         const details = await marketingSnapshot(req.user.id, sourceMediaId, listingId);
         const requestHash = marketingSnapshotHash(details);
         const period = freeMarketingWindow(new Date());
+        await refreshBilling(req.user.id);
         const result = await prisma.$transaction(async tx => {
             await listingCreationGate(tx,req,req.user!.id);
             if(await tx.marketingRequestReceipt.findUnique({where:{userId_clientRequestId:{userId:req.user!.id,clientRequestId}},select:{id:true}})) throw new MarketingInputError('REQUEST_CONFLICT',409);
@@ -139,11 +145,12 @@ export async function createMarketingJob(req: AuthRequest, res: Response) {
                     throw new MarketingInputError('STALE_DETAILS', 409, '商品資料已變更，請重新生成');
             }
             const reserved = await marketingUsedInPeriod(tx,req.user!.id,period.startsAt);
-            if (reserved >= MARKETING_FREE_MONTHLY_LIMIT) throw new MarketingInputError('MONTHLY_LIMIT', 429,
-                '免費版每月 3 次已用完；尊榮版每月 100 次及單次購買 10 次／US$1 須完成付款驗證後開放');
+            const premium = await verifiedPremium(tx,req.user!.id);
+            await reconcileMarketingCredits(tx,req.user!.id);
             const job = await tx.marketingJob.create({ data: { ownerUserId: req.user!.id, listingId: details.listingId,
                 sourceMediaId, clientRequestId, requestHash, snapshot: details as Prisma.InputJsonValue,
                 quotaPeriodStart: period.startsAt, quotaPeriodEnd: period.endsAt }, select: { id: true, status: true } });
+            if (reserved >= (premium ? 100 : MARKETING_FREE_MONTHLY_LIMIT)) await reserveMarketingCredit(tx,req.user!.id,job.id);
             return { ...job, created: true };
         });
         return res.status(result.created ? 202 : 200).json({ id: result.id, status: result.status });

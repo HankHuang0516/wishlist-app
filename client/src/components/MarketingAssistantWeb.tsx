@@ -107,7 +107,7 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
       if(!isActive())return;
       const result=mode==='cancel'?await abandonMarketingQueue(token,raw,isActive):mode==='retry'?await sendMarketingQueue(token,raw,privatePendingStore,queueKey.current,isActive):await readMarketingQueue(token,raw);
       await settleQueue(result,raw,isActive);
-    }catch(failure){if(isActive())setError(failure instanceof ApiFailure&&failure.code==='MONTHLY_LIMIT'?'免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。原操作仍保留，可查核或取消。':'原排隊結果仍待查核；保留原內容與識別碼，不會另建工作。');}
+    }catch(failure){if(isActive())setError(failure instanceof ApiFailure&&['MONTHLY_LIMIT','MARKETING_CREDITS_EXHAUSTED'].includes(failure.code??'')?'本期行銷額度與永久加值已用完，請到贊助與升級核對權益。原操作仍保留，可查核或取消。':'原排隊結果仍待查核；保留原內容與識別碼，不會另建工作。');}
     finally{release?.();running.current=false;if(isActive())setBusy(false);}
   }
   async function queue(body:MarketingQueueBody,isActive:()=>boolean){
@@ -126,8 +126,8 @@ function MarketingAssistantSession({ token, userId, sourceMediaId, listingId, ge
       if (!active.current) return;
       release=await beforeApprove();if(!release)throw new Error('HOST_EDIT_PENDING');if(!isActive())return;
       await queue({kind:'CREATE',sourceMediaId,listingId:listingId??null,expectedVersion:getExpectedVersion()},isActive); }
-    catch (failure) { if (isActive()) {if(failure instanceof ApiFailure&&failure.code==='MARKETING_DISABLED')setGenerationAccess('paused');setError(failure instanceof ApiFailure && failure.code === 'MONTHLY_LIMIT'
-      ? '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。'
+    catch (failure) { if (isActive()) {if(failure instanceof ApiFailure&&failure.code==='MARKETING_DISABLED')setGenerationAccess('paused');setError(failure instanceof ApiFailure && ['MONTHLY_LIMIT','MARKETING_CREDITS_EXHAUSTED'].includes(failure.code??'')
+      ? '本期行銷額度與永久加值已用完，請到贊助與升級核對權益。'
       : queueOriginal.current?'排隊回覆尚未確認，不代表失敗；請查核原工作，不要重新生成。':'無法安全保存排隊操作；請先儲存商品並重試，不會在未記錄時送出。');} }
     finally { release?.();running.current = false; if (isActive()) setBusy(false); }
   }

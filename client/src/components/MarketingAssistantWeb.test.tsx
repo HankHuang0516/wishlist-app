@@ -417,7 +417,7 @@ describe('shared web marketing entry for drafts and published products', () => {
     fetch.mockImplementation(async(url,init)=>url.includes('/requests/')&&init?.method==='POST'?{ok:false,status:429,json:async()=>({errorCode:'MONTHLY_LIMIT',error:'private billing detail'})}:original(url,init));
     render(<MarketingAssistantWeb {...props}/>);fireEvent.click(await screen.findByRole('button',{name:'Open marketing assistant Beta'}));
     fireEvent.click(screen.getByRole('button',{name:'Generate four marketing images'}));
-    await screen.findByText('The 3 free monthly uses are exhausted. Premium with 100 monthly uses and the 10-use US$1 pack await payment verification.');
+    await screen.findByText('Your current marketing allowance and permanent credits are exhausted. Check Support and upgrade.');
     expect(screen.getByRole('region',{name:'Original marketing queue request needs verification'})).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'Generate four marketing images'})).toBeDisabled();expect(fetch.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
     expect(queueStore.clear).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:/pay|purchase/i})).not.toBeInTheDocument();

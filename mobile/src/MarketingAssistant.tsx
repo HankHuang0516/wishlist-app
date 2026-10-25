@@ -77,8 +77,8 @@ export function MarketingAssistant({ api, apiUrl, token, sourceMediaId, listingI
         body: JSON.stringify({ clientRequestId: Crypto.randomUUID(), sourceMediaId, ...(listingId ? { listingId } : {}) }) });
       setJob({ id: created.id, status: created.status, parentJobId: null, deliveredAt: null, copy: null,
         generatedMedia: [], failureCode: null });
-    } catch (failure) { setError(failure instanceof ApiError && failure.code === 'MONTHLY_LIMIT'
-      ? '免費版每月 3 次已用完。尊榮版每月 100 次、10 次包 US$1 尚待付款驗證開放。'
+    } catch (failure) { setError(failure instanceof ApiError && ['MONTHLY_LIMIT','MARKETING_CREDITS_EXHAUSTED'].includes(failure.code??'')
+      ? '本期行銷額度與永久加值已用完，請到贊助與升級核對權益。'
       : '無法加入行銷排隊；請檢查資料是否已儲存，再稍後重試。'); }
     finally { setLoading(false); }
   }

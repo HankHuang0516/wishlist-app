@@ -18,6 +18,7 @@ run('relay identity and rejected-send progress (isolated DB)',()=>{
   const app=express();app.use(express.json());app.use('/leads',createSourceLeadRoutes());app.use('/admin',createSourceLeadAdmin(()=>admin));server=createServer(app);
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
  });
+ beforeEach(async()=>{await prisma.user.updateMany({where:{id:{in:[user,otherUser]}},data:{inquiryWeekStart:null,inquiryFreeUsed:0}});});
  afterAll(async()=>{
   if(server?.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
   if(!verified)return;

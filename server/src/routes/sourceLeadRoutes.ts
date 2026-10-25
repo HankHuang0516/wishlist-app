@@ -477,7 +477,7 @@ export function createSourceLeadRoutes() {
                 // Revising a queued, not-yet-delivered request stays in its
                 // original round. New consent/follow-up/reopen consumes once.
                 const newRound = state === 'WAITING_ROUTE' && room.state !== 'WAITING_ROUTE' &&
-                    (b.action === 'CONSENT' || b.action === 'ASK' || b.action === 'REOPEN');
+                    ['CONSENT','ASK','REOPEN','REVISE'].includes(b.action);
                 if (newRound) await reserveInquiry(tx, req.user!.id, await verifiedPremium(tx, req.user!.id));
                 const event = { requestId: b.requestId, action: b.action, at: new Date().toISOString(), ...(b.text !== undefined ? { text: b.text } : {}), ...(questionAction && b.consent === true ? {consent:true,payloadHash:b.transferHash}:{}), ...(b.action === 'CONSENT' ? { consent: true, questionIds: transferSnapshot(room.lead,events).questions.map(e => e.requestId), payloadHash: b.transferHash } : {}) };
                 const saved = await tx.sourceLeadInquiry.update({ where: { id: room.id }, data: { state, consentHash, ...(followupDelivery?{delivery:followupDelivery}:{}), ...(b.action === 'CANCEL' && room.delivery ? { delivery: { ...object(room.delivery), cancelRequestedAt: new Date().toISOString() } } : {}), events: [...events, event] as unknown as Prisma.InputJsonValue } });

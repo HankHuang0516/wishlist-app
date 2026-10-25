@@ -41,6 +41,11 @@ run('weekly inquiry and verified billing ledger',()=>{
   for(let i=0;i<2;i++){const r=await open();expect((await send(r,ask(r))).status).toBe(200);}
   const fourth=await open();const denied=await send(fourth,ask(fourth));expect(denied.status).toBe(403);expect(denied.body.errorCode).toBe('INQUIRY_WEEKLY_LIMIT');
   expect((await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:fourth.id}})).events).toEqual([]);
+  // Old clients can save a question without consent, then authorize it through
+  // REVISE. This is still a first authorized round, not a free correction.
+  const draft=await send(fourth,{requestId:randomUUID(),action:'ASK',text:'合成舊版未授權草稿'});expect(draft.status).toBe(200);
+  const alternate=await send(fourth,{requestId:randomUUID(),action:'REVISE',text:'合成首次授權更正',consent:true,transferHash:draft.body.transferHash});expect(alternate.status).toBe(403);expect(alternate.body.errorCode).toBe('INQUIRY_WEEKLY_LIMIT');
+  expect((await prisma.sourceLeadInquiry.findUniqueOrThrow({where:{id:fourth.id}})).state).toBe('INQUIRY');
   const benefits=await http.get('/api/payment/benefits').set('x-api-key',keys[0]);expect(benefits.body.inquiry).toMatchObject({freeRemaining:0,freeUsedThisWeek:3,premium:false,timeZone:'Asia/Taipei'});
   expect((await send(first,body)).status).toBe(200);
   expect((await http.get(`/api/source-leads/${first.leadId}/inquiry`).set('x-api-key',keys[0])).status).toBe(200);

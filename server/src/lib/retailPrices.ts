@@ -32,6 +32,10 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
     const buds = t.match(/galaxy\s*buds\s*(\d+)\s*(pro|fe)?\b/);
     if (buds)
         return 'samsung:galaxy-buds:' + buds[1] + ':' + (buds[2] ?? 'base');
+    // Panasonic's beauty appliances use short EH- models (for example EH-SR86).
+    // Keep every model/variant suffix: a nearby generation or color is not an exact match.
+    const panasonic = /panasonic|國際牌/.test(t) ? t.match(/\beh-[a-z]{1,4}\d{1,4}[a-z]?(?:-[a-z0-9]+)?\b/) : null;
+    if (panasonic) return 'panasonic:eh-model:' + panasonic[0].replace(/-/g, '');
     const model = t.match(/\b[a-z][a-z0-9-]*\d[a-z0-9-]{3,}\b/g)?.find(x => !/^hdmi|^usb|^wifi|^bluetooth|^fullhd|^ddr|^twd|^ntd/.test(x));
     return model ? p.mainId + ':' + p.subId + ':' + model.replace(/-/g, '') + (/follow\s*me|移動式.*螢幕組/.test(t) ? ':followme-bundle' : '') : null;
 }

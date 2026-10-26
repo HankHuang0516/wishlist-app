@@ -1201,7 +1201,7 @@ final class NativeQaTests: XCTestCase {
             UserDefaults.standard.set(original,forKey:motionOriginalKey);UserDefaults.standard.synchronize();try setOsMotion(control,to:"1");app.activate()
             try required("地圖來源與排列說明",scroll:true,kind:.button);try tap("地圖來源與排列說明")
             let replay=element("慢速重播排列",kind:.button);guard replay.exists,!replay.isEnabled else{throw Failure.unstableControl}
-            try safeScreenshot("qa-map-stack-os-reduced");try tap("關閉地圖說明");try closeMapStack();try restoreOsMotion()
+            try safeScreenshot("qa-map-stack-os-reduced");checkpoint("map-stack-close-after-os-reduced");try tap("關閉地圖說明");try closeMapStack();try restoreOsMotion()
         }catch{let prior=stage;try restoreOsMotion();checkpoint(prior);throw error}
         checkpoint("map-stack-gesture-motion-complete")
     }
@@ -1220,6 +1220,7 @@ final class NativeQaTests: XCTestCase {
     }
     private func closeMapStack() throws {
         try required("收合商品",scroll:true,kind:.button);try tap("收合商品")
+        try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
         let deadline=Date().addingTimeInterval(5)
         while mapStacks().isEmpty && Date()<deadline{Thread.sleep(forTimeInterval:0.1)}
         guard !mapStacks().isEmpty,!element("查看商品詳情",kind:.button).exists else{throw Failure.unstableControl}

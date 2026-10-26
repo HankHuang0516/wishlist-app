@@ -58,7 +58,8 @@ function assertReviewRemediationEvidence(receipt, native, ageRating) {
 // Hank approved historical footage for this 2.0.17 release while19 was selected.
 // Preserve that original human record; bind the same-release20 correction to its
 // own exact artifact/evidence without claiming a new human answer or new footage.
-// All other versions/builds retain the ordinary fresh-recording requirement.
+// Build21 has its own explicit human answer, bound separately below. Every
+// other version/build retains the ordinary fresh-recording requirement.
 function assertApprovedHistoricalRecording(receipt, native, ageRating, approval, acceptedVersion, notes) {
     assert.equal(ageRating.ageRatingOverrideV2, 'EIGHTEEN_PLUS');
     const originalApprovalScope = {
@@ -68,7 +69,14 @@ function assertApprovedHistoricalRecording(receipt, native, ageRating, approval,
         nativeGitTree: 'b699abd83d9c6c0ead7800bb4931a53eab87b60e',
         artifactSha256: 'b9a86bc946ff69c0a471c561b47242aebb2b7f794bb4e200b9983e4732765baf',
     };
-    const scope = native.buildNumber === '20' ? {
+    const independentlyApproved21 = native.buildNumber === '21';
+    const scope = independentlyApproved21 ? {
+        versionId: '2cea523c-5e6d-468d-9092-9e78f6745f80',
+        buildId: '5e3112cc-f51e-43ea-9401-c3025d95785a',
+        buildNumber: '21',
+        nativeGitTree: '7d496ba5eda63023009f93c2a525ec33410321a1',
+        artifactSha256: 'e33072044767272736808adb2a8a3fe472fd53b328a676c43a2851e23420a861',
+    } : native.buildNumber === '20' ? {
         versionId: originalApprovalScope.versionId,
         buildId: '8967dbcb-09b2-421a-8497-df5df0a30945',
         buildNumber: '20',
@@ -81,9 +89,20 @@ function assertApprovedHistoricalRecording(receipt, native, ageRating, approval,
     assert.equal(receipt.currentBuildPhysicalRecording, false);
     assert.equal(receipt.recordedVersion, '2.0.16');
     assert.equal(approval?.approved, true, 'Require explicit human approval for historical footage');
-    assert.equal(approval?.questionRef, 'call_958c08f13f2e4d74ac306241a9540c2f');
-    for (const [key, value] of Object.entries(originalApprovalScope))
-        assert.equal(approval[key], value, `Preserve the original human approval ${key}`);
+    if (independentlyApproved21) {
+        assert.equal(approval.questionRef, 'call_f08a1e42385d45bdaeb1fb405882f020');
+        assert.equal(approval.humanAnswer, '同意沿用並如實揭露，送審21');
+        assert.equal(approval.scope, 'iOS2.0.18(21) only; historical2.0.16 footage plus current simulator evidence; no current-build physical recording; all other gates remain required');
+        assert.equal(approval.currentBuildPhysicalRecording, false);
+        assert.equal(receipt.authorizationBasis, 'explicit-owner-approval-2.0.18-build21');
+        assert.equal(receipt.originalApprovalBuildNumber, undefined, 'Build21 has independent approval, not inherited19 consent');
+        for (const [key, value] of Object.entries(scope))
+            assert.equal(approval[key], value, `Build21 approval does not cover ${key}`);
+    } else {
+        assert.equal(approval.questionRef, 'call_958c08f13f2e4d74ac306241a9540c2f');
+        for (const [key, value] of Object.entries(originalApprovalScope))
+            assert.equal(approval[key], value, `Preserve the original human approval ${key}`);
+    }
     if (native.buildNumber === '20') {
         assert.equal(approval.humanAnswer, '同意沿用並如實揭露，完成其他檢查後送審');
         assert.equal(approval.scope, 'This release only; historical physical footage is not current-build hardware verification; all other release gates stay required');

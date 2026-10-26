@@ -179,3 +179,29 @@ for(const [name,change] of [
  ['wrong disclosed build',s=>s.receipt.disclosureText='This is the previously accepted2.0.16 physical footage, not a recording of19.'],
  ['current check missing',s=>s.receipt.checks.mapStop=false],
 ])test('same-release historical reuse blocks: '+name,()=>{const s=sameRelease20();change(s);assert.throws(()=>verifySameRelease(s));});
+
+
+function explicitlyApproved21() {
+ const base=sameRelease20(),native={versionId:'2cea523c-5e6d-468d-9092-9e78f6745f80',buildId:'5e3112cc-f51e-43ea-9401-c3025d95785a',buildNumber:'21',nativeGitTree:'7d496ba5eda63023009f93c2a525ec33410321a1',artifactSha256:'e33072044767272736808adb2a8a3fe472fd53b328a676c43a2851e23420a861'};
+ const receipt={...base.receipt,...native,authorizationBasis:'explicit-owner-approval-2.0.18-build21',disclosureText:'This is the previously accepted2.0.16 physical footage, not a recording of21.'};delete receipt.originalApprovalBuildNumber;
+ const approval={...native,approved:true,questionRef:'call_f08a1e42385d45bdaeb1fb405882f020',humanAnswer:'同意沿用並如實揭露，送審21',scope:'iOS2.0.18(21) only; historical2.0.16 footage plus current simulator evidence; no current-build physical recording; all other gates remain required',currentBuildPhysicalRecording:false};
+ return {...base,native,receipt,approval};
+}
+test('new21 consent independently binds exact2.0.18 artifact and honest historical disclosure',()=>assert.doesNotThrow(()=>verifySameRelease(explicitlyApproved21())));
+for(const [name,change]of[
+ ['old19 authorization',s=>s.approval=sameRelease20().approval],
+ ['unapproved',s=>s.approval.approved=false],
+ ['wrong answer',s=>s.approval.humanAnswer='unrelated'],
+ ['wrong question',s=>s.approval.questionRef='unrelated'],
+ ['missing scope',s=>delete s.approval.scope],
+ ['approval physical claim',s=>s.approval.currentBuildPhysicalRecording=true],
+ ['receipt physical claim',s=>s.receipt.currentBuildPhysicalRecording=true],
+ ['inherited19 basis',s=>s.receipt.authorizationBasis='same-2.0.17-release-original19-approval'],
+ ['inherited19 field',s=>s.receipt.originalApprovalBuildNumber='19'],
+ ['future22',s=>{s.native.buildNumber='22';s.receipt.buildNumber='22';s.approval.buildNumber='22';}],
+ ['missing remediation',s=>s.receipt.checks.mapStop=false],
+ ['wrong historical version',s=>s.receipt.recordedVersion='2.0.17'],
+ ['wrong disclosure',s=>s.receipt.disclosureText='A current physical recording.'],
+ ['stale footage inspection',s=>s.receipt.verifiedAt='2000-01-01T00:00:00Z'],
+])test('independent21 consent fails closed: '+name,()=>{const s=explicitlyApproved21();change(s);assert.throws(()=>verifySameRelease(s));});
+for(const key of ['versionId','buildId','buildNumber','nativeGitTree','artifactSha256'])for(const part of ['native','receipt','approval'])test('independent21 exact binding rejects '+part+'.'+key,()=>{const s=explicitlyApproved21();s[part][key]='other';assert.throws(()=>verifySameRelease(s));});

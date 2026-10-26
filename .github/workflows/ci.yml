@@ -83,6 +83,12 @@ jobs:
     - name: Run tests
       run: npm test
 
+    - name: Verify resumable CP backfill batches
+      run: node --test scripts/cp-backfill-drain.test.cjs
+
+    - name: Verify exclusive UI handoff across platform workers
+      run: python3 ../tools/source-pipeline/platform-ui-lease.test.py
+
     - name: Test restricted source sync and private receipt verification
       run: node --test scripts/source-sync-once.test.cjs scripts/source-sync-receipt-check.test.cjs scripts/records-bridge.test.cjs
 

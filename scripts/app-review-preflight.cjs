@@ -324,7 +324,9 @@ async function main() {
         assert.equal(hashFile(privacy.screenshotPath), privacy.screenshotSha256, 'App Privacy screenshot changed');
         result.versionValidation = validatePreparedVersion(version, get('--submission-id'), get('--item-id'));
         if (args.includes('--submit')) {
-            asc('review', 'items-update', '--id', get('--item-id'), '--resolved', 'true');
+            // validatePreparedVersion permits only the exact ready draft/item.
+            // Apple accepts resolved=true only for REJECTED items; changing a
+            // READY_FOR_REVIEW item is invalid and must not precede submission.
             asc('review', 'submissions-submit', '--id', get('--submission-id'), '--confirm');
             result.submitted = true;
         } else result.prepared = true;

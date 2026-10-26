@@ -19,7 +19,7 @@ vi.mock('../SafeAreaModal', () => ({ SafeAreaModal: ({ children }: any) => <div>
 vi.mock('react-native', () => ({
   Platform: { get OS() { return store.platform; } }, Linking: { openURL: (url: string) => store.link(url) },
   StyleSheet: { create: (styles: unknown) => styles },
-  View: ({ children }: any) => <div>{children}</div>, ScrollView: ({ children }: any) => <div>{children}</div>,
+  View: ({ children }: any) => <div>{children}</div>, ScrollView: ({ children }: any) => <div data-native-scroll="true">{children}</div>,
   ActivityIndicator: () => <span>Loading</span>,
   Text: ({ children, accessibilityRole }: any) => <span role={accessibilityRole === 'alert' ? 'alert' : undefined}>{children}</span>,
   Pressable: ({ children, onPress, disabled, accessibilityLabel, accessibilityRole }: any) => <button type="button" aria-label={accessibilityLabel}
@@ -75,6 +75,10 @@ describe('native billing entry and purchase flow', () => {
     await detail(); fireEvent.click(screen.getByRole('button', { name: '前往商店確認訂閱' }));
     act(() => store.callbacks.onPurchaseError({ code: 'user-cancelled' }));
     expect(screen.getByText('已取消本次購買，未新增權益。')).toBeTruthy();
+    // Status belongs to the fixed checkout header, outside its content scroller.
+    const alert = screen.getByText('已取消本次購買，未新增權益。');
+    const scrollParents = Array.from(document.querySelectorAll('[data-native-scroll]')).filter(node => node.contains(alert));
+    expect(scrollParents).toHaveLength(0);
     expect(screen.getByRole('button', { name: '前往商店確認訂閱' }).hasAttribute('disabled')).toBe(false);
     expect(api.mock.calls.filter(call => call[0] === '/payment/verify')).toHaveLength(0);
   });
@@ -123,6 +127,27 @@ describe('native billing entry and purchase flow', () => {
     store.subscriptions = []; await detail();
     expect(screen.getByRole('button', { name: '請先讀取商店價格' }).hasAttribute('disabled')).toBe(true);
     expect(store.requestPurchase).not.toHaveBeenCalled();
+  });
+  it('finishes Apple transactions only after matching server verification, including restore while new checkout is closed', async () => {
+    store.platform = 'ios'; await detail();
+    await act(async () => store.callbacks.onPurchaseSuccess(receipt));
+    await screen.findByText('付款已核對。請返回我的，重新讀取權益。');
+    expect(store.finishTransaction).toHaveBeenCalledWith({ purchase: receipt, isConsumable: false });
+    expect(store.requestPurchase).not.toHaveBeenCalled();
+  });
+  it('rejects mismatched receipt environments and never finishes or grants unconfirmed transactions', async () => {
+    store.platform = 'ios';
+    api.mockImplementation(async (path: string) => path === '/payment/benefits' ? benefits : path === '/marketing/availability' ? { permanentCreditsRemaining: 7 }
+      : { verified: true, active: true, environment: 'Sandbox' });
+    await detail(); await act(async () => store.callbacks.onPurchaseSuccess(receipt));
+    await screen.findByText('付款結果尚未確認。請保留原交易並查核，不要再次購買。');
+    expect(store.finishTransaction).not.toHaveBeenCalled();
+  });
+  it('keeps pending-payment approval distinct from completed payment', async () => {
+    await detail(); await act(async () => store.callbacks.onPurchaseSuccess({ ...receipt, purchaseState: 'pending' }));
+    await screen.findByText('商店正在等待付款核准。請稍後查核原交易，不要重複購買。');
+    expect(api.mock.calls.filter(call => call[0] === '/payment/verify')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '請先查核原交易' }).hasAttribute('disabled')).toBe(true);
   });
   it('keeps one-time add-on and pure support as distinct non-recurring purchases', () => {
     for (const product of store.products) expect(purchaseRequest(product, benefits, 'android').type).toBe('in-app');

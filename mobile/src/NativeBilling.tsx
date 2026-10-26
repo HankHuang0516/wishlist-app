@@ -146,12 +146,13 @@ function StoreCheckout({ api, benefits, credits, onClose, onBusyChange }: { api:
     }
     return <View style={s.container}>
         <BillingHeader title={selected?.name ?? '贊助與升級'} onBack={() => { if (selected) setSelected(null); else if (!busy) onClose(); else setMessage('正在確認購買狀態，請等候回覆。'); }} />
+        {!!message && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[s.notice, { marginHorizontal: 16, marginBottom: 8, paddingVertical: 10 }]}>{message}</Text>}
         {benefits.environment === 'Sandbox' && <Text style={s.notice}>商店測試模式</Text>}
         {selected ? <BillingDetail plan={selected} product={[...iap.products, ...iap.subscriptions].find(product => product.id === selected.id)}
-            available={available} connected={iap.connected} busy={busy} uncertain={uncertain} pending={!!pending} message={message}
+            available={available} connected={iap.connected} busy={busy} uncertain={uncertain} pending={!!pending}
             onBuy={() => void buy()} onRestore={() => void restore()} onRetry={() => void load()} onManage={manage} onPolicy={policy} />
             : <BillingOverview benefits={benefits} credits={credits} products={[...iap.products, ...iap.subscriptions]} available={available}
-                loading={loading} message={message} busy={busy} onSelect={setSelected} onRestore={() => void restore()} onManage={manage}
+                loading={loading} busy={busy} onSelect={setSelected} onRestore={() => void restore()} onManage={manage}
                 onReload={() => void load()} onBenefits={onClose} />}
         {Platform.OS === 'ios' && selected && <Pressable accessibilityRole="link" style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}
             onPress={() => { void Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/').catch(() => setMessage('無法開啟 Apple 使用條款。')); }}><Text style={s.link}>Apple 標準使用條款</Text></Pressable>}

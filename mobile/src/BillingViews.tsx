@@ -30,15 +30,14 @@ export function BillingHeader({ title, onBack }: { title: string; onBack: () => 
   return <View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel={title === '贊助與升級' ? '返回我的' : '返回方案總覽'} onPress={onBack} style={s.back}>
     <Ionicons name="chevron-back" size={25} color={c.tint} /></Pressable><Text accessibilityRole="header" style={s.headerTitle}>{title}</Text><View style={s.back} /></View>;
 }
-export function BillingOverview({ benefits, credits, products, available, loading, message, busy, onSelect, onRestore, onManage, onReload, onBenefits }: {
-  benefits: BillingBenefits; credits: number; products: StoreProduct[]; available: boolean; loading: boolean; message: string; busy: boolean;
+export function BillingOverview({ benefits, credits, products, available, loading, busy, onSelect, onRestore, onManage, onReload, onBenefits }: {
+  benefits: BillingBenefits; credits: number; products: StoreProduct[]; available: boolean; loading: boolean; busy: boolean;
   onSelect: (plan: BillingPlan) => void; onRestore: () => void; onManage: () => void; onReload: () => void; onBenefits: () => void;
 }) {
   return <ScrollView style={s.flex} contentContainerStyle={s.content}>
     <BillingBalance benefits={benefits} credits={credits} />
     {!available && <View style={s.notice}><Text style={s.heading}>付費方案尚未開放</Text><Text style={s.note}>目前無法購買，免費功能與既有權益可正常使用。</Text><BillingButton label="重新確認狀態" secondary onPress={onBenefits} /></View>}
     {loading && <View accessibilityRole="progressbar" style={s.status}><ActivityIndicator color={c.tint} /><Text style={s.note}>正在讀取商店價格…</Text></View>}
-    {!!message && <Text accessibilityRole="alert" style={s.notice}>{message}</Text>}
     {billingPlans.map((plan, index) => {
       const price = storePrice(products.find(product => product.id === plan.id));
       return <View key={plan.id} style={[s.card, index === 0 && s.featured]}>
@@ -57,8 +56,8 @@ export function BillingOverview({ benefits, credits, products, available, loadin
     <Text style={s.centerNote}>實付金額與條款以商店最後確認畫面為準。</Text>
   </ScrollView>;
 }
-export function BillingDetail({ plan, product, available, connected, busy, uncertain, pending, message, onBuy, onRestore, onRetry, onManage, onPolicy }: {
-  plan: BillingPlan; product?: StoreProduct; available: boolean; connected: boolean; busy: boolean; uncertain: boolean; pending: boolean; message: string;
+export function BillingDetail({ plan, product, available, connected, busy, uncertain, pending, onBuy, onRestore, onRetry, onManage, onPolicy }: {
+  plan: BillingPlan; product?: StoreProduct; available: boolean; connected: boolean; busy: boolean; uncertain: boolean; pending: boolean;
   onBuy: () => void; onRestore: () => void; onRetry: () => void; onManage: () => void; onPolicy: (path: string) => void;
 }) {
   const subscription = plan.id === 'wishlist_premium_monthly', price = storePrice(product);
@@ -71,7 +70,6 @@ export function BillingDetail({ plan, product, available, connected, busy, uncer
     <View style={s.card}>{[['付款週期', subscription ? '每月' : '單次'], ['續訂方式', subscription ? '自動續訂' : '不自動續購'], ['取消方式', subscription ? '至原商店管理' : '非訂閱方案']].map(([label, value]) =>
       <View key={label} style={s.detailRow}><Text style={s.body}>{label}</Text><Text style={s.body}>{value}</Text></View>)}</View>
     {subscription && <BillingButton label="在原商店管理訂閱" secondary onPress={onManage} />}
-    {!!message && <Text accessibilityRole="alert" style={s.notice}>{message}</Text>}
     {(uncertain || pending) && <BillingButton label={pending ? '重新查核原交易' : '查核商店購買結果'} secondary disabled={busy} onPress={onRestore} />}
     {available && !price && <BillingButton label="重新讀取商店價格" secondary disabled={busy} onPress={onRetry} />}
     <View style={s.policyRow}>{['terms', 'privacy'].map(path => <Pressable key={path} accessibilityRole="link" onPress={() => onPolicy(path)} style={s.policy}><Text style={s.link}>{path === 'terms' ? '使用條款' : '隱私政策'}</Text></Pressable>)}</View>

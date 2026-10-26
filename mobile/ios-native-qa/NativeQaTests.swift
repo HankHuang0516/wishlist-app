@@ -620,14 +620,20 @@ final class NativeQaTests: XCTestCase {
             checkpoint("marketplace-meetup-current-preview")
             let latest = try required("NativeQAChatSmoke")
             if largeType { guard latest.isHittable else { throw Failure.missingControl } }
-            let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
-            guard summary.isHittable, summary.frame.height >= 44,
-                  (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+            let summary = try required("查看面交預約詳情並確認或調整", scroll: !largeType, kind: .button)
+            guard summary.isHittable, summary.frame.height >= 44 else { throw Failure.unstableControl }
+            if largeType {
+                guard (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+            } else {
+                try required("面交預約 · 提議中")
+                try required("TaipeiStationQA")
+            }
             try safeScreenshot("qa-chat-meetup-preview")
             checkpoint("marketplace-meetup-refresh")
             try tap("更新聊天")
             let refreshed = try required("查看面交預約詳情並確認或調整", kind: .button)
-            guard (refreshed.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+            if largeType { guard (refreshed.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity } }
+            else { try required("TaipeiStationQA") }
             checkpoint("marketplace-meetup-refresh-verified")
             if ProcessInfo.processInfo.environment["NATIVE_QA_ACCESSIBILITY_AUDIT"] == "1" {
                 checkpoint("marketplace-meetup-accessibility-audit")

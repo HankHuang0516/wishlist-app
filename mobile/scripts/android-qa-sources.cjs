@@ -18,7 +18,7 @@ function filesBelow(root, relative) {
 
 function androidQaSources(mobile, { includeInstrumentation = true, verifyFiles = true } = {}) {
   const fixed = [
-    'App.tsx', 'shared/tsconfig.json', 'shared/discoveryMapLayout.ts', 'shared/discoveryRange.ts', 'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json',
+    'App.tsx', 'shared/tsconfig.json', 'shared/discoveryMapLayout.ts', 'shared/discoveryMapStacks.ts', 'shared/discoveryRange.ts', 'app.config.js', 'package.json', 'package-lock.json', 'tsconfig.json',
     'android/build.gradle', 'android/gradle.properties', 'android/settings.gradle',
     'android/gradle/wrapper/gradle-wrapper.properties', 'android/app/build.gradle',
     'android/app/proguard-rules.pro', 'android/app/src/main/AndroidManifest.xml',

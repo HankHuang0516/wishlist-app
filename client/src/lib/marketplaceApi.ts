@@ -9,7 +9,7 @@ export class ApiFailure extends Error {
 // Account reads and other data use independent bounded cooldowns. Keep only a
 // deadline, never a token, response body or pending operation. Waiting does not
 // replay requests; mutations still require their original explicit action.
-const deadlines = { data: 0, account: 0 };
+const deadlines = { data: 0, account: 0, interest: 0 };
 function retryDelay(header: string | null, now: number): number {
   const seconds = header !== null && /^\d+(?:\.\d+)?$/.test(header.trim()) ? Number(header.trim()) : NaN;
   const delay = Number.isFinite(seconds) ? seconds * 1000 : header ? Date.parse(header) - now : NaN;
@@ -34,9 +34,11 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
   if (!/^\/[a-zA-Z0-9/_-]+(?:\?[a-zA-Z0-9_=&%+.,-]*)?$/.test(path) || path.startsWith('//') || /%(?![a-fA-F0-9]{2})/.test(path))
     throw new Error('無效的 API 路徑。');
   const group = token && (init.method ?? 'GET').toUpperCase() === 'GET' && /^\/(?:users\/me|discovery|product-wishes)(?:\/|\?|$)/.test(path) ? 'account' : 'data';
-  const remaining = deadlines[group] - Date.now();
+  const interestRoute=/^\/product-interest(?:\/|\?|$)/.test(path);
+  const remaining = Math.max(deadlines[group],interestRoute?deadlines.interest:0) - Date.now();
   if (remaining > 0) throw new ApiFailure('請求暫時受限，請稍後再試。', 429, 'RATE_LIMIT_COOLDOWN', remaining);
   deadlines[group] = 0;
+  if(interestRoute)deadlines.interest=0;
   const response = await fetch(`${API_URL}${path}`, { ...init, cache: 'no-store', headers: {
     ...(token === null ? {} : { Authorization: `Bearer ${token}` }), ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers,
   }, signal: init.signal ?? AbortSignal.timeout(30_000), redirect: 'error' });
@@ -46,8 +48,11 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
     // Product quotas and route-specific busy responses also use 429. They must
     // retain their own recovery path and cannot pause unrelated account reads.
     const transportLimited = response.status === 429 && (!body.errorCode || body.errorCode === 'RATE_LIMIT_EXCEEDED' || body.errorCode === 'EXTERNAL_INDEX_RATE_LIMIT' || body.errorCode === 'ACCOUNT_READ_RATE_LIMIT' || body.errorCode === 'ACCOUNT_AUTH_READ_RATE_LIMIT' || body.errorCode === 'DISCOVERY_READ_RATE_LIMIT');
-    const now = Date.now(), delay = transportLimited ? retryDelay(response.headers.get('Retry-After'), now) : 0;
-    if (delay) deadlines[group] = Math.max(deadlines[group], now + delay);
+    // Explicit route-scoped interest limits must not pause independent wish
+    // or chat mutations. Generic transport limits retain their shared scope.
+    const interestLimited=response.status===429&&interestRoute&&['INTEREST_RATE_LIMIT','INTEREST_OPERATION_RATE_LIMIT'].includes(body.errorCode??'');
+    const now = Date.now(), delay = transportLimited||interestLimited ? retryDelay(response.headers.get('Retry-After'), now) : 0;
+    if (delay) {const scope=interestLimited?'interest':group;deadlines[scope] = Math.max(deadlines[scope], now + delay);}
     throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status, body.errorCode, delay);
   }
   return response.status === 204 ? undefined as T : await response.json() as T;

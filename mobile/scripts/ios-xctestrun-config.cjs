@@ -32,6 +32,7 @@ const AUTHENTICATED_FLOWS = {
   'golden-wishes': ['NativeQaTests/test16RealLoginGoldenWishTransitions'],
   'golden-discovery': ['NativeQaTests/test17RealLoginGoldenDiscoveryAndDetail'],
   'golden-map': ['NativeQaTests/test18RealLoginGoldenMapAndPrice'],
+  'golden-map-gestures': ['NativeQaTests/test20RealLoginMapStackGestures','NativeQaTests/test21RestoreOsMotionIfInterrupted'],
 };
 function destinationTestRun(template, label, testRoot, inputPort, flow) {
   if (!path.isAbsolute(testRoot) || template.__xctestrun_metadata__?.FormatVersion !== 1 ||

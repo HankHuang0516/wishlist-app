@@ -91,3 +91,16 @@ it('honors the external-index Retry-After without any automatic replay',async()=
  await expect(api('synthetic','/external-listings')).rejects.toMatchObject({code:'RATE_LIMIT_COOLDOWN'});
  expect(fetchMock).toHaveBeenCalledTimes(1);await vi.advanceTimersByTimeAsync(4000);expect(fetchMock).toHaveBeenCalledTimes(1);await api('synthetic','/external-listings');expect(fetchMock).toHaveBeenCalledTimes(2);
 });
+
+it.each(['INTEREST_RATE_LIMIT','INTEREST_OPERATION_RATE_LIMIT'])('honors structured %s only within interest routes, with no replay or suppression of independent wishes',async code=>{
+ fetchMock.mockResolvedValueOnce(rejected('60',JSON.stringify({errorCode:code}))).mockImplementation(async()=>success());
+ await expect(api('synthetic-a','/product-interest?keys=listing%3Asynthetic')).rejects.toMatchObject({status:429,code,retryAfterMs:60000});
+ const original={method:'POST',body:'{"clientRequestId":"original-unchanged-operation"}'};
+ await expect(api('synthetic-b','/product-wishes',original)).resolves.toEqual({ok:true});expect(fetchMock).toHaveBeenCalledTimes(2);expect(fetchMock.mock.calls[1][1]).toMatchObject(original);
+ await expect(api('synthetic-b','/product-interest/operations/original',original)).rejects.toMatchObject({code:'RATE_LIMIT_COOLDOWN',retryAfterMs:60000});
+ await expect(publicApi('/product-interest?keys=listing%3Asynthetic')).rejects.toMatchObject({code:'RATE_LIMIT_COOLDOWN'});expect(fetchMock).toHaveBeenCalledTimes(2);
+ await vi.advanceTimersByTimeAsync(60000);expect(fetchMock).toHaveBeenCalledTimes(2);await expect(api('synthetic-a','/product-interest?keys=listing%3Asynthetic')).resolves.toEqual({ok:true});expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+it('keeps a generic transport cooldown authoritative over interest routes',async()=>{
+ fetchMock.mockResolvedValueOnce(rejected('30')).mockImplementation(async()=>success());await expect(api('synthetic','/chat/conversations')).rejects.toMatchObject({status:429});await expect(api('synthetic','/product-interest?keys=listing%3Asynthetic')).rejects.toMatchObject({code:'RATE_LIMIT_COOLDOWN',retryAfterMs:30000});expect(fetchMock).toHaveBeenCalledTimes(1);
+});

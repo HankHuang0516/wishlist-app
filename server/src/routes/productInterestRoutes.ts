@@ -9,7 +9,7 @@ import {interestInput,interestSnapshot,interestTarget,visibleInterestTargets} fr
 class InterestError extends Error{constructor(public status:number,public code:string){super();}}
 const router=Router();
 router.use((_req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
-router.use(rateLimit({windowMs:60000,limit:120,standardHeaders:true,legacyHeaders:false}));
+router.use(rateLimit({windowMs:60000,limit:120,standardHeaders:true,legacyHeaders:false,handler:(_req,res)=>res.status(429).json({errorCode:'INTEREST_RATE_LIMIT'})}));
 function endpoint(run:(req:AuthRequest)=>Promise<unknown>){return async(req:AuthRequest,res:Response)=>{try{return res.json(await run(req));}catch(e){const status=e instanceof InterestError||e instanceof ListingCreationError?e.status:e instanceof ChatInputError?400:503;return res.status(status).json({errorCode:e instanceof InterestError?e.code:status===400?'INTEREST_INPUT_REJECTED':'INTEREST_UNCONFIRMED'});}};}
 router.get('/',optionalAuthenticateToken,endpoint(async req=>{
  if(Object.keys(req.query).join(',')!=='keys'||typeof req.query.keys!=='string')throw new ChatInputError();
@@ -23,7 +23,7 @@ router.get('/operations/:clientActionId',endpoint(async req=>{
  if(Object.keys(req.query).join(',')!=='productKey')throw new ChatInputError();const productKey=interestTarget(req.query.productKey).productKey,clientActionId=chatIdentity(req.params.clientActionId),userId=req.user!.id;
  return prisma.$transaction(async tx=>{await listingCreationGate(tx,req,userId);const receipt=await tx.productInterestOperation.findUnique({where:{userId_clientActionId:{userId,clientActionId}},select:receiptSelect});if(receipt&&receipt.productKey!==productKey)throw new ChatInputError();return {receipt,current:await current(tx,userId,productKey)};});
 }));
-router.post('/operations/:clientActionId',rateLimit({windowMs:60000,limit:30,keyGenerator:(req:AuthRequest)=>'interest-'+req.user!.id,standardHeaders:true,legacyHeaders:false}),endpoint(async req=>{
+router.post('/operations/:clientActionId',rateLimit({windowMs:60000,limit:30,keyGenerator:(req:AuthRequest)=>'interest-'+req.user!.id,standardHeaders:true,legacyHeaders:false,handler:(_req,res)=>res.status(429).json({errorCode:'INTEREST_OPERATION_RATE_LIMIT'})}),endpoint(async req=>{
  if(Object.keys(req.query).length)throw new ChatInputError();const input=interestInput(req.body),clientActionId=chatIdentity(req.params.clientActionId),userId=req.user!.id;
  return prisma.$transaction(async tx=>{await listingCreationGate(tx,req,userId);const where={userId_clientActionId:{userId,clientActionId}},prior=await tx.productInterestOperation.findUnique({where,select:receiptSelect});
  if(prior){if(prior.requestHash!==input.requestHash||prior.productKey!==input.productKey)throw new ChatInputError();return {receipt:prior,current:await current(tx,userId,input.productKey)};}

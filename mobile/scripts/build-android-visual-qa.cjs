@@ -16,7 +16,11 @@ const localApiUrl = 'http://127.0.0.1:18889';
 const packageName = ORIGINAL_PACKAGE + '.visualqa' + label;
 const output = path.join(mobile, 'build', 'android-visual-qa-' + label);
 const disk = fs.statfsSync(mobile);
-if (disk.bavail * disk.bsize < 23 * 1024 ** 3) throw new Error('Visual QA build requires the20GiB system reserve plus3GiB job budget');
+// A warm incremental bundle can use a caller-measured smaller budget. The
+// separate20GiB reserve is mandatory; retain3GiB as the default cold estimate.
+const jobBudgetGiB=Number(process.env.WISHLIST_QA_BUILD_BUDGET_GIB??3);
+if(!Number.isFinite(jobBudgetGiB)||jobBudgetGiB<1||jobBudgetGiB>20)throw Error('Explicit QA job budget must be1–20GiB');
+if(disk.bavail*disk.bsize<(20+jobBudgetGiB)*1024**3)throw new Error('Visual QA build requires20GiB reserve plus the explicit measured job budget');
 const java = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
 const sdk = '/Users/hank/Library/Android/sdk';
 const aapt = path.join(sdk, 'build-tools/36.0.0/aapt2');
@@ -63,7 +67,7 @@ else {
     throw new Error('Visual QA APK is unsigned, or it used the production upload certificate');
   const metadata = { kind: 'isolated-android-release-equivalent-visual-qa', label, package: packageName,
     apiOrigin: localApiUrl, nonDebuggable: true, staticJsBundle: true, storeDeliverable: false,
-    usesProductionUploadCertificate: false,pushRegistrationValidated:false, apkSha256: hash(target), sourceFiles: sources, sourceHashes };
+    jobBudgetGiB,usesProductionUploadCertificate: false,pushRegistrationValidated:false, apkSha256: hash(target), sourceFiles: sources, sourceHashes };
   fs.writeFileSync(path.join(output, 'build.json'), JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   console.log(JSON.stringify({ kind: metadata.kind, label, package: packageName, apkSha256: metadata.apkSha256,
     staticJsBundle: true, nonDebuggable: true, storeDeliverable: false }));

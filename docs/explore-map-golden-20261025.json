@@ -3,7 +3,7 @@
   "name": "探索地圖全縮圖分類排位",
   "approvedOn": "2026-10-25",
   "timezone": "Asia/Taipei",
-  "status": "IMPLEMENTED_LOCAL_ACCEPTANCE_PASSED_SIGNED_ARTIFACT_MATCHED_SUBMITTED_REVIEW_PENDING",
+  "status": "STACK_DEFAULT_CHANGE_IMPLEMENTED_PENDING_RUNTIME_ACCEPTANCE",
   "userInstruction": "判斷合理性再設為golden目標；功能與UIUX匹配度都至少85%後交給wishlist en/fix上傳更新版與內部測試版",
   "releaseOwner": {
     "title": "wishlist en/fix",
@@ -173,5 +173,77 @@
     "功能與UIUX分別逐項審查，各平台兩項均至少85且無hard blocker後才建立可上傳交付。",
     "由wishlist en/fix接手版本／build、CI與包體核對後，依既有授權上傳網站更新版與內部測試版。",
     "回報網站版本、測試連結、build號及上傳回執；現有舊候選版不能冒充含Golden14的新版本。"
-  ]
+  ],
+  "latestUserAmendment": {
+    "date": "2026-10-26",
+    "source": "Human actual Android38 screenshot + request in release-owner chat",
+    "default": "collapsed geographic thumbnail stacks",
+    "expand": "explicit chosen stack only; all members individually accessible",
+    "collapse": "blank tap, explicit collapse, Web Escape;240ms or immediate reduced motion",
+    "gesture": "scroll/drag do not collapse; selection does not open details",
+    "oldPrimaryAssetScope": "expanded category layout only; no longer default-entry reference",
+    "scoresForAmendedInteraction": {
+      "web": {
+        "functionPoints": [
+          30,
+          20,
+          20,
+          10,
+          15
+        ],
+        "functionScore": 95,
+        "uiuxPoints": [
+          24,
+          24,
+          19,
+          14,
+          12
+        ],
+        "uiuxScore": 93,
+        "deductions": "No complete screen-reader traversal/real touchscreen hardware/long-duration slow network test. Dense60 uses synthetic owned fixture plus real provider bytes, not production inventory."
+      },
+      "android": {
+        "functionPoints": [
+          30,
+          17,
+          20,
+          10,
+          13
+        ],
+        "functionScore": 90,
+        "uiuxPoints": [
+          24,
+          23,
+          18,
+          14,
+          11
+        ],
+        "uiuxScore": 90,
+        "deductions": "Fresh39 gesture scope includes member selection and real OS acknowledgement; all36 traversal/wishlist evidence predates wrapper change, not repeated as fresh39 full-flow. No current physical39 feedback or complete TalkBack/tablet/language matrix."
+      },
+      "ios": {
+        "functionPoints": [
+          30,
+          15,
+          20,
+          10,
+          13
+        ],
+        "functionScore": 88,
+        "uiuxPoints": [
+          24,
+          23,
+          18,
+          13,
+          10
+        ],
+        "uiuxScore": 88,
+        "deductions": "Fresh21 gesture scope2/2 and privacy/OS restoration; complete36/wishlist evidence is prior scoped0752. No current physical iOS, complete VoiceOver/tablet/language matrix. Debug-only toast visible in QA shots is explicitly excluded from signed-Release per-screen claims."
+      }
+    },
+    "priorScoresAreHistorical": true,
+    "releaseStatus": "Local engineering thresholds met; native2.0.18/Android39/iOS21 signed candidate builds in progress, Web844 deployment not yet done",
+    "assessmentMethod": "Weighted engineering assessment of declared criteria and actual evidence; NOT pixel similarity, independent user research, physical-device acceptance or store approval. No averaging platforms or function/UIUX. Unverified branches lose points.",
+    "evidenceReport": "/Volumes/codex_2T/codex_project/Wishlist/QA/golden-release-20261024/golden-map-stacks-local-review-2.0.18.json"
+  }
 }

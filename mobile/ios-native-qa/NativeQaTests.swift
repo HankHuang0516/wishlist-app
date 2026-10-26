@@ -426,14 +426,14 @@ final class NativeQaTests: XCTestCase {
             try required("查看商品：Native QA Switch OLED", scroll: true, timeout: 25)
             try safeScreenshot("qa-guest-list")
             try tap("查看商品：Native QA Switch OLED")
-            try required("聯絡賣家", scroll: true)
+            try required("聊聊詢問", scroll: true)
             try safeScreenshot("qa-guest-detail")
-            try tap("聯絡賣家")
+            try tap("聊聊詢問")
             try required("使用條款與社群安全")
             guard !element("密碼").exists else { throw Failure.invalidIdentity }
             try safeScreenshot("qa-terms-before-auth")
             try tap("先逛逛，不登入")
-            try required("聯絡賣家", scroll: true)
+            try required("聊聊詢問", scroll: true)
             try tap("返回探索")
             try tap("切換地圖瀏覽", kind: .any)
             try required("搜尋目前地圖範圍", scroll: true)
@@ -448,6 +448,7 @@ final class NativeQaTests: XCTestCase {
             try tap("建立帳號")
             for label in ["顯示名稱", "手機號碼（選填）", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
             try safeScreenshot("qa-optional-phone-register")
+            if ProcessInfo.processInfo.environment["NATIVE_QA_REVIEW_REMEDIATION"] == "1" { try tap("返回訪客瀏覽"); return }
             try tap("返回登入")
             checkpoint("anonymous-forgot")
             try tap("忘記密碼")
@@ -523,7 +524,7 @@ final class NativeQaTests: XCTestCase {
         try required("查看商品：Native QA Switch OLED", scroll: true, kind: .button)
         try tap("查看商品：Native QA Switch OLED")
         try required("商品詳情")
-        try required("聯絡賣家", scroll: true)
+        try required("聊聊詢問", scroll: true)
     }
     func test03RealLoginMarketplaceDiscovery() {
         executionTimeAllowance = 120
@@ -545,7 +546,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("marketplace-chat-listing")
             try openMarketplaceListing(search: false)
             checkpoint("marketplace-contact-seller")
-            try tap("聯絡賣家")
+            try tap("聊聊詢問")
             checkpoint("marketplace-chat-input")
             try required("NT$7,500")
             try required("週日下午可以，請先提出預約。", scroll: true)
@@ -589,7 +590,7 @@ final class NativeQaTests: XCTestCase {
             try loginBuyerAndRequireTabs()
             checkpoint("marketplace-meetup-listing")
             try openMarketplaceListing(search: false)
-            try tap("聯絡賣家")
+            try tap("聊聊詢問")
             checkpoint("marketplace-meetup-chat-input")
             try required("NT$7,500")
             try required("週日下午可以，請先提出預約。", scroll: true)
@@ -1007,7 +1008,7 @@ final class NativeQaTests: XCTestCase {
             try safeScreenshot("qa-external-detail")
             try required("地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與原始描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。", scroll: true)
             try required("前往來源網站查看", scroll: true, kind: .button)
-            guard !app.buttons["聯絡賣家"].exists else { throw Failure.invalidIdentity }
+            guard !app.buttons["聊聊詢問"].exists else { throw Failure.invalidIdentity }
             try tap("返回探索")
             try tapTab("願望")
             try required("Native QA 外部比對清單", scroll: true)

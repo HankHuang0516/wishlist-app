@@ -44,6 +44,9 @@ if (resume) {
       // be relocated, unlike ordinary object/product caches.
       for (const transient of ['ModuleCache.noindex', 'SDKStatCaches.noindex'])
         fs.rmSync(path.join(output, cache, transient), { recursive: true, force: true });
+      // Xcode caches the generated runner's bundle identifier in these small
+      // intermediates. Recompile this test target for the new QA identity.
+      if (cache === 'runner-derived') fs.rmSync(path.join(output, cache, 'Build/Intermediates.noindex'), { recursive: true, force: true });
       const products = path.join(output, cache, 'Build/Products');
       for (const name of fs.readdirSync(products))
         if (name.endsWith('.xctestrun')) fs.unlinkSync(path.join(products, name));

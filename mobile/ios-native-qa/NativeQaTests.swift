@@ -610,10 +610,10 @@ final class NativeQaTests: XCTestCase {
             while app.keyboards.firstMatch.exists && Date() < keyboardDeadline { Thread.sleep(forTimeInterval: 0.12) }
             guard !app.keyboards.firstMatch.exists else { throw Failure.unstableControl }
             checkpoint("marketplace-meetup-submit")
-            try tap("提出此版本（改期需對方重新同意）")
+            try tap("送出面交邀約")
             Thread.sleep(forTimeInterval: 1)
             try safeScreenshot("qa-meetup-submit-state")
-            try required("提議中 · 第1版", scroll: true)
+            try required("提議中", scroll: true)
             try required("TaipeiStationQA", scroll: true)
             try safeScreenshot("qa-meetup")
             try tap("返回聊天")

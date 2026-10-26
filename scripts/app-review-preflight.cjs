@@ -24,7 +24,7 @@ function assertArtifactSourceScope(receipt, actualArtifactTree, changedPaths) {
     assert.equal(receipt.buildNumber, '23');
     assert.equal(receipt.artifactNativeGitTree, actualArtifactTree);
     assert.deepEqual([...changedPaths].sort(), [...receipt.qaOnlySourceChanges].sort());
-    for (const path of changedPaths) assert(['mobile/ios-native-qa/NativeQaTests.swift', 'mobile/scripts/build-ios-qa.cjs'].includes(path), 'Production App source changed after artifact compilation');
+    for (const path of changedPaths) assert(['mobile/ios-native-qa/NativeQaTests.swift', 'mobile/scripts/build-ios-qa.cjs', 'mobile/scripts/native-qa-worker.cjs'].includes(path), 'Production App source changed after artifact compilation');
 }
 
 function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTree) {

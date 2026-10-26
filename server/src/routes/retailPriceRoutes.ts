@@ -5,7 +5,7 @@ import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { loadDiscovery, DiscoveryError } from '../lib/discovery';
 import { retailBinding, retailIdentity, retailObservation } from '../lib/retailPrices';
-import { evaluateCp, attachCp, cpTargets } from '../lib/discoveryCp';
+import { evaluateCp, attachCp, cpTargets, cpCapacity, CP_BATCH_SIZE } from '../lib/discoveryCp';
 export function createRetailPriceAdmin(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const r = Router();
     r.use(marketplaceAdmin(getCredential));
@@ -16,14 +16,20 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         if (Object.keys(q.query).some(k => !['limit','source','productKey'].includes(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const limit = Number(q.query.limit ?? 3);
-        if (!Number.isInteger(limit) || limit < 1 || limit > 20)
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100)
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const source = String(q.query.source ?? 'all');
         if (!['all','listing','source','external'].includes(source)) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const productKey = q.query.productKey;
         if (productKey !== undefined && (typeof productKey !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(productKey))) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const all = (await loadDiscovery()).filter(p => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified);
-        const attempts = await prisma.retailPriceObservation.findMany({ where: { expiresAt: { gt: new Date() } }, select: { productKey: true, bindingHash: true }, take: 10000 });
+        const attempts = all.length ? await prisma.$queryRaw<Array<{ productKey: string; bindingHash: string }>>`
+            SELECT DISTINCT a."productKey", a."bindingHash" FROM "RetailPriceObservation" a
+            JOIN jsonb_to_recordset(${JSON.stringify(all.map(p => ({ productKey: p.key, bindingHash: retailBinding(p) })))}::jsonb)
+              AS f("productKey" text, "bindingHash" text)
+              ON a."productKey" = f."productKey" AND a."bindingHash" = f."bindingHash"
+            WHERE a."expiresAt" > ${new Date()}
+        ` : [];
         const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash));
         // Direct lookup stays within the same public/AI-allowed catalog and returns its current binding.
         const waiting = all.filter(p => (source === 'all' || p.kind === source) && (productKey ? p.key === productKey : !covered.has(p.key + ':' + retailBinding(p)))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
@@ -33,14 +39,22 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         return fail(s, e);
     } });
     r.get('/coverage', async (_q, s) => { try { return s.json(cpCoverage(await attachCp(await loadDiscovery()))); } catch (e) { return fail(s,e); } });
+    r.get('/capacity', (_q, s) => { try { return s.json(cpCapacity()); } catch (e) { return fail(s,e); } });
+    r.get('/evaluations', async (q, s) => { try {
+        if (Object.keys(q.query).join(',') !== 'productKeys' || typeof q.query.productKeys !== 'string') throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
+        const keys = q.query.productKeys.split(',');
+        if (!keys.length || keys.length > 100 || new Set(keys).size !== keys.length || keys.some(k => !/^(listing|source|external):[a-f0-9-]{36}$/.test(k))) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
+        const products = await attachCp((await loadDiscovery()).filter(p => keys.includes(p.key) && p.cpAllowed !== false));
+        return s.json({ items: products.map(p => ({ productKey: p.key, bindingHash: retailBinding(p), score: p.cp?.score ?? null, evaluatedAt: p.cp?.evaluatedAt ?? null, ready: cpTargets([p], new Set(p.cp ? [p.key] : [])).length > 0 })) });
+    } catch (e) { return fail(s, e); } });
     r.get('/pending-evaluations', async (q, s) => { try {
         if (Object.keys(q.query).some(k => k !== 'limit'))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const limit = Number(q.query.limit ?? 6);
-        if (!Number.isInteger(limit) || limit < 1 || limit > 6)
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100)
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const all = await attachCp(await loadDiscovery());
-        return s.json({ items: cpTargets(all, new Set(all.filter(p => p.cp).map(p => p.key))).slice(0, limit).map(t => ({ productKey: t.product.key, title: t.product.title, originalPrice: t.comparables[0].price })) });
+        return s.json({ items: cpTargets(all, new Set(all.filter(p => p.cp).map(p => p.key)), limit).map(t => ({ productKey: t.product.key, title: t.product.title, originalPrice: t.comparables[0].price })) });
     }
     catch (e) {
         return fail(s, e);
@@ -62,7 +76,7 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         return fail(s, e);
     } });
     r.post('/evaluate', async (q, s) => { try {
-        if (Object.keys(q.body ?? {}).join(',') !== 'productKeys' || !Array.isArray(q.body.productKeys) || q.body.productKeys.length < 1 || q.body.productKeys.length > 6 || q.body.productKeys.some((k: unknown) => typeof k !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(k)))
+        if (Object.keys(q.body ?? {}).join(',') !== 'productKeys' || !Array.isArray(q.body.productKeys) || q.body.productKeys.length < 1 || q.body.productKeys.length > CP_BATCH_SIZE || new Set(q.body.productKeys).size !== q.body.productKeys.length || q.body.productKeys.some((k: unknown) => typeof k !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         return s.json(await evaluateCp((await loadDiscovery()).filter(p => q.body.productKeys.includes(p.key))));
     }

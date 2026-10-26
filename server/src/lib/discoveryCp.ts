@@ -1,8 +1,16 @@
 import { Prisma } from '@prisma/client';
 import prisma from './prisma';
-import { discoveryHash, DiscoveryError, type DiscoveryProduct } from './discovery';
+import { discoveryHash, DiscoveryError, loadDiscovery, type DiscoveryProduct } from './discovery';
 import { retailIdentity, retailBinding, retailReferences, retailConversion, type RetailReference } from './retailPrices';
 const policyVersion = 3, ttl = 24 * 3600000;
+export const CP_BATCH_SIZE = 6;
+export function cpCapacity() {
+    const raw = process.env.DISCOVERY_CP_DAILY_BATCH_CAP?.trim() || '1000';
+    const dailyBatchCap = Number(raw);
+    if (!/^[1-9]\d{0,3}$/.test(raw) || dailyBatchCap > 2000)
+        throw new DiscoveryError(503, 'CP_CAPACITY_CONFIGURATION_INVALID');
+    return { batchSize: CP_BATCH_SIZE, queueReadLimit: 100, dailyBatchCap, maximumProductsPerDay: dailyBatchCap * CP_BATCH_SIZE, evaluationTtlHours: ttl / 3600000 };
+}
 type Copy = {
     zh: string;
     en: string;
@@ -39,8 +47,8 @@ export type CpTarget = {
     product: ReturnType<typeof cpFacts>;
     comparables: RetailReference[];
 };
-export function cpTargets(products: DiscoveryProduct[], already = new Set<string>()): CpTarget[] {
-    return products.filter(p => eligible(p) && !already.has(p.key) && p.retail?.productKey === p.key && p.retail.bindingHash === retailBinding(p) && p.retail.identity === cpIdentity(p) && p.retail.currency === 'TWD' && Number.isFinite(p.retail.price) && p.retail.price > 0).sort((a, b) => Date.parse(b.date) - Date.parse(a.date) || a.key.localeCompare(b.key)).slice(0, 6).map(p => ({ product: cpFacts(p), comparables: [p.retail!] }));
+export function cpTargets(products: DiscoveryProduct[], already = new Set<string>(), limit = CP_BATCH_SIZE): CpTarget[] {
+    return products.filter(p => eligible(p) && !already.has(p.key) && p.retail?.productKey === p.key && p.retail.bindingHash === retailBinding(p) && p.retail.identity === cpIdentity(p) && p.retail.currency === 'TWD' && Number.isFinite(p.retail.price) && p.retail.price > 0).sort((a, b) => Date.parse(b.date) - Date.parse(a.date) || a.key.localeCompare(b.key)).slice(0, limit).map(p => ({ product: cpFacts(p), comparables: [p.retail!] }));
 }
 const validCopy = (v: unknown): v is Copy => !!v && typeof v === 'object' && typeof (v as Copy).zh === 'string' && typeof (v as Copy).en === 'string' && [(v as Copy).zh, (v as Copy).en].every(s => s.length > 0 && s.length <= 280 && !/https?:|@|\b09\d{8}\b/i.test(s));
 export function validateCpOutput(value: unknown, targets: CpTarget[], model: string, now = new Date()): Record<string, CpEvaluation> {
@@ -69,7 +77,14 @@ export function validateCpOutput(value: unknown, targets: CpTarget[], model: str
 }
 export async function attachCp(products: DiscoveryProduct[], now = new Date()): Promise<EvaluatedProduct[]> {
     const refs = await retailReferences(products, now), prepared = products.map(p => ({ ...p, ...(refs.has(p.key) ? { retail: refs.get(p.key)! } : {}) }));
-    const runs = await prisma.discoveryCpRun.findMany({ where: { state: 'COMPLETED', expiresAt: { gt: now } }, orderBy: { updatedAt: 'desc' }, take: 240, select: { result: true } }), byKey = new Map(prepared.map(p => [p.key, p])), evaluations = new Map<string, CpEvaluation>();
+    // Select results for these public products, rather than letting unrelated
+    // newer batches evict still-valid evaluations after a fixed 240-run window.
+    const runs = prepared.length && refs.size ? await prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>`
+        SELECT "result" FROM "DiscoveryCpRun"
+        WHERE "state" = 'COMPLETED' AND "expiresAt" > ${now}
+          AND "result" ?| ARRAY[${Prisma.join(prepared.map(p => p.key))}]::text[]
+        ORDER BY "updatedAt" DESC, "id" DESC
+    ` : [], byKey = new Map(prepared.map(p => [p.key, p])), evaluations = new Map<string, CpEvaluation>();
     for (const run of runs)
         for (const [key, e] of Object.entries((run.result ?? {}) as Record<string, CpEvaluation>)) {
             const p = byKey.get(key), ref = refs.get(key);
@@ -80,6 +95,7 @@ export async function attachCp(products: DiscoveryProduct[], now = new Date()): 
     return prepared.map(({ cp: _old, ...p }) => ({ ...p, ...(evaluations.has(p.key) ? { cp: evaluations.get(p.key) } : {}) }));
 }
 export async function evaluateCp(products: DiscoveryProduct[], provider: (targets: CpTarget[], model: string) => Promise<unknown> = geminiCp) {
+    const { dailyBatchCap } = cpCapacity();
     const existing = await attachCp(products), targets = cpTargets(existing, new Set(existing.filter(p => p.cp).map(p => p.key)));
     if (!targets.length)
         return { state: 'COMPLETE', evaluated: 0, reason: 'INSUFFICIENT_RETAIL_PRICE_EVIDENCE' };
@@ -88,12 +104,20 @@ export async function evaluateCp(products: DiscoveryProduct[], provider: (target
     const model = process.env.DISCOVERY_CP_MODEL || 'gemini-2.5-flash', id = discoveryHash({ policyVersion, model, targets }), now = new Date();
     const claim = await prisma.$transaction(async (tx) => { await tx.$executeRaw `SELECT pg_advisory_xact_lock(73009261024::bigint)`; const old = await tx.discoveryCpRun.findUnique({ where: { id } }); if (old?.state === 'COMPLETED' && old.expiresAt > now)
         return false; if (old && old.leaseUntil > now)
-        throw new DiscoveryError(old.state === 'RUNNING' ? 409 : 503, 'CP_EVALUATION_PENDING'); if (await tx.discoveryCpRun.count({ where: { createdAt: { gte: new Date(+now - 86400000) } } }) >= 240)
-        throw new DiscoveryError(429, 'CP_DAILY_CAPACITY'); await tx.discoveryCpRun.upsert({ where: { id }, create: { id, model, state: 'RUNNING', leaseUntil: new Date(+now + 60000), expiresAt: new Date(+now + ttl) }, update: { state: 'RUNNING', result: Prisma.DbNull, leaseUntil: new Date(+now + 60000), expiresAt: new Date(+now + ttl) } }); return true; });
+        throw new DiscoveryError(old.state === 'RUNNING' ? 409 : 503, 'CP_EVALUATION_PENDING'); if (await tx.discoveryCpAttempt.count({ where: { createdAt: { gte: new Date(+now - 86400000) } } }) >= dailyBatchCap)
+        throw new DiscoveryError(429, 'CP_DAILY_CAPACITY'); await tx.discoveryCpRun.upsert({ where: { id }, create: { id, model, state: 'RUNNING', leaseUntil: new Date(+now + 60000), expiresAt: new Date(+now + ttl) }, update: { state: 'RUNNING', result: Prisma.DbNull, leaseUntil: new Date(+now + 60000), expiresAt: new Date(+now + ttl) } });
+        await tx.discoveryCpAttempt.create({ data: { runId: id } }); return true; });
     if (!claim)
         return { state: 'COMPLETE', evaluated: targets.length, cached: true };
     try {
         const result = validateCpOutput(await provider(targets, model), targets, model);
+        const keys = new Set(targets.map(t => t.product.key));
+        const current = (await loadDiscovery()).filter(p => keys.has(p.key)), currentRefs = await retailReferences(current);
+        for (const target of targets) {
+            const p = current.find(p => p.key === target.product.key), ref = currentRefs.get(target.product.key);
+            if (!p || !ref || !eligible({ ...p, retail: ref }) || discoveryHash(cpFacts(p)) !== discoveryHash(target.product) || discoveryHash(ref) !== discoveryHash(target.comparables[0]))
+                throw new DiscoveryError(409, 'CP_SOURCE_CHANGED');
+        }
         await prisma.discoveryCpRun.update({ where: { id }, data: { state: 'COMPLETED', result: result as unknown as Prisma.InputJsonValue, leaseUntil: new Date(), expiresAt: new Date(Date.now() + ttl) } });
         return { state: 'COMPLETE', evaluated: targets.length, cached: false };
     }

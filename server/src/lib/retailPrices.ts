@@ -1,5 +1,5 @@
 import prisma from './prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, type RetailPriceObservation } from '@prisma/client';
 import { discoveryHash, DiscoveryError, type DiscoveryProduct } from './discovery';
 export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 'subId'>): string | null {
     if (/非正品|仿品|仿冒|造型款|replica|knockoff/i.test(p.title))
@@ -139,7 +139,22 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
     return { ...data, payloadHash: discoveryHash(data) };
 }
 export async function retailReferences(products: DiscoveryProduct[], now = new Date()) {
-    const rows = await prisma.retailPriceObservation.findMany({ where: { productKey: { in: products.map(p => p.key) }, status: 'VERIFIED', expiresAt: { gt: now } }, orderBy: { checkedAt: 'desc' }, take: 5000 });
+    const facts = products.map(p => ({ productKey: p.key, bindingHash: retailBinding(p), identity: retailIdentity(p) })).filter(p => p.identity);
+    // One valid reference per current product version. A busy product's newer
+    // observations must not push another product beyond a global row window.
+    const rows = facts.length ? await prisma.$queryRaw<RetailPriceObservation[]>`
+        SELECT DISTINCT ON (r."productKey") r.* FROM "RetailPriceObservation" r
+        JOIN jsonb_to_recordset(${JSON.stringify(facts)}::jsonb)
+          AS f("productKey" text, "bindingHash" text, "identity" text)
+          ON r."productKey" = f."productKey" AND r."bindingHash" = f."bindingHash" AND r."identity" = f."identity"
+        WHERE r."status" = 'VERIFIED' AND r."expiresAt" > ${now}
+          AND r."currency" = 'TWD' AND r."originalPrice" > 0
+          AND r."sourceUrl" <> '' AND r."sourceTitle" <> ''
+          AND r."sourceProductTitle" <> '' AND r."evidenceQuote" <> ''
+          AND r."priceType" IN ('MANUFACTURER_MSRP', 'RETAIL_REGULAR')
+        ORDER BY r."productKey", CASE WHEN r."priceType" = 'MANUFACTURER_MSRP' THEN 0 ELSE 1 END,
+          r."originalPrice" ASC, r."checkedAt" DESC, r."id" DESC
+    ` : [];
     const byKey = new Map(products.map(p => [p.key, p])), out = new Map<string, RetailReference>();
     for (const r of rows) {
         const p = byKey.get(r.productKey);

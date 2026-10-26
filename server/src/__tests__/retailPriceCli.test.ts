@@ -14,3 +14,16 @@ test('looks up one bound public key and rejects malformed keys before network ac
  await expect(invoke('candidate',['private:invalid'],{credential:'synthetic-only-key',fetcher})).rejects.toThrow('RETAIL_INVALID_PRODUCT_KEY');
  expect(fetcher).toHaveBeenCalledTimes(1);
 });
+
+test('reads capacity, 100-item queues and exact evaluation status without exposing credentials',async()=>{
+ const fetcher=jest.fn(async()=>({ok:true,json:async()=>({items:[]})}));
+ const key='source:12345678-1234-4234-8234-123456789abc';
+ await invoke('capacity',[],{credential:'synthetic',fetcher});
+ await invoke('pending',['100'],{credential:'synthetic',fetcher});
+ await invoke('candidates',['100','source'],{credential:'synthetic',fetcher});
+ await invoke('status',[key],{credential:'synthetic',fetcher});
+ expect((fetcher.mock.calls[1] as any)[0]).toContain('limit=100');
+ expect((fetcher.mock.calls[3] as any)[0]).toContain('/evaluations?productKeys='+encodeURIComponent(key));
+ await expect(invoke('pending',['101'],{credential:'synthetic',fetcher})).rejects.toThrow('RETAIL_INVALID_LIMIT');
+ await expect(invoke('status',[key,key],{credential:'synthetic',fetcher})).rejects.toThrow('RETAIL_INVALID_PRODUCT_KEY');
+});

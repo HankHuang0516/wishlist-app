@@ -937,9 +937,20 @@ model DiscoveryCpRun {
   updatedAt  DateTime @updatedAt
   leaseUntil DateTime
   expiresAt  DateTime
+  attempts   DiscoveryCpAttempt[]
 
   @@index([state, expiresAt])
   @@index([createdAt])
+}
+
+model DiscoveryCpAttempt {
+  id        String         @id @default(uuid())
+  runId     String         @db.VarChar(64)
+  run       DiscoveryCpRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([runId])
 }
 
 model Item {

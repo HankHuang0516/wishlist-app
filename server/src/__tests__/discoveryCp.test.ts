@@ -1,4 +1,4 @@
-import {cpTargets,cpFacts,validateCpOutput,cpIdentity} from '../lib/discoveryCp';
+import {cpTargets,cpFacts,validateCpOutput,cpIdentity,cpCapacity} from '../lib/discoveryCp';
 import {discoveryHash,type DiscoveryProduct} from '../lib/discovery';
 import {retailBinding,retailConversion,type RetailReference} from '../lib/retailPrices';
 const make=(i=1,patch:Partial<DiscoveryProduct>={}):DiscoveryProduct=>{const p:DiscoveryProduct={kind:'source',id:String(i),key:'source:'+i,title:'Samsung Galaxy Buds3 全新未拆',description:'賣家標示全新，實物與庫存待確認',mainId:'electronics',subId:'audio',classificationMethod:'TITLE_RULE',price:2500,priceText:'2500',currency:'TWD',priceUnitVerified:true,thumbnailUrl:null,photos:[],county:null,district:null,condition:'NEW',sourceLabel:'reference',stockStatus:'UNKNOWN',canonicalUrl:null,detailPath:'/explore',date:'2026-10-24T00:00:00Z',dateBasis:'COLLECTED',dateEarliest:null,...patch};const r:RetailReference={id:String(i),key:'retail:'+i,productKey:p.key,bindingHash:retailBinding(p),identity:cpIdentity(p)!,price:4990,currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.samsung.com/tw/',sourceTitle:'Synthetic original price reference',sourceProductTitle:'Samsung Galaxy Buds3',evidenceQuote:'Galaxy Buds3 建議售價 NT$4,990',sourcePeriod:'2025-04',checkedAt:'2026-10-24T00:00:00Z'};return{...p,retail:r};};
@@ -13,3 +13,18 @@ test('binds variant and bundle identity; does not price Pro as base or bare moni
 test('does not need to research original price again for an asking-price change, but invalidates changed model bindings',()=>{const p=make();expect(retailBinding({...p,price:2000})).toBe(retailBinding(p));expect(cpTargets([{...p,title:'Samsung Galaxy Buds3 Pro'}])).toEqual([]);expect(retailConversion(6000,4990).pricePoints).toBe(0);expect(retailConversion(6000,4990).savingsPercent).toBeLessThan(0);});
 
 test('does not block a model-verified retail-backed watch solely because categorization is miscellaneous',()=>{const p=make(1,{title:'SEIKO SRPB41J1 全新',mainId:'other',subId:'misc'});expect(cpTargets([p])).toHaveLength(1);});
+
+test('exposes a 100-product worklist without enlarging the provider microbatch',()=>{
+ const products=Array.from({length:100},(_,i)=>make(i));
+ expect(cpTargets(products)).toHaveLength(6);
+ expect(cpTargets(products,new Set(),100)).toHaveLength(100);
+});
+test('daily capacity is bounded, configurable, and sufficient for the intended backfill volume',()=>{
+ const old=process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
+ try {
+  delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
+  expect(cpCapacity()).toMatchObject({dailyBatchCap:1000,maximumProductsPerDay:6000,batchSize:6});
+  process.env.DISCOVERY_CP_DAILY_BATCH_CAP='600';expect(cpCapacity().dailyBatchCap).toBe(600);
+  for(const bad of ['0','2001','abc','1.5','-1']){process.env.DISCOVERY_CP_DAILY_BATCH_CAP=bad;expect(()=>cpCapacity()).toThrow('CP_CAPACITY_CONFIGURATION_INVALID');}
+ } finally { if(old===undefined)delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;else process.env.DISCOVERY_CP_DAILY_BATCH_CAP=old; }
+});

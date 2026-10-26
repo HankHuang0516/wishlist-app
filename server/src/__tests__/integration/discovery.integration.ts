@@ -4,7 +4,7 @@ import prisma from '../../lib/prisma';
 import {createDiscoveryRoutes} from '../../routes/discoveryRoutes';
 import {parseLead} from '../../lib/sourceLeadRules';
 import {loadDiscovery} from '../../lib/discovery';
-import {retailBinding,retailObservation} from '../../lib/retailPrices';
+import {retailBinding,retailObservation,retailReferences} from '../../lib/retailPrices';
 import {evaluateCp,attachCp} from '../../lib/discoveryCp';
 import {createLoopbackRequest} from './loopbackHttp';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
@@ -60,6 +60,21 @@ it('uses only external original-new evidence, invalidates expired or changed inp
  const provider=async(targets:any[])=>{calls++;expect(targets.every(t=>t.comparables.length===1&&t.comparables[0].key.startsWith('retail:'))).toBe(true);return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價比較。',en:'Same-model original-new comparison.'}],limitations:[{zh:'品況與庫存待確認。',en:'Condition and stock unconfirmed.'}]}));};
  const result=await evaluateCp(all,provider);expect(result.evaluated).toBe(6);expect(calls).toBe(1);const attached=await attachCp(all),scored=attached.filter(p=>p.cp);expect(scored).toHaveLength(6);
  const page=await http.get('/discovery/cp');expect(page.status).toBe(200);expect(page.body.total).toBe(6);expect(calls).toBe(1);
+ // More unrelated recent batches must not evict this still-valid older score.
+ const newerIds=Array.from({length:241},()=>randomUUID().replace(/-/g,''));
+ await prisma.discoveryCpRun.createMany({data:newerIds.map(id=>({id,model,state:'COMPLETED',result:{},leaseUntil:new Date(),expiresAt:new Date(Date.now()+86400000)}))});
+ await prisma.discoveryCpAttempt.createMany({data:newerIds.map(runId=>({runId}))});
+ expect((await attachCp(all)).filter(p=>p.cp)).toHaveLength(6);
+ const listingProduct=selected.find(p=>p.kind==='listing')!,changedPrice={...listingProduct,price:1001}, previousCap=process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
+ await prisma.listing.update({where:{id:listingProduct.id},data:{price:1001}});
+ try {
+  process.env.DISCOVERY_CP_DAILY_BATCH_CAP='1';
+  await expect(evaluateCp([changedPrice],provider)).rejects.toThrow('CP_DAILY_CAPACITY');
+  expect(calls).toBe(1);
+  delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
+  expect((await evaluateCp([changedPrice],provider)).evaluated).toBe(1);
+  expect(calls).toBe(2);
+ } finally { await prisma.listing.update({where:{id:listingProduct.id},data:{price:listingProduct.price!}}); if(previousCap===undefined)delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;else process.env.DISCOVERY_CP_DAILY_BATCH_CAP=previousCap; }
  const key=scored[0].key;const priceChanged=await attachCp(all.map(p=>p.key===key?{...p,price:999999}:p));expect(priceChanged.find(p=>p.key===key)?.cp).toBeUndefined();
  await prisma.retailPriceObservation.update({where:{id:scored[0].cp!.retail.id},data:{expiresAt:new Date(0)}});expect((await attachCp(all)).find(p=>p.key===key)?.cp).toBeUndefined();
 });
@@ -79,4 +94,36 @@ it('applies the same category/area/source/condition/budget filters to every map 
   await prisma.listing.update({where:{id:listing.id},data:{mapVisibleUntil:new Date(0)}});
   const expired=await http.get('/discovery?presentation=map&source=listing');expect(expired.body.items.find((p:any)=>p.id===listing.id).mapLocation).toBeNull();expect(expired.body.mapTotals.unmapped).toBeGreaterThan(0);
  }finally{await prisma.listing.update({where:{id:listing.id},data:{mapVisibleUntil:null,location:{delete:true}}});}
+});
+
+
+it('charges each failed provider retry against the daily cap and rejects a source withdrawn during evaluation',async()=>{
+ const old=process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
+ const p=(await loadDiscovery()).find(p=>p.key==='listing:'+listingId)!;
+ const freshRefId=randomUUID();retailIds.push(freshRefId);
+ await prisma.retailPriceObservation.create({data:retailObservation({requestId:freshRefId,productKey:p.key,bindingHash:retailBinding(p),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.benq.com/zh-tw/monitor.html',sourceTitle:'Synthetic quota evidence',sourceProductTitle:'BenQ GW2270',sourcePeriod:'2026-10',evidenceQuote:'BenQ GW2270 新品原價 NT$4990',checkedAt:new Date().toISOString()},p)});
+ const changed={...p,price:1003};let calls=0;
+ await prisma.listing.update({where:{id:listingId},data:{price:1003}});
+ try {
+  const used=await prisma.discoveryCpAttempt.count({where:{createdAt:{gte:new Date(Date.now()-86400000)}}});
+  process.env.DISCOVERY_CP_DAILY_BATCH_CAP=String(used+2);
+  const fail=async()=>{calls++;throw Error('synthetic-provider-failure');};
+  for(let i=0;i<2;i++){
+   await expect(evaluateCp([changed],fail)).rejects.toThrow('CP_PROVIDER_UNAVAILABLE');
+   await prisma.discoveryCpRun.updateMany({where:{model,state:'FAILED'},data:{leaseUntil:new Date(0)}});
+  }
+  await expect(evaluateCp([changed],fail)).rejects.toThrow('CP_DAILY_CAPACITY');
+  expect(calls).toBe(2);
+ } finally {
+  await prisma.listing.update({where:{id:listingId},data:{price:p.price!}});
+  if(old===undefined)delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;else process.env.DISCOVERY_CP_DAILY_BATCH_CAP=old;
+ }
+ await prisma.discoveryCpRun.deleteMany({where:{model}});
+ const all=await loadDiscovery(),refs=await retailReferences(all);
+ const source=all.find(p=>p.kind==='source'&&refs.has(p.key))!;expect(source).toBeDefined();
+ await expect(evaluateCp([source],async targets=>{
+  await prisma.externalSourceLead.update({where:{id:source.id},data:{status:'WITHDRAWN'}});
+  return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'合成同款比較。',en:'Synthetic same-model comparison.'}],limitations:[{zh:'合成證據。',en:'Synthetic evidence.'}]}));
+ })).rejects.toThrow('CP_SOURCE_CHANGED');
+ expect(await prisma.discoveryCpRun.count({where:{model,state:'COMPLETED'}})).toBe(0);
 });

@@ -621,14 +621,18 @@ final class NativeQaTests: XCTestCase {
             let latest = try required("NativeQAChatSmoke")
             if largeType { guard latest.isHittable else { throw Failure.missingControl } }
             let summary = try required("查看面交預約詳情並確認或調整", scroll: !largeType, kind: .button)
-            guard summary.isHittable, summary.frame.height >= 44 else { throw Failure.unstableControl }
+            try safeScreenshot("qa-chat-meetup-preview")
+            let onePhysicalPixel = 1.0 / UIScreen.main.scale
+            print("NATIVE_QA_PUBLIC_PREVIEW_HEIGHT=" + String(describing: summary.frame.height))
+            // AX excludes a fractional border pixel on Retina displays. Keep
+            // the44pt target while allowing at most one physical pixel of rounding.
+            guard summary.isHittable, summary.frame.height + onePhysicalPixel + 0.001 >= 44 else { throw Failure.unstableControl }
             if largeType {
                 guard (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
             } else {
                 try required("面交預約 · 提議中")
                 try required("TaipeiStationQA")
             }
-            try safeScreenshot("qa-chat-meetup-preview")
             checkpoint("marketplace-meetup-refresh")
             try tap("更新聊天")
             let refreshed = try required("查看面交預約詳情並確認或調整", kind: .button)

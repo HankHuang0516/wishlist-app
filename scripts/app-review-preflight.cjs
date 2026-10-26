@@ -17,6 +17,16 @@ function assertPrivacyEvidence(receipt, nativeTree, serverTree) {
     assert.equal(receipt.unlinkedPreview, false, 'Reassess any new unlinked data collection');
 }
 
+// A test-harness correction need not rebuild an identical production App. Bind
+// the actual EAS source separately and permit only these non-App QA changes.
+function assertArtifactSourceScope(receipt, actualArtifactTree, changedPaths) {
+    assert.equal(receipt.artifactSourceCommit, '736489b7f0743e496e3fdf282b1bbdea47114866');
+    assert.equal(receipt.buildNumber, '23');
+    assert.equal(receipt.artifactNativeGitTree, actualArtifactTree);
+    assert.deepEqual([...changedPaths].sort(), [...receipt.qaOnlySourceChanges].sort());
+    for (const path of changedPaths) assert(['mobile/ios-native-qa/NativeQaTests.swift', 'mobile/scripts/build-ios-qa.cjs'].includes(path), 'Production App source changed after artifact compilation');
+}
+
 function assertNativeEvidence(receipt, result, selectedBuildId, currentNativeTree) {
     assert.equal(receipt.versionId, result.versionId);
     assert.equal(receipt.demoUserId, result.demoUserId);
@@ -308,6 +318,11 @@ async function main() {
         const version = asc('versions', 'view', '--version-id', result.versionId, '--include-build');
         const nativeTree = execFileSync('git', ['rev-parse', 'HEAD:mobile'], { encoding: 'utf8' }).trim();
         assertNativeEvidence(receipt, result, selectedBuildId(version), nativeTree);
+        if (receipt.artifactSourceCommit) {
+            const tree = execFileSync('git', ['rev-parse', receipt.artifactSourceCommit + ':mobile'], {encoding:'utf8'}).trim();
+            const changed = execFileSync('git', ['diff', '--name-only', receipt.artifactSourceCommit, 'HEAD', '--', 'mobile'], {encoding:'utf8'}).trim().split('\n').filter(Boolean);
+            assertArtifactSourceScope(receipt, tree, changed);
+        }
         const hashFile = path => createHash('sha256').update(fs.readFileSync(path)).digest('hex');
         assert.equal(hashFile(receipt.artifactPath), receipt.artifactSha256, 'Submitted artifact changed');
         assert(args.includes('--remediation-receipt'), 'The Oct 3 rejection requires inspected physical-device evidence');
@@ -340,7 +355,7 @@ async function main() {
     }
     console.log(JSON.stringify(result, null, 2));
 }
-module.exports = { assertPreparedVersionValidation, assertDisabledDraftProducts, assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
+module.exports = { assertArtifactSourceScope, assertPreparedVersionValidation, assertDisabledDraftProducts, assertDemoReady, assertNativeEvidence, assertReviewRemediationEvidence, assertApprovedHistoricalRecording, assertRecordingDelivery, assertPrivacyEvidence, requiredPrivacyTypes, selectedBuildId, checkLive };
 if (require.main === module) main().catch(error => {
     // Never print raw CLI output, credentials, tokens or an HTTP response body.
     console.error(error instanceof assert.AssertionError ? error.message : 'App Review preflight failed; inspect the relevant service securely.');

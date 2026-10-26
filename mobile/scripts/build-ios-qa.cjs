@@ -37,16 +37,15 @@ if (resume) {
     const receipt = JSON.parse(fs.readFileSync(path.join(previous, 'build.json'), 'utf8'));
     if (receipt.kind !== 'isolated-debug-ios-native-qa' || receipt.appBundle !== iosQaBundle(reuseCache) || receipt.storeDeliverable !== false)
       throw new Error('Only verified isolated host products may seed the compiler cache');
-    for (const cache of ['app-derived', 'runner-derived']) {
+    // Keep the small UI runner fresh: Xcode generates its test metadata before
+    // replacing an old product Info.plist, which can retain another identity.
+    for (const cache of ['app-derived']) {
       const cloned = spawnSync('/bin/cp', ['-cR', path.join(previous, cache), path.join(output, cache)], { stdio: 'ignore' });
       if (cloned.status !== 0) throw new Error('APFS host cache clone unavailable; no full-copy fallback');
       // Compiled module caches encode their absolute directory. They cannot
       // be relocated, unlike ordinary object/product caches.
       for (const transient of ['ModuleCache.noindex', 'SDKStatCaches.noindex'])
         fs.rmSync(path.join(output, cache, transient), { recursive: true, force: true });
-      // Xcode caches the generated runner's bundle identifier in these small
-      // intermediates. Recompile this test target for the new QA identity.
-      if (cache === 'runner-derived') fs.rmSync(path.join(output, cache, 'Build/Intermediates.noindex'), { recursive: true, force: true });
       const products = path.join(output, cache, 'Build/Products');
       for (const name of fs.readdirSync(products))
         if (name.endsWith('.xctestrun')) fs.unlinkSync(path.join(products, name));

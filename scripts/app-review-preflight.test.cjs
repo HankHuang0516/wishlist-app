@@ -217,3 +217,14 @@ test('allows the live Google launch only with disabled Apple checkout and explic
  assert.throws(()=>assertDemoReady({...s,businessEvidence:{provider:'APPLE',googlePlayCheckoutEnabled:false}},now));
  assert.throws(()=>assertDemoReady({...s,notes:ready().notes},now));
 });
+
+const {assertArtifactSourceScope}=require('./app-review-preflight.cjs');
+test('binds actual artifact source and allows only the two independently reviewed test-harness changes',()=>{
+ const changed=['mobile/ios-native-qa/NativeQaTests.swift','mobile/scripts/build-ios-qa.cjs'];
+ const r={artifactSourceCommit:'736489b7f0743e496e3fdf282b1bbdea47114866',buildNumber:'23',artifactNativeGitTree:'actual-artifact-tree',qaOnlySourceChanges:changed};
+ assert.doesNotThrow(()=>assertArtifactSourceScope(r,'actual-artifact-tree',changed));
+ assert.throws(()=>assertArtifactSourceScope(r,'another-tree',changed));
+ assert.throws(()=>assertArtifactSourceScope({...r,buildNumber:'24'},'actual-artifact-tree',changed));
+ assert.throws(()=>assertArtifactSourceScope({...r,qaOnlySourceChanges:[...changed,'mobile/src/GuestExploreScreen.tsx']},'actual-artifact-tree',[...changed,'mobile/src/GuestExploreScreen.tsx']));
+ assert.throws(()=>assertArtifactSourceScope(r,'actual-artifact-tree',[]));
+});

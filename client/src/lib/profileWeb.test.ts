@@ -40,3 +40,5 @@ describe('profile operation contract and persist-before-send',()=>{
     await expect(profileResult({...value,receipt:{...value.receipt,state:'ABANDONED',appliedVersion:null},profile},raw,19)).resolves.toMatchObject({state:'ABANDONED',current:false});
   });
 });
+
+it('shows no telephone number for an email-only account, without rendering the legacy compatibility identifier',()=>{expect(parseOwnProfile({...profile,phoneNumber:'account:19',contactPhoneNumber:null},19).phoneNumber).toBeNull();expect(parseOwnProfile({...profile,phoneNumber:null},19).phoneNumber).toBeNull();});

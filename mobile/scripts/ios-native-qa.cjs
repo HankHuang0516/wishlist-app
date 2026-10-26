@@ -30,7 +30,7 @@ const visualFixture = process.env.NATIVE_QA_VISUAL_FIXTURE ?? null;
 const publishOneAiFlow = flow === 'listing-batch-two-ai-publish-one';
 const listingAiFlow = flow === 'listing-batch-ai-photo' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
 const twoPhotoFlow = flow === 'listing-batch-two-photos' || flow === 'listing-batch-two-ai-photos' || publishOneAiFlow;
-const authenticated = flow !== null;
+const authenticated = flow !== null, reviewFlow = flow === 'review-remediation';
 if ((option && (!authenticated || !Object.hasOwn(AUTHENTICATED_FLOWS, flow))) ||
   process.argv[4] && (!requestedContentSize || !['marketplace-my-listings', 'marketplace-meetup', 'golden-map', 'listing-batch-entry'].includes(flow)) || process.argv[5]) throw new Error('Unexpected runtime option');
 if (process.env.NATIVE_QA_ACCESSIBILITY_AUDIT !== undefined && !accessibilityAudit ||
@@ -288,11 +288,11 @@ async function main() {
     server.once('error', () => reject(new Error('Private Metro port occupied; no existing server changed')));
     server.listen(METRO_PORT, '127.0.0.1', () => server.close(resolve));
   });
-  const serviceLifetimeSeconds = mapFlow?600:publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
+  const serviceLifetimeSeconds = reviewFlow?900:mapFlow?600:publishOneAiFlow ? 750 : twoPhotoFlow && listingAiFlow ? 600 : 360;
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
-    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) });
+    visualHomeFixture: reviewFlow || !authenticated || ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) });
   if (['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow)) {
     stage = 'isolated-home-visual-fixture';
     const seeded = mapFlow?(mapFixture=await seedDiscoveryMapQa(qa,database)).base:await seedUiuxHomeQa(qa);
@@ -302,10 +302,10 @@ async function main() {
     if (!homeVisualFixtureSeeded) throw new Error('Home visual QA scores differ from fixed fixture');
   }
   if (listingAiFlow) listingAiTask = completeListingAiDrafts().catch(() => { listingAiTaskFailed = true; });
-  if (flow?.startsWith('marketplace-')) {
+  if (reviewFlow || !authenticated || flow?.startsWith('marketplace-')) {
     stage = 'isolated-marketplace-fixture';
     await seedNativeMarketplace(qa, flow === 'marketplace-my-listings' ? 'buyer' : 'seller', visualFixture ?? 'switch',
-      { seedChatForVisualQa: flow === 'marketplace-chat' || flow === 'marketplace-meetup' });
+      { seedChatForVisualQa: reviewFlow || flow === 'marketplace-chat' || flow === 'marketplace-meetup' });
     marketplaceFixtureSeeded = true;
   }
   qa.exited.then(() => { qaEnded = true; if (!requestedStop) { stopping = true; for (const owned of ownedChildren) owned.kill('SIGTERM'); } },
@@ -364,8 +364,8 @@ async function main() {
       '-collect-test-diagnostics', 'never',
       '-maximum-concurrent-test-simulator-destinations', '1', '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '180', '-maximum-test-execution-time-allowance',
-      mapFlow?'480':publishOneAiFlow ? '620' : twoPhotoFlow && listingAiFlow ? '500' : '240', 'test-without-building'],
-    mapFlow?510000:publishOneAiFlow ? 650000 : twoPhotoFlow && listingAiFlow ? 520000 : 300000);
+      reviewFlow?'240':mapFlow?'480':publishOneAiFlow ? '620' : twoPhotoFlow && listingAiFlow ? '500' : '240', 'test-without-building'],
+    reviewFlow?840000:mapFlow?510000:publishOneAiFlow ? 650000 : twoPhotoFlow && listingAiFlow ? 520000 : 300000);
     testCommandSucceeded = true;
   } catch { /* Extract safe counters even when assertions fail. */ }
   if (fs.existsSync(result)) summary = JSON.parse(await command('/usr/bin/xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result, '--compact']));
@@ -393,7 +393,7 @@ async function main() {
     const match = /^(?:failed - )?Isolated (?:anonymous )?iOS QA failed at ([a-z-]+); raw diagnostics withheld$/.exec(failure.failureText || '');
     if (match) nativeFailureStage = match[1];
   }
-  const expectedInput = flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
+  const expectedInput = reviewFlow || flow?.startsWith('marketplace-') || flow?.startsWith('listing-batch-') || flow === 'external-map' || ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) ? 'login-buyer' : flow === 'deletion' ? 'login-buyer,deletion-buyer' : '';
   if (!testCommandSucceeded || !iosSummaryPassed(summary, udid, authenticated ? selectedTests.length : 2) ||
     (authenticated && ((flow === 'deletion' && !buyerErasureVerified) ||
       ((flow === 'listing-batch-photo' || twoPhotoFlow || listingAiFlow) && (!listingPhotoVerified || !listingPhotoPrivacyVerified || !listingPhotoFixtureVerified)) ||
@@ -423,6 +423,7 @@ async function main() {
   if (!Array.isArray(manifest)) throw new Error('Unexpected attachment manifest');
   const items = manifest.flatMap(item => Array.isArray(item.attachments) ? item.attachments : []);
   const flowAttachments = {
+    'review-remediation': ['product-notice','guest-list','guest-detail','guest-map','terms-before-auth','optional-phone-register','home','marketplace','chat','social-inbox','review-report-receipt','review-blocked','meetup'],
     'marketplace-discovery': ['product-notice', 'home', 'marketplace'],
     'marketplace-chat': ['product-notice', 'home', 'chat-transition', 'chat', 'social-inbox'],
     'marketplace-meetup': ['product-notice', 'home', 'chat-transition', 'meetup-submit-state', 'meetup', 'chat-meetup-preview', 'chat-history-oldest'],
@@ -443,7 +444,7 @@ async function main() {
     'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail', 'external-wish-map', 'external-wish-list'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
-  const names = flow ? flowAttachments[flow] : ['product-notice'];
+  const names = flow ? flowAttachments[flow] : ['product-notice','guest-list','guest-detail','guest-map','terms-before-auth','optional-phone-register'];
   if (items.length !== names.length) throw new Error('Only deliberately safe attachments are permitted');
   for (const name of names) {
     // XCTest appends _<index>_<UUID>.png. Require that exact delimiter so

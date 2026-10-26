@@ -184,10 +184,13 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-stack-drag","qa-map-stack-blank-collapsed","qa-map-stack-os-reduced","qa-map-default-collapsed","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-guest-list","qa-guest-detail","qa-guest-map","qa-terms-before-auth","qa-optional-phone-register","qa-review-report-receipt","qa-review-blocked","qa-listing-batch-header","qa-map-stack-drag","qa-map-stack-blank-collapsed","qa-map-stack-os-reduced","qa-map-default-collapsed","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
-            guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
+            if name == "qa-optional-phone-register", privateControl.exists {
+                let value = privateControl.value as? String
+                guard value == nil || value == "" || value == label else { throw Failure.invalidIdentity }
+            } else { guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity } }
         }
         // Debug LogBox uses a short-lived collapsed toast which is absent from
         // Release builds. Let it expire before visual acceptance while still
@@ -417,12 +420,35 @@ final class NativeQaTests: XCTestCase {
             // Product change notice acknowledgement, not platform terms consent.
             guard notice.isEnabled else { throw Failure.unstableControl }
             try tap("我了解，繼續使用")
+            checkpoint("guest-public-discovery")
+            try required("訪客瀏覽 · 不需要建立帳號")
+            guard !element("使用條款與社群安全").exists && !element("密碼").exists else { throw Failure.invalidIdentity }
+            try required("查看商品：Native QA Switch OLED", scroll: true, timeout: 25)
+            try safeScreenshot("qa-guest-list")
+            try tap("查看商品：Native QA Switch OLED")
+            try required("聊聊詢問", scroll: true)
+            try safeScreenshot("qa-guest-detail")
+            try tap("聊聊詢問")
+            try required("使用條款與社群安全")
+            guard !element("密碼").exists else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-terms-before-auth")
+            try tap("先逛逛，不登入")
+            try required("聊聊詢問", scroll: true)
+            try tap("返回探索")
+            try tap("切換地圖瀏覽", kind: .any)
+            try required("搜尋目前地圖範圍", scroll: true)
+            try safeScreenshot("qa-guest-map")
+            try tap("商品列表", kind: .any)
+            try tap("登入或建立帳號")
+            try acceptVisibleTerms()
             checkpoint("anonymous-login")
             try required("手機號碼或 Email")
             try required("密碼")
             checkpoint("anonymous-register")
             try tap("建立帳號")
-            for label in ["顯示名稱", "手機號碼", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
+            for label in ["顯示名稱", "手機號碼（選填）", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
+            try safeScreenshot("qa-optional-phone-register")
+            if ProcessInfo.processInfo.environment["NATIVE_QA_REVIEW_REMEDIATION"] == "1" { try tap("返回訪客瀏覽"); return }
             try tap("返回登入")
             checkpoint("anonymous-forgot")
             try tap("忘記密碼")
@@ -451,17 +477,12 @@ final class NativeQaTests: XCTestCase {
             checkpoint("actual-anonymous-restart")
             app.terminate()
             app.launch()
-            try required("手機號碼或 Email")
-            guard !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
+            try required("訪客瀏覽 · 不需要建立帳號")
+            try required("查看商品：Native QA Switch OLED", scroll: true, timeout: 25)
+            guard !element("密碼").exists && !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
         } catch { reportFailure() }
     }
-    private func loginBuyerAndRequireTabs() throws {
-        app.launchEnvironment["NATIVE_QA_INPUT_PORT"] = ProcessInfo.processInfo.environment["NATIVE_QA_INPUT_PORT"]
-        app.launch()
-        checkpoint("authenticated-product-notice")
-        try required("我了解，繼續使用", scroll: true)
-        try safeScreenshot("qa-product-notice")
-        try tap("我了解，繼續使用")
+    private func acceptVisibleTerms() throws {
         // Real visible agreement for this isolated synthetic adult fixture;
         // never manufacture a stored acceptance or bypass the auth UI.
         if element("使用條款與社群安全").waitForExistence(timeout: 3) {
@@ -476,6 +497,19 @@ final class NativeQaTests: XCTestCase {
             try required("同意並繼續", scroll: true)
             try tap("同意並繼續")
         }
+    }
+    private func loginBuyerAndRequireTabs() throws {
+        app.launchEnvironment["NATIVE_QA_INPUT_PORT"] = ProcessInfo.processInfo.environment["NATIVE_QA_INPUT_PORT"]
+        app.launch()
+        if try element(tabIdentifier("首頁")).waitForExistence(timeout: 2) { return }
+        checkpoint("authenticated-product-notice")
+        if element("我了解，繼續使用").exists {
+            try required("我了解，繼續使用", scroll: true)
+            try safeScreenshot("qa-product-notice")
+            try tap("我了解，繼續使用")
+        }
+        try tap("登入或建立帳號")
+        try acceptVisibleTerms()
         checkpoint("real-login-native-input")
         try required("手機號碼或 Email"); try required("密碼")
         try privateInput("login-buyer")
@@ -486,18 +520,11 @@ final class NativeQaTests: XCTestCase {
     }
     private func openMarketplaceListing(search: Bool) throws {
         try tapTab("探索")
-        if search {
-            try publicText("搜尋商品名稱與說明", value: "Native QA Switch OLED")
-            try tap("搜尋")
-        }
-        try tap("切換清單")
-        let marketplaceCard = "Native QA Switch OLED，NT$ 7,500，台北市中山區"
-        try required(marketplaceCard, scroll: true, kind: .button)
-        try tap(marketplaceCard)
-        try required("Native QA Switch OLED", scroll: true)
-        try required("聯絡賣家", scroll: true, kind: .button)
-        Thread.sleep(forTimeInterval: 1)
-        try dismissCollapsedDebugWarningToastIfPresent()
+        if search { try publicText("搜尋商品名稱與說明", value: "Native QA Switch OLED"); try tap("搜尋商品") }
+        try required("查看商品：Native QA Switch OLED", scroll: true, kind: .button)
+        try tap("查看商品：Native QA Switch OLED")
+        try required("商品詳情")
+        try required("聊聊詢問", scroll: true)
     }
     func test03RealLoginMarketplaceDiscovery() {
         executionTimeAllowance = 120
@@ -519,7 +546,7 @@ final class NativeQaTests: XCTestCase {
             checkpoint("marketplace-chat-listing")
             try openMarketplaceListing(search: false)
             checkpoint("marketplace-contact-seller")
-            try tap("聯絡賣家")
+            try tap("聊聊詢問")
             checkpoint("marketplace-chat-input")
             try required("NT$7,500")
             try required("週日下午可以，請先提出預約。", scroll: true)
@@ -530,6 +557,22 @@ final class NativeQaTests: XCTestCase {
             try tap("傳送")
             try required("NativeQAChatSmoke", scroll: true)
             try safeScreenshot("qa-chat")
+            if ProcessInfo.processInfo.environment["NATIVE_QA_REVIEW_REMEDIATION"] == "1" {
+                checkpoint("review-report-visible")
+                try tap("檢舉聊天內容或對方")
+                try tap("送出檢舉")
+                try required("完成，返回聊天", scroll: true)
+                try safeScreenshot("qa-review-report-receipt")
+                try tap("完成，返回聊天")
+                try tap("封鎖")
+                try required("解除封鎖")
+                try required("已封鎖，停止傳送新訊息；歷史仍可查看。")
+                guard !element("傳送").isEnabled else { throw Failure.invalidIdentity }
+                try safeScreenshot("qa-review-blocked")
+                try tap("解除封鎖")
+                try required("封鎖")
+                checkpoint("review-report-block-complete")
+            }
             try tap("返回")
             try tapTab("社交")
             try required("聊天與面交")
@@ -547,7 +590,7 @@ final class NativeQaTests: XCTestCase {
             try loginBuyerAndRequireTabs()
             checkpoint("marketplace-meetup-listing")
             try openMarketplaceListing(search: false)
-            try tap("聯絡賣家")
+            try tap("聊聊詢問")
             checkpoint("marketplace-meetup-chat-input")
             try required("NT$7,500")
             try required("週日下午可以，請先提出預約。", scroll: true)
@@ -567,37 +610,34 @@ final class NativeQaTests: XCTestCase {
             while app.keyboards.firstMatch.exists && Date() < keyboardDeadline { Thread.sleep(forTimeInterval: 0.12) }
             guard !app.keyboards.firstMatch.exists else { throw Failure.unstableControl }
             checkpoint("marketplace-meetup-submit")
-            try tap("提出此版本（改期需對方重新同意）")
+            try tap("送出面交邀約")
             Thread.sleep(forTimeInterval: 1)
             try safeScreenshot("qa-meetup-submit-state")
-            try required("提議中 · 第1版", scroll: true)
+            try required("提議中", scroll: true)
             try required("TaipeiStationQA", scroll: true)
             try safeScreenshot("qa-meetup")
             try tap("返回聊天")
+            checkpoint("marketplace-meetup-current-preview")
             let latest = try required("NativeQAChatSmoke")
+            if largeType { guard latest.isHittable else { throw Failure.missingControl } }
+            let summary = try required("查看面交預約詳情並確認或調整", scroll: !largeType, kind: .button)
+            try safeScreenshot("qa-chat-meetup-preview")
+            let onePhysicalPixel = 1.0 / UIScreen.main.scale
+            print("NATIVE_QA_PUBLIC_PREVIEW_HEIGHT=" + String(describing: summary.frame.height))
+            // AX excludes a fractional border pixel on Retina displays. Keep
+            // the44pt target while allowing at most one physical pixel of rounding.
+            guard summary.isHittable, summary.frame.height + onePhysicalPixel + 0.001 >= 44 else { throw Failure.unstableControl }
             if largeType {
-                // An accessibility-large preview must leave room for at least
-                // the latest message without requiring an initial gesture.
-                guard latest.isHittable else { throw Failure.missingControl }
-                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
-                guard summary.isHittable && summary.frame.height >= 44,
-                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
+                guard (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
             } else {
-                try required("查看或提議面交預約", kind: .button)
                 try required("面交預約 · 提議中")
                 try required("TaipeiStationQA")
-                try required("查看面交預約詳情並確認或調整", kind: .button)
             }
-            try safeScreenshot("qa-chat-meetup-preview")
             checkpoint("marketplace-meetup-refresh")
             try tap("更新聊天")
-            if largeType {
-                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
-                guard summary.isHittable,
-                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
-            } else {
-                try required("TaipeiStationQA")
-            }
+            let refreshed = try required("查看面交預約詳情並確認或調整", kind: .button)
+            if largeType { guard (refreshed.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity } }
+            else { try required("TaipeiStationQA") }
             checkpoint("marketplace-meetup-refresh-verified")
             if ProcessInfo.processInfo.environment["NATIVE_QA_ACCESSIBILITY_AUDIT"] == "1" {
                 checkpoint("marketplace-meetup-accessibility-audit")
@@ -965,7 +1005,7 @@ final class NativeQaTests: XCTestCase {
             try safeScreenshot("qa-external-detail")
             try required("地圖圖釘是行政區中心示意，不是商品或面交的精確位置。售價與原始描述由來源提供，Wishlist.ai 並非此商品賣家；請在原站確認現貨、狀態與交易方式。", scroll: true)
             try required("前往來源網站查看", scroll: true, kind: .button)
-            guard !app.buttons["聯絡賣家"].exists else { throw Failure.invalidIdentity }
+            guard !app.buttons["聊聊詢問"].exists else { throw Failure.invalidIdentity }
             try tap("返回探索")
             try tapTab("願望")
             try required("Native QA 外部比對清單", scroll: true)

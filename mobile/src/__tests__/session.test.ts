@@ -44,3 +44,5 @@ describe('encrypted session restoration and origin binding', () => {
     expect(encodeSession('http://localhost:3000/api', token, true)).toContain('http://localhost:3000');
   });
 });
+
+it('admits an email-only account without mistaking the legacy account identifier for a real phone',()=>{expect(parseSessionUser({id:7,name:'Email QA',phoneNumber:'account:7',contactPhoneNumber:null,phoneNumberIsLegacyIdentifier:true})).toEqual({id:7,name:'Email QA',phoneNumber:null});});

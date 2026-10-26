@@ -1,0 +1,9 @@
+# iOS 2.0.18(23): registration and public browsing
+
+Apple reviewed build21 on October26 and reported mandatory phone, login-gated nearby listings and UGC evidence requirements. Build23 changes the actual native entry to anonymous Explore; list, map, search, filters, public product details and public seller listings use an anonymous GET allowlist. Personal wishes, likes, inquiry, reporting, follow and block actions prompt authentication. Private journals and push registration are not mounted for visitors. Existing authenticated flows retain their own identity scopes.
+
+Phone is optional in native and Web registration, the server and PostgreSQL. Empty/omitted phone values persist as NULL; distinct email-only accounts do not conflict. Email verification and password rules remain. For installed builds that require a legacy nonempty phoneNumber field to parse authentication responses, session responses include an explicit account identifier and contactPhoneNumber:null. The identifier is never stored as a telephone number or exposed as public contact/SMS data. New clients normalize the actual nullable contact value.
+
+Tests cover visible consent before credential forms, return to the retained guest product without consenting, actual email-only form submission, unverified JWT rejection, deep-link nonexecution, real PostgreSQL registration/verification/login and public storefront allowlists. Existing rate limits remain unchanged.
+
+Recording evidence must distinguish the retained genuine2.0.16 physical recording from current-build simulator verification. No connected physical iPhone/iPad was detected. Prior physical footage shows terms before login, successful report receipt and blocking; this does not establish current build23 hardware verification. Final submission evidence and truthful review notes are recorded outside the repository under QA/ios-review-remediation-20261026.

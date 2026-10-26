@@ -10,7 +10,7 @@ datasource db {
 model User {
   sourceLeadInquiries SourceLeadInquiry[]
   id                Int       @id @default(autoincrement())
-  phoneNumber       String    @unique
+  phoneNumber       String?   @unique
   password          String
   authVersion       Int       @default(0)
   profileVersion    Int       @default(0)

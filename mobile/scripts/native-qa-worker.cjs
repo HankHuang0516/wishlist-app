@@ -37,6 +37,14 @@ async function cleanFixtures() {
       await tx.externalListingCandidate.deleteMany({ where: { sourceId: { in: sourceIds } } });
       await tx.externalListingSource.deleteMany({ where: { id: { in: sourceIds } } });
     }
+    const feedback = await tx.feedback.findMany({ where: { userId: ids }, select: { id: true, content: true } });
+    for (const row of feedback) {
+      const report = JSON.parse(row.content);
+      if (report.kind !== 'UGC_CHAT_REPORT' || !roomIds.has(report.conversationId)) throw new Error('Unknown QA feedback retained');
+    }
+    const feedbackIds = feedback.map(row => row.id);
+    await tx.submissionReceipt.deleteMany({ where: { kind: 'FEEDBACK', recordId: { in: feedbackIds.map(String) } } });
+    await tx.feedback.deleteMany({ where: { id: { in: feedbackIds } } });
     await tx.conversation.deleteMany({ where: { id: { in: [...roomIds] } } });
     await tx.wishlist.deleteMany({ where: { userId: ids } });
     await tx.follow.deleteMany({ where: { OR: [{ followerId: ids }, { followingId: ids }] } });
@@ -48,6 +56,7 @@ async function cleanFixtures() {
   });
   const summary = {
     fixturesRemaining: await prisma.user.count({ where: { id: ids } }),
+    feedbackRemaining: await prisma.feedback.count({ where: { userId: ids } }),
     followsRemaining: await prisma.follow.count({ where: { OR: [{ followerId: ids }, { followingId: ids }] } }),
     conversationsRemaining: await prisma.conversation.count({ where: { id: { in: [...roomIds] } } }),
     receiptsRemaining: await prisma.accountErasureReceipt.count({ where: { identityHash: identityHashes } }),

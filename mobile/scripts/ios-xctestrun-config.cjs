@@ -16,6 +16,7 @@ const AUTHENTICATED_MY_LISTINGS_TESTS = ['NativeQaTests/test14RealLoginMyListing
 const AUTHENTICATED_HOME_VISUAL_TESTS = ['NativeQaTests/test15RealLoginHomeVisual'];
 const AUTHENTICATED_TESTS = AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS;
 const AUTHENTICATED_FLOWS = {
+  'review-remediation': [...TESTS, ...AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS, ...AUTHENTICATED_MARKETPLACE_CHAT_TESTS, ...AUTHENTICATED_MARKETPLACE_MEETUP_TESTS],
   'marketplace-discovery': AUTHENTICATED_MARKETPLACE_DISCOVERY_TESTS,
   'marketplace-chat': AUTHENTICATED_MARKETPLACE_CHAT_TESTS,
   'marketplace-meetup': AUTHENTICATED_MARKETPLACE_MEETUP_TESTS,
@@ -56,6 +57,7 @@ function destinationTestRun(template, label, testRoot, inputPort, flow) {
   delete qa.TestBundleDestinationRelativePath;
   delete qa.UITargetAppBundleIdentifier;
   qa.EnvironmentVariables.NATIVE_QA_PACKAGE = iosQaBundle(label);
+  if (flow === 'review-remediation') qa.EnvironmentVariables.NATIVE_QA_REVIEW_REMEDIATION = '1';
   if (inputPort !== undefined) {
     if (!Number.isInteger(inputPort) || inputPort < 1024 || inputPort > 65535 || !Object.hasOwn(AUTHENTICATED_FLOWS, flow)) throw new Error('Invalid private input configuration');
     qa.EnvironmentVariables.NATIVE_QA_INPUT_PORT = String(inputPort);
@@ -80,7 +82,7 @@ function anonymousSummaryPassed(summary, udid) {
   return iosSummaryPassed(summary, udid, 2);
 }
 function iosSummaryPassed(summary, udid, count) {
-  if (![1, 2].includes(count) || !summary || summary.result !== 'Passed' || summary.totalTestCount !== count || summary.passedTests !== count ||
+  if (!Number.isInteger(count) || count < 1 || count > 10 || !summary || summary.result !== 'Passed' || summary.totalTestCount !== count || summary.passedTests !== count ||
     summary.failedTests !== 0 || summary.skippedTests !== 0 || summary.expectedFailures !== 0) return false;
   const configurations = Array.isArray(summary.devicesAndConfigurations) ? summary.devicesAndConfigurations : [summary.devicesAndConfigurations];
   return configurations.length === 1 && configurations[0]?.device?.deviceId === udid &&

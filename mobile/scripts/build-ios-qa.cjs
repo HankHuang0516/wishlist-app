@@ -14,7 +14,9 @@ const output = path.join(mobile, 'build', 'ios-native-qa-' + label);
 const disk = fs.statfsSync(mobile);
 if (disk.bavail * disk.bsize < 15 * 1024 ** 3) throw new Error('Isolated iOS QA compilation needs 15 GiB free');
 const resume = process.argv[3] === '--resume-host-build';
-if (process.argv[3] && !resume) throw new Error('Unknown QA build option');
+const reuseCache = process.argv[3]?.startsWith('--reuse-host-cache=') ? qaLabel(process.argv[3].slice('--reuse-host-cache='.length)) : null;
+if (process.argv[4] || process.argv[3] && !resume && !reuseCache) throw new Error('Unknown QA build option');
+if (reuseCache === label) throw new Error('Host cache must come from a different isolated QA build');
 if (resume) {
   // Host compilation only: reuse its own failed output, never rerun a device
   // test or overwrite a successful build manifest. Xcode must revalidate both.
@@ -26,7 +28,30 @@ if (resume) {
   const ownedPartial=partialIdentity?.status===0&&partialIdentity.stdout.trim()===iosQaBundle(label);
   if (fs.existsSync(path.join(output, 'build.json')) || !fs.existsSync(path.join(output, 'runner-build.xcresult')) ||
     !fs.existsSync(path.join(output, 'app-build.xcresult'))&&!ownedPartial) throw new Error('Only a failed isolated host build can be resumed');
-} else fs.mkdirSync(output, { mode: 0o700 });
+} else {
+  fs.mkdirSync(output, { mode: 0o700 });
+  if (reuseCache) {
+    // APFS copy-on-write compilation cache only. Xcode rebuilds and signs both
+    // products for the new identity. No test results/manifests are inherited.
+    const previous = path.join(mobile, 'build', 'ios-native-qa-' + reuseCache);
+    const receipt = JSON.parse(fs.readFileSync(path.join(previous, 'build.json'), 'utf8'));
+    if (receipt.kind !== 'isolated-debug-ios-native-qa' || receipt.appBundle !== iosQaBundle(reuseCache) || receipt.storeDeliverable !== false)
+      throw new Error('Only verified isolated host products may seed the compiler cache');
+    // Keep the small UI runner fresh: Xcode generates its test metadata before
+    // replacing an old product Info.plist, which can retain another identity.
+    for (const cache of ['app-derived']) {
+      const cloned = spawnSync('/bin/cp', ['-cR', path.join(previous, cache), path.join(output, cache)], { stdio: 'ignore' });
+      if (cloned.status !== 0) throw new Error('APFS host cache clone unavailable; no full-copy fallback');
+      // Compiled module caches encode their absolute directory. They cannot
+      // be relocated, unlike ordinary object/product caches.
+      for (const transient of ['ModuleCache.noindex', 'SDKStatCaches.noindex'])
+        fs.rmSync(path.join(output, cache, transient), { recursive: true, force: true });
+      const products = path.join(output, cache, 'Build/Products');
+      for (const name of fs.readdirSync(products))
+        if (name.endsWith('.xctestrun')) fs.unlinkSync(path.join(products, name));
+    }
+  }
+}
 const env = iosHostEnvironment(process.execPath, os.homedir(), os.tmpdir());
 const sourceFiles = ['App.tsx', 'shared/tsconfig.json', 'shared/discoveryMapLayout.ts', 'shared/discoveryMapStacks.ts', 'shared/discoveryRange.ts', 'ios/Podfile.lock', 'ios/Wishlistai/AppDelegate.swift', 'ios/Wishlistai/Info.plist', 'ios/Wishlistai.xcodeproj/project.pbxproj',
   'ios/Wishlistai.xcodeproj/xcshareddata/xcschemes/Wishlistai.xcscheme', 'ios-native-qa/NativeQaTests.swift', 'ios-native-qa/PublicInputState.swift', 'ios-native-qa/HostPublicInputTests.swift',
@@ -103,6 +128,12 @@ async function main() {
   const runner = path.join(output, 'runner-derived/Build/Products/Debug-iphonesimulator/WishlistNativeQa-Runner.app');
   const appBundle = (await command('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', path.join(app, 'Info.plist')], 'app-identity')).trim();
   const runnerBundle = (await command('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', path.join(runner, 'Info.plist')], 'runner-identity')).trim();
+  const testProducts = path.join(output, 'runner-derived/Build/Products');
+  const testTemplates = fs.readdirSync(testProducts).filter(name => name.endsWith('.xctestrun'));
+  if (testTemplates.length !== 1) throw new Error('Require one freshly generated Xcode test template');
+  const generated = JSON.parse(await command('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(testProducts, testTemplates[0])], 'fresh-test-template'));
+  if (generated.WishlistNativeQa?.TestHostBundleIdentifier !== iosQaRunnerBundle(label) + '.xctrunner')
+    throw new Error('Generated Xcode template belongs to another QA identity');
   if (appBundle !== iosQaBundle(label) || runnerBundle !== iosQaRunnerBundle(label) + '.xctrunner') throw new Error('Unexpected QA build identity');
   const appInfo = JSON.parse(await command('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(app, 'Info.plist')], 'unique-recovery-schemes'));
   const schemes = appInfo.CFBundleURLTypes.flatMap(type => type.CFBundleURLSchemes);
@@ -115,7 +146,7 @@ async function main() {
   const architectures = assertSimulatorEntitlements(fs.readFileSync(path.join(app, 'Wishlistai')), fs.readFileSync(entitlements, 'utf8'));
   console.log(JSON.stringify({ kind: 'isolated-ios-qa-host-phase', phase: 'all-architecture-keychain-isolation', architectures, passed: true }));
   const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const metadata = { kind: 'isolated-debug-ios-native-qa', label, appBundle, runnerBundle, app, runner, sourceFiles, sourceHashes,
+  const metadata = { kind: 'isolated-debug-ios-native-qa', label, compilerCacheFrom: reuseCache, appBundle, runnerBundle, app, runner, sourceFiles, sourceHashes,
     architectures, qaKeychainGroup: qaGroup, hashes: { app: hash(path.join(app, 'Wishlistai')), appDebug: hash(path.join(app, 'Wishlistai.debug.dylib')), test: hash(path.join(runner, 'PlugIns/WishlistNativeQa.xctest/WishlistNativeQa')) },
     authenticatedFlowsVerified: false, nativeRuntimeVerified: false, storeDeliverable: false };
   fs.writeFileSync(path.join(output, 'build.json'), JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx', mode: 0o600 });

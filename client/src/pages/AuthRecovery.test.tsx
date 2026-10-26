@@ -19,7 +19,7 @@ const verification={message:'confirmed',token:'discard-fixture-token',user:{id:2
 function mount(element:React.ReactNode,route='/verify-email?token='+nonce,extra?:React.ReactNode){return render(<MemoryRouter initialEntries={[route]}><AuthContext.Provider value={context}>{element}{extra}</AuthContext.Provider></MemoryRouter>);}
 const submit=()=>fireEvent.submit(document.querySelector('form')!);
 function fillPassword(){fireEvent.change(screen.getByLabelText(t('forgot.newPassword')),{target:{value:password}});fireEvent.change(screen.getByLabelText(authText('confirmation')),{target:{value:password}});}
-function fillRegister(){for(const [label,value] of [[authText('displayName'),'合成名稱'],[authText('email'),'synthetic@example.invalid'],[t('register.phoneNumber'),'0912345678'],[t('register.password'),password],[authText('confirmation'),password]])fireEvent.change(screen.getByLabelText(label),{target:{value}});}
+function fillRegister(){for(const [label,value] of [[authText('displayName'),'合成名稱'],[authText('email'),'synthetic@example.invalid'],[t('register.phoneNumberOptional'),'0912345678'],[t('register.password'),password],[authText('confirmation'),password]])fireEvent.change(screen.getByLabelText(label),{target:{value}});}
 beforeEach(()=>{localStorage.clear();localStorage.setItem('user-locale','zh-TW');login.mockReset();refreshUser.mockClear();});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.restoreAllMocks();localStorage.clear();});
 

@@ -8,7 +8,12 @@ import {ProductWishController,type WishProduct,type SavedProductWish} from './pr
 import {pendingRequestKey,privatePendingStore} from './nativePendingStore';
 import {iosColors,iosType} from './iosTheme';
 const Context=createContext<ProductWishController|null>(null);
-export function NativeProductWishProvider({api,apiUrl,userId,children}:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number;children:React.ReactNode}){
+const GuestChoiceContext=createContext<(()=>void)|null>(null);
+export function NativeProductWishProvider(props:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number|null;children:React.ReactNode;onRequireLogin?:()=>void}){
+ if(props.userId===null)return <GuestChoiceContext.Provider value={props.onRequireLogin??null}>{props.children}</GuestChoiceContext.Provider>;
+ return <AuthenticatedProductWishProvider {...props} userId={props.userId}/>;
+}
+function AuthenticatedProductWishProvider({api,apiUrl,userId,children}:{api:ReturnType<typeof createApi>;apiUrl:string;userId:number;children:React.ReactNode}){
  const controller=useMemo(()=>{let key:Promise<string>|null=null;const scope=()=>key??=pendingRequestKey(apiUrl,userId,'product-wish.pending');return new ProductWishController(api,{get:async()=>privatePendingStore.get(await scope()),save:async raw=>privatePendingStore.save(await scope(),raw),clear:async raw=>privatePendingStore.clear(await scope(),raw)},Crypto.randomUUID);},[api,apiUrl,userId]);
  const state=useSyncExternalStore(controller.subscribe,controller.getSnapshot,controller.getSnapshot);
  const [choice,setChoice]=useState<{product:WishProduct;saved?:SavedProductWish}|null>(null),[selected,setSelected]=useState<number|null>(null),[clock,setClock]=useState(Date.now());
@@ -22,10 +27,10 @@ export function NativeProductWishProvider({api,apiUrl,userId,children}:{api:Retu
 // This callback is supplied by the owner provider, so all hearts share one journal.
 const ChoiceContext=createContext<((product:WishProduct,saved?:SavedProductWish)=>void)|null>(null);
 export function NativeProductWishButton({product}:{product:WishProduct}){
- const controller=useContext(Context),choose=useContext(ChoiceContext);
+ const controller=useContext(Context),choose=useContext(ChoiceContext),guestLogin=useContext(GuestChoiceContext);
  const empty=useMemo(()=>({lists:[],saved:[],ready:false,busy:false,pending:null,issue:'',notice:'',retryAt:0}),[]);
  const state=useSyncExternalStore(controller?.subscribe??(()=>()=>{}),controller?.getSnapshot??(()=>empty),controller?.getSnapshot??(()=>empty));
  const saved=state.saved.find(s=>s.productKey===product.kind+':'+product.id);
- return <Pressable accessibilityRole="button" accessibilityLabel={`${saved?'已加入願望，移除':'加入願望清單'}：${product.title}`} accessibilityState={{selected:!!saved}} disabled={!controller||!state.ready||state.busy||!!state.pending} style={s.heart} onPress={event=>{event.stopPropagation();if(!controller)return;if(state.lists.length===1){if(!saved&&!state.lists[0].remaining){choose?.(product,saved);return;}void controller.submit(controller.operation(product,state.lists[0].id,saved));}else choose?.(product,saved);}}><Ionicons name={saved?'bookmark':'bookmark-outline'} size={23} color={saved?iosColors.tint:iosColors.label}/></Pressable>;
+ return <Pressable accessibilityRole="button" accessibilityLabel={`${guestLogin?'登入後加入願望清單':saved?'已加入願望，移除':'加入願望清單'}：${product.title}`} accessibilityState={{selected:!!saved}} disabled={!guestLogin&&(!controller||!state.ready||state.busy||!!state.pending)} style={s.heart} onPress={event=>{event.stopPropagation();if(guestLogin){guestLogin();return;}if(!controller)return;if(state.lists.length===1){if(!saved&&!state.lists[0].remaining){choose?.(product,saved);return;}void controller.submit(controller.operation(product,state.lists[0].id,saved));}else choose?.(product,saved);}}><Ionicons name={saved?'bookmark':'bookmark-outline'} size={23} color={saved?iosColors.tint:iosColors.label}/></Pressable>;
 }
 const s=StyleSheet.create({sheetBackdrop:{flex:1,justifyContent:'flex-end',backgroundColor:'rgba(0,0,0,.35)'},sheet:{maxHeight:'88%',backgroundColor:iosColors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,overflow:'hidden'},status:{padding:12,borderTopWidth:1,borderColor:iosColors.separator,backgroundColor:iosColors.surface},text:{...iosType.body,color:iosColors.label},small:{...iosType.footnote,color:iosColors.secondaryLabel},row:{flexDirection:'row',gap:16,flexWrap:'wrap'},control:{minHeight:48,minWidth:48,justifyContent:'center'},link:{...iosType.body,color:iosColors.tint},header:{minHeight:64,paddingHorizontal:16,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:1,borderColor:iosColors.separator},title:{...iosType.title2,color:iosColors.label,flex:1},content:{padding:20,gap:16},option:{minHeight:64,borderWidth:1,borderColor:iosColors.separator,borderRadius:12,padding:12,flexDirection:'row',gap:12,alignItems:'center'},selected:{borderColor:iosColors.tint,backgroundColor:iosColors.tintSoft},confirm:{minHeight:52,borderRadius:12,backgroundColor:iosColors.tint,alignItems:'center',justifyContent:'center',padding:12},confirmText:{...iosType.headline,color:'white'},heart:{minWidth:48,minHeight:48,borderRadius:24,backgroundColor:iosColors.surface,alignItems:'center',justifyContent:'center'}});

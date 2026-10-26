@@ -1,3 +1,4 @@
+import { sessionContact } from '../lib/sessionContact';
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
@@ -32,21 +33,22 @@ import crypto from 'crypto';
 export const register = async (req: Request, res: Response) => {
     try {
         getJwtSecret(); // Fail before creating users or sending mail if unconfigured.
-        const { phoneNumber, password, name, birthday, email } = req.body; // birthday: YYYY-MM-DD string
+        const { password, name, birthday, email } = req.body;
+        const rawPhone = req.body.phoneNumber;
+        const phoneNumber = typeof rawPhone === 'string' ? rawPhone.trim() || null : rawPhone ?? null;
 
-        if (!phoneNumber || !password || !email) {
+        if (!password || !email) {
             return res.status(400).json({
-                error: 'Phone number, email, and password are required',
+                error: 'Email and password are required',
                 errorCode: AUTH_ERROR_CODES.MISSING_FIELDS,
                 missingFields: [
-                    !phoneNumber && 'phoneNumber',
                     !password && 'password',
                     !email && 'email'
                 ].filter(Boolean)
             });
         }
 
-        if (typeof phoneNumber !== 'string' || !phoneNumber.trim() || phoneNumber.length > 80 ||
+        if ((phoneNumber !== null && (typeof phoneNumber !== 'string' || phoneNumber.length > 80)) ||
             typeof email !== 'string' || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
             (name !== undefined && name !== null && (typeof name !== 'string' || name.length > 50)) ||
             (birthday !== undefined && birthday !== null && typeof birthday !== 'string')) {
@@ -70,7 +72,7 @@ export const register = async (req: Request, res: Response) => {
         const existingUser = await prisma.user.findFirst({
             where: {
                 OR: [
-                    { phoneNumber },
+                    ...(phoneNumber ? [{ phoneNumber }] : []),
                     { email }
                 ]
             }
@@ -127,7 +129,7 @@ export const register = async (req: Request, res: Response) => {
         res.status(201).json({
             message: emailResult.success ? 'Registration successful. Please check your email to verify your account.' : 'Account created, but verification email delivery failed. Please request another verification email.',
             token,
-            user: { id: user.id, phoneNumber: user.phoneNumber, name: user.name },
+            user: { id: user.id, ...sessionContact(user), name: user.name },
             emailVerification: {
                 required: true,
                 sent: emailResult.success === true,
@@ -195,7 +197,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
         res.json({
             message: 'Email verified successfully',
             token: jwtToken,
-            user: { id: updatedUser.id, phoneNumber: updatedUser.phoneNumber, name: updatedUser.name }
+            user: { id: updatedUser.id, ...sessionContact(updatedUser), name: updatedUser.name }
         });
 
     } catch (error) {
@@ -266,7 +268,7 @@ export const login = async (req: Request, res: Response) => {
             token,
             user: {
                 id: user.id,
-                phoneNumber: user.phoneNumber,
+                ...sessionContact(user),
                 name: user.name,
                 email: user.email,
                 isEmailVerified: user.isEmailVerified

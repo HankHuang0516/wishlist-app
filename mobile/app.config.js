@@ -5,13 +5,13 @@ module.exports = {
     name: 'Wishlist.ai',
     icon: './assets/app-icon.png',
     slug: 'weeshgifts',
-    version: '2.0.18',
+    version: '2.0.19',
     orientation: 'portrait',
     scheme: 'weesh',
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '23',
+      buildNumber: '24',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,

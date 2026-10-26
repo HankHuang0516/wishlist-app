@@ -11,7 +11,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '21',
+      buildNumber: '22',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -26,7 +26,7 @@ module.exports = {
     android: {
       ...(process.env.GOOGLE_SERVICES_JSON ? {googleServicesFile:process.env.GOOGLE_SERVICES_JSON} : {}),
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 39,
+      versionCode: 40,
       permissions: ['com.android.vending.BILLING'],
       allowBackup: false,
       blockedPermissions: [

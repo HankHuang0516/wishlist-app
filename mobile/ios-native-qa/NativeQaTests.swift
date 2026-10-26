@@ -184,10 +184,13 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-stack-drag","qa-map-stack-blank-collapsed","qa-map-stack-os-reduced","qa-map-default-collapsed","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-guest-list","qa-guest-detail","qa-guest-map","qa-terms-before-auth","qa-optional-phone-register","qa-review-report-receipt","qa-review-blocked","qa-listing-batch-header","qa-map-stack-drag","qa-map-stack-blank-collapsed","qa-map-stack-os-reduced","qa-map-default-collapsed","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
-            guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
+            if name == "qa-optional-phone-register", privateControl.exists {
+                let value = privateControl.value as? String
+                guard value == nil || value == "" || value == label else { throw Failure.invalidIdentity }
+            } else { guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity } }
         }
         // Debug LogBox uses a short-lived collapsed toast which is absent from
         // Release builds. Let it expire before visual acceptance while still
@@ -432,10 +435,10 @@ final class NativeQaTests: XCTestCase {
             try tap("先逛逛，不登入")
             try required("聯絡賣家", scroll: true)
             try tap("返回探索")
-            try tap("地圖")
+            try tap("切換地圖瀏覽", kind: .any)
             try required("搜尋目前地圖範圍", scroll: true)
             try safeScreenshot("qa-guest-map")
-            try tap("列表")
+            try tap("商品列表", kind: .any)
             try tap("登入或建立帳號")
             try acceptVisibleTerms()
             checkpoint("anonymous-login")
@@ -516,18 +519,11 @@ final class NativeQaTests: XCTestCase {
     }
     private func openMarketplaceListing(search: Bool) throws {
         try tapTab("探索")
-        if search {
-            try publicText("搜尋商品名稱與說明", value: "Native QA Switch OLED")
-            try tap("搜尋")
-        }
-        try tap("切換清單")
-        let marketplaceCard = "Native QA Switch OLED，NT$ 7,500，台北市中山區"
-        try required(marketplaceCard, scroll: true, kind: .button)
-        try tap(marketplaceCard)
-        try required("Native QA Switch OLED", scroll: true)
-        try required("聯絡賣家", scroll: true, kind: .button)
-        Thread.sleep(forTimeInterval: 1)
-        try dismissCollapsedDebugWarningToastIfPresent()
+        if search { try publicText("搜尋商品名稱與說明", value: "Native QA Switch OLED"); try tap("搜尋商品") }
+        try required("查看商品：Native QA Switch OLED", scroll: true, kind: .button)
+        try tap("查看商品：Native QA Switch OLED")
+        try required("商品詳情")
+        try required("聯絡賣家", scroll: true)
     }
     func test03RealLoginMarketplaceDiscovery() {
         executionTimeAllowance = 120

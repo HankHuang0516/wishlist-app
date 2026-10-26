@@ -43,7 +43,7 @@ export function GuestExploreScreen({ apiUrl, active, onSignIn }: { apiUrl: strin
     <View style={s.page}>
       <View style={s.header}><View style={{ flex: 1 }}><Text style={s.title}>探索</Text><Text style={s.note}>訪客瀏覽 · 不需要建立帳號</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel="登入或建立帳號" style={s.signIn} onPress={signIn}><Text style={s.link}>登入／建立帳號</Text></Pressable></View>
-      <NativeDiscovery api={api} apiUrl={apiUrl} userId={null} onRequireLogin={signIn} active={active} onMap={() => {}} onOpen={open} onReports={signIn} />
+      <NativeDiscovery hideIdentityHeader api={api} apiUrl={apiUrl} userId={null} onRequireLogin={signIn} active={active} onMap={() => {}} onOpen={open} onReports={signIn} />
       <Text style={s.footerNote}>公開商品可直接瀏覽；收藏、聯絡賣家與檢舉時才需要登入。</Text>
     </View>
     <SafeAreaModal visible={active && !!detail} animationType="slide" onRequestClose={closeDetail}>

@@ -186,7 +186,14 @@ function assertDemoReady(snapshot, now = Date.now()) {
     assert(rooms.some(r => r.appointment?.status === 'CONFIRMED' && Date.parse(r.appointment.startsAt) > now), 'Demo needs a future confirmed meetup');
     assert(rooms.some(r => r.appointment?.status === 'PROPOSED' && Date.parse(r.appointment.startsAt) > now), 'Demo needs a future proposed meetup');
     assert.equal(snapshot.marketing.available, true, 'Review account must have free AI feature access');
-    assert.equal(snapshot.marketing.paidPurchasesAvailable, false, 'Reassess business answers before enabling payments');
+    if (snapshot.marketing.paidPurchasesAvailable === true) {
+        // Availability is platform-specific: live Google purchases must not be
+        // described as disabled just because this iOS submission has no checkout.
+        assert.deepEqual(snapshot.platformAvailability, { apple: false, google: true, web: false });
+        assert.equal(snapshot.businessEvidence?.provider, 'APPLE');
+        assert.equal(snapshot.businessEvidence?.googlePlayCheckoutEnabled, true);
+        assert(snapshot.notes.includes('Google Play checkout is enabled; Apple checkout remains disabled.'), 'Disclose the actual platform checkout status');
+    } else assert.equal(snapshot.marketing.paidPurchasesAvailable, false, 'Reassess business answers before enabling payments');
     assert.equal(snapshot.marketing.freeMonthlyLimit, 3, 'Reassess business answers if free limits change');
     assert(snapshot.marketing.freeUsedThisMonth < 3, 'Leave free generations available to the reviewer');
     if (snapshot.iapCount || snapshot.subscriptionCount) assertDisabledDraftProducts(snapshot, now);
@@ -278,7 +285,7 @@ async function checkLive(versionId, expectedUserId, businessEvidence) {
     const snapshot = { expectedUserId, userId: login.user.id,
         wishCount: lists.reduce((n, l) => n + (l.items?.length || 0), 0),
         ownListings: (await api('/listings/mine?limit=100', login.token)).items, rooms,
-        marketing: await api('/marketing/availability', login.token), notes: details.notes || '',
+        marketing: await api('/marketing/availability', login.token), platformAvailability: (await api('/payment/benefits', login.token)).availability, notes: details.notes || '',
         productInventory: inventory, businessEvidence, businessContext,
         iapCount: inventory.filter(p => p.kind === 'iap').length,
         subscriptionCount: inventory.filter(p => p.kind === 'subscription').length };

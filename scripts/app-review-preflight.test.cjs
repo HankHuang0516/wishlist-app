@@ -205,3 +205,15 @@ for(const [name,change]of[
  ['stale footage inspection',s=>s.receipt.verifiedAt='2000-01-01T00:00:00Z'],
 ])test('independent21 consent fails closed: '+name,()=>{const s=explicitlyApproved21();change(s);assert.throws(()=>verifySameRelease(s));});
 for(const key of ['versionId','buildId','buildNumber','nativeGitTree','artifactSha256'])for(const part of ['native','receipt','approval'])test('independent21 exact binding rejects '+part+'.'+key,()=>{const s=explicitlyApproved21();s[part][key]='other';assert.throws(()=>verifySameRelease(s));});
+
+
+test('allows the live Google launch only with disabled Apple checkout and explicit iOS business disclosure',()=>{
+ const s=ready();s.marketing.paidPurchasesAvailable=true;
+ s.platformAvailability={apple:false,google:true,web:false};
+ s.businessEvidence={provider:'APPLE',googlePlayCheckoutEnabled:true};
+ s.notes+='\nGoogle Play checkout is enabled; Apple checkout remains disabled.';
+ assert.doesNotThrow(()=>assertDemoReady(s,now));
+ for(const availability of [{apple:true,google:true,web:false},{apple:false,google:true,web:true},null])assert.throws(()=>assertDemoReady({...s,platformAvailability:availability},now));
+ assert.throws(()=>assertDemoReady({...s,businessEvidence:{provider:'APPLE',googlePlayCheckoutEnabled:false}},now));
+ assert.throws(()=>assertDemoReady({...s,notes:ready().notes},now));
+});

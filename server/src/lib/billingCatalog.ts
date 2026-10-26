@@ -21,6 +21,13 @@ export function billingEnabled(provider: BillingProvider) {
         : process.env.GOOGLE_BILLING_ENABLED === '1' && !!process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?.trim();
 }
 export function billingPurchasesAvailable(provider: BillingProvider,userId:number) {
-    return billingEnabled(provider) && (billingEnvironment(userId)==='Sandbox'
-        ? process.env.BILLING_SANDBOX_ENABLED==='1' : process.env.BILLING_PRODUCTION_ENABLED==='1');
+    const environment = billingEnvironment(userId);
+    const globalFlag = environment === 'Sandbox' ? 'BILLING_SANDBOX_ENABLED' : 'BILLING_PRODUCTION_ENABLED';
+    const platformFlag = `${provider}_BILLING_${environment === 'Sandbox' ? 'SANDBOX' : 'PRODUCTION'}_ENABLED`;
+    // A provider can launch after its own store is ready, while the other
+    // platform remains in review. This gates NEW checkout only: keep provider
+    // verification configured so existing purchases can still be reconciled.
+    // Unset platform flags preserve the previous global-gate behaviour.
+    return billingEnabled(provider) && process.env[globalFlag] === '1' &&
+        (process.env[platformFlag] === undefined || process.env[platformFlag] === '1');
 }

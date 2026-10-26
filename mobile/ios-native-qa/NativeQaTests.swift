@@ -184,7 +184,7 @@ final class NativeQaTests: XCTestCase {
         try tap(identifier, kind: .any)
     }
     private func safeScreenshot(_ name: String) throws {
-        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
+        guard app.state == .runningForeground, ["qa-listing-batch-header","qa-map-stack-drag","qa-map-stack-blank-collapsed","qa-map-stack-os-reduced","qa-map-default-collapsed","qa-map-information","qa-map-wishlist-choice","qa-batch-draft-confirm","qa-batch-draft-empty","qa-batch-draft-reopened","qa-map-price-card","qa-map-price-source","qa-map-price-detail","qa-map-thirty-six","qa-map-wishlist-saved","qa-golden-discovery-list", "qa-golden-discovery-detail", "qa-golden-discovery-map", "qa-product-notice", "qa-home", "qa-home-visual-collapsed", "qa-home-visual-expanded", "qa-home-visual-scrolled", "qa-golden-wish-cards", "qa-golden-wish-editor", "qa-golden-wish-currency", "qa-marketplace", "qa-chat-transition", "qa-chat", "qa-social-inbox", "qa-meetup", "qa-meetup-submit-state", "qa-chat-meetup-preview", "qa-chat-history-oldest", "qa-wish", "qa-listing-batch", "qa-photo-picker", "qa-photo-selected", "qa-listing-photo", "qa-listing-resumed", "qa-two-selected", "qa-two-listing", "qa-ai-photo", "qa-ai-resumed", "qa-two-ai-photo", "qa-two-ai-resumed", "qa-two-ai-published", "qa-external-map", "qa-external-list", "qa-external-detail", "qa-external-wish-map", "qa-external-wish-list", "qa-account", "qa-my-listings", "qa-my-listings-edit-opening", "qa-my-listings-edit", "qa-my-listings-marketing-entry", "qa-my-listings-marketing-open", "qa-deleted"].contains(name) else { throw Failure.invalidIdentity }
         for label in ["手機號碼或 Email", "密碼", "新密碼", "再次輸入新密碼", "刪除帳號的目前密碼", "Email 驗證連結或驗證碼", "密碼重設連結或驗證碼"] {
             let privateControl = element(label)
             guard !privateControl.exists || !privateControl.isHittable else { throw Failure.invalidIdentity }
@@ -1125,13 +1125,153 @@ final class NativeQaTests: XCTestCase {
             checkpoint("golden-discovery-map")
             try required("切換地圖瀏覽", scroll: true, kind: .any)
             try tap("切換地圖瀏覽", kind: .any)
-            try required("本批 3 張商品縮圖")
+            try required("本批 3 件商品")
             try safeScreenshot("qa-golden-discovery-map")
             try tap("商品列表", kind: .any)
             try required("3 筆商品與來源", scroll: true)
             checkpoint("golden-discovery-complete")
             app.terminate()
         } catch { reportFailure() }
+    }
+
+    private let motionOriginalKey = "wishlistGoldenStackMotion19"
+    private func osMotionSwitch() throws -> XCUIElement {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.activate()
+        for _ in 0..<12 {
+            for label in ["Reduce Motion", "減少動態效果"] {
+                let control = settings.switches.matching(identifier: label).firstMatch
+                if control.exists && control.isHittable { return control }
+            }
+            var navigated = false
+            for label in ["Motion", "動態效果", "Accessibility", "輔助使用"] {
+                let cell = settings.cells.containing(.staticText, identifier: label).firstMatch
+                if cell.exists && cell.isHittable { cell.tap(); navigated = true; break }
+            }
+            if !navigated {
+                let back = settings.navigationBars.buttons.matching(identifier: "Settings").firstMatch
+                if back.exists && back.isHittable { back.tap() } else { settings.swipeUp() }
+            }
+        }
+        throw Failure.missingControl
+    }
+    private func setOsMotion(_ control:XCUIElement,to desired:String) throws {
+        guard ["0","1"].contains(desired),control.isHittable,control.isEnabled else {throw Failure.invalidIdentity}
+        if control.value as? String != desired {
+            // Settings exposes the complete row as a Switch. Tap its trailing
+            // toggle region once, then wait for the actual acknowledged value.
+            control.coordinate(withNormalizedOffset:CGVector(dx:0.90,dy:0.5)).tap()
+        }
+        let deadline=Date().addingTimeInterval(3)
+        var stable=0
+        repeat {stable=control.value as? String == desired ? stable+1:0;if stable>=3{return};Thread.sleep(forTimeInterval:0.12)} while Date()<deadline
+        throw Failure.unstableControl
+    }
+    private func restoreOsMotion() throws {
+        guard let original = UserDefaults.standard.string(forKey: motionOriginalKey) else { return }
+        let control = try osMotionSwitch()
+        try setOsMotion(control,to:original)
+        UserDefaults.standard.removeObject(forKey: motionOriginalKey)
+        UserDefaults.standard.synchronize()
+        app.activate()
+        checkpoint("map-motion-os-setting-restored")
+    }
+    private func stackBlankPoint() throws -> CGPoint {
+        let frame=element("discovery-map-frame"),safe=CGRect(x:app.frame.minX,y:app.frame.minY+68,width:app.frame.width,height:app.frame.height-168)
+        let area=frame.frame.intersection(safe)
+        guard frame.exists,area.width>100,area.height>100 else{throw Failure.unstableControl}
+        let tiles=app.buttons.allElementsBoundByIndex.filter{$0.label.hasPrefix("選取商品：")}.map{$0.frame.insetBy(dx:-3,dy:-3)}
+        var y=area.maxY-14
+        while y>area.minY+14 {var x=area.maxX-14;while x>area.minX+14 {let point=CGPoint(x:x,y:y);if !tiles.contains(where:{$0.contains(point)}){return point};x-=16};y-=16}
+        throw Failure.missingControl
+    }
+    private func stackCoordinate(_ point:CGPoint) -> XCUICoordinate {app.coordinate(withNormalizedOffset:CGVector(dx:0,dy:0)).withOffset(CGVector(dx:point.x-app.frame.minX,dy:point.y-app.frame.minY))}
+    private func auditStackBlankAndOsMotion() throws {
+        guard let identifier=mapTitleStacks.values.first else{throw Failure.missingControl}
+        checkpoint("map-stack-blank-drag");try openMapStack(identifier);let point=try stackBlankPoint(),canvas=element("discovery-map-scroll")
+        stackCoordinate(point).press(forDuration:0.05,thenDragTo:stackCoordinate(CGPoint(x:point.x,y:max(app.frame.minY+90,point.y-64))))
+        try safeScreenshot("qa-map-stack-drag");guard canvas.exists else{throw Failure.unstableControl}
+        let blank=try stackBlankPoint();stackCoordinate(blank).tap();let until=Date().addingTimeInterval(5)
+        while mapStacks().isEmpty && Date()<until{Thread.sleep(forTimeInterval:0.1)}
+        guard !mapStacks().isEmpty,!element("discovery-map-scroll").exists else{throw Failure.unstableControl}
+        try safeScreenshot("qa-map-stack-blank-collapsed")
+        try openMapStack(identifier);checkpoint("map-stack-real-os-reduced")
+        do {
+            let control=try osMotionSwitch();guard let original=control.value as? String,["0","1"].contains(original) else{throw Failure.invalidIdentity}
+            UserDefaults.standard.set(original,forKey:motionOriginalKey);UserDefaults.standard.synchronize();try setOsMotion(control,to:"1");app.activate()
+            try required("地圖來源與排列說明",scroll:true,kind:.button);try tap("地圖來源與排列說明")
+            let replay=element("慢速重播排列",kind:.button);guard replay.exists,!replay.isEnabled else{throw Failure.unstableControl}
+            try safeScreenshot("qa-map-stack-os-reduced");try tap("關閉地圖說明");try closeMapStack();try restoreOsMotion()
+        }catch{let prior=stage;try restoreOsMotion();checkpoint(prior);throw error}
+        checkpoint("map-stack-gesture-motion-complete")
+    }
+    func test21RestoreOsMotionIfInterrupted() {executionTimeAllowance=90;do{try prepare();try restoreOsMotion()}catch{XCTFail("QA motion preference restoration failed")}}
+
+    private var mapTitleStacks: [String:String] = [:]
+    private func mapStacks() -> [XCUIElement] {
+        app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@", "discovery-map-stack:")).allElementsBoundByIndex
+    }
+    private func openMapStack(_ identifier:String) throws {
+        try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+        let stack=app.buttons.matching(identifier:identifier).firstMatch
+        guard stack.waitForExistence(timeout:20),stack.isHittable,stack.frame.height>=48 else{throw Failure.unstableControl}
+        stack.tap()
+        guard element("discovery-map-scroll").waitForExistence(timeout:5) else{throw Failure.missingControl}
+    }
+    private func closeMapStack() throws {
+        try required("收合商品",scroll:true,kind:.button);try tap("收合商品")
+        let deadline=Date().addingTimeInterval(5)
+        while mapStacks().isEmpty && Date()<deadline{Thread.sleep(forTimeInterval:0.1)}
+        guard !mapStacks().isEmpty,!element("查看商品詳情",kind:.button).exists else{throw Failure.unstableControl}
+    }
+    private func auditMapStacks() throws {
+        try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+        let deadline=Date().addingTimeInterval(20)
+        while mapStacks().isEmpty && Date()<deadline{Thread.sleep(forTimeInterval:0.1)}
+        guard !element("discovery-map-scroll").exists else{throw Failure.unstableControl}
+        checkpoint("map-stack-membership-inventory")
+        let pattern=try NSRegularExpression(pattern:"展開附近 ([0-9]+) 件商品")
+        let stacks=mapStacks().map{element -> (String,Int) in
+            let label=element.label,range=NSRange(label.startIndex...,in:label)
+            guard let match=pattern.firstMatch(in:label,range:range),let digits=Range(match.range(at:1),in:label),let count=Int(label[digits]) else{return (element.identifier,0)}
+            checkpoint("map-stack-count-"+String(count));return (element.identifier,count)
+        }
+        try safeScreenshot("qa-map-default-collapsed")
+        checkpoint("map-stacks-total-"+String(stacks.reduce(0,{$0+$1.1})))
+        guard stacks.reduce(0,{$0+$1.1})==36 else{throw Failure.unstableControl}
+        for (identifier,count) in stacks {
+            checkpoint("map-stack-open-and-select")
+            try openMapStack(identifier);let canvas=element("discovery-map-scroll");var selected=0
+            for _ in 0..<40 {
+                for i in 1...36 {
+                    let name=i<=9 ? "Samsung Galaxy Buds3":i<=18 ? "陶瓷馬克杯":i<=27 ? "童書繪本":"棉質襯衫"
+                    let title=String(format:"地圖驗收 %02d %@",i,name),label="選取商品："+title,control=element(label,kind:.button)
+                    if mapTitleStacks[title]==nil && control.exists && control.isHittable && control.frame.height>=48 {
+                        try tap(label);let until=Date().addingTimeInterval(3)
+                        while !element(label,kind:.button).isSelected && Date()<until{Thread.sleep(forTimeInterval:0.1)}
+                        guard element(label,kind:.button).isSelected else{throw Failure.unstableControl}
+                        mapTitleStacks[title]=identifier;selected+=1
+                    }
+                }
+                if selected==count{break}
+                canvas.swipeUp(velocity:.slow)
+            }
+            guard selected==count else{throw Failure.unstableControl}
+            try closeMapStack()
+        }
+        guard mapTitleStacks.count==36 else{throw Failure.unstableControl}
+    }
+
+    func test20RealLoginMapStackGestures() {
+        executionTimeAllowance=110
+        do {
+            try prepare();try loginBuyerAndRequireTabs();try tapTab("探索");try required("39 筆商品與來源",scroll:true)
+            try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true);try tap("切換地圖瀏覽",kind:.any);try required("本批 36 件商品",scroll:true)
+            try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true);let until=Date().addingTimeInterval(15)
+            while mapStacks().isEmpty && Date()<until{Thread.sleep(forTimeInterval:0.1)}
+            guard let first=mapStacks().first,!element("discovery-map-scroll").exists else{throw Failure.unstableControl}
+            mapTitleStacks["gesture-target"]=first.identifier;try safeScreenshot("qa-map-default-collapsed");try auditStackBlankAndOsMotion();app.terminate()
+        }catch{reportFailure()}
     }
 
     func test18RealLoginGoldenMapAndPrice() {
@@ -1149,31 +1289,18 @@ final class NativeQaTests: XCTestCase {
             try required("商品詳情");try required(fold,scroll:true,kind:.button);try tap(fold);try required("參考原價：NT$ 4,990");try safeScreenshot("qa-map-price-detail");try tap("關閉原價參考");try tap("返回探索")
             checkpoint("map-thirty-six-selectors")
             try required("清除搜尋文字",scroll:true,kind:.button);try tap("清除搜尋文字");try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true)
-            try tap("切換地圖瀏覽",kind:.any);try required("本批 36 張商品縮圖",scroll:true)
+            try tap("切換地圖瀏覽",kind:.any);try required("本批 36 件商品",scroll:true)
             checkpoint("map-information-accessible")
             try required("地圖來源與排列說明",scroll:true,kind:.button);try tap("地圖來源與排列說明")
             let closeInfo=try required("關閉地圖說明",kind:.button)
             guard closeInfo.isHittable,closeInfo.frame.width>=44,closeInfo.frame.height>=44,app.frame.contains(closeInfo.frame) else{throw Failure.unstableControl}
             try safeScreenshot("qa-map-information");try tap("關閉地圖說明")
             try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
-            // React Native exposes testID on the canvas host view on iOS.
-            // Gestures target that exact host; its AX type need not be ScrollView.
-            let canvas=element("discovery-map-scroll")
-            guard canvas.exists else{throw Failure.missingControl}
-            for i in 1...36 {
-                let name=i<=9 ? "Samsung Galaxy Buds3":i<=18 ? "陶瓷馬克杯":i<=27 ? "童書繪本":"棉質襯衫"
-                let label=String(format:"選取商品：地圖驗收 %02d %@",i,name)
-                var control=element(label,kind:.button)
-                for _ in 0..<24 {
-                    if control.exists && control.isHittable && control.frame.height>=48 {break}
-                    scrollToward(control,in:canvas);control=element(label,kind:.button)
-                }
-                guard control.exists,control.isHittable,control.frame.height>=48 else{throw Failure.unstableControl}
-                try tap(label)
-                let selectionDeadline=Date().addingTimeInterval(3)
-                while !element(label,kind:.button).isSelected && Date()<selectionDeadline {Thread.sleep(forTimeInterval:0.1)}
-                guard element(label,kind:.button).isSelected else{throw Failure.unstableControl}
-            }
+            try auditMapStacks()
+            guard let finalStack=mapTitleStacks["地圖驗收 36 棉質襯衫"] else{throw Failure.missingControl}
+            try openMapStack(finalStack)
+            let finalLabel="選取商品：地圖驗收 36 棉質襯衫"
+            try required(finalLabel,scroll:true,kind:.button);try tap(finalLabel)
             try safeScreenshot("qa-map-thirty-six")
             checkpoint("map-wishlist-add-remove")
             let title="地圖驗收 36 棉質襯衫",add="加入願望清單："+title,remove="已加入願望，移除："+title
@@ -1189,6 +1316,7 @@ final class NativeQaTests: XCTestCase {
             try tapTab("首頁");try tapTab("探索");try required("39 筆商品與來源",scroll:true)
             try publicText("搜尋商品名稱與說明",value:"地圖驗收");try required("36 筆商品與來源",scroll:true);try tap("切換地圖瀏覽",kind:.any)
             try required("底圖：OpenFreeMap · © OpenStreetMap contributors",scroll:true)
+            try openMapStack(finalStack)
             let lastLabel="選取商品："+title
             for _ in 0..<24 {let control=element(lastLabel,kind:.button);if control.exists&&control.isHittable&&control.frame.height>=48 {break};scrollToward(control,in:element("discovery-map-scroll"))}
             try required(lastLabel,kind:.button);try tap(lastLabel);try required(remove,scroll:true,kind:.button);try safeScreenshot("qa-map-wishlist-saved")

@@ -5,13 +5,13 @@ module.exports = {
     name: 'Wishlist.ai',
     icon: './assets/app-icon.png',
     slug: 'weeshgifts',
-    version: '2.0.17',
+    version: '2.0.18',
     orientation: 'portrait',
     scheme: 'weesh',
     userInterfaceStyle: 'automatic',
     ios: {
       bundleIdentifier: 'com.hankhuang.weesh',
-      buildNumber: '20',
+      buildNumber: '21',
       supportsTablet: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -26,7 +26,7 @@ module.exports = {
     android: {
       ...(process.env.GOOGLE_SERVICES_JSON ? {googleServicesFile:process.env.GOOGLE_SERVICES_JSON} : {}),
       package: 'com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1',
-      versionCode: 38,
+      versionCode: 39,
       permissions: ['com.android.vending.BILLING'],
       allowBackup: false,
       blockedPermissions: [

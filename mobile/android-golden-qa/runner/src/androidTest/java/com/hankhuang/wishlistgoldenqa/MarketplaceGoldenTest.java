@@ -417,7 +417,7 @@ public class MarketplaceGoldenTest {
         checkpoint("filter-invalid-price");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");checkpoint("filter-price-entry");reveal("探索最低價格");await("探索最低價格").setText("100");reveal("探索最高價格");await("探索最高價格").setText("50");checkpoint("filter-price-validation");click("套用篩選");reveal("價格需為有效的新臺幣金額，最低價不能高於最高價。");capture("explore-filter-validation");
         reveal("探索最低價格");await("探索最低價格").setText("0");reveal("探索最高價格");await("探索最高價格").setText("100");checkpoint("category-keeps-price-draft");revealBackwards("分類目錄 ▾");click("分類目錄 ▾");await("商品分類");click("家具家居");reveal("全部家具家居");click("全部家具家居");await("篩選商品");reveal("探索最高價格");assertEquals("Changing category retains the price draft","100",readText("探索最高價格"));click("套用篩選");reveal("查看商品：二手深藍色陶瓷馬克杯");
         checkpoint("listing-photo-first-detail");click("查看商品：二手深藍色陶瓷馬克杯");await("商品詳情");capture("listing-detail-photo-first");reveal("聊聊詢問");assertTrue("Contact action stays reachable",await("聊聊詢問").getVisibleBounds().height()>=48);click("返回探索");assertTrue("Detail window must dismiss before browse gestures",device.wait(Until.gone(By.text("商品詳情")),5000));device.waitForIdle(1000);
-        checkpoint("explicit-map-navigation");revealBackwards("切換地圖瀏覽");click("切換地圖瀏覽");await("本批 3 張商品縮圖");capture("explore-explicit-map");reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("explore-map-canvas");revealBackwards("地圖來源與排列說明");click("地圖來源與排列說明");await("關閉地圖說明");capture("explore-map-information");click("關閉地圖說明");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");assertTrue("Map must expose the current shared source filters",has("來源"));capture("explore-map-shared-filters");click("關閉探索選項");revealBackwards("商品列表");click("商品列表");await("探索");reveal("查看商品：二手深藍色陶瓷馬克杯");
+        checkpoint("explicit-map-navigation");revealBackwards("切換地圖瀏覽");click("切換地圖瀏覽");await("本批 3 件商品");capture("explore-explicit-map");reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("explore-map-canvas");revealBackwards("地圖來源與排列說明");click("地圖來源與排列說明");await("關閉地圖說明");capture("explore-map-information");click("關閉地圖說明");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");assertTrue("Map must expose the current shared source filters",has("來源"));capture("explore-map-shared-filters");click("關閉探索選項");revealBackwards("商品列表");click("商品列表");await("探索");reveal("查看商品：二手深藍色陶瓷馬克杯");
         checkpoint("wish-context-preserves-new-filters");click("首頁");reveal("尋找深藍色陶瓷馬克杯的符合商品");click("尋找深藍色陶瓷馬克杯的符合商品");await("正在配對你選擇的願望");revealBackwards("篩選商品");click("篩選商品");await("瀏覽內容");click("最新上架");reveal("探索最高價格");await("探索最高價格").setText("55");click("套用篩選");await("2 筆商品與來源");assertFalse("Leaving a wish scope removes its banner",has("正在配對你選擇的願望"));capture("explore-wish-cleared-price-retained");
         checkpoint("native-version-settings");click("我的");
         android.content.pm.PackageInfo installed=InstrumentationRegistry.getInstrumentation().getContext().getPackageManager().getPackageInfo(target,0);
@@ -441,7 +441,7 @@ public class MarketplaceGoldenTest {
                 assertNotNull("Thumbnail canvas remains present",host);Rect viewport=host.getVisibleBounds();
                 // At the inner edge Android may hand the gesture to the outer
                 // page. Restore the frame, then search in the other direction.
-                if(viewport.height()<120){revealBackwards("本批 36 張商品縮圖",1);break;}
+                if(viewport.height()<120){revealBackwards("本批 36 件商品",1);break;}
                 int distance=Math.min(64,viewport.height()-56),y=viewport.centerY();
                 assertTrue("Canvas scroll delivered",device.swipe(viewport.centerX(),y,viewport.centerX(),y+(forward?-distance:distance),12));
                 device.waitForIdle(300);
@@ -450,6 +450,52 @@ public class MarketplaceGoldenTest {
         }
         assertTrue("Thumbnail tap target is at least48dp",await(label).getVisibleBounds().height()>=48);
         click(label);assertNotNull("Clicked product must settle selected",device.wait(Until.findObject(By.desc(label).selected(true)),5000));
+    }
+    private final Map<String,String> mapTitleStacks=new HashMap<>();
+    private java.util.List<UiObject2> mapStacks(){return device.findObjects(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*")));}
+    private void openMapStack(String id) throws Exception {
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");
+        UiObject2 stack=device.wait(Until.findObject(By.res(id)),15000);assertNotNull("Actual geographic stack required",stack);
+        Rect prior=null;int stable=0;long end=SystemClock.elapsedRealtime()+10000;
+        while(SystemClock.elapsedRealtime()<end){stack=device.findObject(By.res(id));assertNotNull(stack);Rect bounds=stack.getVisibleBounds();stable=bounds.height()>=48&&bounds.equals(prior)?stable+1:0;prior=bounds;if(stable>=3){stack.click();device.waitForIdle(1500);break;}SystemClock.sleep(100);}
+        assertTrue("Expanded canvas must actually mount after the single issued tap",device.wait(Until.hasObject(By.res("discovery-map-scroll")),5000));assertTrue("Chosen stack replaces collapsed markers",device.wait(Until.gone(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*"))),5000));
+    }
+    private void closeMapStack() throws Exception {revealBackwards("收合商品");click("收合商品");reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");assertTrue("Explicit collapse restores stacks",device.wait(Until.hasObject(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*"))),5000));assertFalse("Selected preview closes with the stack",has("查看商品詳情"));}
+    private void auditMapStacks() throws Exception {
+        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");
+        assertTrue("Map must load geographic stacks",device.wait(Until.hasObject(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*"))),20000));
+        assertFalse("Entry never auto-expands",device.hasObject(By.res("discovery-map-scroll")));capture("map-default-collapsed");
+        LinkedHashMap<String,Integer> stackCounts=new LinkedHashMap<>();for(UiObject2 stack:mapStacks()){String label=stack.getContentDescription();java.util.regex.Matcher count=java.util.regex.Pattern.compile("展開附近 ([0-9]+) 件商品").matcher(label);assertTrue(count.matches());stackCounts.put(stack.getResourceName(),Integer.parseInt(count.group(1)));}
+        assertEquals("All36 loaded members are represented exactly once",36,stackCounts.values().stream().mapToInt(Integer::intValue).sum());
+        for(Map.Entry<String,Integer> stack:stackCounts.entrySet()){
+            checkpoint("map-expand-stack");openMapStack(stack.getKey());int selected=0;
+            for(int pass=0;pass<40&&selected<stack.getValue();pass++){
+                for(int i=0;i<mapTitles.length();i++){String title=mapTitles.getString(i),label="選取商品："+title;if(!mapTitleStacks.containsKey(title)&&visible(label,48)){selectMapTitle(title);mapTitleStacks.put(title,stack.getKey());selected++;}}
+                if(selected<stack.getValue()){UiObject2 host=device.findObject(By.res("discovery-map-scroll"));assertNotNull(host);Rect b=host.getVisibleBounds();if(b.height()<120)reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");else device.swipe(b.centerX(),b.centerY()+32,b.centerX(),b.centerY()-32,12);device.waitForIdle(300);}
+            }
+            assertEquals("Every member of the explicitly chosen stack is individually selectable",stack.getValue().intValue(),selected);capture("map-expanded-stack-"+mapTitleStacks.size());closeMapStack();
+        }
+        assertEquals("All36 actual individual selections retained",36,mapTitleStacks.size());
+    }
+    private int mapInteractionReads() throws Exception {
+        String port=InstrumentationRegistry.getArguments().getString("inputPort","");HttpURLConnection c=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/map/motion-boundary").openConnection();c.setRequestProperty("X-Wishlist-Golden-Phase",phase);c.setConnectTimeout(5000);c.setReadTimeout(5000);assertEquals(200,c.getResponseCode());ByteArrayOutputStream out=new ByteArrayOutputStream();try(InputStream in=c.getInputStream()){byte[] b=new byte[1024];for(int n;(n=in.read(b))!=-1;)out.write(b,0,n);}c.disconnect();return new JSONObject(out.toString("UTF-8")).getInt("discoveryReads");
+    }
+    private int[] blankMapPoint() {
+        UiObject2 host=device.findObject(By.res("discovery-map-scroll"));assertNotNull(host);Rect area=host.getVisibleBounds();java.util.List<UiObject2> tiles=device.findObjects(By.desc(java.util.regex.Pattern.compile("選取商品：.*")));
+        for(int y=area.bottom-12;y>area.top+12;y-=16)for(int x=area.right-12;x>area.left+12;x-=16){boolean free=true;for(UiObject2 tile:tiles)if(tile.getVisibleBounds().contains(x,y)){free=false;break;}if(free)return new int[]{x,y};}
+        throw new AssertionError("Actual non-thumbnail blank space required");
+    }
+    private void auditMapBlankAndReduced(String stackId) throws Exception {
+        int before=mapInteractionReads();checkpoint("map-blank-versus-drag");openMapStack(stackId);int[] point=blankMapPoint();UiObject2 canvas=device.findObject(By.res("discovery-map-scroll"));Rect area=canvas.getVisibleBounds();device.swipe(point[0],point[1],point[0],Math.max(area.top+12,point[1]-70),12);assertTrue("Dragging does not collapse the stack",device.wait(Until.hasObject(By.res("discovery-map-scroll")),3000));capture("map-drag-keeps-expanded");device.waitForIdle(2000);point=blankMapPoint();device.click(point[0],point[1]);assertTrue("Blank tap actually collapses",device.wait(Until.hasObject(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*"))),5000));assertTrue("Blank collapse removes all individual targets",device.wait(Until.gone(By.res("discovery-map-scroll")),5000));capture("map-blank-collapsed");
+        String original=device.executeShellCommand("settings get global transition_animation_scale").trim();assertTrue(original.matches("null|[0-9]+(?:\\.[0-9]+)?"));
+        try{checkpoint("map-actual-system-reduced");device.executeShellCommand("settings put global transition_animation_scale 0.0");openMapStack(stackId);revealBackwards("地圖來源與排列說明");click("地圖來源與排列說明");reveal("慢速重播排列");long deadline=SystemClock.elapsedRealtime()+5000;while(await("慢速重播排列").isEnabled()&&SystemClock.elapsedRealtime()<deadline)SystemClock.sleep(100);assertFalse("Actual OS reduced motion disables replay",await("慢速重播排列").isEnabled());capture("map-stack-os-reduced");click("關閉地圖說明");closeMapStack();openMapStack(stackId);assertFalse("Reduced stack does not offer active animation pause",has("暫停排列"));closeMapStack();}
+        finally{device.executeShellCommand(original.equals("null")?"settings delete global transition_animation_scale":"settings put global transition_animation_scale "+original);assertEquals("Original OS preference restored",original,device.executeShellCommand("settings get global transition_animation_scale").trim());}
+        assertEquals("Stacks, gestures and motion never search automatically",before,mapInteractionReads());checkpoint("map-stack-gesture-audit-complete");
+    }
+    private void mapGestures() throws Exception {
+        checkpoint("map-short-gesture-entry");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 件商品");reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");
+        assertTrue("Real geographic stacks required",device.wait(Until.hasObject(By.res(java.util.regex.Pattern.compile("discovery-map-stack:.*"))),15000));assertFalse("No automatic expansion",device.hasObject(By.res("discovery-map-scroll")));
+        int total=0;String first=null;for(UiObject2 stack:mapStacks()){java.util.regex.Matcher count=java.util.regex.Pattern.compile("展開附近 ([0-9]+) 件商品").matcher(stack.getContentDescription());assertTrue(count.matches());total+=Integer.parseInt(count.group(1));if(first==null)first=stack.getResourceName();}assertEquals("All36 loaded products represented",36,total);capture("map-short-default-collapsed");auditMapBlankAndReduced(first);checkpoint("map-short-gesture-complete");
     }
     private void map() throws Exception {
         assertNotNull("Map fixtures required",mapTitles);assertEquals(36,mapTitles.length());
@@ -461,9 +507,9 @@ public class MarketplaceGoldenTest {
         checkpoint("native-original-price-detail");reveal("查看商品："+mapTitles.getString(0));click("查看商品："+mapTitles.getString(0));await("商品詳情");
         reveal(fold);click(fold);await("參考原價：NT$ 4,990");capture("discount-native-detail");click("關閉原價參考");click("返回探索");
         assertTrue(device.wait(Until.gone(By.desc("返回探索")),10000));
-        checkpoint("map-all-thirty-six");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
+        checkpoint("map-all-thirty-six");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 件商品");
         reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");capture("map-thirty-six-canvas-top");
-        for(int i=0;i<mapTitles.length();i++){checkpoint("map-select-item-"+(i+1));selectMapTitle(mapTitles.getString(i));}
+        auditMapStacks();auditMapBlankAndReduced(mapTitleStacks.get(mapTitles.getString(35)));openMapStack(mapTitleStacks.get(mapTitles.getString(35)));selectMapTitle(mapTitles.getString(35));
         capture("map-thirty-six-canvas-selected");
         checkpoint("map-single-wishlist-add");String title=mapTitles.getString(35),add="加入願望清單："+title,remove="已加入願望，移除："+title;
         reveal(add);click(add);reveal(remove);await(remove);capture("map-single-wishlist-saved");
@@ -471,11 +517,11 @@ public class MarketplaceGoldenTest {
         checkpoint("map-create-second-fixture-list");
         String port=InstrumentationRegistry.getArguments().getString("inputPort","");
         HttpURLConnection create=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/map/second-list").openConnection();create.setRequestMethod("POST");create.setRequestProperty("X-Wishlist-Golden-Phase",phase);create.setConnectTimeout(5000);create.setReadTimeout(15000);create.setInstanceFollowRedirects(false);assertEquals(200,create.getResponseCode());create.disconnect();
-        click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
-        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(add);
+        click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 件商品");
+        openMapStack(mapTitleStacks.get(title));selectMapTitle(title);reveal(add);
         checkpoint("map-multiple-wishlist-confirm");click(add);await("加入願望清單");click("第二份地圖願望");capture("map-multiple-wishlist-confirm");click("確認加入");reveal(remove);await(remove);
-        checkpoint("map-wishlist-reentry-readback");click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 張商品縮圖");
-        reveal("底圖：OpenFreeMap · © OpenStreetMap contributors");selectMapTitle(title);reveal(remove);capture("map-wishlist-server-readback");click(remove);await("從願望清單移除");capture("map-multiple-wishlist-remove");click("確認移除");reveal(add);await(add);
+        checkpoint("map-wishlist-reentry-readback");click("首頁");click("探索");await("39 筆商品與來源");mapSearch("地圖驗收");await("36 筆商品與來源");click("切換地圖瀏覽");await("本批 36 件商品");
+        openMapStack(mapTitleStacks.get(title));selectMapTitle(title);reveal(remove);capture("map-wishlist-server-readback");click(remove);await("從願望清單移除");capture("map-multiple-wishlist-remove");click("確認移除");reveal(add);await(add);
         checkpoint("map-checks-complete");
     }
     private void batchCount(int count) throws Exception {
@@ -514,12 +560,12 @@ public class MarketplaceGoldenTest {
     @Test public void approvedMarketplaceRegression() throws Exception {
         device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         phase=InstrumentationRegistry.getArguments().getString("phase","");
-        assertTrue("Explicit bounded phase required",phase.equals("batch-remove")||phase.equals("map")||phase.equals("source")||phase.equals("discovery")||phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
+        assertTrue("Explicit bounded phase required",phase.equals("map-gestures")||phase.equals("batch-remove")||phase.equals("map")||phase.equals("source")||phase.equals("discovery")||phase.equals("buyer")||phase.equals("seller")||phase.equals("logout")||phase.equals("market")||phase.equals("chat")||phase.equals("photo")||phase.equals("photo-recovery"));
         File external=InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null);
         assertNotNull("Owned test-host storage unavailable",external);
         evidence=new File(external,"golden-"+phase);
         assertTrue("Fresh owned evidence directory required",!evidence.exists()&&evidence.mkdirs());
-        try { login(); if(phase.equals("batch-remove"))batchRemove();else if(phase.equals("map"))map();else if(phase.equals("source"))source();else if(phase.equals("discovery"))discovery();else if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
+        try { login(); if(phase.equals("map-gestures"))mapGestures();else if(phase.equals("batch-remove"))batchRemove();else if(phase.equals("map"))map();else if(phase.equals("source"))source();else if(phase.equals("discovery"))discovery();else if(phase.equals("buyer"))buyer();else if(phase.equals("seller"))seller();else if(phase.equals("market"))market();else if(phase.equals("chat"))chat();else if(phase.equals("photo")||phase.equals("photo-recovery"))photo();else logout(); }
         catch(Throwable failure){
             try{saveLoginStructure();}catch(Throwable ignored){}
             try{clearLoginForDiagnostic();}catch(Throwable ignored){}

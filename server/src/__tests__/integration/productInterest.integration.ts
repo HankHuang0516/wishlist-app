@@ -3,10 +3,11 @@ import {createLoopbackRequest} from './loopbackHttp';
 import {randomUUID,createHash} from 'crypto';
 import prisma from '../../lib/prisma';
 import routes from '../../routes/productInterestRoutes';
+import {createProductWishRoutes} from '../../routes/productWishRoutes';
 import {createSourceLeadAdmin} from '../../routes/sourceLeadRoutes';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if(process.env.DATABASE_URL!==process.env.TEST_DATABASE_URL)throw Error('Explicit isolated database required');
-const app=express();app.use(express.json());app.use('/interest',routes);app.use('/source-admin',createSourceLeadAdmin(()=> 'synthetic-interest-admin'));
+const app=express();app.use(express.json());app.use('/interest',routes);app.use('/product-wishes',createProductWishRoutes());app.use('/source-admin',createSourceLeadAdmin(()=> 'synthetic-interest-admin'));
 const http=createLoopbackRequest(app);
 const run=randomUUID();let users:{id:number;apiKey:string|null}[]=[],listingId:string;const leadIds:string[]=[];
 const actor=(index=1)=>users[index];
@@ -36,4 +37,12 @@ it('counts only recent active local source questions and labels them proxy inqui
  await prisma.sourceLeadInquiry.update({where:{leadId_buyerUserId:{leadId:id,buyerUserId:actor().id}},data:{state:'DELIVERY_REQUIRES_REVIEW'}});expect((await get('source:'+id)).body.items[0].inquiringCount).toBe(1);
  await prisma.externalSourceLead.update({where:{id},data:{status:'WITHDRAWN'}});expect((await get('source:'+id)).body.items).toEqual([]);
  }finally{if(previous===undefined)delete process.env.SOURCE_LEADS_PUBLIC_ENABLED;else process.env.SOURCE_LEADS_PUBLIC_ENABLED=previous;}
+});
+
+it('keeps the real interest limiter, declares its scope and leaves independent wishlist writes available',async()=>{
+ let limited:Awaited<ReturnType<typeof get>>|undefined;
+ for(let count=0;count<121;count++){const response=await get();if(response.status===429){limited=response;break;}expect(response.status).toBe(200);}
+ expect(limited?.status).toBe(429);expect(limited?.body).toEqual({errorCode:'INTEREST_RATE_LIMIT'});expect(Number(limited?.headers['retry-after'])).toBeGreaterThan(0);expect(limited?.headers['cache-control']).toBe('private, no-store');
+ const list=await prisma.wishlist.create({data:{userId:actor().id,title:'isolated-limit-wish',isPublic:false}}),clientRequestId=randomUUID();
+ const saved=await http.post('/product-wishes').set('x-api-key',actor().apiKey!).send({clientRequestId,kind:'listing',productId:listingId,wishlistId:list.id});expect(saved.status).toBe(201);expect(saved.body).toMatchObject({clientRequestId,productKey:'listing:'+listingId,wishlistId:list.id});expect(await prisma.productWishLink.count({where:{userId:actor().id,productKey:'listing:'+listingId}})).toBe(1);
 });

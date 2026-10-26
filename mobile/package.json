@@ -34,9 +34,13 @@
     "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.0",
     "@types/node": "^25.0.3",
     "@types/react": "~19.2.2",
+    "@types/react-dom": "19.2.3",
     "@vitest/coverage-v8": "^4.1.11",
+    "jsdom": "27.4.0",
+    "react-dom": "19.2.3",
     "typescript": "~6.0.3",
     "vitest": "^4.1.11"
   }

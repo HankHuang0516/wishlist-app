@@ -16,9 +16,9 @@ export function emailPayload(raw: string) {
 export function registrationPayload(fields: { name: string; phone: string; email: string; password: string; confirmation: string }) {
   const name = fields.name.trim(), phoneNumber = fields.phone.trim();
   if (!name || name.length > 50) throw new Error('顯示名稱需為 1–50 個字元。');
-  if (!/^09\d{8}$/.test(phoneNumber)) throw new Error('請輸入 09 開頭的十位台灣手機號碼。');
+  if (phoneNumber && !/^09\d{8}$/.test(phoneNumber)) throw new Error('請輸入 09 開頭的十位台灣手機號碼。');
   const { email } = emailPayload(fields.email);
-  return { name, phoneNumber, email, password: validateNewPassword(fields.password, fields.confirmation) };
+  return { name, ...(phoneNumber ? { phoneNumber } : {}), email, password: validateNewPassword(fields.password, fields.confirmation) };
 }
 export function recoveryLink(raw: string, apiUrl: string, local = false): RecoveryLink | null {
   if (!raw || raw.length > 2048) return null;

@@ -12,10 +12,10 @@ import {defaultDiscovery,discoveryPrice,mergeDiscoveryPage,nativeDiscoveryPath,p
 import {iosColors,iosType} from './iosTheme';
 import {readDiscoveryRange} from './discoveryRange';
 
-type Props={api:ReturnType<typeof createApi>;apiUrl:string;userId:number;active:boolean;wishItemId?:number;onClearWish?:()=>void;onMap:(filters:DiscoveryFilters)=>void;onOpen:(product:DiscoveryProduct)=>Promise<void>;onReports:()=>void};
+type Props={api:ReturnType<typeof createApi>;apiUrl:string;userId:number|null;onRequireLogin?:()=>void;active:boolean;wishItemId?:number;onClearWish?:()=>void;onMap:(filters:DiscoveryFilters)=>void;onOpen:(product:DiscoveryProduct)=>Promise<void>;onReports:()=>void};
 const sources=[['all','全部來源'],['listing','站內刊登'],['source','公開來源'],['external','合作來源']]as const;
-export function NativeDiscovery(props:Props){return <NativeProductWishProvider key={props.apiUrl+':'+props.userId} api={props.api} apiUrl={props.apiUrl} userId={props.userId}><NativeDiscoverySession {...props}/></NativeProductWishProvider>;}
-function NativeDiscoverySession({api,apiUrl,active,wishItemId,onClearWish,onOpen,onReports}:Props){
+export function NativeDiscovery(props:Props){return <NativeProductWishProvider key={props.apiUrl+':'+props.userId} api={props.api} apiUrl={props.apiUrl} userId={props.userId} onRequireLogin={props.onRequireLogin}><NativeDiscoverySession {...props}/></NativeProductWishProvider>;}
+function NativeDiscoverySession({api,apiUrl,userId,onRequireLogin,active,wishItemId,onClearWish,onOpen,onReports}:Props){
  const {fontScale}=useWindowDimensions();
  const [mapMode,setMapMode]=useState(false),[selectedMapKey,setSelectedMapKey]=useState<string|null>(null),[mapBounds,setMapBounds]=useState<[number,number,number,number]|null>(null),[retryUntil,setRetryUntil]=useState(0),[clock,setClock]=useState(Date.now());
  const retryRef=useRef(0),mapScope=mapMode?{bbox:mapBounds??undefined}:undefined,waitSeconds=Math.max(0,Math.ceil((retryUntil-clock)/1000));
@@ -42,7 +42,7 @@ function NativeDiscoverySession({api,apiUrl,active,wishItemId,onClearWish,onOpen
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[]);
  useEffect(()=>{if(priorWish.current===wishItemId)return;priorWish.current=wishItemId;if(wishItemId===undefined&&filters.feed!=='for-you')return;generation.current++;setPage(null);setFilters({...defaultDiscovery,...(wishItemId?{feed:'for-you' as const,sort:'recommended' as const}:{})});setSearch('');},[wishItemId]);
  useEffect(()=>{if(active)void load();else{generation.current++;loading.current=false;setBusy(false);}},[load,active]);
- const change=(next:DiscoveryFilters)=>{const nextPath=nativeDiscoveryPath(next,'',next.feed==='for-you'?wishItemId:undefined,mapScope);if(nextPath===path){void load();return;}generation.current++;pageRef.current=null;setPage(null);setFilters(next);};
+ const change=(next:DiscoveryFilters)=>{if(userId===null&&next.feed==='for-you'){onRequireLogin?.();return;}const nextPath=nativeDiscoveryPath(next,'',next.feed==='for-you'?wishItemId:undefined,mapScope);if(nextPath===path){void load();return;}generation.current++;pageRef.current=null;setPage(null);setFilters(next);};
  async function open(product:DiscoveryProduct){if(openingLock.current)return;openingLock.current=true;setOpening(product.key);setIssue('');try{await onOpen(product);}catch{if(alive.current)setIssue('商品可能已變更或停止公開，請重新整理。');}finally{openingLock.current=false;if(alive.current)setOpening(null);}}
  const category=page?.categories.find(c=>c.id===filters.main),sub=category?.children.find(c=>c.id===filters.sub),priceFilter=!!filters.min||!!filters.max;
  const selectedCount=[filters.main?'category':'',filters.county,filters.condition,filters.source==='all'?'':filters.source,priceFilter?'price':''].filter(Boolean).length;

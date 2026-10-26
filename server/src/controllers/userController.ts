@@ -1,3 +1,4 @@
+import { sessionContact } from '../lib/sessionContact';
 
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
@@ -32,7 +33,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         // Settings may see own profile, never password hashes, OTP/reset/email
         // bearer links or API keys. API-key management has its separate route.
         res.setHeader('Cache-Control', 'private, no-store');
-        res.json({...user,isPremium:user.isPremium||premium});
+        res.json({...user,...sessionContact(user),isPremium:user.isPremium||premium});
     } catch (error) {
         console.error('Profile read unavailable; request and database details withheld');
         res.status(500).json({ error: 'Internal server error', errorCode: API_ERROR_CODES.INTERNAL_ERROR });

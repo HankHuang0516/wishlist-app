@@ -1,3 +1,4 @@
+import { GuestEntryScreen } from './src/GuestEntryScreen';
 import {ProductInterestProvider} from './src/ProductInterestView';
 import { SafeAreaModal } from './src/SafeAreaModal';
 import * as Notifications from 'expo-notifications';
@@ -227,7 +228,7 @@ function NativeApp({ apiUrl }: { apiUrl: string }) {
   if (deletionProblem) return <SafeAreaView style={styles.screen}><Text style={styles.title}>刪除恢復資料尚未確認</Text><Text accessibilityRole="alert" style={styles.body}>{deletionProblem}</Text><Pressable accessibilityRole="button" style={styles.button} onPress={() => { setDeletionProblem(''); setBooting(true); setRestoreAttempt(n => n + 1); }}><Text style={styles.buttonText}>重新讀取安全儲存</Text></Pressable></SafeAreaView>;
   if (deletionJournal || deletionOpen) return <SafeAreaView style={styles.screen}><AccountDeletionScreen apiUrl={apiUrl} userId={user?.id} token={token ?? undefined} initialJournal={deletionJournal} onPrepared={setDeletionJournal} onErased={erasePrivateViews} onExit={exitDeletion} /></SafeAreaView>;
   if (user && (!termsChecked || !termsAccepted)) return <SafeAreaView style={styles.screen}>{termsChecked ? <TermsAgreement apiUrl={apiUrl} onAccept={() => setTermsAccepted(true)} onDecline={() => setDeletionOpen(true)} /> : <ActivityIndicator />}</SafeAreaView>;
-  if (!user) return <SafeAreaView style={styles.screen}><AuthScreen onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
+  if (!user) return <SafeAreaView style={styles.screen}><GuestEntryScreen onCloseRecovery={closeRecovery} onTermsAccepted={() => setTermsAccepted(true)} apiUrl={apiUrl} initialLink={authLink} externalBusy={busy} externalIssue={error} onAuthenticated={authenticate} onRetryRestore={sessionIssue ? () => { setError(''); setSessionIssue(null); setBooting(true); setRestoreAttempt(n => n + 1); } : undefined} /></SafeAreaView>;
 
   return <ProductInterestProvider read={api} apiUrl={apiUrl} userId={user.id}><SafeAreaView style={styles.screen}>
     {tab !== '探索' && <View style={styles.header}>

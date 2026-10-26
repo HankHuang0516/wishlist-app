@@ -7,8 +7,8 @@ import { AuthOperationGate, createAuthOperationGate } from './authOperation';
 import { iosColors, iosRadius, iosShadow, iosSpacing, iosType, minimumTapSize } from './iosTheme';
 import { TermsAgreement } from './TermsAgreement';
 const titles: Record<AuthMode, string> = { login: '登入', register: '建立帳號', forgot: '忘記密碼', resend: '重新寄送驗證信', verify: '驗證 Email', reset: '重設密碼' };
-export function AuthScreen({ apiUrl, initialLink, externalBusy = false, externalIssue, onRetryRestore, onAuthenticated, onClose, onResetConfirmed, operationGate, onTermsAccepted }: {
-  onTermsAccepted?: () => void;
+export function AuthScreen({ apiUrl, initialLink, externalBusy = false, externalIssue, onRetryRestore, onAuthenticated, onClose, onResetConfirmed, operationGate, onTermsAccepted, onBrowse }: {
+  onTermsAccepted?: () => void; onBrowse?: () => void;
   apiUrl: string; initialLink: RecoveryLink | null; externalBusy?: boolean; externalIssue?: string; onRetryRestore?: () => void;
   onAuthenticated: (value: unknown) => Promise<void>; onClose?: () => void; onResetConfirmed?: () => Promise<void>; operationGate?: AuthOperationGate;
 }) {
@@ -87,11 +87,12 @@ export function AuthScreen({ apiUrl, initialLink, externalBusy = false, external
   const input = (label: string, value: string, change: (value: string) => void, options: Partial<React.ComponentProps<typeof TextInput>> = {}) =>
     <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput placeholderTextColor={iosColors.secondaryLabel} accessibilityLabel={label} placeholder={label} value={value} onChangeText={change} editable={!disabled} autoCapitalize="none" autoCorrect={false} style={styles.input} {...options} /></View>;
   const button = (label: string, action: () => void, primary = false) => <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={action} style={[primary ? styles.button : styles.link, disabled && styles.disabled]}><Text style={primary ? styles.buttonText : styles.linkText}>{label}</Text></Pressable>;
-  if ((mode === 'login' || mode === 'register') && !termsAccepted) return <View style={styles.flex}>{!!externalIssue?.trim() && <Text accessibilityRole="alert" style={styles.error}>{externalIssue.trim()}</Text>}<TermsAgreement apiUrl={apiUrl} onAccept={() => { setTermsAccepted(true); onTermsAccepted?.(); }} /></View>;
+  if ((mode === 'login' || mode === 'register') && !termsAccepted) return <View style={styles.flex}>{!!externalIssue?.trim() && <Text accessibilityRole="alert" style={styles.error}>{externalIssue.trim()}</Text>}{onBrowse&&button('先逛逛，不登入',onBrowse)}<TermsAgreement apiUrl={apiUrl} onAccept={() => { setTermsAccepted(true); onTermsAccepted?.(); }} /></View>;
   return <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+    {onBrowse&&button('返回訪客瀏覽',onBrowse)}
     <Text style={styles.eyebrow}>YOUR WISH, A LITTLE CLOSER</Text><Text style={styles.brand}>Wishlist.ai</Text><Text style={styles.body}>留下願望，找到附近的下一個好物。</Text><Text style={styles.heading}>{titles[mode]}</Text>
     {mode === 'login' && <>{input('手機號碼或 Email', identifier, setIdentifier, { autoComplete: 'username', maxLength: 254 })}{input('密碼', password, setPassword, { secureTextEntry: true, autoComplete: 'current-password', maxLength: 1024 })}</>}
-    {mode === 'register' && <>{input('顯示名稱', name, setName, { maxLength: 50, autoComplete: 'name' })}{input('手機號碼', phone, setPhone, { keyboardType: 'phone-pad', autoComplete: 'tel', maxLength: 10 })}{input('Email', email, setEmail, { keyboardType: 'email-address', autoComplete: 'email', maxLength: 254 })}</>}
+    {mode === 'register' && <>{input('顯示名稱', name, setName, { maxLength: 50, autoComplete: 'name' })}{input('手機號碼（選填）', phone, setPhone, { keyboardType: 'phone-pad', autoComplete: 'tel', maxLength: 10 })}{input('Email', email, setEmail, { keyboardType: 'email-address', autoComplete: 'email', maxLength: 254 })}</>}
     {(mode === 'forgot' || mode === 'resend') && input('註冊時的 Email', email, setEmail, { keyboardType: 'email-address', autoComplete: 'email', maxLength: 254 })}
     {(mode === 'verify' || mode === 'reset') && <><Text style={styles.note}>請貼上信件中的連結或驗證碼。連結含一次性憑證，不會儲存到裝置或傳送給其他服務。</Text>{input(mode === 'verify' ? 'Email 驗證連結或驗證碼' : '密碼重設連結或驗證碼', linkText, setLinkText, { maxLength: 2048 })}</>}
     {(mode === 'register' || mode === 'reset') && <>{input('新密碼', password, setPassword, { secureTextEntry: true, autoComplete: 'new-password', maxLength: 73 })}{input('再次輸入新密碼', confirmation, setConfirmation, { secureTextEntry: true, autoComplete: 'new-password', maxLength: 73 })}<Text style={styles.note}>密碼 8–72 字元，包含英文字母與數字；符號限 @$!%*?&。</Text></>}

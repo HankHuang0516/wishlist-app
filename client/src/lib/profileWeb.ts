@@ -5,21 +5,22 @@ export const profileFlags = ['isAvatarVisible', 'isPhoneVisible', 'isRealNameVis
 export const profileText = ['nicknames', 'realName', 'address', 'birthday', 'email'] as const;
 export type ProfileField = typeof profileFlags[number] | typeof profileText[number];
 export type ProfilePatch = Partial<Record<ProfileField, string | boolean | null>>;
-export type OwnProfile = { id: number; profileVersion: number; name: string | null; phoneNumber: string; nicknames: string; realName: string | null; address: string | null; birthday: string | null; email: string | null; avatarUrl: string | null; isPremium: boolean; apiKey?: string } & Record<typeof profileFlags[number], boolean>;
+export type OwnProfile = { id: number; profileVersion: number; name: string | null; phoneNumber: string | null; nicknames: string; realName: string | null; address: string | null; birthday: string | null; email: string | null; avatarUrl: string | null; isPremium: boolean; apiKey?: string } & Record<typeof profileFlags[number], boolean>;
 export class ProfileError extends Error {}
 const fail = () => { throw new ProfileError('帳號資料或儲存回執不正確，請重新查核'); };
 export function parseOwnProfile(raw: unknown, userId: number): OwnProfile {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail();
   const row = raw as Record<string, unknown>;
-  if (row.id !== userId || !Number.isSafeInteger(row.profileVersion) || Number(row.profileVersion) < 0 || Number(row.profileVersion) > 2147483647 || typeof row.phoneNumber !== 'string' || !row.phoneNumber || row.phoneNumber.length > 200 || typeof row.isPremium !== 'boolean' || profileFlags.some(key => typeof row[key] !== 'boolean')) return fail();
+  if (row.id !== userId || !Number.isSafeInteger(row.profileVersion) || Number(row.profileVersion) < 0 || Number(row.profileVersion) > 2147483647 || (row.phoneNumber !== null && (typeof row.phoneNumber !== 'string' || !row.phoneNumber || row.phoneNumber.length > 200)) || typeof row.isPremium !== 'boolean' || profileFlags.some(key => typeof row[key] !== 'boolean')) return fail();
   const text = (key: string, max: number) => { const value = row[key]; if (value == null) return null; if (typeof value !== 'string' || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) return fail(); return value; };
+  if ('contactPhoneNumber' in row && row.contactPhoneNumber !== null && (typeof row.contactPhoneNumber !== 'string' || !row.contactPhoneNumber.trim() || row.contactPhoneNumber.length > 80)) return fail();
   const birthday = text('birthday', 24);
   if (birthday && (!/^\d{4}-\d{2}-\d{2}(?:T00:00:00.000Z)?$/.test(birthday) || !Number.isFinite(Date.parse(birthday)) || new Date(birthday).toISOString().slice(0,10) !== birthday.slice(0,10))) return fail();
   const avatarUrl = text('avatarUrl', 2048);
   if (avatarUrl && !/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(avatarUrl)) {
     try { const url = new URL(avatarUrl); if (url.protocol !== 'https:' || url.username || url.password) return fail(); } catch { return fail(); }
   }
-  return { id: userId, profileVersion: Number(row.profileVersion), name: text('name',50), phoneNumber: row.phoneNumber,
+  return { id: userId, profileVersion: Number(row.profileVersion), name: text('name',50), phoneNumber: Object.prototype.hasOwnProperty.call(row, 'contactPhoneNumber') ? row.contactPhoneNumber : row.phoneNumber,
     nicknames: text('nicknames',254) ?? '', realName: text('realName',100), address: text('address',500), birthday: birthday?.slice(0,10) ?? null,
     email: text('email',254), avatarUrl, isPremium: row.isPremium, ...Object.fromEntries(profileFlags.map(key => [key,row[key]])) } as OwnProfile;
 }

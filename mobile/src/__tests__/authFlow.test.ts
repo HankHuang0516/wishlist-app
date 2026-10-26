@@ -8,6 +8,7 @@ describe('native authentication payload and credential link isolation', () => {
   it('normalizes visible registration fields but preserves exact passwords and email case', () => {
     expect(registrationPayload(register())).toEqual({ name: '合成帳號', phoneNumber: '0912345678', email: 'User@example.com', password: 'Password123' });
   });
+  it('allows email registration without collecting a phone',()=>{expect(registrationPayload({...register(),phone:'  '})).toEqual({name:'合成帳號',email:'User@example.com',password:'Password123'});});
   it.each([{ name: '' }, { name: 'a'.repeat(51) }, { phone: '1234567890' }, { phone: '091234567' }, { email: 'invalid' }, { password: 'weak', confirmation: 'weak' }, { confirmation: 'different' }])('rejects invalid registration fields %#', patch => {
     expect(() => registrationPayload({ ...register(), ...patch })).toThrow();
   });
@@ -86,3 +87,5 @@ describe('bounded authentication error messages', () => {
     expect(authErrorMessage(new ApiError(500))).toContain('不會自動重送');
   });
 });
+
+it('allows email registration without a phone and omits the phone field',()=>{expect(registrationPayload({name:"合成名稱",phone:"",email:"guest@example.invalid",password:"Synthetic123!",confirmation:"Synthetic123!"})).not.toHaveProperty("phoneNumber");});

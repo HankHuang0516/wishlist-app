@@ -42,3 +42,5 @@ describe('web auth contracts matching APP',()=>{
     vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new Error('unavailable');});expect(authIssue(new AuthFlowError('expired'))).toContain('expired');
   });
 });
+
+it('accepts an empty optional phone with valid email credentials',()=>{expect(registrationPayload({...fields,phoneNumber:''}).phoneNumber).toBe('');});

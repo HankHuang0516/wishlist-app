@@ -292,7 +292,7 @@ async function main() {
   qaDeadline = Date.now() + serviceLifetimeSeconds * 1000;
   qa = await startNativeQa(database, serviceLifetimeSeconds, { externalListingsPilot: flow === 'external-map',
     listingAiPilot: listingAiFlow, marketingVisualOwnerRole: visualFixture === 'visual-mug' ? 'buyer' : null,
-    visualHomeFixture: ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) });
+    visualHomeFixture: !authenticated || ['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow) });
   if (['home-visual','golden-wishes','golden-discovery','golden-map','golden-map-gestures','listing-batch-entry'].includes(flow)) {
     stage = 'isolated-home-visual-fixture';
     const seeded = mapFlow?(mapFixture=await seedDiscoveryMapQa(qa,database)).base:await seedUiuxHomeQa(qa);
@@ -302,7 +302,7 @@ async function main() {
     if (!homeVisualFixtureSeeded) throw new Error('Home visual QA scores differ from fixed fixture');
   }
   if (listingAiFlow) listingAiTask = completeListingAiDrafts().catch(() => { listingAiTaskFailed = true; });
-  if (flow?.startsWith('marketplace-')) {
+  if (!authenticated || flow?.startsWith('marketplace-')) {
     stage = 'isolated-marketplace-fixture';
     await seedNativeMarketplace(qa, flow === 'marketplace-my-listings' ? 'buyer' : 'seller', visualFixture ?? 'switch',
       { seedChatForVisualQa: flow === 'marketplace-chat' || flow === 'marketplace-meetup' });
@@ -443,7 +443,7 @@ async function main() {
     'external-map': ['product-notice', 'home', 'external-map', 'external-list', 'external-detail', 'external-wish-map', 'external-wish-list'],
     deletion: ['product-notice', 'home', 'wish', 'deleted'],
   };
-  const names = flow ? flowAttachments[flow] : ['product-notice'];
+  const names = flow ? flowAttachments[flow] : ['product-notice','guest-list','guest-detail','guest-map','terms-before-auth','optional-phone-register'];
   if (items.length !== names.length) throw new Error('Only deliberately safe attachments are permitted');
   for (const name of names) {
     // XCTest appends _<index>_<UUID>.png. Require that exact delimiter so

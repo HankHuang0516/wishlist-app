@@ -9,7 +9,7 @@ export default function ApiDocsPage() {
     let base='';try{base=integrationApiBase();}catch{ /* Invalid configuration is not exposed. */ }
     const apiSections:{title:string;apis:ApiItem[]}[]=[
       { title:text('🔐 認證','🔐 Authentication'),apis:[
-        {method:'POST',path:'/auth/register',desc:text('註冊帳號；電子信箱必填，登入前須完成郵件驗證。','Register. Email is required; verify it before subsequent login.'),body:'{ phoneNumber, password, email, name?, birthday? }'},
+        {method:'POST',path:'/auth/register',desc:text('註冊帳號；電子信箱必填、手機選填；登入前須完成郵件驗證。','Register. Email is required and phone is optional; verify email before subsequent login.'),body:'{ password, email, phoneNumber?, name?, birthday? }'},
         {method:'POST',path:'/auth/login',desc:text('使用手機或電子信箱登入，取得 JWT。','Log in with phone or email in phoneNumber to obtain a JWT.'),body:'{ phoneNumber, password }'},
         {method:'POST',path:'/auth/forgot-password',desc:text('請求郵件重設連結；回覆不證明收件匣送達。','Request an email reset link. A reply does not prove inbox delivery.'),body:'{ email }'},
         {method:'POST',path:'/auth/reset-password',desc:text('使用郵件連結的一次性 token 重設密碼。','Reset the password using the one-time token from the email link.'),body:'{ token, newPassword }'},

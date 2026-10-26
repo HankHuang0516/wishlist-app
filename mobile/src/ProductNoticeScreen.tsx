@@ -25,7 +25,7 @@ export function ProductNoticeScreen({ apiUrl, onContinue }: { apiUrl: string; on
     <Text style={styles.body}>Weesh 已改版為 Wishlist.ai。除了整理願望，新版加入附近商品地圖、商品聊天室與面交預約。</Text>
     <Text accessibilityRole="header" style={styles.heading}>帳號與資料說明</Text>
     <Text style={styles.body}>新版使用 Wishlist.ai 帳號系統，不會自動匯入舊 Weesh 帳號或資料，也不代表已完成舊資料遷移。</Text>
-    <Text style={styles.body}>已有 Wishlist.ai 帳號，請直接登入；沒有帳號，請建立新帳號。既有 Wishlist.ai 願望不需重新建立。</Text>
+    <Text style={styles.body}>不登入也能瀏覽公開商品、搜尋與地圖。需要刊登、收藏或聯絡賣家時再登入或建立帳號；既有 Wishlist.ai 願望不需重新建立。</Text>
     <Text style={styles.note}>確認這份說明不會建立帳號、匯入資料或接受隱私政策與使用條款。</Text>
     {storageIssue && <Text accessibilityRole="alert" style={styles.error}>裝置暫時無法記住確認結果。可以重試，或僅這次繼續；下次開啟仍會提醒。</Text>}
     <Pressable accessibilityRole="button" accessibilityLabel="我了解，繼續使用" disabled={busy} onPress={() => void acknowledge()} style={[styles.button, busy && styles.disabled]}><Text style={styles.buttonText}>{busy ? '正在記住確認…' : '我了解，繼續使用'}</Text></Pressable>

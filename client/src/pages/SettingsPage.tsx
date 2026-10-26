@@ -410,7 +410,7 @@ function SettingsSession() {
                                 <label htmlFor="profile-phone" className="text-sm font-medium">{t('settings.phone')}</label>
                                 <Input
                                     id="profile-phone"
-                                    value={profile.phoneNumber}
+                                    value={profile.phoneNumber ?? ''}
                                     disabled
                                     className="bg-gray-100 text-gray-500 cursor-not-allowed"
                                 />

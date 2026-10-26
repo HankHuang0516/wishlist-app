@@ -417,12 +417,34 @@ final class NativeQaTests: XCTestCase {
             // Product change notice acknowledgement, not platform terms consent.
             guard notice.isEnabled else { throw Failure.unstableControl }
             try tap("我了解，繼續使用")
+            checkpoint("guest-public-discovery")
+            try required("訪客瀏覽 · 不需要建立帳號")
+            guard !element("使用條款與社群安全").exists && !element("密碼").exists else { throw Failure.invalidIdentity }
+            try required("查看商品：Native QA Switch OLED", scroll: true, timeout: 25)
+            try safeScreenshot("qa-guest-list")
+            try tap("查看商品：Native QA Switch OLED")
+            try required("聯絡賣家", scroll: true)
+            try safeScreenshot("qa-guest-detail")
+            try tap("聯絡賣家")
+            try required("使用條款與社群安全")
+            guard !element("密碼").exists else { throw Failure.invalidIdentity }
+            try safeScreenshot("qa-terms-before-auth")
+            try tap("先逛逛，不登入")
+            try required("聯絡賣家", scroll: true)
+            try tap("返回探索")
+            try tap("地圖")
+            try required("搜尋目前地圖範圍", scroll: true)
+            try safeScreenshot("qa-guest-map")
+            try tap("列表")
+            try tap("登入或建立帳號")
+            try acceptVisibleTerms()
             checkpoint("anonymous-login")
             try required("手機號碼或 Email")
             try required("密碼")
             checkpoint("anonymous-register")
             try tap("建立帳號")
-            for label in ["顯示名稱", "手機號碼", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
+            for label in ["顯示名稱", "手機號碼（選填）", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
+            try safeScreenshot("qa-optional-phone-register")
             try tap("返回登入")
             checkpoint("anonymous-forgot")
             try tap("忘記密碼")
@@ -451,17 +473,12 @@ final class NativeQaTests: XCTestCase {
             checkpoint("actual-anonymous-restart")
             app.terminate()
             app.launch()
-            try required("手機號碼或 Email")
-            guard !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
+            try required("訪客瀏覽 · 不需要建立帳號")
+            try required("查看商品：Native QA Switch OLED", scroll: true, timeout: 25)
+            guard !element("密碼").exists && !app.buttons["我的"].exists && !element("我了解，繼續使用").exists else { throw Failure.invalidIdentity }
         } catch { reportFailure() }
     }
-    private func loginBuyerAndRequireTabs() throws {
-        app.launchEnvironment["NATIVE_QA_INPUT_PORT"] = ProcessInfo.processInfo.environment["NATIVE_QA_INPUT_PORT"]
-        app.launch()
-        checkpoint("authenticated-product-notice")
-        try required("我了解，繼續使用", scroll: true)
-        try safeScreenshot("qa-product-notice")
-        try tap("我了解，繼續使用")
+    private func acceptVisibleTerms() throws {
         // Real visible agreement for this isolated synthetic adult fixture;
         // never manufacture a stored acceptance or bypass the auth UI.
         if element("使用條款與社群安全").waitForExistence(timeout: 3) {
@@ -476,6 +493,16 @@ final class NativeQaTests: XCTestCase {
             try required("同意並繼續", scroll: true)
             try tap("同意並繼續")
         }
+    }
+    private func loginBuyerAndRequireTabs() throws {
+        app.launchEnvironment["NATIVE_QA_INPUT_PORT"] = ProcessInfo.processInfo.environment["NATIVE_QA_INPUT_PORT"]
+        app.launch()
+        checkpoint("authenticated-product-notice")
+        try required("我了解，繼續使用", scroll: true)
+        try safeScreenshot("qa-product-notice")
+        try tap("我了解，繼續使用")
+        try tap("登入或建立帳號")
+        try acceptVisibleTerms()
         checkpoint("real-login-native-input")
         try required("手機號碼或 Email"); try required("密碼")
         try privateInput("login-buyer")

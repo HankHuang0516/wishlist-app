@@ -3,7 +3,7 @@ import { ApiError, validateApiUrl } from './api';
 // v1 had no origin binding. It is intentionally not sent to a new service or
 // silently migrated: this unreleased prototype must sign in again once.
 export const SESSION_KEY = 'wishlist.session.v2';
-export type SessionUser = { id: number; name?: string; phoneNumber: string };
+export type SessionUser = { id: number; name?: string; phoneNumber: string | null };
 export type SessionIssue = 'storage-unavailable' | 'service-unavailable' | 'expired' | 'expired-storage-unavailable' | 'different-service' | 'invalid-session' | 'invalid-response';
 type RestoreResult = { kind: 'authenticated'; token: string; user: SessionUser } | { kind: 'anonymous' } | { kind: SessionIssue };
 type Storage = { get: () => Promise<string | null>; remove: () => Promise<void> };
@@ -14,7 +14,9 @@ const record = (v: unknown): Record<string, unknown> => {
 export function parseSessionUser(v: unknown): SessionUser {
   const u = record(v);
   if (!Number.isSafeInteger(u.id) || (u.id as number) < 1 || typeof u.phoneNumber !== 'string' || !u.phoneNumber.trim() || u.phoneNumber.length > 80 || (u.name !== null && u.name !== undefined && (typeof u.name !== 'string' || u.name.length > 200))) throw new Error('Invalid session user');
-  return { id: u.id as number, phoneNumber: u.phoneNumber, ...(typeof u.name === 'string' ? { name: u.name } : {}) };
+  const contact = Object.prototype.hasOwnProperty.call(u, 'contactPhoneNumber') ? u.contactPhoneNumber : u.phoneNumber;
+  if (contact !== null && (typeof contact !== 'string' || !contact.trim() || contact.length > 80)) throw new Error('Invalid contact phone');
+  return { id: u.id as number, phoneNumber: contact as string | null, ...(typeof u.name === 'string' ? { name: u.name } : {}) };
 }
 export function encodeSession(apiUrl: string, token: unknown, local = false) {
   if (typeof token !== 'string' || token.length > 2048 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) throw new Error('Invalid session token');

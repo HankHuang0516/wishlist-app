@@ -86,7 +86,7 @@ export function newPasswordPayload(password: string, confirmation: string) {
 export function registrationPayload(fields: {name:string;phoneNumber:string;email:string;password:string;confirmation:string;birthday:string}) {
   const name = fields.name.trim(), phoneNumber = fields.phoneNumber.trim();
   if (!name || name.length > 50) throw new AuthFlowError('invalidName');
-  if (!/^09\d{8}$/.test(phoneNumber)) throw new AuthFlowError('invalidPhone');
+  if (phoneNumber && !/^09\d{8}$/.test(phoneNumber)) throw new AuthFlowError('invalidPhone');
   const { email } = emailPayload(fields.email), password = newPasswordPayload(fields.password,fields.confirmation);
   const birthday = fields.birthday;
   if (birthday && (!/^\d{4}-\d{2}-\d{2}$/.test(birthday) || !Number.isFinite(Date.parse(birthday)) ||

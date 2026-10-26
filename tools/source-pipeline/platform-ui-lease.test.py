@@ -47,7 +47,9 @@ class PlatformUiLeaseTests(unittest.TestCase):
         if command != "status":
             args.extend(["--run-id", run, "--platform", platform, "--worker", worker])
         if token is not None:
-            args.extend(["--token", token])
+            # URL-safe random tokens may start with '-'. Keep the value bound
+            # to its option so argparse never treats it as another flag.
+            args.append("--token=" + token)
         return args
 
     def cli(self, command, platform="FB", worker="fb-worker", run="run-1",
@@ -205,6 +207,14 @@ class PlatformUiLeaseTests(unittest.TestCase):
                  error="NOT_UI_OWNER")
         self.cli("release", token=original["token"])
         self.cli("acquire", "DCARD", "dcard-worker", run="next-run")
+
+    def test_leading_dash_token_releases_through_real_cli(self):
+        self.cli("assign")
+        with mock.patch.object(LEASE.secrets, "token_urlsafe",
+                               return_value="-synthetic-url-safe-token"):
+            granted = self.store.execute("acquire", "run-1", "FB", "fb-worker")
+        self.cli("release", token=granted["token"])
+        self.assertFalse(self.cli("status")["held"])
 
     def test_exact_deadline_is_expired_not_renewable(self):
         fixed = LEASE.Coordinator(self.root, clock=lambda: 1000)

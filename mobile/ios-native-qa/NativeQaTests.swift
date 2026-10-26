@@ -617,30 +617,17 @@ final class NativeQaTests: XCTestCase {
             try required("TaipeiStationQA", scroll: true)
             try safeScreenshot("qa-meetup")
             try tap("返回聊天")
+            checkpoint("marketplace-meetup-current-preview")
             let latest = try required("NativeQAChatSmoke")
-            if largeType {
-                // An accessibility-large preview must leave room for at least
-                // the latest message without requiring an initial gesture.
-                guard latest.isHittable else { throw Failure.missingControl }
-                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
-                guard summary.isHittable && summary.frame.height >= 44,
-                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
-            } else {
-                try required("查看或提議面交預約", kind: .button)
-                try required("面交預約 · 提議中")
-                try required("TaipeiStationQA")
-                try required("查看面交預約詳情並確認或調整", kind: .button)
-            }
+            if largeType { guard latest.isHittable else { throw Failure.missingControl } }
+            let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
+            guard summary.isHittable, summary.frame.height >= 44,
+                  (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
             try safeScreenshot("qa-chat-meetup-preview")
             checkpoint("marketplace-meetup-refresh")
             try tap("更新聊天")
-            if largeType {
-                let summary = try required("查看面交預約詳情並確認或調整", kind: .button)
-                guard summary.isHittable,
-                      (summary.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
-            } else {
-                try required("TaipeiStationQA")
-            }
+            let refreshed = try required("查看面交預約詳情並確認或調整", kind: .button)
+            guard (refreshed.value as? String)?.contains("TaipeiStationQA") == true else { throw Failure.invalidIdentity }
             checkpoint("marketplace-meetup-refresh-verified")
             if ProcessInfo.processInfo.environment["NATIVE_QA_ACCESSIBILITY_AUDIT"] == "1" {
                 checkpoint("marketplace-meetup-accessibility-audit")

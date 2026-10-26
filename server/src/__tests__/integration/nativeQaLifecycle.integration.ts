@@ -6,7 +6,7 @@ const { startNativeQa, qaEnvironment } = require('../../../../mobile/scripts/nat
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Identical isolated test DB required');
 const worker = path.resolve(__dirname, '../../../../mobile/scripts/native-qa-worker.cjs');
-const empty = { fixturesRemaining: 0, followsRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
+const empty = { fixturesRemaining: 0, feedbackRemaining: 0, followsRemaining: 0, conversationsRemaining: 0, receiptsRemaining: 0, mediaTasksRemaining: 0, legacyTasksRemaining: 0, photoFoldersRemaining: 0 };
 const ownedUsers: number[] = [];
 function childFixture(env: NodeJS.ProcessEnv) {
     const child = fork(worker, [], { env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
@@ -148,4 +148,22 @@ describe('owned local QA process lifecycle and real isolated PostgreSQL', () => 
             await prisma.user.delete({ where: { id: outsider.id } });
         }
     });
+});
+
+
+it('exactly cleans an owned synthetic UGC report and its receipt without leaving user erasure blocked', async()=>{
+ const qa=await startNativeQa(process.env.TEST_DATABASE_URL,30,{visualHomeFixture:true});
+ ownedUsers.push(...Object.values(qa.actors).map((actor:any)=>actor.id));
+ const {seedNativeMarketplace}=require('../../../../mobile/scripts/native-qa-marketplace-fixture.cjs');
+ try {
+  await seedNativeMarketplace(qa,'seller','switch',{seedChatForVisualQa:true});
+  const login=await fetch(qa.apiUrl+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phoneNumber:qa.actors.buyer.email,password:qa.actors.buyer.password})});
+  const auth=await login.json() as any;expect(login.status).toBe(200);
+  const headers={Authorization:'Bearer '+auth.token,'Content-Type':'application/json'};
+  const inbox=await (await fetch(qa.apiUrl+'/api/chat/conversations?limit=25',{headers})).json() as any;const room=inbox.items[0];
+  const report=await fetch(qa.apiUrl+'/api/chat/conversations/'+room.id+'/reports',{method:'POST',headers,body:JSON.stringify({clientReportId:randomUUID(),reportedUserId:qa.actors.seller.id,reason:'OBJECTIONABLE',details:'Isolated cleanup regression only',messageId:null})});
+  expect(report.status).toBe(201);expect((await report.json() as any).received).toBe(true);
+  expect(await prisma.feedback.count({where:{userId:qa.actors.buyer.id}})).toBe(1);
+  expect(await qa.stop()).toEqual(empty);expect(await prisma.feedback.count({where:{userId:qa.actors.buyer.id}})).toBe(0);
+ } finally {await qa.stop();}
 });

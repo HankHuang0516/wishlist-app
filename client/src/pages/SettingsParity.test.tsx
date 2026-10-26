@@ -286,12 +286,18 @@ describe('settings hub retains web-only functionality while adding app actions',
     await screen.findByText(/資料已被其他操作更新/);await vi.waitFor(()=>expect(input).not.toBeDisabled());
     expect(input).toHaveValue('保留草稿');expect(fetcher.mock.calls.filter(call=>call[1]?.method==='POST')).toHaveLength(1);expect(document.getElementById('nickname-saved')).toHaveClass('opacity-0');
   });
-  it('StrictMode replay does not adopt the first lifecycle response when it arrives last',async()=>{
+  it('StrictMode remount does not adopt the previous lifecycle response when it arrives last',async()=>{
     let initial!:(value:unknown)=>void,reads=0;
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
       if(url.endsWith('/users/me')&&++reads===1)return new Promise(resolve=>{initial=resolve;});
       return ok({...profile,profileVersion:2,nicknames:'目前資料'});
     }));
+    const first = render(<StrictMode>{view()}</StrictMode>);
+    // Recovery is asynchronous, so StrictMode may cancel its first effect
+    // before it ever calls fetch. Establish an actual pending old request
+    // before remounting instead of relying on that scheduler ordering.
+    await waitFor(() => expect(initial).toBeTypeOf('function'));
+    first.unmount();
     render(<StrictMode>{view()}</StrictMode>);await screen.findByDisplayValue('目前資料');
     await act(async()=>initial(ok(profile)));expect(screen.getByLabelText('暱稱')).toHaveValue('目前資料');
   });

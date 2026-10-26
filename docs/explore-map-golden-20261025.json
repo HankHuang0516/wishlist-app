@@ -182,8 +182,68 @@
     "collapse": "blank tap, explicit collapse, Web Escape;240ms or immediate reduced motion",
     "gesture": "scroll/drag do not collapse; selection does not open details",
     "oldPrimaryAssetScope": "expanded category layout only; no longer default-entry reference",
-    "scoresForAmendedInteraction": null,
+    "scoresForAmendedInteraction": {
+      "web": {
+        "functionPoints": [
+          30,
+          20,
+          20,
+          10,
+          15
+        ],
+        "functionScore": 95,
+        "uiuxPoints": [
+          24,
+          24,
+          19,
+          14,
+          12
+        ],
+        "uiuxScore": 93,
+        "deductions": "No complete screen-reader traversal/real touchscreen hardware/long-duration slow network test. Dense60 uses synthetic owned fixture plus real provider bytes, not production inventory."
+      },
+      "android": {
+        "functionPoints": [
+          30,
+          17,
+          20,
+          10,
+          13
+        ],
+        "functionScore": 90,
+        "uiuxPoints": [
+          24,
+          23,
+          18,
+          14,
+          11
+        ],
+        "uiuxScore": 90,
+        "deductions": "Fresh39 gesture scope includes member selection and real OS acknowledgement; all36 traversal/wishlist evidence predates wrapper change, not repeated as fresh39 full-flow. No current physical39 feedback or complete TalkBack/tablet/language matrix."
+      },
+      "ios": {
+        "functionPoints": [
+          30,
+          15,
+          20,
+          10,
+          13
+        ],
+        "functionScore": 88,
+        "uiuxPoints": [
+          24,
+          23,
+          18,
+          13,
+          10
+        ],
+        "uiuxScore": 88,
+        "deductions": "Fresh21 gesture scope2/2 and privacy/OS restoration; complete36/wishlist evidence is prior scoped0752. No current physical iOS, complete VoiceOver/tablet/language matrix. Debug-only toast visible in QA shots is explicitly excluded from signed-Release per-screen claims."
+      }
+    },
     "priorScoresAreHistorical": true,
-    "releaseStatus": "not yet in Android38/iOS20/Web821"
+    "releaseStatus": "Local engineering thresholds met; native2.0.18/Android39/iOS21 signed candidate builds in progress, Web844 deployment not yet done",
+    "assessmentMethod": "Weighted engineering assessment of declared criteria and actual evidence; NOT pixel similarity, independent user research, physical-device acceptance or store approval. No averaging platforms or function/UIUX. Unverified branches lose points.",
+    "evidenceReport": "/Volumes/codex_2T/codex_project/Wishlist/QA/golden-release-20261024/golden-map-stacks-local-review-2.0.18.json"
   }
 }

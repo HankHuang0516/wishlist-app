@@ -44,6 +44,9 @@ if (resume) {
       // be relocated, unlike ordinary object/product caches.
       for (const transient of ['ModuleCache.noindex', 'SDKStatCaches.noindex'])
         fs.rmSync(path.join(output, cache, transient), { recursive: true, force: true });
+      const products = path.join(output, cache, 'Build/Products');
+      for (const name of fs.readdirSync(products))
+        if (name.endsWith('.xctestrun')) fs.unlinkSync(path.join(products, name));
     }
   }
 }
@@ -123,6 +126,12 @@ async function main() {
   const runner = path.join(output, 'runner-derived/Build/Products/Debug-iphonesimulator/WishlistNativeQa-Runner.app');
   const appBundle = (await command('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', path.join(app, 'Info.plist')], 'app-identity')).trim();
   const runnerBundle = (await command('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', path.join(runner, 'Info.plist')], 'runner-identity')).trim();
+  const testProducts = path.join(output, 'runner-derived/Build/Products');
+  const testTemplates = fs.readdirSync(testProducts).filter(name => name.endsWith('.xctestrun'));
+  if (testTemplates.length !== 1) throw new Error('Require one freshly generated Xcode test template');
+  const generated = JSON.parse(await command('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(testProducts, testTemplates[0])], 'fresh-test-template'));
+  if (generated.WishlistNativeQa?.TestHostBundleIdentifier !== iosQaRunnerBundle(label) + '.xctrunner')
+    throw new Error('Generated Xcode template belongs to another QA identity');
   if (appBundle !== iosQaBundle(label) || runnerBundle !== iosQaRunnerBundle(label) + '.xctrunner') throw new Error('Unexpected QA build identity');
   const appInfo = JSON.parse(await command('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(app, 'Info.plist')], 'unique-recovery-schemes'));
   const schemes = appInfo.CFBundleURLTypes.flatMap(type => type.CFBundleURLSchemes);

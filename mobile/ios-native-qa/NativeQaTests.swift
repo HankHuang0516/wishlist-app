@@ -497,10 +497,13 @@ final class NativeQaTests: XCTestCase {
     private func loginBuyerAndRequireTabs() throws {
         app.launchEnvironment["NATIVE_QA_INPUT_PORT"] = ProcessInfo.processInfo.environment["NATIVE_QA_INPUT_PORT"]
         app.launch()
+        if try element(tabIdentifier("首頁")).waitForExistence(timeout: 2) { return }
         checkpoint("authenticated-product-notice")
-        try required("我了解，繼續使用", scroll: true)
-        try safeScreenshot("qa-product-notice")
-        try tap("我了解，繼續使用")
+        if element("我了解，繼續使用").exists {
+            try required("我了解，繼續使用", scroll: true)
+            try safeScreenshot("qa-product-notice")
+            try tap("我了解，繼續使用")
+        }
         try tap("登入或建立帳號")
         try acceptVisibleTerms()
         checkpoint("real-login-native-input")
@@ -557,6 +560,22 @@ final class NativeQaTests: XCTestCase {
             try tap("傳送")
             try required("NativeQAChatSmoke", scroll: true)
             try safeScreenshot("qa-chat")
+            if ProcessInfo.processInfo.environment["NATIVE_QA_REVIEW_REMEDIATION"] == "1" {
+                checkpoint("review-report-visible")
+                try tap("檢舉聊天內容或對方")
+                try tap("送出檢舉")
+                try required("完成，返回聊天", scroll: true)
+                try safeScreenshot("qa-review-report-receipt")
+                try tap("完成，返回聊天")
+                try tap("封鎖")
+                try required("解除封鎖")
+                try required("已封鎖，停止傳送新訊息；歷史仍可查看。")
+                guard !element("傳送").isEnabled else { throw Failure.invalidIdentity }
+                try safeScreenshot("qa-review-blocked")
+                try tap("解除封鎖")
+                try required("封鎖")
+                checkpoint("review-report-block-complete")
+            }
             try tap("返回")
             try tapTab("社交")
             try required("聊天與面交")

@@ -23,7 +23,13 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         const productKey = q.query.productKey;
         if (productKey !== undefined && (typeof productKey !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(productKey))) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const all = (await loadDiscovery()).filter(p => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified);
-        const attempts = await prisma.retailPriceObservation.findMany({ where: { expiresAt: { gt: new Date() } }, select: { productKey: true, bindingHash: true }, take: 10000 });
+        const attempts = all.length ? await prisma.$queryRaw<Array<{ productKey: string; bindingHash: string }>>`
+            SELECT DISTINCT a."productKey", a."bindingHash" FROM "RetailPriceObservation" a
+            JOIN jsonb_to_recordset(${JSON.stringify(all.map(p => ({ productKey: p.key, bindingHash: retailBinding(p) })))}::jsonb)
+              AS f("productKey" text, "bindingHash" text)
+              ON a."productKey" = f."productKey" AND a."bindingHash" = f."bindingHash"
+            WHERE a."expiresAt" > ${new Date()}
+        ` : [];
         const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash));
         // Direct lookup stays within the same public/AI-allowed catalog and returns its current binding.
         const waiting = all.filter(p => (source === 'all' || p.kind === source) && (productKey ? p.key === productKey : !covered.has(p.key + ':' + retailBinding(p)))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));

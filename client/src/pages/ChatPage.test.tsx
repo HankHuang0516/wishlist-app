@@ -303,7 +303,9 @@ describe('private chat web parity', () => {
     render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
     const original = '合成無效\u0000訊息';
     fireEvent.change(screen.getByRole('textbox', { name: '商品聊天訊息（最多2000字元）' }), { target: { value: original } });
-    fireEvent.click(screen.getByRole('button', { name: '傳送訊息' }));
+    const send = screen.getByRole('button', { name: '傳送訊息' });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
     await screen.findByText('請輸入1至2000字訊息，不含無效控制字元');
     expect(screen.getByRole('textbox', { name: '商品聊天訊息（最多2000字元）' })).toHaveValue(original);
     expect(posts()).toHaveLength(0); expect(data.size).toBe(0);

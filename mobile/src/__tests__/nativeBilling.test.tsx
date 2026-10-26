@@ -14,7 +14,7 @@ const store = vi.hoisted(() => ({
 }));
 vi.mock('expo-iap', () => ({ useIAP: (callbacks: unknown) => { store.callbacks = callbacks; return store; }, getAvailablePurchases: (options: unknown) => store.restore(options) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: { apiUrl: 'https://example.com/api' } } } }));
-vi.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+vi.mock('@expo/vector-icons', () => ({ Ionicons: () => null, FontAwesome6: () => null }));
 vi.mock('../SafeAreaModal', () => ({ SafeAreaModal: ({ children }: any) => <div>{children}</div> }));
 vi.mock('react-native', () => ({
   Platform: { get OS() { return store.platform; } }, Linking: { openURL: (url: string) => store.link(url) },

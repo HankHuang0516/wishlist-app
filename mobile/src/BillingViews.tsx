@@ -1,10 +1,14 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { billingPlans, type BillingPlan, type StoreProduct, storePrice } from './billingPlans';
 import type { BillingBenefits } from './billingBenefits';
 import { iosColors as c } from './iosTheme';
 
+function PlanIcon({ plan, size }: { plan: BillingPlan; size: number }) {
+  return plan.id === 'wishlist_premium_monthly' ? <FontAwesome6 name="crown" size={size} color={c.tint} />
+    : <Ionicons name={plan.icon} size={size} color={plan.id === 'wishlist_sponsor_90' ? '#E53959' : c.tint} />;
+}
 export function BillingButton({ label, onPress, secondary = false, disabled = false, loading = false }: {
   label: string; onPress: () => void; secondary?: boolean; disabled?: boolean; loading?: boolean;
 }) {
@@ -40,11 +44,14 @@ export function BillingOverview({ benefits, credits, products, available, loadin
     {loading && <View accessibilityRole="progressbar" style={s.status}><ActivityIndicator color={c.tint} /><Text style={s.note}>正在讀取商店價格…</Text></View>}
     {billingPlans.map((plan, index) => {
       const price = storePrice(products.find(product => product.id === plan.id));
-      return <View key={plan.id} style={[s.card, index === 0 && s.featured]}>
-        <View style={s.planHeader}><View style={[s.icon, index === 2 && s.heart]}><Ionicons name={plan.icon} size={26} color={index === 2 ? '#E53959' : c.tint} /></View>
-          <View style={s.planCopy}><Text style={s.heading}>{plan.name}</Text><Text style={s.note}>{plan.kind}</Text></View>
-          <Text style={s.price}>{available ? price ? `${price}${index === 0 ? '／月' : ''}` : loading ? '讀取中' : '價格尚未確認' : '尚未開放'}</Text></View>
-        {plan.features.map(feature => <View style={s.feature} key={feature}><Ionicons name="checkmark-circle" size={21} color={c.tint} /><Text style={s.body}>{feature}</Text></View>)}
+      const header = <View style={s.planHeader}><View style={[s.icon, index === 2 && s.heart]}><PlanIcon plan={plan} size={26} /></View>
+        <View style={s.planCopy}><Text style={s.heading}>{plan.name}</Text><Text style={s.note}>{plan.kind}</Text></View>
+        <Text style={s.price}>{available ? price ? `${price}${index === 0 ? '／月' : ''}` : loading ? '讀取中' : '價格尚未確認' : '尚未開放'}</Text>
+      </View>;
+      if (index === 2) return <Pressable key={plan.id} accessibilityRole="button" accessibilityLabel={plan.action} onPress={() => onSelect(plan)}
+        style={({ pressed }) => [s.card, pressed && s.pressed]}>{header}<View style={s.supportRow}><Text style={s.note}>不含尊榮或行銷額度</Text><Text style={s.link}>查看贊助方案 ›</Text></View></Pressable>;
+      return <View key={plan.id} style={[s.card, index === 0 && s.featured]}>{header}
+        {index === 0 && plan.features.map(feature => <View style={s.feature} key={feature}><Ionicons name="checkmark-circle" size={21} color={c.tint} /><Text style={s.body}>{feature}</Text></View>)}
         <BillingButton label={plan.action} secondary={index !== 0} onPress={() => onSelect(plan)} />
       </View>;
     })}
@@ -63,7 +70,7 @@ export function BillingDetail({ plan, product, available, connected, busy, uncer
   const subscription = plan.id === 'wishlist_premium_monthly', price = storePrice(product);
   const canBuy = available && connected && !!price && !busy && !uncertain && !pending;
   return <View style={s.flex}><ScrollView style={s.flex} contentContainerStyle={s.content}>
-    <View style={s.hero}><View style={s.heroIcon}><Ionicons name={plan.icon} size={46} color={c.tint} /></View>
+    <View style={s.hero}><View style={s.heroIcon}><PlanIcon plan={plan} size={46} /></View>
       <Text style={s.heroTitle}>{plan.headline}</Text><Text style={s.heroPrice}>{available ? price ? `${price}${subscription ? '／月' : ''}` : '價格尚未確認' : '尚未開放'}</Text></View>
     <View style={s.card}>{plan.features.map(feature => <View style={s.feature} key={feature}><Ionicons name="checkmark-circle" size={23} color={c.tint} /><Text style={s.heading}>{feature}</Text></View>)}</View>
     <Text style={s.note}>{plan.note}</Text>
@@ -102,6 +109,7 @@ export const billingStyles = StyleSheet.create({
   planCopy: { flex: 1, minWidth: 120, gap: 3 },
   price: { fontSize: 19, lineHeight: 27, fontWeight: '700', color: c.tint, flexShrink: 1 },
   icon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#E5F0FF', alignItems: 'center', justifyContent: 'center' },
+  supportRow: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
   heart: { backgroundColor: '#FFECF0' },
   feature: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   button: { minHeight: 50, padding: 13, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },

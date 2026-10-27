@@ -2,7 +2,8 @@ import { NativeActionMenu } from './NativeActionMenu';
 import { NativeDisclosure } from './NativeDisclosure';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { wishShareMessage } from './wishShare';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -45,6 +46,13 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
   const begin = () => { if (!active.current || locked.current) return false; locked.current = true; setBusy(true); setError(''); return true; };
   const end = () => { locked.current = false; if (active.current) setBusy(false); };
   const blocked = busy || !ready || pending !== null;
+  async function shareWish(wish: ManagedWish) {
+    if (blocked) return;
+    Alert.alert('分享這個願望？', wishShareMessage(wish), [
+      { text: '取消', style: 'cancel' },
+      { text: '開啟分享選單', onPress: () => { void Share.share({ message: wishShareMessage(wish), title: wish.name }).catch(() => Alert.alert('暫時無法分享', '願望仍保存在清單，可稍後再試。')); } },
+    ]);
+  }
   async function loadLists(cursor: number | null = null) {
     const page = parseManagementPage(await api(root + '/lists' + (cursor ? '?cursor=' + cursor : '')), parseManagedList, 25);
     if (active.current) { setLists(old => cursor ? [...old.filter(v => !page.items.some(p => p.id === v.id)), ...page.items] : page.items); setListCursor(page.nextCursor); }
@@ -217,6 +225,7 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
       {wishes.length === 0 && !busy && <Text style={s.text}>這個清單還沒有願望，先記下想找的好物。</Text>}
       {wishes.map(w => <View key={w.id} style={s.card}><View style={s.wishCardHeader}><WishImage wish={w} compact /><View style={s.wishCardInfo}><View style={s.wishNameRow}><Text accessibilityLabel={w.name} numberOfLines={3} style={[s.heading,s.wishName]}>{w.name}</Text><Pressable accessibilityRole="button" accessibilityLabel={w.name+'的更多操作'} style={s.wishMore} disabled={blocked} onPress={()=>setMenuWishId(w.id)}><Ionicons name="ellipsis-horizontal" size={23} color={iosColors.tint}/></Pressable></View><Text style={[s.aiStatus, w.aiStatus === 'FAILED' && s.aiFailed]}>{aiLabel[w.aiStatus]}</Text>{w.aiStatus === 'COMPLETED' && w.aiPrice !== null && <Text style={s.aiPrice}>AI 參考價格 {w.aiCurrency ?? ''} {w.aiPrice}</Text>}<Text style={s.muted}>{w.maxPrice === null ? '未設定預算' : `最高預算 ${w.priceCurrency ?? '幣別未確認'} ${w.maxPrice}`}{w.isHidden ? ' · 已隱藏' : ''}{w.isPurchased ? ' · 已完成' : ''}</Text></View></View>{!!w.notes && <><Text numberOfLines={expandedWishIds.has(w.id) ? undefined : 3} style={s.text}>{w.notes}</Text>{w.notes.length > 100 && <Pressable accessibilityRole="button" onPress={() => setExpandedWishIds(old => { const next = new Set(old); next.has(w.id) ? next.delete(w.id) : next.add(w.id); return next; })}><Text style={s.expandText}>{expandedWishIds.has(w.id) ? '收合詳細資訊' : '展開詳細資訊'}</Text></Pressable>}</>}{!!w.link && <Text style={s.text}>參考連結：{w.link}</Text>}{!!w.aiLink && <Text style={s.text}>AI 參考商品：{w.aiLink}</Text>}
         {button('尋找符合商品', () => onExplore(w.id), busy || w.isHidden || w.isPurchased, 'primary')}
+        {button('分享這個願望', () => void shareWish(w), blocked)}
       </View>)}
       {wishCursor !== null && button('載入更多願望', () => void read(() => loadDetail(selected.id, wishCursor)), busy)}
       {button('重新載入', () => void read(() => loadDetail(selected.id)), busy)}

@@ -2,6 +2,7 @@ import prisma from './prisma';
 import { checkAndIncrementAiUsage } from './usageService';
 import { loadEclawRecognitionConfig, recognizeWithEclaw } from './eclawRecognition';
 import type { EclawRecognitionResult } from './eclawRecognition';
+import { eclawImageResource } from './eclawRecognitionImage';
 
 function minimaxPilotUserId() {
     const raw = process.env.MINIMAX_PILOT_USER_ID;
@@ -61,7 +62,8 @@ export function startEclawRecognitionWorker(
                     ...(minimaxPilotUserId() ? { NOT: { wishlist: { userId: minimaxPilotUserId()! }, imageUrl: { startsWith: `${process.env.API_URL || 'https://wishlist-app-production.up.railway.app/api'}/listing-media/` } } } : {}),
                 },
                 orderBy: { createdAt: 'asc' },
-                select: { id: true, name: true, imageUrl: true, link: true, aiError: true, wishlist: { select: { userId: true } } },
+                select: { id: true, name: true, imageUrl: true, link: true, aiError: true, wishlist: { select: { userId: true } },
+                    wishMedia: { select: { ownerUserId: true, imageUrl: true, flickrImageUrl: true } } },
             });
             if (!item) return;
             const attempt = retryAttempt(item.aiError);
@@ -76,7 +78,7 @@ export function startEclawRecognitionWorker(
                 const result = await recognize({
                     jobId: attempt > 0 ? `wish-${item.id}-retry-${attempt}` : `wish-${item.id}`,
                     ...(attempt > 0 ? { previousJobId: `wish-${item.id}` } : {}),
-                    resourceUrl: item.imageUrl || item.link!,
+                    resourceUrl: eclawImageResource(item.imageUrl, item.link, item.wishlist.userId, item.wishMedia),
                     currentName: item.name,
                 }, config);
                 await prisma.item.updateMany({

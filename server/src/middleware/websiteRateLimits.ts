@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
+import { isMinimaxWorker } from '../lib/minimaxWorkerAuth';
 
 const rootFiles = new Set(['index.html', 'web-version.json', 'sw.js', 'registerSW.js', 'manifest.webmanifest', 'pwa-cache-policy.js', 'analytics-frame.html', 'analytics-frame.js', 'robots.txt', 'vite.svg', 'logo.png', 'og-image.png']);
 const assetExtension = /\.(?:js|css|png|jpe?g|webp|svg|gif|ico|woff2?|json)$/i;
@@ -31,6 +32,11 @@ export function isAccountRead(req: Request): boolean {
 }
 
 function isAccountRequest(req: Request): boolean {
+  // The private image controller checks the worker capability AND the live
+  // processing lease. Do not mistake that capability for a user-session JWT.
+  // All other paths/methods and forged capabilities retain normal user auth.
+  if (req.method === 'GET' && /^\/api\/listing-media\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/image\/?$/i.test(req.path) &&
+      isMinimaxWorker(req.headers.authorization)) return false;
   if (isAccountRead(req)) return true;
   const credentials = typeof req.headers.authorization === 'string' || typeof req.headers['x-api-key'] === 'string';
   return credentials && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&

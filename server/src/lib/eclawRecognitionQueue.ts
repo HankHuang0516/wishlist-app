@@ -75,6 +75,7 @@ export function startEclawRecognitionWorker(
                 }
                 const result = await recognize({
                     jobId: attempt > 0 ? `wish-${item.id}-retry-${attempt}` : `wish-${item.id}`,
+                    ...(attempt > 0 ? { previousJobId: `wish-${item.id}` } : {}),
                     resourceUrl: item.imageUrl || item.link!,
                     currentName: item.name,
                 }, config);

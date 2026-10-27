@@ -8,6 +8,7 @@ import { leadCurrent, leadDTO } from './sourceLeadRules';
 import { externalCandidateSelect, publicCandidate } from '../routes/externalListingRoutes';
 import { classifyDiscovery, discoveryCatalog, sourcePrice, statedCondition } from './discoveryCatalog';
 import { wishKeywords, normalizeWish } from './wishlistMatch';
+import { privateStorePreviewProducts } from './privateStorePreview';
 
 export type DiscoveryProduct = {
   kind: 'listing' | 'source' | 'external'; id: string; key: string; title: string; description: string;
@@ -61,7 +62,9 @@ async function scan<T extends {id: string}>(read: (cursor?: string) => Promise<T
     cursor = next;
   }
 }
-export async function loadDiscovery(now = new Date(), mapPresentation=false) {
+export async function loadDiscovery(now = new Date(), mapPresentation=false, viewerId?: number) {
+  const privatePreview = await privateStorePreviewProducts(viewerId, now, mapPresentation);
+  if (privatePreview !== null) return privatePreview;
   const products: DiscoveryProduct[] = [];
   await prisma.$transaction(async tx => {
     const listings = await scan(cursor => tx.listing.findMany({where:{id:{notIn:privateReviewListingIds()},status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));

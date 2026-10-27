@@ -21,6 +21,8 @@ describe('durable EClaw recognition queue', () => {
         delete process.env.ECLAW_RECOGNITION_DEVICE_ID;
         delete process.env.ECLAW_RECOGNITION_DEVICE_SECRET;
         delete process.env.MINIMAX_PILOT_USER_ID;
+        delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+        delete process.env.APP_REVIEW_DEMO_USER_ID;
     });
 
     it('claims one oldest pending item and writes the matching agent result', async () => {
@@ -72,12 +74,14 @@ describe('durable EClaw recognition queue', () => {
     });
     it('does not claim native APP photos reserved for the MiniMax pilot account', async () => {
         process.env.MINIMAX_PILOT_USER_ID = '928';
+        process.env.APP_REVIEW_DEMO_USER_ID = '946';
+        process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = 'synthetic-only-native-vision-token-at-least-32';
         findFirst.mockResolvedValue(null);
         updateMany.mockResolvedValue({ count: 0 });
         const stop = startEclawRecognitionWorker(jest.fn(), jest.fn());
         await settle();
         expect(findFirst.mock.calls[0][0].where.NOT).toMatchObject({
-            wishlist: { userId: 928 }, imageUrl: { startsWith: expect.stringContaining('/api/listing-media/') },
+            wishlist: { userId: { in: [928, 946] } }, imageUrl: { startsWith: expect.stringContaining('/api/listing-media/') },
         });
         stop();
     });

@@ -25,11 +25,11 @@ const auth = (path: string) => isolatedHttp.get(path).set('Authorization', `Bear
 const callback = (jobId: string, body: object) => isolatedHttp.post(`/api/internal/minimax-vision/${jobId}/result`)
     .set('Authorization', `Bearer ${token}`).send(body);
 
-async function wish() {
+async function wish(owner = userId, list = listId) {
     const id = randomUUID();
     const imageUrl = `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/image`;
-    const item = await prisma.item.create({ data: { wishlistId: listId, name: '等待辨識', imageUrl, aiStatus: 'PENDING', uploadStatus: 'COMPLETED' } });
-    await prisma.listingMedia.create({ data: { id, ownerUserId: userId, wishItemId: item.id, imageUrl,
+    const item = await prisma.item.create({ data: { wishlistId: list, name: '等待辨識', imageUrl, aiStatus: 'PENDING', uploadStatus: 'COMPLETED' } });
+    await prisma.listingMedia.create({ data: { id, ownerUserId: owner, wishItemId: item.id, imageUrl,
         thumbnailUrl: `${getApiUrl().replace(/\/$/, '')}/listing-media/${id}/thumbnail`, contentHash: 'synthetic' } });
     return item.id;
 }
@@ -76,6 +76,31 @@ const externalResult = { recognizable: true, name: '藍色桌上檯燈',
     evidence: ['藍色燈罩', '白色底座'], uncertainties: ['未能確認燈泡'], confidence: 0.9 };
 
 describe('isolated MiniMax Code pull queue', () => {
+    it('meters the exact review identity once, accepts its correlated result, and enforces the ordinary daily limit', async () => {
+        const previousDemo = process.env.APP_REVIEW_DEMO_USER_ID;
+        const demo = await prisma.user.create({ data: { phoneNumber: `vision-demo-${randomUUID()}`, password: 'synthetic-unused' } });
+        try {
+            const list = await prisma.wishlist.create({ data: { userId: demo.id, title: 'synthetic private review wishes' } });
+            process.env.APP_REVIEW_DEMO_USER_ID = String(demo.id);
+            const itemId = await wish(demo.id, list.id);
+            const claimed = await auth('/api/internal/minimax-vision/next');
+            expect(claimed.status).toBe(200);
+            expect(claimed.body.kind).toBe('WISH');
+            expect((await prisma.user.findUniqueOrThrow({ where: { id: demo.id } })).aiUsageCount).toBe(1);
+            expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+            expect((await prisma.user.findUniqueOrThrow({ where: { id: demo.id } })).aiUsageCount).toBe(1);
+            expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: { name: '銀色相機', category: '相機',
+                visibleText: [], listedPriceTwd: null, evidence: ['銀色機身', '黑色圓形鏡頭'], confidence: 0.9 } })).status).toBe(204);
+            expect(await prisma.item.findUnique({ where: { id: itemId } })).toMatchObject({ name: '銀色相機', aiStatus: 'COMPLETED' });
+            await prisma.user.update({ where: { id: demo.id }, data: { aiUsageCount: 10, lastAiUsageDate: new Date() } });
+            const limitedId = await wish(demo.id, list.id);
+            expect((await auth('/api/internal/minimax-vision/next')).status).toBe(204);
+            expect(await prisma.item.findUnique({ where: { id: limitedId } })).toMatchObject({ aiStatus: 'SKIPPED', aiError: 'Daily AI limit exceeded' });
+        } finally {
+            if (previousDemo === undefined) delete process.env.APP_REVIEW_DEMO_USER_ID; else process.env.APP_REVIEW_DEMO_USER_ID = previousDemo;
+            await prisma.user.delete({ where: { id: demo.id } });
+        }
+    });
     it('authenticates, claims once, rejects forged results, and updates the APP wish', async () => {
         const itemId = await wish();
         expect((await isolatedHttp.get('/api/internal/minimax-vision/next')).status).toBe(404);

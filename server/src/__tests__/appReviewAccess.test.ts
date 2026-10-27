@@ -1,6 +1,6 @@
 import { appReviewDemoUserId } from '../lib/appReviewAccess';
 import { marketingEnabledFor } from '../lib/marketingAssistantAccess';
-import { listingAiEnabledFor, listingAiUserIds } from '../lib/minimaxWorkerAuth';
+import { listingAiEnabledFor, listingAiUserIds, minimaxWishUserIds } from '../lib/minimaxWorkerAuth';
 
 describe('App Review free pilot access', () => {
     const original = { ...process.env };
@@ -47,5 +47,14 @@ describe('App Review free pilot access', () => {
         expect(listingAiUserIds()).toEqual([]);
         expect(listingAiEnabledFor(946)).toBe(false);
         expect(marketingEnabledFor(946)).toBe(false);
+    });
+    it('routes only configured native-photo pilot identities, failing closed when the worker is unavailable', () => {
+        process.env.MINIMAX_PILOT_USER_ID = '928';
+        expect(minimaxWishUserIds()).toEqual([928, 946]);
+        delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+        expect(minimaxWishUserIds()).toEqual([]);
+        process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = 'test-only-token-with-at-least-32-characters';
+        process.env.MINIMAX_PILOT_USER_ID = 'invalid';
+        expect(minimaxWishUserIds()).toEqual([]);
     });
 });

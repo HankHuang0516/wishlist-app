@@ -6,6 +6,13 @@ export function minimaxPilotUserId() {
     return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+export function minimaxWishUserIds(): number[] {
+    const pilot = minimaxPilotUserId();
+    if (!pilot || !minimaxWorkerToken()) return [];
+    const demo = appReviewDemoUserId();
+    return [...new Set(demo === null ? [pilot] : [pilot, demo])];
+}
+
 export function minimaxWorkerToken() {
     const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
     return token && token.length >= 32 ? token : null;

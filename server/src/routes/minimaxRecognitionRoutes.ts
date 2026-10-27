@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from '../lib/externalListingIntake';
 import prisma from '../lib/prisma';
 import { getApiUrl } from '../config/constants';
-import { isMinimaxWorker, listingAiEnabledFor, listingAiUserIds, minimaxPilotUserId, minimaxWorkerToken } from '../lib/minimaxWorkerAuth';
+import { isMinimaxWorker, listingAiEnabledFor, listingAiUserIds, minimaxPilotUserId, minimaxWishUserIds, minimaxWorkerToken } from '../lib/minimaxWorkerAuth';
+import { checkAndIncrementAiUsage } from '../lib/usageService';
 import { validListingAiDraft } from '../lib/listingAiDraft';
 import { forbiddenListingField } from '../lib/listingPolicy';
 
@@ -17,7 +18,7 @@ function config() {
     // retiring the legacy wish pilot must not silently disable either queue.
     if (!token || (!id && process.env.MINIMAX_LISTING_AI_ENABLED !== '1' &&
         process.env.MINIMAX_EXTERNAL_CANDIDATE_AI_ENABLED !== '1')) return null;
-    return { userId: id, prefix: `${getApiUrl().replace(/\/$/, '')}/listing-media/` };
+    return { userIds: minimaxWishUserIds(), prefix: `${getApiUrl().replace(/\/$/, '')}/listing-media/` };
 }
 
 function clean(value: unknown, max: number) {
@@ -49,13 +50,14 @@ router.use((req, res, next) => {
     next();
 });
 
-async function claimWish(userId: number | null, prefix: string) {
-    if (!userId) return null;
+async function claimWish(userIds: number[], prefix: string) {
+    if (!userIds.length) return null;
+    const userId = { in: userIds };
     await prisma.item.updateMany({ where: { wishlist: { userId }, aiStatus: 'PROCESSING', aiError: { startsWith: 'MINIMAX_JOB_' },
         updatedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { aiStatus: 'PENDING', aiError: 'MINIMAX_RETRY' } });
     for (let attempt = 0; attempt < 3; attempt++) {
         const item = await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PENDING', uploadStatus: 'COMPLETED',
-            imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true,
+            imageUrl: { startsWith: prefix } }, orderBy: { createdAt: 'asc' }, select: { id: true, imageUrl: true, aiError: true, wishlist: { select: { userId: true } },
                 wishMedia: { select: { imageUrl: true } } } });
         if (!item?.imageUrl) break;
         const suffix = item.imageUrl.slice(prefix.length);
@@ -67,7 +69,17 @@ async function claimWish(userId: number | null, prefix: string) {
         const jobId = randomUUID();
         const claimed = await prisma.item.updateMany({ where: { id: item.id, aiStatus: 'PENDING' },
             data: { aiStatus: 'PROCESSING', aiError: `MINIMAX_JOB_${jobId}` } });
-        if (claimed.count) return { kind: 'WISH', jobId, imageUrl: item.imageUrl };
+        if (claimed.count) {
+            // Preserve the legacy pilot. The review identity uses the ordinary
+            // free daily allowance, charged only after its unique lease wins.
+            if (item.wishlist.userId !== minimaxPilotUserId() && item.aiError !== 'MINIMAX_RETRY' &&
+                !await checkAndIncrementAiUsage(item.wishlist.userId)) {
+                await prisma.item.updateMany({ where: { id: item.id, aiError: `MINIMAX_JOB_${jobId}` },
+                    data: { aiStatus: 'SKIPPED', aiError: 'Daily AI limit exceeded' } });
+                continue;
+            }
+            return { kind: 'WISH', jobId, imageUrl: item.imageUrl };
+        }
     }
     return null;
 }
@@ -150,13 +162,13 @@ async function claimExternalCandidate() {
 // UpdateMany remains the cross-request guard against leasing the same row.
 let nextLaneIndex = 0;
 router.get('/next', async (_req, res) => {
-    const { userId, prefix } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
+    const { userIds, prefix } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
     const firstLane = nextLaneIndex;
     nextLaneIndex = (nextLaneIndex + 1) % 3;
     try {
         for (let offset = 0; offset < 3; offset++) {
             const lane = (firstLane + offset) % 3;
-            const job = lane === 0 ? await claimWish(userId, prefix) :
+            const job = lane === 0 ? await claimWish(userIds, prefix) :
                 lane === 1 ? await claimListing(prefix) : await claimExternalCandidate();
             if (job) return res.json(job);
         }
@@ -165,12 +177,12 @@ router.get('/next', async (_req, res) => {
 });
 
 router.post('/:jobId/result', async (req, res) => {
-    const { userId } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
+    const { userIds } = res.locals.minimax as NonNullable<ReturnType<typeof config>>;
     const jobId = req.params.jobId;
     if (!/^[0-9a-f-]{36}$/.test(jobId)) return res.status(400).json({ error: 'INVALID_JOB' });
     const failed = req.body?.status === 'FAILED';
     try {
-        const item = userId ? await prisma.item.findFirst({ where: { wishlist: { userId }, aiStatus: 'PROCESSING',
+        const item = userIds.length ? await prisma.item.findFirst({ where: { wishlist: { userId: { in: userIds } }, aiStatus: 'PROCESSING',
             aiError: `MINIMAX_JOB_${jobId}` }, select: { id: true } }) : null;
         if (item) {
             const result = failed ? null : validMinimaxResult(req.body?.result);

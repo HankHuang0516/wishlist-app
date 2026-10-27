@@ -60,7 +60,8 @@ describe('restricted browser source management (isolated DB only)',()=>{
   const before=(await get('records/'+id,s)).body,privateFacts={canonicalUrl:f.canonicalUrl,title:'合成待審修改'};
   expect((await post('records/save',s,{operationId:randomUUID(),items:[{archiveItemId,expectedRevision:before.recordRevision,expectedStateHash:before.stateHash,facts:privateFacts}]})).status).toBe(200);
   const live=await http.get('/public/'+id);expect(live.status).toBe(200);expect(live.body.title).toBe(f.title);expect(live.body).not.toHaveProperty('pendingFacts');expect(live.body.checkedAt).toBe(f.checkedAt);
-  await prisma.externalSourceLead.update({where:{id},data:{checkedAt:new Date(Date.now()-49*3600000)}});expect((await http.get('/public/'+id)).status).toBe(404);
+  await prisma.externalSourceLead.update({where:{id},data:{checkedAt:new Date(Date.now()-3*86400000)}});expect((await http.get('/public/'+id)).status).toBe(200);
+  await prisma.externalSourceLead.update({where:{id},data:{checkedAt:new Date(Date.now()-14*86400000-1)}});expect((await http.get('/public/'+id)).status).toBe(404);
   const row=(await get('records/'+id,s)).body;expect((await post('records/save',s,{operationId:randomUUID(),items:[{archiveItemId,expectedRevision:row.recordRevision,expectedStateHash:row.stateHash,facts:{...f,sourceClaimState:'RESERVED',stateEvidenceRef:'source:synthetic-reserved'}}]})).status).toBe(200);expect((await http.get('/public/'+id)).status).toBe(404);
  });
  test('revocation during an admitted SAVE wait prevents a later write',async()=>{

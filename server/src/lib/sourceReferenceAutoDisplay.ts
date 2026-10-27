@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import {createHash} from 'node:crypto';
 import {LeadError,digest,object,publicUrl,ref,exact} from './sourceLeadRules';
 import {parseRecordFacts} from './sourceLeadRecords';
@@ -66,7 +67,7 @@ export async function validateAutoReference(tx:any,row:any,receiptRef:unknown){
  if(!evidence||!['EXISTING_SOURCE_ADMIN','SOURCE_SESSION_VERIFIER'].includes(evidence.issuer)||!evidence.verified)return {ok:false,reason:'TRUSTED_SOURCE_EVIDENCE_INCOMPLETE'};
  const facts=parseRecordFacts(row.pendingFacts);
  if(evidence.archiveItemId!==row.archiveItemId||evidence.canonicalUrl!==row.canonicalUrl||evidence.factsHash!==digest({archiveItemId:row.archiveItemId,facts})||+evidence.checkedAt!==Date.parse(facts.checkedAt))return {ok:false,reason:'SOURCE_EVIDENCE_FACTS_OR_TIME_MISMATCH'};
- if(Date.now()-+evidence.checkedAt>48*3600000||+evidence.checkedAt>Date.now())return {ok:false,reason:'SOURCE_EVIDENCE_EXPIRED'};
+ if(Date.now()-+evidence.checkedAt>SOURCE_VALIDITY_MS||+evidence.checkedAt>Date.now())return {ok:false,reason:'SOURCE_EVIDENCE_EXPIRED'};
  const old=object(row.evidence);
  if(Array.isArray(old.media)&&old.media.length)return {ok:false,reason:'EXISTING_MEDIA_REQUIRES_RIGHTS_REVIEW'};
  return {ok:true,reason:null,evidence};

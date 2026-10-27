@@ -10,7 +10,7 @@ export const mapPoint = (latitude: number, longitude: number) => ({
   x: ((longitude + 180) / 360 * 128 - 106) * 256,
   y: ((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 128 - 53) * 256,
 });
-// The server decides freshness (archive leads keep 48h; DB records stay until a recheck withdraws them).
+// The server decides freshness (archive leads keep 14 days; DB records stay until a recheck withdraws them).
 export function currentLead(lead: Pick<SourceLead, 'postedEarliestAt' | 'postedLatestAt' | 'checkedAt'>, now = Date.now()) {
   const lower = Date.parse(lead.postedEarliestAt ?? ''), upper = Date.parse(lead.postedLatestAt ?? ''), checked = Date.parse(lead.checkedAt);
   return Number.isFinite(lower) && Number.isFinite(upper) && Number.isFinite(checked) && lower <= upper && upper <= now && checked <= now;

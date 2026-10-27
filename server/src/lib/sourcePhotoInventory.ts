@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { createHash } from 'crypto';
 // Source-only capacity; native seller listing's separate eight-photo policy is unchanged.
 export const SOURCE_PHOTO_LIMIT = 32;
@@ -32,7 +33,7 @@ export function photoCompleteness(row:{archiveItemId:string;canonicalUrl:string;
  result.sourceCount=expected.length;
  result.physicalSourceCount=inventory.photos.filter(p=>p.classification==='SAME_ITEM').length;
  if(expected.length>SOURCE_PHOTO_LIMIT&&row.recordOrigin!=='DB_MASTER')return {...result,status:'OVER_LIMIT'};
- if((row.recordOrigin!=='DB_MASTER'&&now-Date.parse(inventory.checkedAt)>48*3600000)||inventory.bindingHash!==photoBindingHash(inventory,Array.isArray(e.media)?e.media:[]))return {...result,status:'STALE'};
+ if((row.recordOrigin!=='DB_MASTER'&&now-Date.parse(inventory.checkedAt)>SOURCE_VALIDITY_MS)||inventory.bindingHash!==photoBindingHash(inventory,Array.isArray(e.media)?e.media:[]))return {...result,status:'STALE'};
  if(inventory.coverage!=='FULL_POST'||inventory.ambiguities?.length||inventory.photos.some(p=>p.classification==='UNKNOWN'))return result;
  const media=Array.isArray(e.media)?e.media:[];
  const assigned=media.map((m:any)=>m.sourcePhotoId);

@@ -53,10 +53,10 @@ describe('authorized external supply intake', () => {
             catch (error) { expect(error).toBeInstanceOf(ExternalIntakeError); expect((error as ExternalIntakeError).field).toBe('sourceItemId'); }
         }
     });
-    it('accepts a daily observation at 24 hours but rejects one millisecond older', () => {
-        expect(parseExternalCandidate({ ...item, observedAt: '2026-09-23T12:00:00Z' }, source, now).observedAt)
-            .toEqual(new Date('2026-09-23T12:00:00Z'));
-        expect(() => parseExternalCandidate({ ...item, observedAt: '2026-09-23T11:59:59.999Z' }, source, now))
+    it('accepts observations within fourteen days and rejects one millisecond older', () => {
+        expect(parseExternalCandidate({ ...item, observedAt: '2026-09-10T12:00:00.001Z', expiresAt: '2026-09-24T12:00:00.001Z' }, source, now).observedAt)
+            .toEqual(new Date('2026-09-10T12:00:00.001Z'));
+        expect(() => parseExternalCandidate({ ...item, observedAt: '2026-09-10T11:59:59.999Z' }, source, now))
             .toThrow(ExternalIntakeError);
     });
     it('recognizes all 12 Taipei and 29 New Taipei official districts', () => {
@@ -81,7 +81,7 @@ describe('authorized external supply intake', () => {
         [{ ...item, county: '新北市', district: '中山區' }, 'district'],
         [{ ...item, district: '火星區' }, 'district'],
         [{ ...item, priceTwd: 0 }, 'priceTwd'],
-        [{ ...item, observedAt: '2026-09-20T11:00:00Z' }, 'expiresAt'],
+        [{ ...item, observedAt: '2026-09-09T11:00:00Z' }, 'expiresAt'],
         [{ ...item, expiresAt: '2026-10-30T11:00:00Z' }, 'expiresAt'],
         [{ ...item, title: '二手桌上型檯燈，LINE ID: seller123' }, 'title'],
     ])('rejects unsupported or unsafe record %p', (raw, field) => {

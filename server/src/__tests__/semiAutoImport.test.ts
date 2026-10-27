@@ -5,7 +5,7 @@ import { spawnSync } from 'child_process';
 import { PendingImportStore, normalize, parseInput, sha } from '../lib/semiAutoImport';
 const now=new Date('2026-10-09T02:00:00Z');
 const base={libraryFileId:'libfile_'+'a'.repeat(32),jsonVersion:28,csvVersion:25,sha256:'a'.repeat(64),csvLibraryFileId:'libfile_'+'b'.repeat(32),csvSha256:'b'.repeat(64)};
-const row=(key='1')=>({sourceUrl:'https://www.facebook.com/groups/123/posts/456',itemKey:key,title:'測試二手桌',price:100,currency:'TWD',county:'臺南市',district:'永康區',originalPostedAt:'2026-09-01T00:00:00Z',checkedAt:'2026-10-08T00:00:00Z',status:'ACTIVE'});
+const row=(key='1')=>({sourceUrl:'https://www.facebook.com/groups/123/posts/456',itemKey:key,title:'測試二手桌',price:100,currency:'TWD',county:'臺南市',district:'永康區',originalPostedAt:'2026-10-01T00:00:00Z',checkedAt:'2026-10-08T00:00:00Z',status:'ACTIVE'});
 let root:string;
 beforeEach(()=>{root=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'wishlist-pending-test-'));fs.chmodSync(root,0o700);});
 afterEach(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -19,9 +19,9 @@ test('one post multiple keys survive; same item duplicate and differing facts co
  j=s.advance(j.id,0,base);expect(j).toMatchObject({accepted:2,duplicates:2,rejected:1,state:'COMPLETE'});
  expect(s.page(j.id).items.map(r=>r.outcome)).toEqual(['PENDING_REVIEW','PENDING_REVIEW','DUPLICATE','CONFLICT']);
 });
-test('calendar months and 48h are independent; missing/old dates kept for review without refreshed check',()=>{
+test('posting and check fourteen-day windows are independent; missing/old dates kept for review without refreshed check',()=>{
  const unknown=normalize({...row(),originalPostedAt:null,checkedAt:null},now);expect(unknown.issues).toContain('ORIGINAL_DATE_UNKNOWN');expect(unknown.checkedAt).toBeNull();
- const old=normalize({...row(),originalPostedAt:'2026-07-01T00:00:00Z'},now);expect(old.issues).toContain('OUTSIDE_TWO_CALENDAR_MONTHS');expect(old.issues).not.toContain('SOURCE_CHECK_STALE');
+ const old=normalize({...row(),originalPostedAt:'2026-07-01T00:00:00Z'},now);expect(old.issues).toContain('OUTSIDE_FOURTEEN_DAYS');expect(old.issues).not.toContain('SOURCE_CHECK_STALE');
  const stale=normalize({...row(),checkedAt:'2026-09-01T00:00:00Z'},now);expect(stale.issues).toContain('SOURCE_CHECK_STALE');expect(stale.checkedAt).toBe('2026-09-01T00:00:00.000Z');
 });
 test.each([{county:'臺中市',district:'西屯區'},{county:'臺南市',district:'永康區'},{county:'高雄市',district:'左營區'}])('Taiwan valid district %j',loc=>expect(normalize({...row(),...loc},now).county).toBe(loc.county));
@@ -73,9 +73,10 @@ test('interrupted paired export rebuilds missing file only when existing bytes e
  fs.unlinkSync(path.join(dir,'manifest.json'));fs.unlinkSync(path.join(dir,'pending.csv'));expect(s.export(j.id,j.revision,base).manifest).toEqual(result.manifest);
  fs.writeFileSync(path.join(dir,'pending.csv'),'changed');expect(()=>s.export(j.id,j.revision,base)).toThrow('EXPORT_RECOVERY_CONFLICT');
 });
-test('two-calendar-month cutoff uses Taipei date and clamps month ends',()=>{
- expect(normalize({...row(),originalPostedAt:'2026-08-08T16:00:00Z'},now).issues).not.toContain('OUTSIDE_TWO_CALENDAR_MONTHS');
- expect(normalize({...row(),originalPostedAt:'2026-08-08T15:59:59Z'},now).issues).toContain('OUTSIDE_TWO_CALENDAR_MONTHS');
- const end=new Date('2026-04-30T00:00:00Z');expect(normalize({...row(),originalPostedAt:'2026-02-27T16:00:00Z'},end).issues).not.toContain('OUTSIDE_TWO_CALENDAR_MONTHS');
- expect(normalize({...row(),originalPostedAt:'2026-02-27T15:59:59Z'},end).issues).toContain('OUTSIDE_TWO_CALENDAR_MONTHS');
+test('fourteen-day posting cutoff is exact across month ends and leap days',()=>{
+ for(const value of ['2026-10-09T02:00:00Z','2026-04-01T00:00:00Z','2028-03-01T00:00:00Z']) {
+  const at=new Date(value),boundary=+at-14*86400000;
+  expect(normalize({...row(),originalPostedAt:new Date(boundary).toISOString()},at).issues).not.toContain('OUTSIDE_FOURTEEN_DAYS');
+  expect(normalize({...row(),originalPostedAt:new Date(boundary-1).toISOString()},at).issues).toContain('OUTSIDE_FOURTEEN_DAYS');
+ }
 });

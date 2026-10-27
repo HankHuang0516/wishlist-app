@@ -73,7 +73,7 @@ test('accepts only attributed fresh snapshots and explicit disjoint withdrawal s
   assert.throws(() => parseFeedEnvelope(envelope([item('one')], [{ sourceItemId: 'one', reason: 'SOLD' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([], [{ sourceItemId: 'two', reason: 'UNKNOWN' }]), config, now), /FEED_WITHDRAWAL_INVALID/);
   assert.throws(() => parseFeedEnvelope({ ...envelope(), authorizationRef: 'contract:other-ref' }, config, now), /FEED_ENVELOPE_INVALID/);
-  assert.throws(() => parseFeedEnvelope({ ...envelope(), generatedAt: '2026-09-23T03:00:00Z' }, config, now), /FEED_ENVELOPE_INVALID/);
+  assert.throws(() => parseFeedEnvelope({ ...envelope(), generatedAt: '2026-09-11T02:59:59.999Z' }, config, now), /FEED_ENVELOPE_INVALID/);
   assert.throws(() => parseFeedEnvelope(envelope([item('one', '2026-09-26T03:00:00Z')]), config, now), /FEED_ITEM_INVALID/);
 });
 
@@ -338,4 +338,10 @@ test('over-limit snapshots are rejected before any private or public write', asy
   ]) await assert.rejects(syncAuthorizedFeed(config, { fetchApi, fetchFeed: async () => snapshot }),
     /FEED_ENVELOPE_INVALID/);
   assert.deepEqual(calls, ['GET', 'GET']);
+});
+
+test('authorized snapshots remain valid for fourteen days without resetting their observation times',()=>{
+ const generatedAt=new Date(+now-13*86400000).toISOString();
+ assert.deepEqual(parseFeedEnvelope({...envelope([]),generatedAt},config,now),{items:[],withdrawals:[]});
+ assert.throws(()=>parseFeedEnvelope({...envelope(),generatedAt:new Date(+now-14*86400000-1).toISOString()},config,now),/FEED_ENVELOPE_INVALID/);
 });

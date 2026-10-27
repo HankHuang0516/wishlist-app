@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -65,8 +66,8 @@ export function normalize(input: unknown, now: Date): PendingItem {
     if(county&&!TAIWAN_DISTRICTS[county])throw new ImportError('INVALID_COUNTY');if(district&&(!county||!TAIWAN_DISTRICTS[county]?.has(district)))throw new ImportError('INVALID_DISTRICT');if(!county||!district)issues.push('LOCATION_UNKNOWN');
     const originalPostedAt=iso(b.originalPostedAt),checkedAt=iso(b.checkedAt);
     if(!originalPostedAt)issues.push('ORIGINAL_DATE_UNKNOWN');
-    else if(!archiveGate({originalPostedAt:new Date(originalPostedAt),verifiedAddress:'date-only',addressEvidenceRef:'date-only',verifiedLatitude:23,verifiedLongitude:120},now))issues.push(new Date(originalPostedAt)>now?'FUTURE_ORIGINAL_DATE':'OUTSIDE_TWO_CALENDAR_MONTHS');
-    if(!checkedAt)issues.push('SOURCE_CHECK_UNKNOWN');else if(new Date(checkedAt)>now)issues.push('FUTURE_SOURCE_CHECK');else if(now.getTime()-Date.parse(checkedAt)>48*3600000)issues.push('SOURCE_CHECK_STALE');
+    else if(!archiveGate({originalPostedAt:new Date(originalPostedAt),verifiedAddress:'date-only',addressEvidenceRef:'date-only',verifiedLatitude:23,verifiedLongitude:120},now))issues.push(new Date(originalPostedAt)>now?'FUTURE_ORIGINAL_DATE':'OUTSIDE_FOURTEEN_DAYS');
+    if(!checkedAt)issues.push('SOURCE_CHECK_UNKNOWN');else if(new Date(checkedAt)>now)issues.push('FUTURE_SOURCE_CHECK');else if(now.getTime()-Date.parse(checkedAt)>SOURCE_VALIDITY_MS)issues.push('SOURCE_CHECK_STALE');
     const sourceStatus=clean(b.status,20)?.toUpperCase()??'UNKNOWN';if(!['ACTIVE','RESERVED','SOLD','WITHDRAWN','UNKNOWN'].includes(sourceStatus))throw new ImportError('INVALID_STATUS');
     // An ACTIVE assertion is not a verified live-stock observation.
     issues.push('STOCK_UNVERIFIED');if(['SOLD','WITHDRAWN'].includes(sourceStatus))issues.push('NOT_AVAILABLE');

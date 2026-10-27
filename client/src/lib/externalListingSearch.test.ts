@@ -17,6 +17,17 @@ const row = () => ({ id: randomUUID(), title: '二手檯燈', description: '來�
   aiDerivedPublicFields: false, aiSupplement: null });
 
 describe('source-attributed external map data', () => {
+  it('keeps day-three and day-thirteen observations and expires at day fourteen', () => {
+    for (const days of [3, 13]) {
+      const observed = now - days * 86_400_000;
+      expect(parseExternalListing({ ...row(), observedAt: new Date(observed).toISOString(),
+        expiresAt: new Date(observed + 14 * 86_400_000).toISOString() }, now)).toBeDefined();
+    }
+    const observedAt = new Date(now - 14 * 86_400_000).toISOString();
+    expect(() => parseExternalListing({ ...row(), observedAt }, now)).toThrow();
+    expect(() => parseExternalListing({ ...row(), expiresAt: new Date(now + 15 * 86_400_000).toISOString() }, now)).toThrow();
+  });
+
   it('keeps only source facts and district-center provenance', () => {
     const item = parseExternalListing({ ...row(), secret: 'not public', owner: { id: 1 } }, now);
     expect(item).not.toHaveProperty('secret'); expect(item).not.toHaveProperty('owner');
@@ -43,7 +54,7 @@ describe('source-attributed external map data', () => {
     { imageUrl: 'https://images.example.com:444/items/1.jpg' },
     { thumbnailUrl: null }, { thumbnailUrl: 'https://evil.example/items/1.jpg' },
     { thumbnailUrl: 'https://images.example.com/items/1.jpg' },
-    { observedAt: new Date(now - 49 * 3_600_000).toISOString() },
+    { observedAt: new Date(now - 14 * 86_400_000 - 1).toISOString() },
     { expiresAt: new Date(now - 1_000).toISOString() },
     { location: { latitude: 25.01186, longitude: 121.45797, precision: 'EXACT',
       source: 'https://data.gov.tw/dataset/25489' } },

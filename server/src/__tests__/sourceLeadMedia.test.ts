@@ -4,7 +4,17 @@ const row={id,archiveItemId:'archive-item-1',canonicalUrl:'https://www.facebook.
 const photo=()=>({id,archiveItemId:row.archiveItemId,sourceUrl:row.canonicalUrl,permission:'PUBLIC_DISPLAY_AND_STORAGE',reviewed:true,storageProvider:'FLICKR',rightsEvidenceRef:'consent:synthetic-rights',mappingEvidenceRef:'review:synthetic-mapping',uploadReceiptRef:'review:synthetic-upload',sequence:0,alt:'測試鍋具',checkedAt:new Date(now).toISOString(),permissionExpiresAt:new Date(now+86400000).toISOString(),flickrPhotoId:'123',imageUrl:'https://live.staticflickr.com/1/123_abc_b.jpg',thumbnailUrl:'https://live.staticflickr.com/1/123_abc_s.jpg'});
 describe('source media is Flickr-only and bound to one permitted item',()=>{
  test('no media remains empty; PUBLIC source is not display permission',()=>{expect(sourceLeadMedia(row,now)).toEqual([]);expect(sourceLeadMedia({...row,evidence:{media:[{...photo(),permission:'UNKNOWN'}]}},now)).toEqual([])});
- test.each([{storageProvider:'local'},{storageProvider:'RAILWAY'},{sourceUrl:'https://www.facebook.com/groups/123/posts/999'},{archiveItemId:'other-item'},{reviewed:false},{rightsEvidenceRef:undefined},{uploadReceiptRef:undefined},{imageUrl:'https://scontent.example.com/1.jpg'},{flickrPhotoId:'999'},{checkedAt:new Date(now-49*3600000).toISOString()},{permissionExpiresAt:new Date(now).toISOString()}])('suppresses unsafe or unreviewed mapping %j',patch=>expect(sourceLeadMedia({...row,evidence:{media:[{...photo(),...patch}]}},now)).toEqual([]));
+ test.each([{storageProvider:'local'},{storageProvider:'RAILWAY'},{sourceUrl:'https://www.facebook.com/groups/123/posts/999'},{archiveItemId:'other-item'},{reviewed:false},{rightsEvidenceRef:undefined},{uploadReceiptRef:undefined},{imageUrl:'https://scontent.example.com/1.jpg'},{flickrPhotoId:'999'},{checkedAt:new Date(now-14*86400000-1).toISOString()},{permissionExpiresAt:new Date(now).toISOString()}])('suppresses unsafe or unreviewed mapping %j',patch=>expect(sourceLeadMedia({...row,evidence:{media:[{...photo(),...patch}]}},now)).toEqual([]));
  test('user-directed rights are distinct from seller consent and still require mapping and Flickr receipt',()=>{expect(sourceLeadMedia({...row,evidence:{media:[{...photo(),rightsBasis:'HANK_USER_DIRECTED',rightsEvidenceRef:'consent:Hank-20261003-0633'}]}},now)).toHaveLength(1);expect(sourceLeadMedia({...row,evidence:{media:[{...photo(),rightsBasis:'UNKNOWN'}]}},now)).toEqual([])});
  test('preserves original photo order and never exposes temporary source image URLs in DTO',()=>{const second={...photo(),id:'22222222-2222-4222-8222-222222222222',sequence:1};const r={...row,evidence:{media:[second,photo()]}};expect(sourceLeadMedia(r,now).map(m=>m.sequence)).toEqual([0,1]);const dto=sourceLeadMediaDTO(r);expect(dto.map(m=>m.id)).toEqual([id,second.id]);expect(dto[0].imageUrl).toContain('/source-leads/'+id+'/media/'+id+'/image');expect(JSON.stringify(dto)).not.toContain('staticflickr');expect(JSON.stringify(dto)).not.toContain('consent:');});
+});
+
+test('legacy generated photo deadlines adopt fourteen days without changing bound metadata',()=>{
+ const m={...photo(),permissionExpiresAt:new Date(now+48*3600000).toISOString()};
+ const original=JSON.stringify(m),r={...row,evidence:{media:[m]}};
+ expect(sourceLeadMedia(r,now+3*86400000)).toHaveLength(1);
+ expect(sourceLeadMedia(r,now+14*86400000-1)).toHaveLength(1);
+ expect(sourceLeadMedia(r,now+14*86400000)).toHaveLength(0);
+ expect(JSON.stringify(m)).toBe(original);
+ expect(sourceLeadMedia({...row,evidence:{media:[photo()]}},now+2*86400000)).toHaveLength(0);
 });

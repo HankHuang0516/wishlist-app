@@ -443,7 +443,7 @@ describe('admin-only attributed external supply staging', () => {
             await prisma.externalListingSource.delete({ where: { id: aiSourceId } });
         }
     });
-    it('revokes an unobserved 24-hour approval and requires a new private AI/review cycle', async () => {
+    it('revokes an unobserved fourteen-day approval and requires a new private AI/review cycle', async () => {
         const priorFlag = process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED;
         process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED = '1';
         const admin = (path: string) => request(server).post(url + path).set('x-admin-key', adminKey)
@@ -462,12 +462,17 @@ describe('admin-only attributed external supply staging', () => {
             const approval = { expectedContentHash: first.contentHash, authorizationRef: sourceBody.authorizationRef,
                 reviewRef: 'review:synthetic-refresh-first', confirmRights: true, confirmItem: true };
             expect((await admin(`/candidates/${id}/approve`).send(approval)).status).toBe(200);
+            const thirteenDaysAgo = new Date(Date.now() - 13 * 86_400_000);
             await prisma.externalListingCandidate.update({ where: { id }, data: {
-                observedAt: new Date(Date.now() - 25 * 3_600_000) } });
+                observedAt: thirteenDaysAgo, expiresAt: new Date(+thirteenDaysAgo + 14 * 86_400_000) } });
+            expect((await request(server).get('/api/external-listings')).body.items
+                .some((item: { id: string }) => item.id === id)).toBe(true);
+            await prisma.externalListingCandidate.update({ where: { id }, data: {
+                observedAt: new Date(Date.now() - 14 * 86_400_000 - 1) } });
             expect((await request(server).get('/api/external-listings')).body.items
                 .some((item: { id: string }) => item.id === id)).toBe(false);
             // A same-content feed refresh can arrive before the 15-minute
-            // expiry cycle; it must not silently restore yesterday's review.
+            // expiry cycle; it must not silently restore the expired review.
             const immediate = await admin(`/sources/${refreshSourceId}/candidates`).send({ items: [candidate()] });
             expect(immediate.status).toBe(202);
             expect(immediate.body.items[0]).toMatchObject({ id, status: 'PENDING_REVIEW', aiStatus: 'PENDING', changed: false });
@@ -476,7 +481,7 @@ describe('admin-only attributed external supply staging', () => {
             expect((await admin(`/candidates/${id}/approve`).send({ ...approval,
                 reviewRef: 'review:synthetic-refresh-second' })).status).toBe(200);
             await prisma.externalListingCandidate.update({ where: { id }, data: {
-                observedAt: new Date(Date.now() - 25 * 3_600_000), aiDraft: { title: 'stale private suggestion' } } });
+                observedAt: new Date(Date.now() - 14 * 86_400_000 - 1), aiDraft: { title: 'stale private suggestion' } } });
             expect(await expireExternalCandidates()).toBeGreaterThanOrEqual(1);
             expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id } })).toMatchObject({
                 status: 'STALE', approvalRef: null, approvedAuthorizationRef: null,

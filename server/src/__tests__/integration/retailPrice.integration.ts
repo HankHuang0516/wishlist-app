@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { discoveryHash } from '../../lib/discovery';
 import express from 'express';
 import {randomUUID} from 'crypto';
 import prisma from '../../lib/prisma';
@@ -91,3 +94,26 @@ it('keeps original references and candidate dedup correct behind more than 10000
  const queue=await http.get('/retail/candidates?limit=100').set('X-Admin-Key','synthetic-retail-admin');
  expect(queue.status).toBe(200);expect(queue.body.items.some((p:any)=>p.productKey===items[1].key)).toBe(false);
 },30000);
+
+it('migrates existing negative research without resetting checks or breaking exact API retries',async()=>{
+ const key='listing:'+listingId,p=(await loadDiscovery()).find(p=>p.key===key)!;
+ const cases=[];
+ for(const [status,days] of [['NOT_FOUND',7],['NEEDS_SPEC',7],['NOT_FOUND',3]] as const){
+  const body={requestId:randomUUID(),productKey:key,bindingHash:retailBinding(p),status,checkedAt:new Date().toISOString(),notes:'Synthetic migration research'};
+  ids.push(body.requestId);
+  const {payloadHash,...facts}=retailObservation(body,p);
+  const oldFacts={...facts,expiresAt:new Date(+facts.checkedAt+days*86400000)};
+  const row=await prisma.retailPriceObservation.create({data:{...oldFacts,payloadHash:discoveryHash(oldFacts)}});
+  cases.push({body,row,days});
+ }
+ const sql=fs.readFileSync(path.join(__dirname,'../../../prisma/migrations/20261027030000_source_validity_14_days/migration.sql'),'utf8').split(';')[0];
+ await prisma.$executeRawUnsafe(sql);
+ await prisma.$executeRawUnsafe(sql);
+ for(const {body,row,days} of cases){
+  const migrated=await prisma.retailPriceObservation.findUniqueOrThrow({where:{id:row.id}});
+  expect(+migrated.expiresAt-+migrated.checkedAt).toBe((days===7?14:days)*86400000);
+  expect(migrated.checkedAt).toEqual(row.checkedAt);
+  expect(migrated.payloadHash).toBe(row.payloadHash);
+  if(days===7) expect((await post(body)).body.cached).toBe(true);
+ }
+});

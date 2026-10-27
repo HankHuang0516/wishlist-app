@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { loadDiscovery, DiscoveryError } from '../lib/discovery';
-import { retailBinding, retailIdentity, retailObservation } from '../lib/retailPrices';
+import { retailBinding, retailIdentity, retailObservation, retailObservationMatches } from '../lib/retailPrices';
 import { evaluateCp, attachCp, cpTargets, cpCapacity, CP_BATCH_SIZE } from '../lib/discoveryCp';
 export function createRetailPriceAdmin(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const r = Router();
@@ -65,7 +65,7 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
             throw new DiscoveryError(404, 'RETAIL_PRODUCT_UNAVAILABLE');
         const data = retailObservation(body, p), old = await prisma.retailPriceObservation.findUnique({ where: { id: data.id } });
         if (old) {
-            if (old.payloadHash !== data.payloadHash)
+            if (!retailObservationMatches(old.payloadHash, data))
                 throw new DiscoveryError(409, 'RETAIL_REQUEST_CONFLICT');
             return s.json({ id: old.id, status: old.status, cached: true });
         }

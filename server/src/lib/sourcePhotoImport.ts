@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { photoBindingHash, photoCompleteness, parsePhotoInventory, SOURCE_PHOTO_LIMIT, SourcePhotoInventory } from './sourcePhotoInventory';
 import { sourceLeadMedia } from './sourceLeadMedia';
 export type VerifiedPhotoReceipt={state:'UPLOADED_AND_VERIFIED';archiveItemId:string;sourcePostUrl:string;sourcePhotoId:string;mediaId:string;photoId:string;mappingEvidenceRef:string;rightsBasis:'HANK_USER_DIRECTED'|'SELLER_CONSENT';rightsEvidenceRef:string;uploadReceiptRef:string;verifiedAt:string;flickrOriginal:{source:string};thumbnailSource:string};
@@ -14,7 +15,7 @@ export function prepareSourcePhotoImport(base:any,inventory:Omit<SourcePhotoInve
  const media=expected.map((photo,sequence)=>{
   const r=receipts.find(r=>r.sourcePhotoId===photo.sourcePhotoId);
   if(!r||r.state!=='UPLOADED_AND_VERIFIED'||r.archiveItemId!==base.archiveItemId||r.sourcePostUrl!==base.canonicalUrl||!r.flickrOriginal?.source)fail('VERIFIED_SAME_ITEM_RECEIPT_REQUIRED');
-  return {id:r!.mediaId,archiveItemId:base.archiveItemId,sourceUrl:base.canonicalUrl,sourcePhotoId:photo.sourcePhotoId,permission:'PUBLIC_DISPLAY_AND_STORAGE',rightsBasis:r!.rightsBasis,reviewed:true,storageProvider:'FLICKR',rightsEvidenceRef:r!.rightsEvidenceRef,mappingEvidenceRef:r!.mappingEvidenceRef,uploadReceiptRef:r!.uploadReceiptRef,flickrPhotoId:r!.photoId,imageUrl:r!.flickrOriginal.source,thumbnailUrl:r!.thumbnailSource,sequence,alt:base.title.replace(/^來源線索：/,''),checkedAt:r!.verifiedAt,permissionExpiresAt:new Date(Date.parse(base.checkedAt)+48*3600000).toISOString()};
+  return {id:r!.mediaId,archiveItemId:base.archiveItemId,sourceUrl:base.canonicalUrl,sourcePhotoId:photo.sourcePhotoId,permission:'PUBLIC_DISPLAY_AND_STORAGE',rightsBasis:r!.rightsBasis,reviewed:true,storageProvider:'FLICKR',rightsEvidenceRef:r!.rightsEvidenceRef,mappingEvidenceRef:r!.mappingEvidenceRef,uploadReceiptRef:r!.uploadReceiptRef,flickrPhotoId:r!.photoId,imageUrl:r!.flickrOriginal.source,thumbnailUrl:r!.thumbnailSource,sequence,alt:base.title.replace(/^來源線索：/,''),checkedAt:r!.verifiedAt,permissionExpiresAt:new Date(Date.parse(base.checkedAt)+SOURCE_VALIDITY_MS).toISOString()};
  });
  const photoInventory={...inventory,bindingHash:photoBindingHash(inventory,media)};
  const row={...structuredClone(base),archiveVersion:archive.version,archiveSha256:archive.sha256,evidence:{...structuredClone(base.evidence),media,photoInventory}};

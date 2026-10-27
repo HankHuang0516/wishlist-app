@@ -44,7 +44,7 @@ describe('DB record photos are backed up to Flickr and bound per item', () => {
     const unknown = assignment([{ sourcePhotoId: '901', classification: 'UNKNOWN' }]);
     expect(() => recordPhotoEvidence(row, unknown, [], now)).toThrow();
   });
-  test('DB record photos do not expire passively; archive photos keep the 48h window', () => {
+  test('DB record photos do not expire passively; archive photos keep the 14-day window', () => {
     const { media, photoInventory } = recordPhotoEvidence(row, assignment(), [receipt('901', 1), receipt('902', 2)], now);
     const later = now + 30 * 86400000, evidence = { media, photoInventory };
     expect(sourceLeadMedia({ ...row, recordOrigin: 'DB_MASTER', evidence }, later)).toHaveLength(2);
@@ -96,4 +96,13 @@ describe('posts with more item photos than the source limit bind the first 32 (H
     const probe = { ...row, recordOrigin: 'DB_MASTER', evidence: { media: media.slice(0, 31), photoInventory } };
     expect(photoCompleteness(probe, sourceLeadMedia(probe, now), now).status).not.toBe('OVER_LIMIT');
   });
+});
+
+test('archive photos and inventory remain usable on day thirteen and expire at day fourteen',()=>{
+ const {media,photoInventory}=recordPhotoEvidence(row,assignment(),[receipt('901',1),receipt('902',2)],now);
+ const record={...row,recordOrigin:'ARCHIVE',evidence:{media,photoInventory}},checked=Date.parse(assignment().checkedAt);
+ const at=checked+13*86400000,visible=sourceLeadMedia(record,at);
+ expect(visible).toHaveLength(2);
+ expect(photoCompleteness(record,visible,at).status).toBe('IMPORTED_COMPLETE');
+ expect(sourceLeadMedia(record,checked+14*86400000)).toHaveLength(0);
 });

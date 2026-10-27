@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import prisma from './prisma';
 import { Prisma, type RetailPriceObservation } from '@prisma/client';
 import { discoveryHash, DiscoveryError, type DiscoveryProduct } from './discovery';
@@ -135,8 +136,15 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
     }
     else if (['originalPrice', 'sourceUrl', 'sourceProductTitle', 'evidenceQuote'].some(k => b[k] !== undefined && b[k] !== null))
         throw new DiscoveryError(400, 'RETAIL_INVALID_OBSERVATION');
-    const data = { id: b.requestId, productKey: p.key, bindingHash: retailBinding(p), identity, status: String(b.status), originalPrice, currency: 'TWD', priceType, sourceUrl, sourceTitle, sourceProductTitle, sourcePeriod: period, evidenceQuote, checkedAt, expiresAt: new Date(+checkedAt + (b.status === 'VERIFIED' ? 14 : 7) * 86400000), notes };
+    const data = { id: b.requestId, productKey: p.key, bindingHash: retailBinding(p), identity, status: String(b.status), originalPrice, currency: 'TWD', priceType, sourceUrl, sourceTitle, sourceProductTitle, sourcePeriod: period, evidenceQuote, checkedAt, expiresAt: new Date(+checkedAt + SOURCE_VALIDITY_MS), notes };
     return { ...data, payloadHash: discoveryHash(data) };
+}
+// Keep retries of pre-policy negative receipts idempotent after the data migration.
+export function retailObservationMatches(oldHash: string, data: ReturnType<typeof retailObservation>) {
+    if (oldHash === data.payloadHash) return true;
+    if (!['NOT_FOUND', 'NEEDS_SPEC'].includes(data.status)) return false;
+    const { payloadHash, ...facts } = data;
+    return oldHash === discoveryHash({ ...facts, expiresAt: new Date(+data.checkedAt + 7 * 86_400_000) });
 }
 export async function retailReferences(products: DiscoveryProduct[], now = new Date()) {
     const facts = products.map(p => ({ productKey: p.key, bindingHash: retailBinding(p), identity: retailIdentity(p) })).filter(p => p.identity);

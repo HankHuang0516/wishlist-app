@@ -1,3 +1,5 @@
+import { discoveryHash } from '../lib/discovery';
+import { retailObservationMatches } from '../lib/retailPrices';
 import {randomUUID} from 'crypto';
 import {retailObservation,retailBinding,retailIdentity} from '../lib/retailPrices';
 import type {DiscoveryProduct} from '../lib/discovery';
@@ -106,3 +108,17 @@ test('standard white Nintendo OLED set never matches a partial or different cons
 
 
 test('Nintendo Taiwan MSRP is model-bound and refuses lookalike domains',()=>{const product={...p,title:'Nintendo Switch OLED 白色 二手 含原盒及配件收納包',mainId:'electronics',subId:'gaming'};const body={...input(),productKey:product.key,bindingHash:retailBinding(product),originalPrice:'10480',sourceUrl:'https://support.nintendo.com/tw/information/2021/210706/index.html',sourceProductTitle:'Nintendo Switch（OLED款式）白色',evidenceQuote:'Nintendo Switch（OLED款式）建議售價NTD 10,480（含稅）；白色',sourcePeriod:'2021-07-06'};expect(Number(retailObservation(body,product).originalPrice)).toBe(10480);expect(()=>retailObservation({...body,sourceUrl:'https://nintendo.com.attacker.invalid/'},product)).toThrow();expect(()=>retailObservation({...body,sourceProductTitle:'Nintendo Switch OLED 紅藍'},product)).toThrow();});
+
+test.each(['NOT_FOUND','NEEDS_SPEC'])('negative research %s lasts fourteen days',status=>{
+ const b={requestId:randomUUID(),productKey:p.key,bindingHash:retailBinding(p),status,checkedAt:new Date().toISOString(),notes:'Synthetic research result'};
+ const r=retailObservation(b,p);
+ expect(+r.expiresAt-+r.checkedAt).toBe(14*86400000);
+});
+
+test('old seven-day negative request hashes stay idempotent, but changed facts conflict',()=>{
+ const data=retailObservation({requestId:randomUUID(),productKey:p.key,bindingHash:retailBinding(p),status:'NOT_FOUND',checkedAt:new Date().toISOString(),notes:'Synthetic legacy research'},p);
+ const {payloadHash,...facts}=data;
+ const oldHash=discoveryHash({...facts,expiresAt:new Date(+data.checkedAt+7*86400000)});
+ expect(retailObservationMatches(oldHash,data)).toBe(true);
+ expect(retailObservationMatches(oldHash,{...data,notes:'Changed research',payloadHash:'changed'})).toBe(false);
+});

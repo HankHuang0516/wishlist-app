@@ -1,3 +1,4 @@
+import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { photoBindingHash, photoCompleteness, parsePhotoInventory, SOURCE_PHOTO_LIMIT } from './sourcePhotoInventory';
 import { sourceLeadMedia } from './sourceLeadMedia';
@@ -40,7 +41,7 @@ export function recordPhotoEvidence(row: { id: string; archiveItemId: string; ca
     const upload = r ? { id: r.mediaId, flickrPhotoId: r.photoId, imageUrl: r.imageSource, thumbnailUrl: r.thumbnailSource, uploadReceiptRef: 'source:flickr-upload/' + r.mediaId } :
       { id: m.id, flickrPhotoId: m.flickrPhotoId, imageUrl: m.imageUrl, thumbnailUrl: m.thumbnailUrl, uploadReceiptRef: m.uploadReceiptRef };
     return { ...upload, archiveItemId: row.archiveItemId, sourceUrl: row.canonicalUrl, sourcePhotoId: p.sourcePhotoId, permission: 'PUBLIC_DISPLAY_AND_STORAGE', rightsBasis: 'HANK_USER_DIRECTED', reviewed: true, storageProvider: 'FLICKR',
-      rightsEvidenceRef, mappingEvidenceRef: inventory.reviewRef, sequence, alt, checkedAt: inventory.checkedAt, permissionExpiresAt: new Date(Date.parse(inventory.checkedAt) + 48 * 3600000).toISOString() };
+      rightsEvidenceRef, mappingEvidenceRef: inventory.reviewRef, sequence, alt, checkedAt: inventory.checkedAt, permissionExpiresAt: new Date(Date.parse(inventory.checkedAt) + SOURCE_VALIDITY_MS).toISOString() };
   });
   const photoInventory = { ...inventory, bindingHash: photoBindingHash(inventory, media) };
   const probe = { archiveItemId: row.archiveItemId, canonicalUrl: row.canonicalUrl, recordOrigin: 'DB_MASTER', evidence: { media, photoInventory } };

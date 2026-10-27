@@ -181,7 +181,7 @@ export function createExternalIntakeRoutes(getCredential: () => unknown = () => 
         } catch (error) { return fail(res, error); }
     });
     // A partner's sold/removed signal must hide a previously approved item
-    // immediately; waiting for the 24-hour freshness window is unsafe.
+    // immediately; waiting for the 14-day freshness window is unsafe.
     router.post('/sources/:id/withdraw', writes(), async (req, res) => {
         try {
             if (!isListingId(req.params.id)) return res.status(404).json({ error: '來源不存在' });

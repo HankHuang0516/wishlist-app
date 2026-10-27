@@ -260,7 +260,7 @@ describe('isolated MiniMax Code pull queue', () => {
         const claimed = await auth('/api/internal/minimax-vision/next');
         expect(claimed.body).toMatchObject({ kind: 'EXTERNAL_CANDIDATE', jobId: expect.any(String) });
         await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
-            observedAt: new Date(Date.now() - 49 * 3_600_000), aiDraft: { title: 'stale private suggestion' },
+            observedAt: new Date(Date.now() - 14 * 86_400_000 - 1), aiDraft: { title: 'stale private suggestion' },
         } });
         // Reject the callback even before the 15-minute expiry worker wakes.
         expect((await callback(claimed.body.jobId, { status: 'COMPLETED', result: externalResult })).status).toBe(409);
@@ -274,7 +274,7 @@ describe('isolated MiniMax Code pull queue', () => {
     it('does not lease an old external image during the expiry worker interval', async () => {
         const { candidate } = await externalCandidate();
         await prisma.externalListingCandidate.update({ where: { id: candidate.id }, data: {
-            observedAt: new Date(Date.now() - 49 * 3_600_000),
+            observedAt: new Date(Date.now() - 14 * 86_400_000 - 1),
         } });
         await auth('/api/internal/minimax-vision/next');
         expect(await prisma.externalListingCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({

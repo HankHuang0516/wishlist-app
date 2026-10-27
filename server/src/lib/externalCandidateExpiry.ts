@@ -4,7 +4,7 @@ import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from './externalListingIntake';
 
 // A paused, expired or no-longer-recent source item must be re-imported from a
 // fresh authorized observation before further review. Public reads already
-// reject >24h observations; the scheduled status transition also prevents a
+// reject observations outside 14 days; the scheduled status transition also prevents a
 // later same-content import from silently retaining an old approval.
 export async function expireExternalCandidates(now = new Date()) {
     const observationCutoff = new Date(now.getTime() - EXTERNAL_OBSERVATION_MAX_AGE_MS);

@@ -1,3 +1,4 @@
+import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from './externalListingSearch';
 import {ExternalListingDetailContent} from './ExternalListingDetailContent';
 import {NativeDiscovery} from './NativeDiscovery';
 import type {DiscoveryFilters,DiscoveryProduct} from './discoveryData';
@@ -110,12 +111,12 @@ export function ExploreScreen({ api, apiUrl, userId, onOpenChat, onOpenSourceCha
   }, []);
   const visible = useMemo(() => items.filter(item => Date.parse(item.expiresAt) > clock && !!item.mapVisibleUntil && Date.parse(item.mapVisibleUntil) > clock), [items, clock]);
   const externalVisible = useMemo(() => externalItems.filter(item =>
-    Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= 48 * 3_600_000), [externalItems, clock]);
+    Date.parse(item.expiresAt) > clock && clock - Date.parse(item.observedAt) <= EXTERNAL_OBSERVATION_MAX_AGE_MS), [externalItems, clock]);
   const chosen = visible.find(item => item.id === selected);
   const chosenExternal = externalVisible.find(item => item.id === selectedExternal);
   useEffect(() => { if (detail && Date.parse(detail.expiresAt) <= clock) { detailSequence.current++; setDetail(null); } }, [clock, detail]);
   useEffect(() => { if (externalDetail && (Date.parse(externalDetail.expiresAt) <= clock ||
-    clock - Date.parse(externalDetail.observedAt) > 48 * 3_600_000)) {
+    clock - Date.parse(externalDetail.observedAt) > EXTERNAL_OBSERVATION_MAX_AGE_MS)) {
     detailSequence.current++; setExternalDetail(null); setSelectedExternal(null);
   } }, [clock, externalDetail]);
   const data = useMemo(() => listingGeoJSON(visible), [visible]);

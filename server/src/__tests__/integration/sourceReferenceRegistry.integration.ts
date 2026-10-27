@@ -58,7 +58,7 @@ describe('explicit browser verifier authority and private registration',()=>{
  });
  test('missing material, stale capture, privacy and key rotation stay fail-closed',async()=>{
   const s=await login(),f=fixture();delete (f.evidence as any).coordinateEvidence;const r=await register(s,[f.evidence]);expect(r.body.records[0].verified).toBe(false);expect((await save(s,f.evidence,r.body.records[0].receiptRef)).body.results[0].autoDisplay.state).toBe('HELD');
-  const g=fixture(),raw=JSON.parse(g.evidence.sourceReceiptJson),old=new Date(Date.now()-49*3600000).toISOString();raw.actualCheckedAt=old;g.facts.checkedAt=old;g.evidence.sourceReceiptJson=JSON.stringify(raw);g.facts.evidence.sourceCheckRef='source:'+rawSha(g.evidence.sourceReceiptJson);
+  const g=fixture(),raw=JSON.parse(g.evidence.sourceReceiptJson),old=new Date(Date.now()-14*86400000-1).toISOString();raw.actualCheckedAt=old;g.facts.checkedAt=old;g.evidence.sourceReceiptJson=JSON.stringify(raw);g.facts.evidence.sourceCheckRef='source:'+rawSha(g.evidence.sourceReceiptJson);
   const stale=await register(s,[g.evidence]);expect((await save(s,g.evidence,stale.body.records[0].receiptRef)).body.results[0].autoDisplay.state).toBe('HELD');
   const privateFacts={...fixture().evidence,facts:{...g.facts,summary:'person@example.invalid'}};expect((await register(s,[privateFacts])).status).toBe(409);
   const rotated=express();rotated.use('/manager',createSourceManagerRoutes(()=>key+'-rotated',()=>origin));expect((await request(rotated).get('/manager/session').set('Cookie',s.cookie)).status).toBe(401);

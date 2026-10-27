@@ -2,6 +2,9 @@ import type { FeatureCollection, Point } from 'geojson';
 import { clipBounds, ListingSearchError, type Bounds, type SearchFilters } from './listingSearch';
 import { isUuid as uuid } from './listingBatch';
 
+// Hank selected the same 14-day window on Web, native and server.
+export const EXTERNAL_OBSERVATION_MAX_AGE_MS = 14 * 86_400_000;
+
 export type ExternalListing = {
   id: string; title: string; description: string; condition: 'USED'; priceTwd: number;
   county: '臺北市' | '新北市'; district: string; imageUrl: string; thumbnailUrl: string; canonicalUrl: string;
@@ -48,8 +51,8 @@ export function parseExternalListing(value: unknown, now = Date.now()): External
   const price = typeof row.priceTwd === 'string' && /^\d{1,8}(?:\.\d{1,2})?$/.test(row.priceTwd) ? Number(row.priceTwd) : NaN;
   const observedAt = Date.parse(row.observedAt), expiresAt = Date.parse(row.expiresAt);
   if (!Number.isFinite(price) || price < 1 || price > 10_000_000 || !Number.isFinite(observedAt) ||
-      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 || now - observedAt > 24 * 3_600_000 ||
-      expiresAt <= now || expiresAt > observedAt + 30 * 86_400_000)
+      !Number.isFinite(expiresAt) || observedAt > now + 5 * 60_000 || now - observedAt > EXTERNAL_OBSERVATION_MAX_AGE_MS ||
+      expiresAt <= now || expiresAt > observedAt + EXTERNAL_OBSERVATION_MAX_AGE_MS)
     throw new ListingSearchError('外部商品已失效或資料不正確');
   const canonicalUrl = externalUrl(row.canonicalUrl, source.host);
   const imageUrl = externalUrl(row.imageUrl, source.imageHost);

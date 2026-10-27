@@ -51,7 +51,7 @@ export function parseFeedEnvelope(raw, config, now = new Date()) {
     raw.version !== 1 || raw.sourceId !== config.sourceId || raw.authorizationRef !== config.authorizationRef ||
     typeof raw.generatedAt !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(raw.generatedAt) ||
     !Number.isFinite(Date.parse(raw.generatedAt)) || Date.parse(raw.generatedAt) > now.getTime() + 5 * 60_000 ||
-    now.getTime() - Date.parse(raw.generatedAt) > 24 * 60 * 60_000 ||
+    now.getTime() - Date.parse(raw.generatedAt) > 14 * 24 * 60 * 60_000 ||
     !Array.isArray(raw.items) || raw.items.length > 200 ||
     !Array.isArray(raw.withdrawals) || raw.withdrawals.length > 50) throw new Error('FEED_ENVELOPE_INVALID');
   const seen = new Set();
@@ -69,7 +69,7 @@ export function parseFeedEnvelope(raw, config, now = new Date()) {
     seen.add(withdrawal.sourceItemId);
   }
   // Missing items are not interpreted as sold. They age out through the
-  // server's 24-hour freshness gate unless the source sends an explicit signal.
+  // server's 14-day freshness gate unless the source sends an explicit signal.
   return { items: raw.items, withdrawals: raw.withdrawals };
 }
 

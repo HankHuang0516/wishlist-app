@@ -53,13 +53,19 @@ it('removes withdrawn sources and rejects prior-page cursors rather than mixing 
  const disabled=process.env.SOURCE_LEADS_PUBLIC_ENABLED;process.env.SOURCE_LEADS_PUBLIC_ENABLED='0';
  const closed=await http.get('/discovery');expect(closed.body.counts.source).toBe(0);process.env.SOURCE_LEADS_PUBLIC_ENABLED=disabled;
 });
-it('uses only external original-new evidence, invalidates expired or changed inputs, and never evaluates from a GET',async()=>{
+it('retains completed comparisons, invalidates expired retail or changed inputs, and never evaluates from a GET',async()=>{
  expect((await http.post('/discovery/cp-evaluations').send({})).status).toBe(401);const all=await loadDiscovery();let calls=0;
  const selected=all.filter(p=>p.mainId==='electronics'&&p.subId==='monitors'&&p.price!==null).slice(0,6);
  for(const p of selected){const id=randomUUID();retailIds.push(id);await prisma.retailPriceObservation.create({data:retailObservation({requestId:id,productKey:p.key,bindingHash:retailBinding(p),status:'VERIFIED',originalPrice:'4990',currency:'TWD',priceType:'MANUFACTURER_MSRP',sourceUrl:'https://www.benq.com/zh-tw/monitor.html',sourceTitle:'Synthetic original price evidence',sourceProductTitle:'BenQ GW2270',sourcePeriod:'2026-10',evidenceQuote:'BenQ GW2270 新品原價 NT$4990',checkedAt:new Date().toISOString()},p)});}
  const provider=async(targets:any[])=>{calls++;expect(targets.every(t=>t.comparables.length===1&&t.comparables[0].key.startsWith('retail:'))).toBe(true);return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價比較。',en:'Same-model original-new comparison.'}],limitations:[{zh:'品況與庫存待確認。',en:'Condition and stock unconfirmed.'}]}));};
  const result=await evaluateCp(all,provider);expect(result.evaluated).toBe(6);expect(calls).toBe(1);const attached=await attachCp(all),scored=attached.filter(p=>p.cp);expect(scored).toHaveLength(6);
  const page=await http.get('/discovery/cp');expect(page.status).toBe(200);expect(page.body.total).toBe(6);expect(calls).toBe(1);
+ // Provider-cache expiry alone must not remove unchanged, retail-backed picks.
+ await prisma.discoveryCpRun.updateMany({where:{model,state:'COMPLETED'},data:{expiresAt:new Date(0)}});
+ expect((await attachCp(all)).filter(p=>p.cp)).toHaveLength(6);
+ expect((await http.get('/discovery/cp')).body.total).toBe(6);
+ expect((await evaluateCp(all,provider)).evaluated).toBe(0);
+ expect(calls).toBe(1);
  // More unrelated recent batches must not evict this still-valid older score.
  const newerIds=Array.from({length:241},()=>randomUUID().replace(/-/g,''));
  await prisma.discoveryCpRun.createMany({data:newerIds.map(id=>({id,model,state:'COMPLETED',result:{},leaseUntil:new Date(),expiresAt:new Date(Date.now()+86400000)}))});

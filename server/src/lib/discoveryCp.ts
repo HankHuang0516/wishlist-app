@@ -77,11 +77,13 @@ export function validateCpOutput(value: unknown, targets: CpTarget[], model: str
 }
 export async function attachCp(products: DiscoveryProduct[], now = new Date()): Promise<EvaluatedProduct[]> {
     const refs = await retailReferences(products, now), prepared = products.map(p => ({ ...p, ...(refs.has(p.key) ? { retail: refs.get(p.key)! } : {}) }));
-    // Select results for these public products, rather than letting unrelated
-    // newer batches evict still-valid evaluations after a fixed 240-run window.
+    // Completed comparisons are retained evidence, not a 24-hour display cache.
+    // Reuse them only while the current public product and unexpired retail
+    // reference still match exactly. Run expiry bounds provider retries; it
+    // must not hide an unchanged product or force another paid evaluation.
     const runs = prepared.length && refs.size ? await prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>`
         SELECT "result" FROM "DiscoveryCpRun"
-        WHERE "state" = 'COMPLETED' AND "expiresAt" > ${now}
+        WHERE "state" = 'COMPLETED'
           AND "result" ?| ARRAY[${Prisma.join(prepared.map(p => p.key))}]::text[]
         ORDER BY "updatedAt" DESC, "id" DESC
     ` : [], byKey = new Map(prepared.map(p => [p.key, p])), evaluations = new Map<string, CpEvaluation>();

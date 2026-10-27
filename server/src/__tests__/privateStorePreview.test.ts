@@ -19,6 +19,6 @@ it('reads only the owner’s allowlisted DRAFT records and preserves actual stat
  location:{county:'臺北市',district:'中山區',publicLongitude:121.53,publicLatitude:25.07},media:[{id:'photo',flickrImageUrl:'https://live.staticflickr.com/fixture/image.jpg',flickrThumbnailUrl:'https://live.staticflickr.com/fixture/thumbnail.jpg'}]}]);
  const rows=await privateStorePreviewProducts(946,now,true);
  expect(findMany.mock.calls[0][0].where).toEqual({id:{in:[id]},ownerUserId:946,status:'DRAFT'});
- expect(rows).toEqual([expect.objectContaining({id,price:350,stockStatus:'DRAFT',title:'橘色檯燈',mapLocation:{coordinates:[121.53,25.07],precision:'APPROXIMATE_2KM'}})]);
+ expect(rows).toEqual([expect.objectContaining({id,price:350,stockStatus:'DRAFT',title:'橘色檯燈',mapLocation:{coordinates:[121.53,25.07],precision:'APPROXIMATE_2KM',visibleUntil:new Date(preview.expiresAt).toISOString()}})]);
  expect(rows![0]).not.toHaveProperty('requestHash');expect(rows![0].photos).toHaveLength(1);
 });

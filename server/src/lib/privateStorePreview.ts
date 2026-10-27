@@ -26,6 +26,7 @@ export function privateStorePreview(viewerId: number | undefined, now = new Date
 export async function privateStorePreviewProducts(viewerId: number | undefined, now: Date, map: boolean): Promise<DiscoveryProduct[] | null> {
   const ids = privateStorePreview(viewerId, now);
   if (!ids) return null;
+  const visibleUntil = new Date(JSON.parse(process.env.PRIVATE_STORE_PREVIEW!).expiresAt).toISOString();
   const rows = await prisma.listing.findMany({ where: { id: { in: ids }, ownerUserId: viewerId, status: 'DRAFT' },
     select: { ...publicListingSelect, media: { orderBy: { position: 'asc' }, where: { capturePurpose: { not: 'AI_MARKETING' } },
       select: { id: true, flickrImageUrl: true, flickrThumbnailUrl: true } } } });
@@ -44,7 +45,7 @@ export async function privateStorePreviewProducts(viewerId: number | undefined, 
       thumbnailUrl: photos[0]?.thumbnailUrl ?? null, photos, county: r.location?.county ?? null,
       district: r.location?.district ?? null, condition: r.condition, sourceLabel: 'Wishlist', stockStatus: r.status,
       canonicalUrl: null, detailPath: '/listings/' + r.id, date: r.createdAt.toISOString(), dateBasis: 'COLLECTED', dateEarliest: null,
-      ...(map ? { mapLocation: r.location ? { coordinates: [r.location.publicLongitude, r.location.publicLatitude] as [number, number], precision: 'APPROXIMATE_2KM' as const } : null } : {}),
+      ...(map ? { mapLocation: r.location ? { coordinates: [r.location.publicLongitude, r.location.publicLatitude] as [number, number], precision: 'APPROXIMATE_2KM' as const, visibleUntil } : null } : {}),
     };
   });
 }

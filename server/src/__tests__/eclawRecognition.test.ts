@@ -10,6 +10,26 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('EClaw queued product recognition contract', () => {
+    it('reads the exact late prior reply before dispatching a retry, without borrowing a different job', async () => {
+        const result = {jobId:'wish-7',name:'銀色相機',price:800,priceLow:600,priceHigh:1000,currency:'TWD',priceBasis:'外觀品類估算'};
+        const fetchImpl = jest.fn().mockResolvedValue(response({ messages: [
+            {id:'late',entity_id:0,is_from_bot:true,text:JSON.stringify(result)},
+            {id:'other',entity_id:0,is_from_bot:true,text:JSON.stringify({...result,jobId:'wish-70',name:'別人的商品'})},
+        ]}));
+        await expect(recognizeWithEclaw({jobId:'wish-7-retry-1',previousJobId:'wish-7',resourceUrl:'https://images.example.com/item.jpg',currentName:'等待辨識'},config,fetchImpl))
+            .resolves.toMatchObject({name:'銀色相機',price:800});
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(fetchImpl.mock.calls[0][0]).toContain('/api/chat/history');
+    });
+
+    it('accepts a late original reply while the same immutable photo retry is waiting', async () => {
+        const fetchImpl = jest.fn()
+          .mockResolvedValueOnce(response({messages:[]}))
+          .mockResolvedValueOnce(response({success:true}))
+          .mockResolvedValueOnce(response({messages:[{id:'late',entity_id:0,is_from_bot:true,text:JSON.stringify({jobId:'wish-9',name:'頭戴耳機',price:500,priceLow:300,priceHigh:700,currency:'TWD',priceBasis:'品類估算'})}]}));
+        await expect(recognizeWithEclaw({jobId:'wish-9-retry-1',previousJobId:'wish-9',resourceUrl:'https://images.example.com/item.jpg',currentName:'等待辨識'},config,fetchImpl))
+            .resolves.toMatchObject({name:'頭戴耳機',price:500});
+    });
     it('dispatches the public image as photo media and accepts the matching JSON reply', async () => {
         const fetchImpl = jest.fn()
             .mockResolvedValueOnce(response({ messages: [{ id: 'old', entity_id: 0, is_from_bot: true, text: 'old' }] }))

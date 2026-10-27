@@ -6,6 +6,28 @@ const auth: RequestHandler = (req, res, next) => {
   if (req.headers.authorization !== 'Bearer synthetic-verified') { res.status(401).json({ errorCode: 'INVALID_TOKEN' }); return; }
   (req as typeof req & { user: { id: number } }).user = { id: 42 }; next();
 };
+it('delegates only a verified worker image GET to the existing private-media lease guard', async () => {
+ const prior = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
+ const worker = 'synthetic-worker-capability-32-characters-long';
+ process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN = worker;
+ const app = express(); app.use(accountReadBudget(auth));
+ let processing = false;
+ app.get('/api/listing-media/:id/image', (_req, res) => {
+   if (!processing) { res.status(404).json({ errorCode: 'NO_ACTIVE_LEASE' }); return; }
+   res.json({ user: res.locals.verifiedAccountRequest ?? false });
+ });
+ app.use((_req, res) => res.json({ ok: true }));
+ const url = '/api/listing-media/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/image';
+ try {
+  expect((await request(app).get(url).set('Authorization', 'Bearer '+worker)).status).toBe(404);
+  processing = true;
+  const read = await request(app).get(url).set('Authorization', 'Bearer '+worker);
+  expect(read.status).toBe(200); expect(read.body.user).toBe(false);
+  for (const [method, path] of [['get',url.replace('/image','/thumbnail')],['post',url],['get','/api/users/me']] as const)
+    expect((await request(app)[method](path).set('Authorization','Bearer '+worker)).status).toBe(401);
+  expect((await request(app).get(url).set('Authorization','Bearer forged')).status).toBe(401);
+ } finally { if(prior===undefined)delete process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;else process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN=prior; }
+});
 it('public saturation cannot block verified wishes, messages, reports, map controls or source inquiries', async () => {
  const app = express(); app.use(accountReadBudget(auth)); app.use(...websiteRateLimits('/missing-build'));
  app.use((_req, res) => res.json({ ok: true }));

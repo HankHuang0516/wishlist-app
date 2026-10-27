@@ -50,7 +50,7 @@ export function loadEclawRecognitionConfig(env: NodeJS.ProcessEnv = process.env)
     const entityId = Number(env.ECLAW_RECOGNITION_ENTITY_ID ?? '0');
     if (!Number.isInteger(entityId) || entityId < 0) throw new Error('ECLAW_RECOGNITION_ENTITY_ID must be a non-negative integer');
     const pollIntervalMs = boundedInteger(env.ECLAW_RECOGNITION_POLL_MS, 1500, 250, 10000);
-    const replyTimeoutMs = boundedInteger(env.ECLAW_RECOGNITION_TIMEOUT_MS, 120000, 5000, 300000);
+    const replyTimeoutMs = boundedInteger(env.ECLAW_RECOGNITION_TIMEOUT_MS, 300000, 5000, 300000);
     return {
         baseUrl: (env.ECLAW_RECOGNITION_BASE_URL || 'https://eclawbot.com').replace(/\/$/, ''),
         deviceId,
@@ -117,12 +117,28 @@ function buildPrompt(jobId: string, resourceUrl: string, currentName: string) {
 }
 
 export async function recognizeWithEclaw(
-    input: { jobId: string; resourceUrl: string; currentName: string },
+    input: { jobId: string; resourceUrl: string; currentName: string; previousJobId?: string },
     config: EclawRecognitionConfig,
     fetchImpl: Fetch = fetch,
 ): Promise<EclawRecognitionResult> {
     const resource = safePublicResourceUrl(input.resourceUrl);
     const before = await readHistory(config, fetchImpl);
+    const matchingReply = (rows: HistoryMessage[], ids: string[]) => {
+        for (const row of [...rows].reverse()) {
+            if (!isBotMessage(row, config.entityId) || typeof row.text !== 'string') continue;
+            for (const id of ids) {
+                if (!row.text.includes(id)) continue;
+                try { return parseRecognitionReply(row.text, id); }
+                catch { /* A partial/different job is not a completed receipt. */ }
+            }
+        }
+        return null;
+    };
+    // Photo identity is immutable for a queued wish. A retry may read its
+    // exact prior job's late reply; it must not resend or borrow another item.
+    const reusableIds = [input.jobId, ...(input.previousJobId ? [input.previousJobId] : [])];
+    const recovered = matchingReply(before, reusableIds);
+    if (recovered) return recovered;
     const existingIds = new Set(before.map(row => typeof row.id === 'string' ? row.id : '').filter(Boolean));
     const prompt = buildPrompt(input.jobId, resource, input.currentName);
     const sentAt = Date.now();
@@ -144,6 +160,10 @@ export async function recognizeWithEclaw(
     const deadline = Date.now() + config.replyTimeoutMs;
     while (Date.now() < deadline) {
         const rows = await readHistory(config, fetchImpl);
+        if (input.previousJobId) {
+            const latePrevious = matchingReply(rows, [input.previousJobId]);
+            if (latePrevious) return latePrevious;
+        }
         const reply = rows.find(row => {
             if (!isBotMessage(row, config.entityId) || typeof row.id !== 'string' || existingIds.has(row.id) || typeof row.text !== 'string') return false;
             const created = Date.parse(String(row.created_at || ''));

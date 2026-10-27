@@ -1,4 +1,5 @@
 import { recognizeImage, recognizeListingImage, recognizeExternalCandidateImage, validExternalImageUrl, safeVisionError } from './server.mjs';
+import { writeFile } from 'node:fs/promises';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
@@ -29,7 +30,13 @@ async function cycle() {
         ? await recognizeListingImage(job.imageUrl, { authToken: token }) : kind === 'EXTERNAL_CANDIDATE'
             ? await recognizeExternalCandidateImage(job.imageUrl, job.imageHost) : await recognizeImage(job.imageUrl) }; }
     catch (error) {
-        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${safeVisionError(error)}\n`);
+        const code = safeVisionError(error);
+        // launchd may discard stderr. Persist only bounded, sanitized metadata;
+        // never retain a signed image URL, prompt, credential, or raw exception.
+        await writeFile(new URL('./last-vision-error.json', import.meta.url), JSON.stringify({
+            at: new Date().toISOString(), kind, jobId: job.jobId, code,
+        }) + '\n', { mode: 0o600 }).catch(() => undefined);
+        process.stderr.write(`MiniMax image recognition failed for job ${job.jobId}: ${code}\n`);
         body = { status: 'FAILED' };
     }
     const delivered = await api(`/${job.jobId}/result`, { method: 'POST', body: JSON.stringify(body) });

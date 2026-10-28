@@ -1,0 +1,43 @@
+{
+  "source": "client/src/layouts/Layout.tsx: Lucide Gift v0.562.0",
+  "original": {
+    "path": "web-gift.svg",
+    "sha256": "ca360609de5111a2191842078dedd5589aa4be55f5a2583b1617c33b17a0e214"
+  },
+  "renderedOriginal": {
+    "path": "original-no-H.png",
+    "sha256": "f31ba97ad356ed7338d7c9a3977dab6e9b849dabc6078e879f63b843077d82e5"
+  },
+  "H": {
+    "path": "general-H.png",
+    "sha256": "29bb4c6f54024441b675d9f04233dc0283dcc3dff2b78fbb08cd61581d61b9fa"
+  },
+  "canvas": [
+    1024,
+    1024
+  ],
+  "background": "#FFFFFF",
+  "stroke": "#2D2D2D",
+  "originalTransform": "identity",
+  "HPlacement": {
+    "size": [
+      80,
+      84
+    ],
+    "position": [
+      148,
+      186
+    ],
+    "colorOrOpacityAdjustment": false
+  },
+  "output": {
+    "path": "../assets/app-icon.png",
+    "sha256": "9ff7fead9828558245091278db175f1e743fae261e2b1dd1ef2aa4af10689152",
+    "alpha": false
+  },
+  "changedOutsideH": 0,
+  "HOverGift": 0,
+  "HOutsideCircle": 0,
+  "visibleHPixels": 2796,
+  "inspectionScope": "Source master only. Native package, store and installed-icon checks are separate."
+}

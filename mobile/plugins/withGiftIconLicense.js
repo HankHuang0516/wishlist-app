@@ -19,7 +19,7 @@ module.exports = config => {
     const name = IOSConfig.XcodeUtils.getProjectName(mod.modRequest.projectRoot);
     copyNotice(mod, path.join(mod.modRequest.platformProjectRoot, name, filename));
     IOSConfig.XcodeUtils.addResourceFileToGroup({
-      filepath: filename, groupName: name, project: mod.modResults, isBuildFile: true,
+      filepath: path.join(name, filename), groupName: name, project: mod.modResults, isBuildFile: true,
     });
     return mod;
   });

@@ -104,6 +104,27 @@ export function adminRequestBudget(getCredential: () => unknown = () => process.
   };
 }
 
+// The local MiniMax/marketing pollers call /api/internal/* every few seconds with
+// the server-held worker token. They must not drain the public 500/IP/15min
+// bucket shared by visitors and pipeline readbacks from the same address. Only a
+// Bearer token that matches WISHLIST_MINIMAX_CALLBACK_TOKEN on these two worker
+// mounts qualifies; anything else keeps the normal limits.
+export const WORKER_REQUEST_LIMIT = 3000;
+export function workerRequestBudget(isWorker: (authorization: string | undefined) => boolean = isMinimaxWorker): RequestHandler {
+  const budget = rateLimit({ windowMs: 15 * 60 * 1000, limit: WORKER_REQUEST_LIMIT, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: () => 'minimax-worker',
+    message: { errorCode: 'WORKER_RATE_LIMIT' } });
+  return (req, res, next) => {
+    if (!/^\/api\/internal\/(?:marketing|minimax-vision)(?:\/|$)/.test(req.path)) return next();
+    if (!isWorker(typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined)) return next();
+    budget(req, res, error => {
+      if (error) return next(error);
+      res.locals.verifiedWorkerRequest = true;
+      next();
+    });
+  };
+}
+
 export function websiteRateLimits(buildRoot: string) {
   const assets = publicBuildPaths(buildRoot);
   const isBuildRead = (req: Request) => (req.method === 'GET' || req.method === 'HEAD') && (assets.has(req.path) || assets.has('/index.html') && /^\/(?:explore|wishes|chat|social|settings|login|register|terms|privacy|support|account-deletion|partners|changelog|wishlists(?:\/\d+)?|listings(?:\/[a-f0-9-]{36})?)\/?$/i.test(req.path));
@@ -120,5 +141,5 @@ export function websiteRateLimits(buildRoot: string) {
   // Separate process-local stores, each retaining the original500/IP/15min.
   // Downloading a new shell cannot exhaust account/chat reads, and saturated
   // data requests cannot stop downloading the recovery/update interface.
-  return [create((req, res) => isBuildRead(req) || isSourceMediaRead(req) || res.locals.verifiedAccountRequest === true || res.locals.verifiedAdminRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req)), create(req => !isSourceMediaRead(req))];
+  return [create((req, res) => isBuildRead(req) || isSourceMediaRead(req) || res.locals.verifiedAccountRequest === true || res.locals.verifiedAdminRequest === true || res.locals.verifiedWorkerRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req)), create(req => !isSourceMediaRead(req))];
 }

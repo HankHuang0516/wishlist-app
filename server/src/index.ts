@@ -50,7 +50,7 @@ import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
 import helmet from 'helmet';
-import { accountReadBudget, websiteRateLimits } from './middleware/websiteRateLimits';
+import { accountReadBudget, websiteRateLimits, adminRequestBudget } from './middleware/websiteRateLimits';
 
 dotenv.config();
 
@@ -85,6 +85,7 @@ app.set('trust proxy', 1);
 
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(accountReadBudget(authenticateToken));
+app.use(adminRequestBudget());
 app.use(...websiteRateLimits(clientBuildPath));
 
 app.use('/api/source-manager',createSourceManagerRoutes());

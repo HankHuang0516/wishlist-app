@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
+import { adminHeaderAdmission } from '../lib/adminAdmission';
 import { isMinimaxWorker } from '../lib/minimaxWorkerAuth';
 
 const rootFiles = new Set(['index.html', 'web-version.json', 'sw.js', 'registerSW.js', 'manifest.webmanifest', 'pwa-cache-policy.js', 'analytics-frame.html', 'analytics-frame.js', 'robots.txt', 'vite.svg', 'logo.png', 'og-image.png']);
@@ -80,6 +81,29 @@ export function accountReadBudget(authenticate: RequestHandler): RequestHandler 
   };
 }
 
+// Server-held admin credential (x-admin-key) gets its own budget so the source
+// pipeline's sequential writes/readbacks do not share the public 500/IP/15min
+// bucket with visitors. Only a header that matches ADMIN_API_KEY qualifies; a
+// missing, wrong or oversized header falls through to the normal limits, so
+// guessing keys never escapes them. The key is never logged or echoed.
+export const ADMIN_REQUEST_LIMIT = 6000;
+export function adminRequestBudget(getCredential: () => unknown = () => process.env.ADMIN_API_KEY): RequestHandler {
+  const budget = rateLimit({ windowMs: 15 * 60 * 1000, limit: ADMIN_REQUEST_LIMIT, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: () => 'admin-credential',
+    message: { errorCode: 'ADMIN_RATE_LIMIT' } });
+  return (req, res, next) => {
+    if (!/^\/api\//.test(req.path) || req.headers['x-admin-key'] === undefined) return next();
+    let configured: unknown;
+    try { configured = getCredential(); } catch { return next(); }
+    if (adminHeaderAdmission(configured, req.headers['x-admin-key']) !== 'AUTHORIZED') return next();
+    budget(req, res, error => {
+      if (error) return next(error);
+      res.locals.verifiedAdminRequest = true;
+      next();
+    });
+  };
+}
+
 export function websiteRateLimits(buildRoot: string) {
   const assets = publicBuildPaths(buildRoot);
   const isBuildRead = (req: Request) => (req.method === 'GET' || req.method === 'HEAD') && (assets.has(req.path) || assets.has('/index.html') && /^\/(?:explore|wishes|chat|social|settings|login|register|terms|privacy|support|account-deletion|partners|changelog|wishlists(?:\/\d+)?|listings(?:\/[a-f0-9-]{36})?)\/?$/i.test(req.path));
@@ -96,5 +120,5 @@ export function websiteRateLimits(buildRoot: string) {
   // Separate process-local stores, each retaining the original500/IP/15min.
   // Downloading a new shell cannot exhaust account/chat reads, and saturated
   // data requests cannot stop downloading the recovery/update interface.
-  return [create((req, res) => isBuildRead(req) || isSourceMediaRead(req) || res.locals.verifiedAccountRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req)), create(req => !isSourceMediaRead(req))];
+  return [create((req, res) => isBuildRead(req) || isSourceMediaRead(req) || res.locals.verifiedAccountRequest === true || res.locals.verifiedAdminRequest === true || hasDedicatedAuthLimit(req)), create(req => !isBuildRead(req)), create(req => !isSourceMediaRead(req))];
 }

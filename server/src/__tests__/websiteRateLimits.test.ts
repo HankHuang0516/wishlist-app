@@ -4,7 +4,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import express from 'express';
 import request from 'supertest';
-import { publicBuildPaths, websiteRateLimits, adminRequestBudget, ADMIN_REQUEST_LIMIT } from '../middleware/websiteRateLimits';
+import { publicBuildPaths, websiteRateLimits, adminRequestBudget, ADMIN_REQUEST_LIMIT, workerRequestBudget, WORKER_REQUEST_LIMIT } from '../middleware/websiteRateLimits';
 
 let buildRoot: string;
 beforeEach(() => {
@@ -107,5 +107,35 @@ describe('admin credential budget', () => {
       const first = await request(server).get('/api/x').set('x-admin-key', KEY);
       expect(first.headers['ratelimit-remaining']).toBe(String(ADMIN_REQUEST_LIMIT - 1));
     } finally { server.close(); }
+  });
+});
+
+describe('worker poller budget', () => {
+  const ok = (h: string | undefined) => h === 'Bearer synthetic-worker-token';
+  function workerApp() {
+    const instance = express();
+    instance.use(workerRequestBudget(ok));
+    instance.use(...websiteRateLimits(buildRoot));
+    instance.use((_req, res) => res.json({ ok: true }));
+    return instance;
+  }
+  it('keeps authenticated worker polling out of the public 500/IP budget', async () => {
+    const server = workerApp().listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      for (let i = 0; i < 500; i++) expect((await request(server).get('/api/source-leads?unlocated=1')).status).toBe(200);
+      expect((await request(server).get('/api/source-leads?unlocated=1')).status).toBe(429);
+      expect((await request(server).get('/api/internal/marketing/next').set('authorization', 'Bearer wrong')).status).toBe(429);
+      const worker = await request(server).get('/api/internal/minimax-vision/next').set('authorization', 'Bearer synthetic-worker-token');
+      expect(worker.status).toBe(200);
+      expect(worker.headers['ratelimit-limit']).toBe(String(WORKER_REQUEST_LIMIT));
+    } finally { server.close(); }
+  });
+  it('does not exempt the worker token on other paths', async () => {
+    const instance = express();
+    instance.use(workerRequestBudget(ok));
+    instance.use((_req, res) => res.json({ worker: res.locals.verifiedWorkerRequest === true }));
+    expect((await request(instance).get('/api/source-lead-admin/records').set('authorization', 'Bearer synthetic-worker-token')).body.worker).toBe(false);
+    expect((await request(instance).get('/api/internal/marketing/next').set('authorization', 'Bearer synthetic-worker-token')).body.worker).toBe(true);
   });
 });

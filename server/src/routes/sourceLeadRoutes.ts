@@ -37,7 +37,10 @@ export function createSourceLeadAdmin(getCredential: () => unknown = () => proce
     const router = Router();
     router.use(marketplaceAdmin(getCredential));
     router.use((_q, r, n) => { r.set('Cache-Control', 'private, no-store'); n(); });
-    router.use(rateLimit({ windowMs: 60000, limit: 30 }));
+    // Requests already admitted by adminRequestBudget (verified x-admin-key, 6000/15min) skip this per-IP burst cap;
+    // parallel platform schedules share one IP and routinely exceed 30/min. Anything else keeps the 30/min guard.
+    router.use(rateLimit({ windowMs: 60000, limit: 30, skip: (_q, r) => r.locals.verifiedAdminRequest === true,
+        message: { errorCode: 'ADMIN_ROUTE_RATE_LIMIT' } }));
     router.get('/relay-identity', (_req, res) => res.json(relayIdentity()));
     router.use('/records',createSourceLeadRecordRoutes());
     router.use('/reference-evidence',createSourceReferenceEvidenceRoutes());

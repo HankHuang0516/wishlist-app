@@ -4,7 +4,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import express from 'express';
 import request from 'supertest';
-import { publicBuildPaths, websiteRateLimits } from '../middleware/websiteRateLimits';
+import { publicBuildPaths, websiteRateLimits, adminRequestBudget, ADMIN_REQUEST_LIMIT } from '../middleware/websiteRateLimits';
 
 let buildRoot: string;
 beforeEach(() => {
@@ -67,3 +67,45 @@ it('public source thumbnails retain their own 500-read protection without exhaus
  expect((await request(instance).get('/api/source-leads/not-a-uuid/media/private/thumbnail')).headers['ratelimit-remaining']).toBe('497');
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 },15000);
+
+describe('admin credential budget', () => {
+  const KEY = 'synthetic-admin-key-for-tests';
+  function adminApp() {
+    const instance = express();
+    instance.use(adminRequestBudget(() => KEY));
+    instance.use(...websiteRateLimits(buildRoot));
+    instance.use((_req, res) => res.json({ ok: true }));
+    return instance;
+  }
+  it('lets only the matching x-admin-key bypass the public 500/IP budget', async () => {
+    const server = adminApp().listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      for (let i = 0; i < 500; i++) expect((await request(server).get('/api/source-leads?unlocated=1')).status).toBe(200);
+      expect((await request(server).get('/api/source-leads?unlocated=1')).status).toBe(429);
+      expect((await request(server).post('/api/source-lead-admin/records').set('x-admin-key', 'wrong-key')).status).toBe(429);
+      const admin = await request(server).post('/api/source-lead-admin/records').set('x-admin-key', KEY);
+      expect(admin.status).toBe(200);
+      expect(admin.headers['ratelimit-limit']).toBe(String(ADMIN_REQUEST_LIMIT));
+      expect(JSON.stringify(admin.headers)).not.toContain(KEY);
+    } finally { server.close(); }
+  });
+  it('does not admit anyone when the server has no admin key configured', async () => {
+    const instance = express();
+    instance.use(adminRequestBudget(() => undefined));
+    instance.use((_req, res) => res.json({ admin: res.locals.verifiedAdminRequest === true }));
+    expect((await request(instance).get('/api/x').set('x-admin-key', '')).body.admin).toBe(false);
+    expect((await request(instance).get('/api/x').set('x-admin-key', 'anything')).body.admin).toBe(false);
+  });
+  it('caps the admin credential at its own limit', async () => {
+    const instance = express();
+    instance.use(adminRequestBudget(() => KEY));
+    instance.use((_req, res) => res.json({ ok: true }));
+    const server = instance.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const first = await request(server).get('/api/x').set('x-admin-key', KEY);
+      expect(first.headers['ratelimit-remaining']).toBe(String(ADMIN_REQUEST_LIMIT - 1));
+    } finally { server.close(); }
+  });
+});

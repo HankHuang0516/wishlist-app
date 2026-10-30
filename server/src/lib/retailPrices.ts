@@ -50,8 +50,67 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
     // Keep every model/variant suffix: a nearby generation or color is not an exact match.
     const panasonic = /panasonic|國際牌/.test(t) ? t.match(/\beh-[a-z]{1,4}\d{1,4}[a-z]?(?:-[a-z0-9]+)?\b/) : null;
     if (panasonic) return 'panasonic:eh-model:' + panasonic[0].replace(/-/g, '');
-    const model = t.match(/\b[a-z][a-z0-9-]*\d[a-z0-9-]{3,}\b/g)?.find(x => !/^hdmi|^usb|^wifi|^bluetooth|^fullhd|^ddr|^twd|^ntd/.test(x));
-    return model ? p.mainId + ':' + p.subId + ':' + model.replace(/-/g, '') + (/follow\s*me|移動式.*螢幕組/.test(t) ? ':followme-bundle' : '') : null;
+    const apple = appleFamilyIdentity(t, capacity);
+    if (apple !== undefined) return apple;
+    const model = t.match(/\b[a-z][a-z0-9-]*\d[a-z0-9-]{3,}\b/g)?.find(x => !/^hdmi|^usb|^wifi|^bluetooth|^fullhd|^ddr|^twd|^ntd/.test(x) && !SELLER_STOCK_CODE.test(x))
+        ?? shortModel(t);
+    return model ? p.mainId + ':' + p.subId + ':' + model.replace(/[- ]/g, '') + (/follow\s*me|移動式.*螢幕組/.test(t) ? ':followme-bundle' : '') : null;
+}
+
+// Hank 2026-10-30: trade some precision for coverage. Short letter+number model codes
+// (U87, K361, AT-101, MRX 720, ATH-MSR7, V12) now count as a model. Unit, size and
+// standard tokens are excluded; the evidence title/quote must still yield the same identity.
+const SHORT_MODEL_NOISE = /^(?:mm|cm|kg|gb|tb|mb|ml|mah|us|eu|uk|jp|no|nt|ntd|twd|usd|x|v|w|hz|ip|usb|hdmi|ddr|lv|cp|size|page|vol|ep|ch|pd|qc|ios|wifi|lte|gps|mrc|uv|f|xl|xxl)$/;
+// Seller inventory numbers such as A88134 (Carousell shop stock codes) are not product models.
+const SELLER_STOCK_CODE = /^a\d{5}$/;
+function shortModel(t: string): string | null {
+    for (const m of t.matchAll(/\b([a-z]{1,6})[- ]?(\d{1,5}[a-z]{0,3})\b/g)) {
+        const [, prefix, num] = m;
+        if (SHORT_MODEL_NOISE.test(prefix)) continue;
+        if (/^\d$/.test(num) && prefix.length < 3) continue;
+        if (/^(?:19|20)\d\d$/.test(num) || /\d(?:g|gb|tb|mb|ml|mm|cm|kg|mah|w|hz|k)$/.test(num) || SELLER_STOCK_CODE.test(prefix + num)) continue;
+        return prefix + num;
+    }
+    return null;
+}
+
+// Apple product families have no alphanumeric model code in seller titles.
+// Returns undefined when the title is not one of these families.
+function appleFamilyIdentity(t: string, capacity: RegExpMatchArray | null): string | null | undefined {
+    const cap = capacity ? capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
+    const gen = (s: string) => s.match(/(?:第\s*)?(\d{1,2})\s*(?:代|gen)/)?.[1] ?? s.match(/^\s*(\d{1,2})\b/)?.[1];
+    const pods = t.match(/airpods\s*(pro|max)?(.*)/);
+    if (pods) {
+        if (/僅盒|only\s*case|充電盒\s*(?:單賣|單售)|單耳|左耳單|右耳單/.test(t)) return null;
+        const kind = pods[1] ?? 'base', g = gen(pods[2]) ?? (kind === 'max' ? '1' : kind === 'pro' && /第一代|一代/.test(pods[2]) ? '1' : undefined);
+        if (!g) return null;
+        const anc = kind === 'base' && /anc|主動降噪|降噪/.test(t) ? ':anc' : '';
+        return 'apple:airpods:' + kind + ':' + g + anc;
+    }
+    const watch = t.match(/apple\s*watch\s*(series\s*(\d{1,2})|se\s*(\d)?|ultra\s*(\d)?|(\d{1,2}))/);
+    if (watch) {
+        const line = watch[2] || watch[5] ? 'series' + (watch[2] ?? watch[5]) : watch[1].startsWith('se') ? 'se' + (watch[3] ?? '1') : 'ultra' + (watch[4] ?? '1');
+        const mm = t.match(/(\d{2})\s*mm/)?.[1];
+        const radio = /lte|cellular|行動網路/.test(t) ? 'lte' : 'gps';
+        return mm ? 'apple:watch:' + line + ':' + mm + 'mm:' + radio : null;
+    }
+    const tablet = t.match(/ipad\s*(air|mini|pro)\b/);
+    if (tablet) {
+        const chip = t.match(/\b(m\d|a\d{2}\s*pro|a\d{2})\b/)?.[1]?.replace(/\s/g, '') ?? gen(t.slice((tablet.index ?? 0) + tablet[0].length));
+        const radio = /cellular|lte|5g|4g|行動網路/.test(t) ? 'cellular' : 'wifi';
+        return chip && cap ? 'apple:ipad-' + tablet[1] + ':' + chip + ':' + radio + ':' + cap : null;
+    }
+    const mac = t.match(/macbook\s*(air|pro|neo)?/);
+    if (mac) {
+        const size = t.match(/\b(1[1-6])(?:\.\d)?\s*(?:吋|inch|")?/)?.[1];
+        const chip = t.match(/\b(m\d(?:\s*(?:pro|max))?|a\d{2}\s*pro|i[3579])\b/)?.[1]?.replace(/\s/g, '');
+        const storage = t.match(/(\d{3,4})\s*gb|(\d)\s*tb/);
+        const disk = storage ? (storage[1] ? storage[1] + 'gb' : storage[2] + 'tb') : null;
+        return size && chip && disk ? 'apple:macbook-' + (mac[1] ?? 'base') + ':' + size + ':' + chip + ':' + disk : null;
+    }
+    const phone = t.match(/iphone\s*(air|se\s*(\d)?)/);
+    if (phone) return cap ? 'apple:iphone-' + (phone[1].startsWith('se') ? 'se' + (phone[2] ?? '1') : 'air') + ':' + cap : null;
+    return undefined;
 }
 export const retailBinding = (p: DiscoveryProduct) => discoveryHash({ key: p.key, title: p.title, description: p.description.slice(0, 1200), identity: retailIdentity(p) });
 export type RetailReference = {

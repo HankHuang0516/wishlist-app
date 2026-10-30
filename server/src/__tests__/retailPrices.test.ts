@@ -42,7 +42,7 @@ test('accepts real short Panasonic EH models while retaining exact variants and 
   expect(retailIdentity({...beauty,title})).not.toBe(retailIdentity(beauty));
   expect(()=>retailObservation({...body,sourceProductTitle:title},beauty)).toThrow();
  }
- expect(retailIdentity({...beauty,title:'無品牌 EH-SR86'})).toBeNull();
+ expect(retailIdentity({...beauty,title:'無品牌 EH-SR86'})).not.toBe(retailIdentity(beauty));
  expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR85 市售價26,000元'},beauty)).toThrow();
  expect(()=>retailObservation({...body,evidenceQuote:'Panasonic EH-SR86 促銷價17,577元',originalPrice:'17577'},beauty)).toThrow();
 });
@@ -121,4 +121,22 @@ test('old seven-day negative request hashes stay idempotent, but changed facts c
  const oldHash=discoveryHash({...facts,expiresAt:new Date(+data.checkedAt+7*86400000)});
  expect(retailObservationMatches(oldHash,data)).toBe(true);
  expect(retailObservationMatches(oldHash,{...data,notes:'Changed research',payloadHash:'changed'})).toBe(false);
+});
+
+test('Hank 2026-10-30 broader identity: short model codes and Apple families, never stock codes or units',()=>{
+ const e={mainId:'electronics',subId:'audio'} as any;
+ expect(retailIdentity({...e,title:'AKG K361 黑色封閉式耳罩監聽耳機 二手'})).toBe('electronics:audio:k361');
+ expect(retailIdentity({...e,title:'Anthem MRX 720 7.2聲道 AV環繞擴大機'})).toBe('electronics:audio:mrx720');
+ expect(retailIdentity({...e,title:'Audio-Technica ATH-M50x 白色 A88134'})).toBe('electronics:audio:m50x');
+ expect(retailIdentity({...e,title:'ALLIE 防曬水凝乳 EX 90g'})).toBeNull();
+ expect(retailIdentity({...e,title:'Apple AirPods 4 主動降噪 ANC'})).toBe('apple:airpods:base:4:anc');
+ expect(retailIdentity({...e,title:'Apple AirPods 4 二手'})).not.toBe(retailIdentity({...e,title:'Apple AirPods 4 主動降噪 ANC'}));
+ expect(retailIdentity({...e,title:'Apple AirPods Pro（賣家標示第3代）降噪 二手'})).toBe('apple:airpods:pro:3');
+ expect(retailIdentity({...e,title:'Apple AirPods 3 白色充電盒 二手 僅盒 無耳機'})).toBeNull();
+ expect(retailIdentity({...e,title:'Apple AirPods Pro 二手'})).toBeNull();
+ expect(retailIdentity({...e,title:'Apple Watch Series 9 45mm GPS 午夜色'})).toBe('apple:watch:series9:45mm:gps');
+ expect(retailIdentity({...e,title:'Apple Watch Ultra 2 49mm LTE 鈦色'})).toBe('apple:watch:ultra2:49mm:lte');
+ expect(retailIdentity({...e,title:'Apple iPad mini（A17 Pro）Wi-Fi 128GB 星光色'})).toBe('apple:ipad-mini:a17pro:wifi:128gb');
+ expect(retailIdentity({...e,title:'Apple MacBook Air 13 2020 M1 8GB/256GB 灰'})).toBe('apple:macbook-air:13:m1:256gb');
+ expect(retailIdentity({...e,title:'Apple iPhone Air 256GB 天藍'})).toBe('apple:iphone-air:256gb');
 });

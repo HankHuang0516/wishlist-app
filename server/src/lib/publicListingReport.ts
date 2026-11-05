@@ -17,6 +17,7 @@ export const MAX_REPORT_HOURS = 2160;
 export const REFRESH_INTERVAL_MS = 120_000;
 export const MAX_STALE_MS = 900_000;
 const VISIBLE_SCAN_BATCH = 500;
+const VISIBLE_SCAN_BUDGET_MS = 15_000;
 
 export type HourBucket = { hour: string; firstPublished: number; republished: number; stillPublished: number };
 export type ListingSnapshot = {
@@ -27,10 +28,10 @@ export type ListingSnapshot = {
   latestFirstPublishAt: string | null;
   firstPublishedNotPublishedNow: number;
   records: { total: number; published: number; privatePending: number; withdrawn: number; publishedWithoutPublishEvent: number };
-  privatePendingOlderThan24h: number;
-  oldestPrivatePendingSince: string | null;
+  privatePendingNotUpdatedIn24h: number;
+  oldestPrivatePendingUpdateAt: string | null;
   publicSearchEnabled: boolean;
-  publiclyVisible: number;
+  publiclyVisible: number | null;
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -77,24 +78,40 @@ export async function loadListingSnapshot(db: ReportDb, publicSearchEnabled: boo
         (SELECT count(*) FROM "ExternalSourceLead" WHERE status = 'PRIVATE_PENDING')::int AS "privatePending",
         (SELECT count(*) FROM "ExternalSourceLead" WHERE status = 'WITHDRAWN')::int AS withdrawn,
         (SELECT count(*) FROM "ExternalSourceLead" l WHERE l.status = 'PUBLISHED' AND NOT EXISTS (SELECT 1 FROM success s WHERE s."leadId" = l.id))::int AS "publishedWithoutPublishEvent",
-        (SELECT count(*) FROM "ExternalSourceLead" WHERE status = 'PRIVATE_PENDING' AND "updatedAt" < (SELECT at FROM clock) - interval '24 hours')::int AS "privatePendingOlderThan24h",
-        ${utcText(Prisma.sql`(SELECT min("updatedAt") FROM "ExternalSourceLead" WHERE status = 'PRIVATE_PENDING')`)} AS "oldestPrivatePendingSince"`);
+        (SELECT count(*) FROM "ExternalSourceLead" WHERE status = 'PRIVATE_PENDING' AND "updatedAt" < (SELECT at FROM clock) - interval '24 hours')::int AS "privatePendingNotUpdatedIn24h",
+        ${utcText(Prisma.sql`(SELECT min("updatedAt") FROM "ExternalSourceLead" WHERE status = 'PRIVATE_PENDING')`)} AS "oldestPrivatePendingUpdateAt"`);
     return { totals: rows[0], buckets };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 5000, timeout: 15000 });
 
-  // Same eligibility check as the public search and /api/source-leads/summary.
-  // Batched so the refresh never holds every row's evidence in memory at once.
-  let publiclyVisible = 0;
-  if (publicSearchEnabled) {
-    const now = new Date(totals.asOf);
-    let cursor: string | null = null;
+  return {
+    ...toSnapshot(totals, buckets, publicSearchEnabled),
+    publiclyVisible: publicSearchEnabled ? await countPubliclyVisible(db, new Date(totals.asOf)) : 0,
+  };
+}
+
+// Same eligibility check as the public search and /api/source-leads/summary.
+// Batched so a refresh never holds every row's evidence in memory at once. The
+// event-log counts do not depend on this, so a failed or over-budget scan gives
+// null for this one number instead of losing the whole report.
+async function countPubliclyVisible(db: ReportDb, now: Date): Promise<number | null> {
+  const deadline = Date.now() + VISIBLE_SCAN_BUDGET_MS;
+  let visible = 0;
+  let cursor: string | null = null;
+  try {
     for (;;) {
       const rows: any[] = await db.externalSourceLead.findMany({ where: { status: 'PUBLISHED' }, orderBy: { id: 'asc' }, take: VISIBLE_SCAN_BATCH, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
-      for (const row of rows) if (leadCurrent(row, now)) publiclyVisible += 1;
-      if (rows.length < VISIBLE_SCAN_BATCH) break;
+      for (const row of rows) if (leadCurrent(row, now)) visible += 1;
+      if (rows.length < VISIBLE_SCAN_BATCH) return visible;
+      if (Date.now() > deadline) return null;
       cursor = rows[rows.length - 1].id;
     }
+  } catch (error) {
+    console.error('[listing-report] visible scan failed', (error as { code?: string })?.code ?? (error as Error)?.name ?? 'UNKNOWN');
+    return null;
   }
+}
+
+function toSnapshot(totals: any, buckets: HourBucket[], publicSearchEnabled: boolean): Omit<ListingSnapshot, 'publiclyVisible'> {
   return {
     asOf: totals.asOf,
     buckets,
@@ -103,10 +120,9 @@ export async function loadListingSnapshot(db: ReportDb, publicSearchEnabled: boo
     latestFirstPublishAt: totals.latestFirstPublishAt,
     firstPublishedNotPublishedNow: totals.firstPublishedNotPublishedNow,
     records: { total: totals.total, published: totals.published, privatePending: totals.privatePending, withdrawn: totals.withdrawn, publishedWithoutPublishEvent: totals.publishedWithoutPublishEvent },
-    privatePendingOlderThan24h: totals.privatePendingOlderThan24h,
-    oldestPrivatePendingSince: totals.oldestPrivatePendingSince,
+    privatePendingNotUpdatedIn24h: totals.privatePendingNotUpdatedIn24h,
+    oldestPrivatePendingUpdateAt: totals.oldestPrivatePendingUpdateAt,
     publicSearchEnabled,
-    publiclyVisible,
   };
 }
 
@@ -115,9 +131,10 @@ const DEFINITIONS = {
   deduplication: '每筆紀錄只算一次，取最早的成功事件。同一 operationId 重試會回放既有結果，不產生新事件，所以不會重算。',
   republishedNotCounted: '重查或改價後再次公開的事件，只列在這個欄位，不算新上架。',
   withdrawals: '已售出或下架不會回頭扣除當時的成功數，歷史數字不會變動；目前已不公開的數量看 firstPublishedNotPublishedNow 與每日的 stillPublishedNow。',
-  zeroVersusNull: '涵蓋範圍內的 0 是實際沒有上架（事件與狀態同交易寫入，不會漏記）；null 代表無法確認，例如事件紀錄開始之前。',
-  legacyRecords: 'publishedWithoutPublishEvent 是事件紀錄建立前匯入的舊資料，沒有上架時間，不計入成功數，也不代表目前公開可見。',
-  publiclyVisible: '買家目前實際搜尋得到的數量，與公開搜尋使用同一套檢查。',
+  zeroVersusNull: '涵蓋範圍內的 0 是目前紀錄流程實際沒有上架（事件與狀態同交易寫入，不會漏記）；舊匯入路徑不寫事件，只會出現在 publishedWithoutPublishEvent。null 代表無法確認，例如事件紀錄開始之前。',
+  legacyRecords: 'publishedWithoutPublishEvent 是經舊匯入路徑寫入、沒有上架事件的資料，沒有上架時間，不計入成功數，也不代表目前公開可見。',
+  publiclyVisible: '買家目前實際搜尋得到的數量，與公開搜尋使用同一套檢查，在其他計數之後才掃描，可能與 records.published 差幾筆。檢查未完成時為 null。',
+  waitingToPublish: '目前存成私人待審的紀錄。時間依最後更新計算，照片重傳或重新儲存都會更新，所以不代表已等待多久。',
   rates: '由已結束的整點小時實際計算，不含進行中的小時；coveredHours 不足時只以涵蓋到的小時為分母。',
   partial: 'partial=true 表示該小時或該日尚未結束，數字還會增加。',
   freshness: 'asOf 是資料庫快照時間。state=stale 表示最近一次重新整理失敗，回傳的是上一份成功結果。secondsSinceLatestFirstPublish 只說明多久沒有新上架，與資料是否新鮮無關。',
@@ -155,15 +172,24 @@ export function buildListingReport(snapshot: ListingSnapshot, options: { hours: 
 
   // Daily series rolls whole UTC hours up to Taipei days, from the first covered day.
   const todayStart = taipeiDayStart(asOf);
+  const dayTotals = new Map<number, { firstPublished: number; republished: number; stillPublished: number }>();
+  for (const [hour, bucket] of byHour) {
+    const day = taipeiDayStart(hour);
+    const totals = dayTotals.get(day) ?? { firstPublished: 0, republished: 0, stillPublished: 0 };
+    totals.firstPublished += bucket.firstPublished;
+    totals.republished += bucket.republished;
+    totals.stillPublished += bucket.stillPublished;
+    dayTotals.set(day, totals);
+  }
   const daily = [];
   if (coverageHour !== null) {
     for (let day = taipeiDayStart(coverageHour); day <= todayStart; day += DAY_MS) {
-      const next = day + DAY_MS;
+      const totals = dayTotals.get(day);
       daily.push({
-        date: taipeiDate(day), startsAt: iso(day), endsAt: iso(next),
-        firstPublished: sum(day, next, first),
-        republishedNotCounted: sum(day, next, b => b.republished),
-        stillPublishedNow: sum(day, next, b => b.stillPublished),
+        date: taipeiDate(day), startsAt: iso(day), endsAt: iso(day + DAY_MS),
+        firstPublished: totals?.firstPublished ?? 0,
+        republishedNotCounted: totals?.republished ?? 0,
+        stillPublishedNow: totals?.stillPublished ?? 0,
         ...(day === todayStart ? { partial: true } : {}),
       });
     }
@@ -218,7 +244,6 @@ export function buildListingReport(snapshot: ListingSnapshot, options: { hours: 
     hourly: { requestedHours: hours, from: iso(windowStart), to: iso(currentHour + HOUR_MS), gaps, points },
     measuredRates: {
       kind: 'measured',
-      last60Minutes: count(snapshot.last60Minutes),
       last24CompleteHours: last24,
       last168CompleteHours: rate(168),
     },
@@ -228,9 +253,9 @@ export function buildListingReport(snapshot: ListingSnapshot, options: { hours: 
     live: {
       kind: 'live_snapshot',
       asOf: snapshot.asOf,
-      publiclyVisible: { count: snapshot.publiclyVisible, publicSearchEnabled: snapshot.publicSearchEnabled },
+      publiclyVisible: { count: snapshot.publiclyVisible, publicSearchEnabled: snapshot.publicSearchEnabled, ...(snapshot.publiclyVisible === null ? { state: 'unavailable', reason: 'VISIBILITY_CHECK_INCOMPLETE' } : {}) },
       records: snapshot.records,
-      waitingToPublish: { count: snapshot.records.privatePending, olderThan24h: snapshot.privatePendingOlderThan24h, oldestSince: snapshot.oldestPrivatePendingSince },
+      waitingToPublish: { count: snapshot.records.privatePending, notUpdatedIn24h: snapshot.privatePendingNotUpdatedIn24h, oldestUpdateAt: snapshot.oldestPrivatePendingUpdateAt },
       processing: unavailable(PIPELINE_STATE_NOT_ON_SERVER),
     },
     pipelineOutcomes: {

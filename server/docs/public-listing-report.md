@@ -15,9 +15,10 @@ database load.
 | De-duplication | One per record, at its earliest success event. A retried `operationId` replays the stored result and adds no event. |
 | Republish (`republishedNotCounted`) | Any later success event for the same record, such as after a recheck or price fix. Never added to successes. |
 | Withdrawn or sold | History is not rewritten. See `firstPublishedNotPublishedNow` and the daily `stillPublishedNow`. |
-| `0` vs `null` | Inside coverage, `0` means nothing was published, because events cannot be missed. `null` means unknown, such as before the event log began. |
-| Legacy rows (`publishedWithoutPublishEvent`) | Rows imported before the event log. They have no publish time and are excluded from successes. |
-| `publiclyVisible` | The same eligibility check as public search and `/api/source-leads/summary`. |
+| `0` vs `null` | Inside coverage, `0` means nothing was published through the records flow, whose events are written with the status change. The older `/import` route writes no event, and its rows appear only in `publishedWithoutPublishEvent`. `null` means unknown, such as before the event log began. |
+| Legacy rows (`publishedWithoutPublishEvent`) | Rows written by the older import route. They have no publish time and are excluded from successes. |
+| `publiclyVisible` | The same eligibility check as public search and `/api/source-leads/summary`. Scanned after the other counts, so it can differ from `records.published` by a few. `null` with `VISIBILITY_CHECK_INCOMPLETE` if the scan fails or exceeds 15 seconds. |
+| `waitingToPublish` | Records now saved as private pending. Its times use the last update, which photo retries and re-saves also bump, so they do not measure the wait. |
 
 All counts come from `SourceLeadRecordEvent` and `ExternalSourceLead`.
 Candidates, captures and local pipeline receipts are never used.

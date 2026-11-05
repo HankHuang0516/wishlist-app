@@ -156,6 +156,17 @@ describe('public listing report against raw records (isolated only)', () => {
     expect(snapshot.records.published).toBeGreaterThan(0);
   });
 
+  test('a failed visibility scan gives null, not a lost report or a zero', async () => {
+    await createPublished(prefix + randomUUID());
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = { $transaction: prisma.$transaction.bind(prisma), externalSourceLead: { findMany: async () => { throw new Error('postgres://secret'); } } } as any;
+    const snapshot = await loadListingSnapshot(broken, true);
+    expect(snapshot.publiclyVisible).toBeNull();
+    expect(snapshot.records.published).toBeGreaterThan(0);
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain('secret');
+    errorLog.mockRestore();
+  });
+
   test('the real route serves the report, and the existing admin routes stay protected', async () => {
     await createPublished(prefix + randomUUID());
     const server = express();

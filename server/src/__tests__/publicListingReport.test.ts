@@ -12,8 +12,8 @@ const base = (over: Partial<ListingSnapshot> = {}): ListingSnapshot => ({
   latestFirstPublishAt: '2026-11-05T04:00:00.000Z',
   firstPublishedNotPublishedNow: 0,
   records: { total: 0, published: 0, privatePending: 0, withdrawn: 0, publishedWithoutPublishEvent: 0 },
-  privatePendingOlderThan24h: 0,
-  oldestPrivatePendingSince: null,
+  privatePendingNotUpdatedIn24h: 0,
+  oldestPrivatePendingUpdateAt: null,
   publicSearchEnabled: true,
   publiclyVisible: 0,
   ...over,
@@ -124,6 +124,12 @@ describe('target and unavailable values', () => {
       expect(value.reason).toMatch(/^[A-Z_]+$/);
     }
     expect(report.estimates).toBeNull();
+  });
+
+  test('an incomplete visibility check is null with a reason and leaves the counts alone', () => {
+    const report = build(base({ publiclyVisible: null, buckets: [bucket('2026-11-05T03:00:00.000Z', 2)] }));
+    expect(report.live.publiclyVisible).toEqual({ count: null, publicSearchEnabled: true, state: 'unavailable', reason: 'VISIBILITY_CHECK_INCOMPLETE' });
+    expect(report.successfulListings.cumulative.count).toBe(2);
   });
 });
 
@@ -284,7 +290,7 @@ describe('public payload', () => {
   const allowedKeys = new Set(('schemaVersion report timeZone utcOffset asOf servedAt freshness state ageSeconds refreshIntervalSeconds maxStaleSeconds latestFirstPublishAt secondsSinceLatestFirstPublish ' +
     'coverage from to retention retentionNote successfulListings kind last60Minutes count currentHour hourStart partial today date startsAt yesterday endsAt cumulative republishedNotCounted firstPublishedNotPublishedNow ' +
     'daily firstPublished stillPublishedNow hourly requestedHours gaps reason points covered measuredRates last24CompleteHours last168CompleteHours coveredHours perHour target gapFromLast24hAverage ' +
-    'live publiclyVisible publicSearchEnabled records total published privatePending withdrawn publishedWithoutPublishEvent waitingToPublish olderThan24h oldestSince processing value ' +
+    'live publiclyVisible publicSearchEnabled records total published privatePending withdrawn publishedWithoutPublishEvent waitingToPublish notUpdatedIn24h oldestUpdateAt processing value ' +
     'pipelineOutcomes failed skipped failureReasons estimates definitions successfulListing deduplication withdrawals zeroVersusNull legacyRecords rates').split(' '));
   const walk = (value: unknown, visit: (key: string | null, leaf: unknown) => void, key: string | null = null): void => {
     if (Array.isArray(value)) value.forEach(item => walk(item, visit, null));
@@ -293,7 +299,7 @@ describe('public payload', () => {
   };
 
   test('contains only allow-listed fields, and no strings that could carry private data', () => {
-    const report = build(base({ buckets: [bucket('2026-11-05T03:00:00.000Z', 1)], firstPublishedNotPublishedNow: 1, oldestPrivatePendingSince: '2026-11-01T00:00:00.000Z' }), 2, { targetPerHour: 100 });
+    const report = build(base({ buckets: [bucket('2026-11-05T03:00:00.000Z', 1)], firstPublishedNotPublishedNow: 1, oldestPrivatePendingUpdateAt: '2026-11-01T00:00:00.000Z' }), 2, { targetPerHour: 100 });
     const keys: string[] = [];
     const strings: string[] = [];
     walk(report, (key, leaf) => { if (key) keys.push(key); if (typeof leaf === 'string') strings.push(leaf); });

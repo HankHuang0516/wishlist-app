@@ -8,6 +8,7 @@ import { authenticateToken } from './middleware/auth';
 import { createProductWishRoutes } from './routes/productWishRoutes';
 import { createDiscoveryRoutes } from './routes/discoveryRoutes';
 import { createSourceLeadRoutes, createSourceLeadAdmin } from './routes/sourceLeadRoutes';
+import { createPublicListingReportRoutes } from './routes/publicListingReportRoutes';
 import { pendingImportBodyAdmission } from './routes/semiAutoImportRoutes';
 import express, { Express, Request, Response } from 'express';
 import { getApiUrl, getClientUrl } from './config/constants';
@@ -91,6 +92,8 @@ app.use(...websiteRateLimits(clientBuildPath));
 
 app.use('/api/source-manager',createSourceManagerRoutes());
 app.use(cors());
+// GET-only and key-free, so it is mounted before any request body is parsed.
+app.use('/api/public/listing-report', createPublicListingReportRoutes());
 app.use('/api/source-lead-admin/pending-imports', ...pendingImportBodyAdmission());
 app.use(express.json({ limit: '1mb' }));
 

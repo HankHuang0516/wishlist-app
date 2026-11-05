@@ -1,9 +1,11 @@
 import { recognizeImage, recognizeListingImage, recognizeExternalCandidateImage, validExternalImageUrl, safeVisionError } from './server.mjs';
 import { writeFile } from 'node:fs/promises';
+import { workReceipts } from './work-receipts.mjs';
 
 const API = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
 const once = process.argv.includes('--once');
+const receipts = workReceipts('wishlist-vision', 'images_recognized');
 
 if (!token || token.length < 32) throw new Error('WISHLIST_MINIMAX_CALLBACK_TOKEN must be configured locally');
 if (!/^https:\/\/[a-z0-9.-]+\/api$/i.test(API)) throw new Error('WISHLIST_MINIMAX_API_URL must be an HTTPS API origin');
@@ -41,10 +43,12 @@ async function cycle() {
     }
     const delivered = await api(`/${job.jobId}/result`, { method: 'POST', body: JSON.stringify(body) });
     if (delivered.status !== 204) throw new Error(`CALLBACK_HTTP_${delivered.status}`);
+    if (body.status === 'COMPLETED') await receipts.completed(job.jobId);
     process.stdout.write(`MiniMax vision job ${job.jobId}: ${body.status}\n`);
     return true;
 }
 
+await receipts.start();
 do {
     try {
         const worked = await cycle();

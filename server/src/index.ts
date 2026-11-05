@@ -51,6 +51,7 @@ import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
 
 import helmet from 'helmet';
+import { configureProxyTrust } from './lib/proxyTrust';
 import { accountReadBudget, websiteRateLimits, adminRequestBudget, workerRequestBudget } from './middleware/websiteRateLimits';
 
 dotenv.config();
@@ -81,8 +82,7 @@ app.use(helmet({
   },
 }));
 
-// Trust proxy (required for Railway/reverse proxy to work with rate-limit)
-app.set('trust proxy', 1);
+configureProxyTrust(app);
 
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(accountReadBudget(authenticateToken));

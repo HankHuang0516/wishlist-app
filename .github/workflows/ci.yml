@@ -104,6 +104,9 @@ jobs:
     - name: Test marketing photo preservation without provider access
       run: node --test ../tools/minimax-vision-bridge/marketing-compose.test.mjs
 
+    - name: Test anonymous worker receipts without account access
+      run: node --test ../tools/minimax-vision-bridge/work-receipts.test.mjs
+
     - name: Test authorized private feed bridge without partner access
       run: node --test ../tools/authorized-feed-bridge/poller.test.mjs
 

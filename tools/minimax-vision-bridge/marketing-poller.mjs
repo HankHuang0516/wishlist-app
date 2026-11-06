@@ -6,6 +6,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { workReceipts } from './work-receipts.mjs';
 import { composeFramedMarketingImage, composeMarketingImage, cutoutMayOmitPhotoDetails } from './marketing-compose.mjs';
 
 const exec = promisify(execFile);
@@ -16,6 +17,7 @@ async function mcode(stage, args, options) {
 const apiBase = process.env.WISHLIST_MINIMAX_API_URL || 'https://wishlist-app-production.up.railway.app/api';
 const token = process.env.WISHLIST_MINIMAX_CALLBACK_TOKEN;
 const once = process.argv.includes('--once');
+const receipts = workReceipts('wishlist-marketing', 'marketing_sets_generated');
 const qaLoopback = process.env.NODE_ENV === 'test' && /^http:\/\/127\.0\.0\.1:\d+\/api$/.test(apiBase);
 if (!token || token.length < 32 || !(/^https:\/\/[a-z0-9.-]+\/api$/i.test(apiBase) || qaLoopback))
   throw new Error('WORKER_CONFIG_INVALID');
@@ -152,6 +154,7 @@ async function cycle() {
       body: JSON.stringify({ copy }) }, job.leaseId);
     if (delivered.status !== 204) throw new Error(`COMPLETE_HTTP_${delivered.status}`);
     completed = true;
+    await receipts.completed(job.id);
     process.stdout.write(`Marketing job ${job.id}: REVIEW, four distinct private images\n`);
   } catch (error) {
     const failure = await call(`/${job.id}/fail`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }, job.leaseId).catch(() => null);
@@ -164,6 +167,7 @@ async function cycle() {
   return completed;
 }
 
+await receipts.start();
 do {
   try {
     const worked = await cycle();

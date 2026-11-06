@@ -41,3 +41,9 @@ macOS 常駐工作器使用 `~/Library/Application Support/WishlistMiniMax/` 下
 原先的 `server.mjs` 仍可做單機概念驗證；請不要將其回環端口公開。新增的 poller 仍需 Railway 部署與兩端一致的私密設定，才算完成端到端串接。
 
 Mac 要保持開機、連網且不進入系統睡眠，螢幕可以關閉；MiniMax 登入及 Connector broker 也需有效。先用測試帳號、單工、人工核對回覆；正式公開使用前須確認 MiniMax 方案適用性、費用與風險。MiniMax 官方 [Token Plan FAQ](https://platform.minimax.io/subscribe/token-plan) 將其定位為個人互動使用，建議正式環境採按量付費。
+
+## 完成工作量收據
+
+`poller.mjs` 與 `marketing-poller.mjs` 在伺服器以 HTTP 204 接受完成結果後，透過 `work-receipts.mjs` 寫一筆本機匿名收據到 `~/.local/share/minimax-worker-receipts/<worker-id>/`，供 MiniMax worker 監控統計。收據只有工作 ID 的 SHA-256、指標與時間，不含工作 ID、圖片網址、提示詞或結果。失敗的工作不寫；寫入失敗不影響工作，只會暫停 `alive` 心跳，監控就不會把那段時間當成 0。
+
+`work-receipts.mjs` 要和 poller 一起更新到安裝副本（`WishlistMiniMax/` 與 `WishlistMarketing/` 各一份），否則工作器會啟動失敗。執行 `node --test tools/minimax-vision-bridge/work-receipts.test.mjs` 驗證。

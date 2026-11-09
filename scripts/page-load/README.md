@@ -13,7 +13,7 @@
 | 換頁完成（`route_ready`） | 「正在載入頁面…」消失、該頁自己的畫面出現 |
 | API 數／串接層數 | 這次載入打了幾支 API；其中必須「一支等一支」的最長鏈有幾層 |
 
-「畫面不再變動」的條件：沒有進行中的請求、沒有載入指示（轉圈、骨架、「載入中」文字）、視窗內圖片都載完，且持續 700 ms 沒有新動靜。20 秒內達不到就記為未完成（FAIL）。
+「畫面不再變動」的條件：沒有進行中的請求、沒有看得到的載入指示（轉圈、骨架、「載入中」文字）、視窗內圖片都載完，且持續 700 ms 沒有新動靜。載入指示只算人看得到的：在視窗內、而且沒有被捲動區塊捲到外面。清單裡還沒捲到的列會一直留著「圖片載入中…」（瀏覽器要捲到才抓那些圖），那不屬於畫面上的內容；`instrument.check.cjs` 檢查這條規則。20 秒內達不到就記為未完成（FAIL）。
 
 三種情境：
 
@@ -94,7 +94,7 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 ## 檔案
 
 - `page-load-budget.cjs` 量測與判定；`--enforce` 時有 FAIL 會以非零結束。
-- `instrument.js` 注入頁面的唯讀觀測程式。
+- `instrument.js` 注入頁面的唯讀觀測程式；`instrument.check.cjs` 用合成頁面檢查它判定載入指示的規則。
 - `routes.json` 全部路由；`signedIn` 需登入、`guestOnly` 只在未登入時量、`textLoaders: false` 表示該頁內文本來就會提到「載入」。
 - `local-stack.cjs` 本機隔離環境。
 - `head-of-line-check.cjs` 互相拖累檢查。

@@ -106,16 +106,33 @@
     return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.01;
   };
   const inViewport = box => box.bottom > 0 && box.right > 0 && box.top < innerHeight && box.left < innerWidth;
+  // A loading indicator counts only where a person can see it: inside the window and not scrolled out of a
+  // scrolling box. A list keeps "loading image" placeholders for the rows it has not scrolled to yet, and the
+  // browser does not fetch those images until they come into view; they are not part of what is on screen.
+  const seen = element => {
+    if (!visible(element)) return false;
+    let box = element.getBoundingClientRect();
+    if (!inViewport(box)) return false;
+    box = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+    for (let parent = element.parentElement; parent && parent !== document.documentElement; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+      const clip = parent.getBoundingClientRect();
+      box = { top: Math.max(box.top, clip.top), bottom: Math.min(box.bottom, clip.bottom), left: Math.max(box.left, clip.left), right: Math.min(box.right, clip.right) };
+      if (box.bottom - box.top < 1 || box.right - box.left < 1) return false;
+    }
+    return true;
+  };
   const ownText = element => Array.from(element.childNodes).filter(node => node.nodeType === 3).map(node => node.nodeValue).join('').trim();
   const loaders = (matchText = true) => {
     const found = [];
     const marked = document.querySelectorAll('[aria-busy="true"],[role="progressbar"],.animate-spin,.animate-pulse,[class*="skeleton" i],[class*="spinner" i]');
-    for (const element of marked) if (visible(element)) found.push(('marked:' + describe(element)).slice(0, 140));
+    for (const element of marked) if (seen(element)) found.push(('marked:' + describe(element)).slice(0, 140));
     if (!matchText) return found;
     const candidates = document.querySelectorAll('[role="status"],p,span,div,li,button,h1,h2,h3,td');
     for (const element of candidates) {
       const text = ownText(element);
-      if (text && text.length <= 40 && loaderText.test(text) && visible(element)) found.push(('text:' + text + ' @' + describe(element)).slice(0, 140));
+      if (text && text.length <= 40 && loaderText.test(text) && seen(element)) found.push(('text:' + text + ' @' + describe(element)).slice(0, 140));
       if (found.length >= 8) break;
     }
     return found;

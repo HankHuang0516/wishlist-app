@@ -13,7 +13,7 @@
 | 換頁完成（`route_ready`） | 「正在載入頁面…」消失、該頁自己的畫面出現 |
 | API 數／串接層數 | 這次載入打了幾支 API；其中必須「一支等一支」的最長鏈有幾層 |
 
-「畫面不再變動」的條件：沒有進行中的請求、沒有載入指示（轉圈、骨架、「載入中」文字）、視窗內圖片都載完，且持續 700 ms 沒有新動靜。20 秒內達不到就記為未完成（FAIL）。
+「畫面不再變動」的條件：沒有進行中的請求、沒有看得到的載入指示（轉圈、骨架、「載入中」文字）、視窗內圖片都載完，且持續 700 ms 沒有新動靜。載入指示只算人看得到的：在視窗內、而且沒有被捲動區塊捲到外面。清單裡還沒捲到的列會一直留著「圖片載入中…」（瀏覽器要捲到才抓那些圖），那不屬於畫面上的內容；`instrument.check.cjs` 檢查這條規則。20 秒內達不到就記為未完成（FAIL）。
 
 三種情境：
 
@@ -87,6 +87,8 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 
   貼進去後：`await __plbFrame.load('/wishes')` 量回訪、`await __plbFrame.inApp('/wishes')` 量 App 內切頁、`__plbFrame.links('^/wishlists/\\d+$')` 取框架內目前頁面的連結（找需要識別碼的頁面）、`__plbFrame.close()` 收掉框架。結果只有時間、數量與去掉識別碼的請求路徑，不含頁面文字。每次量測的 `injected` 會記下觀測程式放進去的時刻，以及在那之前頁面是否已經送出 API（應為 0）。「第一次造訪」要清空快取才量得到，這個做法不量。
 
+  要一次量完登入後的所有頁面，接著貼 `in-frame-driver.js`：它會自己找出需要識別碼的頁面（願望清單、聊天室、追蹤對象），每頁量回訪與切頁各 2 次，並把讀取頻率壓在每分鐘 20 次以下；進度看 `__plbProgress`，結果在 `__plbResults`。量測期間分頁要保持在最上層。
+
   `in-frame-runner.check.cjs` 用本機隔離環境檢查這個做法：同一批頁面用它量和用 `page-load-budget.cjs` 量，數字應該一致。
 
 - **`in-app-probe.js`**：直接裝在分頁本身，只量 App 內切頁（`await __plbGo('/wishes')`），視窗是瀏覽器當下的大小。
@@ -94,9 +96,9 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 ## 檔案
 
 - `page-load-budget.cjs` 量測與判定；`--enforce` 時有 FAIL 會以非零結束。
-- `instrument.js` 注入頁面的唯讀觀測程式。
+- `instrument.js` 注入頁面的唯讀觀測程式；`instrument.check.cjs` 用合成頁面檢查它判定載入指示的規則。
 - `routes.json` 全部路由；`signedIn` 需登入、`guestOnly` 只在未登入時量、`textLoaders: false` 表示該頁內文本來就會提到「載入」。
 - `local-stack.cjs` 本機隔離環境。
 - `head-of-line-check.cjs` 互相拖累檢查。
-- `in-frame-runner.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、產生貼入程式、本機對照檢查。
+- `in-frame-runner.js`、`in-frame-driver.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、整批執行、產生貼入程式、本機對照檢查。
 - `in-app-probe.js` 已登入分頁用的切頁探針。

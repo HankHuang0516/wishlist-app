@@ -75,9 +75,21 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 
 先單獨讀一個極小的靜態檔，再在一支重 API（預設 `/api/discovery`）進行時重讀。重 API 超過 `--budget`，或小檔被拖慢超過 `--allow`（預設 200 ms），就是 FAIL。
 
-## 已登入的瀏覽器分頁
+## 已登入的瀏覽器分頁（正式站登入後的頁面）
 
-`in-app-probe.js` 可貼進已登入的分頁，呼叫 `await __plbGo('/wishes')` 量 App 內切頁。安裝期間頁面送出的所有非 GET 請求都會被拒絕並列出，開頁面不會造成任何寫入（例如聊天已讀）。重新整理分頁即移除。
+腳本不會、也不能在正式站登入。登入後才看得到的頁面，要由本人先在自己的瀏覽器登入，再把量測程式放進那個分頁執行。兩種做法，安裝期間頁面送出的所有非 GET 請求都會被擋下並列在結果裡，開頁面不會造成任何寫入（例如聊天已讀、草稿儲存）：
+
+- **`in-frame-runner.js`（建議）**：在分頁上蓋一個手機尺寸（390×844）的同站框架，在框架裡量。觀測程式與判定規則和 `page-load-budget.cjs` 相同，所以數字可以直接和未登入的結果比較，也量得到「回訪」（整頁重新載入）。
+
+  ```bash
+  node scripts/page-load/build-in-frame-payload.cjs --minify   # 產生要貼進分頁執行的程式
+  ```
+
+  貼進去後：`await __plbFrame.load('/wishes')` 量回訪、`await __plbFrame.inApp('/wishes')` 量 App 內切頁、`__plbFrame.links('^/wishlists/\\d+$')` 取框架內目前頁面的連結（找需要識別碼的頁面）、`__plbFrame.close()` 收掉框架。結果只有時間、數量與去掉識別碼的請求路徑，不含頁面文字。每次量測的 `injected` 會記下觀測程式放進去的時刻，以及在那之前頁面是否已經送出 API（應為 0）。「第一次造訪」要清空快取才量得到，這個做法不量。
+
+  `in-frame-runner.check.cjs` 用本機隔離環境檢查這個做法：同一批頁面用它量和用 `page-load-budget.cjs` 量，數字應該一致。
+
+- **`in-app-probe.js`**：直接裝在分頁本身，只量 App 內切頁（`await __plbGo('/wishes')`），視窗是瀏覽器當下的大小。
 
 ## 檔案
 
@@ -86,4 +98,5 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 - `routes.json` 全部路由；`signedIn` 需登入、`guestOnly` 只在未登入時量、`textLoaders: false` 表示該頁內文本來就會提到「載入」。
 - `local-stack.cjs` 本機隔離環境。
 - `head-of-line-check.cjs` 互相拖累檢查。
+- `in-frame-runner.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、產生貼入程式、本機對照檢查。
 - `in-app-probe.js` 已登入分頁用的切頁探針。

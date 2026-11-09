@@ -1,38 +1,46 @@
-import { Component, Suspense, lazy, createRef, type ComponentType, type LazyExoticComponent } from 'react';
+import { Component, Suspense, createRef, type ComponentType } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from './ui/Button';
 import { t } from '../utils/localization';
 
 type PageLoader = () => Promise<{ default: ComponentType }>;
-class PageLoadError extends Error {}
 
-function loadPage(load: PageLoader) {
-  return lazy(async () => {
-    try { return await load(); }
-    catch { throw new PageLoadError('Page resources unavailable'); }
-  });
-}
+// Pages whose code has arrived, kept for the life of the tab. A page is shown the moment its code is here:
+// at once when it was opened before, and otherwise as soon as the import settles. The page's code is not
+// handed to React.lazy and Suspense, because React holds a Suspense fallback on screen for 300 ms once it
+// has been shown, however quickly the code arrives, and that was paid on every single navigation.
+const arrived = new Map<PageLoader, ComponentType>();
 
 type BoundaryProps = { load: PageLoader; navigationKey: string };
-type BoundaryState = { page: LazyExoticComponent<ComponentType>; failure: 'load' | 'render' | null };
+type BoundaryState = { page: ComponentType | null; failure: 'load' | 'render' | null };
 
 class PageBoundary extends Component<BoundaryProps, BoundaryState> {
-  // Keep the lazy identity stable through form edits and parent rerenders.
-  // A rejected React.lazy promise needs a fresh identity on explicit retry.
-  state: BoundaryState = { page: loadPage(this.props.load), failure: null };
+  state: BoundaryState = { page: arrived.get(this.props.load) ?? null, failure: null };
   private heading = createRef<HTMLHeadingElement>();
+  // Only the latest request of a mounted boundary may change what is shown.
+  private request = 0;
 
-  static getDerivedStateFromError(error: unknown): Partial<BoundaryState> {
-    return { failure: error instanceof PageLoadError ? 'load' : 'render' };
-  }
+  static getDerivedStateFromError(): Partial<BoundaryState> { return { failure: 'render' }; }
 
-  componentDidCatch() { this.heading.current?.focus(); }
+  componentDidMount() { if (!this.state.page) this.fetchPage(); }
 
-  componentDidUpdate(previous: BoundaryProps) {
+  componentWillUnmount() { this.request++; }
+
+  componentDidUpdate(previous: BoundaryProps, before: BoundaryState) {
+    if (this.state.failure && !before.failure) this.heading.current?.focus();
     if (this.state.failure && previous.navigationKey !== this.props.navigationKey) this.retry();
   }
 
-  private retry = () => this.setState({ page: loadPage(this.props.load), failure: null });
+  private fetchPage() {
+    const request = ++this.request, load = this.props.load;
+    load().then(module => {
+      arrived.set(load, module.default);
+      if (request === this.request) this.setState({ page: module.default, failure: null });
+    }, () => { if (request === this.request) this.setState({ failure: 'load' }); });
+  }
+
+  // A failed import is asked for again; a page that failed while rendering is mounted afresh.
+  private retry = () => this.setState({ failure: null }, () => { if (!this.state.page) this.fetchPage(); });
 
   render() {
     if (this.state.failure) return (
@@ -47,8 +55,9 @@ class PageBoundary extends Component<BoundaryProps, BoundaryState> {
         </div>
       </section>
     );
-    const Page = this.state.page;
-    return <Suspense fallback={<p role="status" className="py-6">{t('route.loading')}</p>}><Page /></Suspense>;
+    const Page = this.state.page, waiting = <p role="status" className="late-reveal py-6">{t('route.loading')}</p>;
+    // The boundary below is only for a page that itself waits for something while rendering.
+    return Page ? <Suspense fallback={waiting}><Page /></Suspense> : waiting;
   }
 }
 

@@ -28,6 +28,36 @@ describe('route resource recovery', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a page opened before at once: no waiting line and no second import', async () => {
+    const load = vi.fn().mockResolvedValue({ default: () => <h1>Loaded page</h1> });
+    mount(createLazyPage(load));
+    await screen.findByRole('heading', { name: 'Loaded page' });
+    fireEvent.click(screen.getByRole('link', { name: 'Other page' }));
+    await screen.findByRole('heading', { name: 'Other feature' });
+    fireEvent.click(screen.getByRole('link', { name: 'Change query' }));
+    // Present in the very render that follows the click: nothing is awaited here.
+    expect(screen.getByRole('heading', { name: 'Loaded page' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the page in the same turn its code arrives, and ignores code that arrives after leaving', async () => {
+    let finish!: (value: { default: () => React.ReactNode }) => void;
+    const load = vi.fn(() => new Promise<{ default: () => React.ReactNode }>(resolve => { finish = resolve; }));
+    const view = mount(createLazyPage(load));
+    expect(screen.getByRole('status')).toHaveTextContent('正在載入頁面');
+    await act(async () => finish({ default: () => <h1>Loaded page</h1> }));
+    // No timer has run: the heading is there as soon as the import settled.
+    expect(screen.getByRole('heading', { name: 'Loaded page' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    view.unmount();
+    const late = vi.fn(() => new Promise<{ default: () => React.ReactNode }>(resolve => { finish = resolve; }));
+    const second = mount(createLazyPage(late));
+    second.unmount();
+    await act(async () => finish({ default: () => <h1>Too late</h1> }));
+    expect(document.body).not.toHaveTextContent('Too late');
+  });
+
   it('does not retry automatically, disclose the import error, or unmount the shell; explicit retry creates a fresh lazy promise', async () => {
     const load = vi.fn().mockRejectedValueOnce(new Error('secret://private-path/token'))
       .mockResolvedValue({ default: () => <h1>Recovered page</h1> });

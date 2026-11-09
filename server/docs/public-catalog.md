@@ -33,6 +33,7 @@
 | `GET /api/discovery`（一般列表與地圖模式） | 一個 SQL 敘述：篩選、分類數量、總數、分頁代碼、該頁商品。只讀該頁商品的內容 |
 | `GET /api/discovery/products/:kind/:id` | 以鍵查單筆 |
 | `GET /api/source-leads/summary` | 對 `PublicCatalogEntry` 計數 |
+| `GET /api/source-leads/map`（來源地圖的位置與各位置件數） | 一個 SQL 敘述：目前公開的來源項目接回來源列取座標，依座標分組。讀取模型不可用時改由 `scanSourceMap()` 全掃，結果相同 |
 | `/api/discovery/for-you`、`/api/discovery/cp`、`POST /cp-evaluations`、`/api/retail-price-admin/*` | 仍取得全部商品再運算（`loadDiscovery()`），但商品來自已存好的項目，不再逐筆重驗與重組。超過 20,000 筆時這幾支仍會回 `DISCOVERY_SCAN_CAPACITY` |
 
 分頁代碼（cursor）的規則不變：只對「同一組查詢條件、同一批結果」有效，結果有任何增減或內容改變就回 409 `DISCOVERY_RESULTS_CHANGED`。

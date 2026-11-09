@@ -79,6 +79,14 @@ export function parseLead(v: unknown): SourceLead { const r = obj(v); const cont
 export function parseLeadPage(v: unknown) { const r = obj(v); if (typeof r.enabled !== 'boolean' || !Array.isArray(r.items) || r.items.length > 25 || !(r.nextCursor === null || uuid(r.nextCursor)) || (!r.enabled && (r.items.length || r.nextCursor !== null)))
     throw new Error('線索分頁錯誤'); const items = r.items.map(parseLead); if (new Set(items.map((r: SourceLead) => r.id)).size !== items.length)
     throw new Error('線索重複'); return { items: items as SourceLead[], nextCursor: r.nextCursor as string | null, enabled: r.enabled as boolean }; }
+// The places of the source map: one point per place, with how many references share it and the first of them.
+export type SourceMapPoint = { id: string; latitude: number; longitude: number; count: number; publicPlaceName: string | null };
+export function parseLeadMap(v: unknown) { const r = obj(v); if (typeof r.enabled !== 'boolean' || !Number.isSafeInteger(r.total) || r.total < 0 || !Array.isArray(r.points) || r.points.length > 20000 || (!r.enabled && (r.total || r.points.length)))
+    throw new Error('線索地圖錯誤'); const ids = new Set<string>(), places = new Set<string>(); let total = 0;
+ for (const value of r.points) { const p = obj(value), place = p.latitude + ',' + p.longitude;
+  if (Object.keys(p).some(k => !['id', 'latitude', 'longitude', 'count', 'publicPlaceName'].includes(k)) || !uuid(p.id) || ids.has(p.id) || typeof p.latitude !== 'number' || typeof p.longitude !== 'number' || !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude) || Math.abs(p.latitude) > 90 || Math.abs(p.longitude) > 180 || places.has(place) || !Number.isSafeInteger(p.count) || p.count < 1 || !(p.publicPlaceName === null || typeof p.publicPlaceName === 'string' && p.publicPlaceName.length <= 300))
+    throw new Error('線索地圖錯誤'); ids.add(p.id); places.add(place); total += p.count; }
+ if (total !== r.total) throw new Error('線索地圖錯誤'); return { total: r.total as number, points: r.points as SourceMapPoint[], enabled: r.enabled as boolean }; }
 export type LeadRoom = {
     transferIssue?: { code: 'FACEBOOK_COMMENT_REJECTED'; checkedAt: string; originalPostUrl: string };
     id: string;

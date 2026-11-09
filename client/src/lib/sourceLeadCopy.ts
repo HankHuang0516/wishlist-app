@@ -57,6 +57,8 @@ const english = {
   '{count}件': '{count} items',
   '地圖含公共地點與縣市示意點；概略位置，非取貨點，不提供精確距離或導航。實際面交地點待確認可轉告後私訊買家。': 'The map includes public places and approximate county points, not pickup points. It does not provide precise distances or directions. The actual meetup place still needs confirmation before being relayed privately to the buyer.',
   '來源商品清單': 'Source item list',
+  '載入更多來源（已顯示 {shown}／{total} 件）': 'Load more sources (showing {shown} of {total})',
+  '讀取更多來源中…': 'Loading more sources…',
   '查看 {title}': 'View {title}',
   '選擇線索': 'Select a source lead',
   '概略位置，非取貨點': 'Approximate location, not a pickup point',

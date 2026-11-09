@@ -74,6 +74,8 @@ afterAll(async () => {
   await prisma.externalSourceLead.deleteMany({ where: { id: { in: leadIds } } });
   await prisma.listing.deleteMany({ where: { ownerUserId: userId } });
   await prisma.user.deleteMany({ where: { id: userId } });
+  await prisma.$executeRaw`TRUNCATE "PublicCatalogDirty"`;
+  await prisma.$executeRaw`UPDATE "PublicCatalogState" SET "readyAt" = NULL`;
   await prisma.$disconnect();
 });
 

@@ -1,0 +1,239 @@
+[
+ {
+  "id": "home",
+  "path": "/",
+  "name": "首頁"
+ },
+ {
+  "id": "explore",
+  "path": "/explore",
+  "name": "探索（商品列表）"
+ },
+ {
+  "id": "explore-source",
+  "path": "/explore?view=source-leads&source={sourceId}&presentation=1&photos=2&approximate=1&unlocated=1",
+  "name": "探索－外部商品詳情"
+ },
+ {
+  "id": "source-leads",
+  "path": "/source-leads",
+  "name": "來源商品地圖",
+  "runs": 1
+ },
+ {
+  "id": "listing",
+  "path": "/listings/{listingId}",
+  "name": "商品頁"
+ },
+ {
+  "id": "storefront",
+  "path": "/users/{sellerId}/storefront",
+  "name": "賣家賣場"
+ },
+ {
+  "id": "login",
+  "path": "/login",
+  "name": "登入",
+  "guestOnly": true
+ },
+ {
+  "id": "register",
+  "path": "/register",
+  "name": "註冊",
+  "guestOnly": true
+ },
+ {
+  "id": "forgot-password",
+  "path": "/forgot-password",
+  "name": "忘記密碼",
+  "guestOnly": true
+ },
+ {
+  "id": "resend-verification",
+  "path": "/resend-verification",
+  "name": "重寄驗證信",
+  "guestOnly": true
+ },
+ {
+  "id": "verify-email",
+  "path": "/verify-email",
+  "name": "Email 驗證",
+  "guestOnly": true
+ },
+ {
+  "id": "reset-password",
+  "path": "/reset-password",
+  "name": "重設密碼",
+  "guestOnly": true
+ },
+ {
+  "id": "terms",
+  "path": "/terms",
+  "name": "服務條款"
+ },
+ {
+  "id": "privacy",
+  "path": "/privacy",
+  "name": "隱私權政策"
+ },
+ {
+  "id": "support",
+  "path": "/support",
+  "name": "客服支援"
+ },
+ {
+  "id": "partners",
+  "path": "/partners",
+  "name": "合作夥伴"
+ },
+ {
+  "id": "partner-inquiry",
+  "path": "/partners/inquiry",
+  "name": "合作洽詢"
+ },
+ {
+  "id": "account-deletion",
+  "path": "/account-deletion",
+  "name": "刪除帳號說明"
+ },
+ {
+  "id": "api-docs",
+  "path": "/api-docs",
+  "name": "API 文件"
+ },
+ {
+  "id": "api-showcase",
+  "path": "/api-showcase",
+  "name": "API 展示"
+ },
+ {
+  "id": "changelog",
+  "path": "/changelog",
+  "name": "更新紀錄",
+  "textLoaders": false
+ },
+ {
+  "id": "manage-login",
+  "path": "/manage/login",
+  "name": "來源管理登入"
+ },
+ {
+  "id": "not-found",
+  "path": "/no-such-page-load-check",
+  "name": "404"
+ },
+ {
+  "id": "dashboard",
+  "path": "/dashboard",
+  "name": "願望清單總覽",
+  "signedIn": true
+ },
+ {
+  "id": "wishes",
+  "path": "/wishes",
+  "name": "願望",
+  "signedIn": true
+ },
+ {
+  "id": "wishlist-detail",
+  "path": "/wishlists/{wishlistId}",
+  "name": "願望清單內容",
+  "signedIn": true
+ },
+ {
+  "id": "sell",
+  "path": "/sell",
+  "name": "批次刊登",
+  "signedIn": true
+ },
+ {
+  "id": "sell-manual",
+  "path": "/sell/manual",
+  "name": "手動刊登",
+  "signedIn": true
+ },
+ {
+  "id": "my-listings",
+  "path": "/my-listings",
+  "name": "我的商品",
+  "signedIn": true
+ },
+ {
+  "id": "reports",
+  "path": "/reports",
+  "name": "檢舉紀錄",
+  "signedIn": true
+ },
+ {
+  "id": "chat",
+  "path": "/chat",
+  "name": "聊天（收件匣）",
+  "signedIn": true
+ },
+ {
+  "id": "chat-room",
+  "path": "/chat?room={conversationId}",
+  "name": "聊天（對話）",
+  "signedIn": true
+ },
+ {
+  "id": "social",
+  "path": "/social",
+  "name": "社交",
+  "signedIn": true
+ },
+ {
+  "id": "settings",
+  "path": "/settings",
+  "name": "設定",
+  "signedIn": true
+ },
+ {
+  "id": "settings-notifications",
+  "path": "/settings/notifications",
+  "name": "通知設定",
+  "signedIn": true
+ },
+ {
+  "id": "change-password",
+  "path": "/change-password",
+  "name": "變更密碼",
+  "signedIn": true
+ },
+ {
+  "id": "purchase-history",
+  "path": "/purchase-history",
+  "name": "購買紀錄",
+  "signedIn": true
+ },
+ {
+  "id": "user-wishlists",
+  "path": "/users/{friendId}/wishlists",
+  "name": "他人願望清單",
+  "signedIn": true
+ },
+ {
+  "id": "friend-wishlist",
+  "path": "/wishlists/{friendWishlistId}",
+  "name": "他人願望清單內容",
+  "signedIn": true
+ },
+ {
+  "id": "user-profile",
+  "path": "/users/{friendId}/profile",
+  "name": "他人個人頁",
+  "signedIn": true
+ },
+ {
+  "id": "manage-source-items",
+  "path": "/manage/source-items",
+  "name": "來源商品管理",
+  "signedIn": true
+ },
+ {
+  "id": "manage-source-evidence",
+  "path": "/manage/source-evidence",
+  "name": "來源證據登記",
+  "signedIn": true
+ }
+]

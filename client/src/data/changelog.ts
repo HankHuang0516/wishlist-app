@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.848',date:'2026-11-10',title:'首頁開啟速度',type:'Fullstack',items:[{type:'Enhancement',content:'登入後首頁的願望配對改為一次讀取全部願望與各自的第一頁配對，不再逐一願望等待；配對結果與排序和原本相同。'}]},
  {version:'2.0.847',date:'2026-11-10',title:'頁面開啟速度',type:'Fullstack',items:[{type:'Enhancement',content:'探索、首頁與探索內的商品詳情改讀預先整理好的公開目錄，開啟時間由數秒降到一秒左右，顯示內容與原本相同。'},{type:'Enhancement',content:'來源線索地圖先用一次讀取畫出所有位置與件數；清單改為捲到底或按「載入更多來源」再讀下一頁。'},{type:'Enhancement',content:'切換頁面不再固定等待，開過的頁面會立即顯示。'}]},
  {version:'2.0.820',date:'2026-10-26',title:'探索地圖與參考原價說明',type:'Fullstack',items:[{type:'Enhancement',content:'探索列表與地圖共用搜尋及篩選；依分類排列已載入商品縮圖，選取後可辨認原公開概略位置，沒有有效公開位置的商品另外列出。'},{type:'Enhancement',content:'商品以約參考原價幾折呈現比較，點擊可查看參考原價及來源；沒有足夠依據時不顯示折數。'},{type:'Fix',content:'私人草稿的照片與未使用行銷圖可一併移除，保留已使用生成額度；地圖讀取失敗時明確提示並可手動重載。'}]},
  {version:'2.0.819',date:'2026-10-25',title:'每週代問額度與分開的贊助方案',type:'Fullstack',items:[{type:'New',content:'未訂閱者每週一台灣時間 00:00 重新取得 3 次免費代問；同筆重試與同輪更正不重複扣次，原詢問與回覆仍可查閱。'},{type:'Security',content:'贊助、尊榮訂閱與行銷加值使用獨立商品及驗單帳本，贊助不會開通尊榮；購買依各平台實際開放狀態顯示。'}]},

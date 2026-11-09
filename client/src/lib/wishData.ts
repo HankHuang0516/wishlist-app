@@ -16,15 +16,31 @@ export function rankHomeMatches(matches: WishMatch[], userId: number): WishMatch
 const object = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new WishDataError(); return v as Record<string, unknown>; };
 const id = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v <= 2147483647;
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && !!v.trim() && v.length <= max;
-export function parseMatchWishes(v: unknown) {
-  const p = object(v); if (!Array.isArray(p.items) || p.items.length > 100 || !(p.nextCursor === null || id(p.nextCursor))) throw new WishDataError();
-  const items = p.items.map(v => {
-    const w = object(v), list = object(w.wishlist);
-    if (!id(w.id) || !text(w.name, 200) || !(w.maxPrice === null || (typeof w.maxPrice === 'number' && Number.isFinite(w.maxPrice) && w.maxPrice >= 0 && w.maxPrice <= 1e12)) || !(w.priceCurrency === null || (typeof w.priceCurrency === 'string' && /^[A-Z]{3}$/.test(w.priceCurrency))) || !id(list.id) || !text(list.title, 200) || typeof list.isPublic !== 'boolean') throw new WishDataError();
-    return { id: w.id, name: w.name, maxPrice: w.maxPrice as number | null, priceCurrency: w.priceCurrency as string | null, wishlist: { id: list.id, title: list.title, isPublic: list.isPublic } };
-  });
+function parseMatchWish(v: unknown): MatchWish {
+  const w = object(v), list = object(w.wishlist);
+  if (!id(w.id) || !text(w.name, 200) || !(w.maxPrice === null || (typeof w.maxPrice === 'number' && Number.isFinite(w.maxPrice) && w.maxPrice >= 0 && w.maxPrice <= 1e12)) || !(w.priceCurrency === null || (typeof w.priceCurrency === 'string' && /^[A-Z]{3}$/.test(w.priceCurrency))) || !id(list.id) || !text(list.title, 200) || typeof list.isPublic !== 'boolean') throw new WishDataError();
+  return { id: w.id, name: w.name, maxPrice: w.maxPrice as number | null, priceCurrency: w.priceCurrency as string | null, wishlist: { id: list.id, title: list.title, isPublic: list.isPublic } };
+}
+/** A page of wishes must be bounded, free of repeats and end where its cursor says. */
+function wishPage<T extends { id: number }>(p: Record<string, unknown>, rows: unknown, items: T[]) {
+  if (!Array.isArray(rows) || rows.length > 100 || !(p.nextCursor === null || id(p.nextCursor))) throw new WishDataError();
   if (new Set(items.map(w => w.id)).size !== items.length || (p.nextCursor !== null && p.nextCursor !== items.at(-1)?.id)) throw new WishDataError();
-  return { items, nextCursor: p.nextCursor as number | null };
+  return p.nextCursor as number | null;
+}
+export function parseMatchWishes(v: unknown) {
+  const p = object(v);
+  const items = Array.isArray(p.items) && p.items.length <= 100 ? p.items.map(parseMatchWish) : [];
+  return { items, nextCursor: wishPage(p, p.items, items) };
+}
+export type HomeMatchGroup = { wish: MatchWish; page: ReturnType<typeof parseWishMatchPage> };
+/** One read of the home page: a page of wishes, each with the first page of its matches and the cursor for the rest. */
+export function parseHomeMatches(v: unknown, apiUrl: string, local = false, now = Date.now()) {
+  const p = object(v);
+  const groups: HomeMatchGroup[] = Array.isArray(p.groups) && p.groups.length <= 100 ? p.groups.map(v => {
+    const g = object(v), wish = parseMatchWish(g.wish);
+    return { wish, page: parseWishMatchPage(g, wish.id, apiUrl, local, now) };
+  }) : [];
+  return { groups, nextCursor: wishPage(p, p.groups, groups.map(g => g.wish)) };
 }
 export function wishMatchPath(wishItemId: number, filters: SearchFilters, bounds: Bounds, radiusKm = '', includeOwnPreview = false) {
   if (!id(wishItemId)) throw new WishDataError();
@@ -51,5 +67,5 @@ export function parseWishMatchPage(v: unknown, wishItemId: number, apiUrl: strin
     return { wishItemId, listing, score: m.score, reasons, budget: m.budget as WishMatch['budget'], distanceKm: m.distanceKm as number | null };
   });
   if (new Set(items.map(m => m.listing.id)).size !== items.length) throw new WishDataError();
-  return { items: items.filter(m => Date.parse(m.listing.expiresAt) > now), nextCursor: p.nextCursor as string | null, notice: p.notice, scannedCandidates: p.scannedCandidates as number };
+  return { items: items.filter(m => Date.parse(m.listing.expiresAt) > now), nextCursor: p.nextCursor as string | null, notice: p.notice as string, scannedCandidates: p.scannedCandidates as number };
 }

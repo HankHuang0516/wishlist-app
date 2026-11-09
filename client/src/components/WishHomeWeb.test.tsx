@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WishHomeWeb from './WishHomeWeb';
-import { makeWish, makeMatch, makeMatchPage, makeListing, responseOk } from '../__tests__/fixtures/marketplace';
+import { makeWish, makeMatch, makeMatchPage, makeHomePage, makeListing, responseOk, uuid } from '../__tests__/fixtures/marketplace';
 vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect, previewNotice }: { items: { id: string }[]; previewNotice: string; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}<p>{previewNotice}</p></div> }));
 beforeEach(() => localStorage.setItem('user-locale', 'zh-TW'));
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -10,7 +10,7 @@ const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key=
 describe('APP-equivalent homepage match UX', () => {
   it('shows one best match per wish, expands alternatives, and puts the wish selector below matches', async () => {
     const first = makeMatch(), best = makeMatch(1, makeListing('最匹配的三國演義'), 98);
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([first, best]))));
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [first, best] }]))));
     render(view());
     const bestLinks = await screen.findAllByRole('link', { name: /最匹配的三國演義/ });
     expect(bestLinks).toHaveLength(2);
@@ -26,8 +26,23 @@ describe('APP-equivalent homepage match UX', () => {
     expect(chooser.querySelector('summary')).toHaveTextContent('今天想找什麼？');
     expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
   });
+  it('reads a wish beyond its first page only when the home read says there is more, and ranks across both', async () => {
+    const first = makeMatch(1, makeListing('第一頁的三國演義'), 70), later = makeMatch(1, makeListing('第二頁更吻合的三國演義'), 96), cursor = uuid();
+    const fetch = vi.fn(async (url: string) => responseOk(url.includes('home-matches')
+      ? makeHomePage([{ wish: makeWish(1), items: [first], nextCursor: cursor }, { wish: makeWish(2), items: [makeMatch(2)] }])
+      : makeMatchPage([later])));
+    vi.stubGlobal('fetch', fetch); render(view());
+    const links = await screen.findAllByRole('link', { name: /第二頁更吻合的三國演義/ });
+    expect(links).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1][0]).toContain('/listings/matches?wishItemId=1&');
+    expect(fetch.mock.calls[1][0]).toContain('cursor=' + cursor);
+    expect(screen.getByRole('button', { name: /共有2件吻合商品/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('passes the single match ID for fresh lookup and automatic map framing', async () => {
-    const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([match]))));
+    const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [match] }]))));
     render(view()); await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
     screen.getByText('選願望交叉比對').closest('details')!.setAttribute('open', '');
     const link = screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
@@ -37,13 +52,13 @@ describe('APP-equivalent homepage match UX', () => {
     expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
   });
   it('shows incomplete failure instead of no matching items, and offers a retry', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('match-wishes')) return responseOk({ items: [makeWish()], nextCursor: null }); throw new Error('offline'); }));
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('home-matches')) return responseOk(makeHomePage([{ wish: makeWish(), items: [makeMatch()], nextCursor: uuid() }])); throw new Error('offline'); }));
     render(view()); expect(await screen.findByRole('alert')).toHaveTextContent('這不代表沒有商品');
     expect(screen.queryByText(/目前沒有其他賣家/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: /重新整理願望與配對/ })).toBeEnabled();
     expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
   });
   it('retains a truthful empty map after a complete read without inventing items or issuing a search', async () => {
-    const fetch = vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([])));
+    const fetch = vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish() }])));
     vi.stubGlobal('fetch', fetch); render(view());
     const map = await screen.findByTestId('home-map');
     expect(map.parentElement).toHaveAttribute('aria-label', '沒有吻合商品標記的地圖概覽');
@@ -52,12 +67,13 @@ describe('APP-equivalent homepage match UX', () => {
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
     expect(screen.getByText(/目前沒有其他賣家的吻合商品/)).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: '不套用願望，瀏覽商品地圖' }).every(link => link.getAttribute('href') === '/explore')).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain('/listings/home-matches?limit=100');
   });
   it('does not label pending or failed wish reads as empty, and explicitly recovers to the empty overview', async () => {
     let resolve!: (value: unknown) => void;
     const fetch = vi.fn().mockImplementationOnce(() => new Promise(done => { resolve = done; }))
-      .mockResolvedValueOnce(responseOk({ items: [], nextCursor: null }));
+      .mockResolvedValueOnce(responseOk(makeHomePage()));
     vi.stubGlobal('fetch', fetch); render(view());
     expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新整理願望與配對' })).toBeDisabled();
@@ -75,7 +91,7 @@ describe('APP-equivalent homepage match UX', () => {
   it('only shows the empty overview after an explicit successful retry of an incomplete match read', async () => {
     let matchReads = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.includes('match-wishes')) return responseOk({ items: [makeWish()], nextCursor: null });
+      if (url.includes('home-matches')) return responseOk(makeHomePage([{ wish: makeWish(), items: [], nextCursor: uuid() }]));
       return ++matchReads === 1 ? { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) } : responseOk(makeMatchPage([]));
     }));
     render(view()); await screen.findByRole('alert');
@@ -88,7 +104,7 @@ describe('APP-equivalent homepage match UX', () => {
   });
   it('describes a confirmed empty overview in English while keeping the original search destination', async () => {
     localStorage.setItem('user-locale', 'en-US');
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([]))));
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish() }]))));
     render(view()); const map = await screen.findByTestId('home-map');
     expect(map.parentElement).toHaveAttribute('aria-label', 'Map overview without matching item markers');
     expect(map).toHaveTextContent('there are no matching item markers');
@@ -99,14 +115,14 @@ describe('APP-equivalent homepage match UX', () => {
   it('ignores late private wishes when the account session is replaced', async () => {
     let resolve!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
-      ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk({ items: [], nextCursor: null }))));
+      ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk(makeHomePage()))));
     const mounted = render(view()); mounted.rerender(view('second', 20));
     await screen.findByText('先留下你的第一個願望');
-    await act(async () => resolve(responseOk({ items: [makeWish()], nextCursor: null })));
+    await act(async () => resolve(responseOk(makeHomePage([{ wish: makeWish() }]))));
     expect(screen.queryByRole('radio', { name: /三國演義/ })).not.toBeInTheDocument();
   });
   it('keeps photo shortcuts optional and sends a Unicode search to the real explore route', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk({ items: [], nextCursor: null })));
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage())));
     const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
     render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
     await screen.findByText('先留下你的第一個願望');
@@ -118,7 +134,7 @@ describe('APP-equivalent homepage match UX', () => {
   });
   it('deduplicates map photos shared by multiple wishes and preserves listing navigation', async () => {
     const item = makeListing();
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish(1), makeWish(2)], nextCursor: null } : makeMatchPage([makeMatch(Number(new URL(url).searchParams.get('wishItemId')), item)]))));
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(1), items: [makeMatch(1, item)] }, { wish: makeWish(2), items: [makeMatch(2, item)] }]))));
     const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
     render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
     const map = await screen.findByTestId('home-map'); expect(within(map).getAllByRole('button')).toHaveLength(1);
@@ -127,7 +143,7 @@ describe('APP-equivalent homepage match UX', () => {
   });
   it('provides the same match expansion, chooser and destination in English', async () => {
     localStorage.setItem('user-locale', 'en-US'); const first = makeMatch(), second = makeMatch(1, makeListing('Other synthetic item'), 91);
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => responseOk(url.includes('match-wishes') ? { items: [makeWish()], nextCursor: null } : makeMatchPage([first, second]))));
+    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [first, second] }]))));
     render(view()); const expand = await screen.findByRole('button', { name: /has 2 matching items, View all/ });
     fireEvent.click(expand); expect(screen.getByRole('button', { name: /has 2 matching items, Collapse results/ })).toHaveAttribute('aria-expanded', 'true');
     const links = screen.getAllByRole('link', { name: /Other synthetic item/ }); expect(links).toHaveLength(2);

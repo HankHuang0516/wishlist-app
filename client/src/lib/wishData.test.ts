@@ -1,7 +1,7 @@
 const randomUUID = () => crypto.randomUUID();
 import { describe, expect, it } from 'vitest';
 import { emptySearchFilters, TAIWAN_BOUNDS } from './listingSearch';
-import { parseMatchWishes, parseWishMatchPage, rankHomeMatches, wishMatchPath } from './wishData';
+import { parseHomeMatches, parseMatchWishes, parseWishMatchPage, rankHomeMatches, wishMatchPath } from './wishData';
 const api = 'https://example.invalid'; const future = new Date(Date.now() + 86400000).toISOString();
 const wish = () => ({ id: 1, name: 'Sony 相機', maxPrice: 5000, priceCurrency: 'TWD', wishlist: { id: 2, title: '私人願望', isPublic: false } });
 function listing() { const id = randomUUID(), mediaId = randomUUID(); return { id, title: 'Sony 相機', description: '合成測試相機', brand: 'Sony', category: 'electronics', condition: 'USED', price: '4000.00', currency: 'TWD', deliveryMethods: ['MEETUP'], negotiable: false, status: 'ACTIVE', expiresAt: future, owner: { id: 3, name: null }, location: { county: '臺北市', district: '中正區', publicLatitude: 25.05, publicLongitude: 121.51, precisionMeters: 2200 }, media: [{ id: mediaId, imageUrl: `${api}/api/listing-media/${mediaId}/image`, thumbnailUrl: `${api}/api/listing-media/${mediaId}/thumbnail` }] }; }
@@ -16,6 +16,19 @@ describe('native wish browsing and explainable match protocol', () => {
     expect(ranked).toHaveLength(2);
     expect(ranked.map(item => item.listing.id)).toEqual([better.listing.id, first.listing.id]);
     expect(ranked[0].listing.media[0].thumbnailUrl).toBeTruthy();
+  });
+  it('parses the home read as a wish page whose groups each carry a genuine match page', () => {
+    const home = (groups: unknown[], nextCursor: number | null = null) => ({ groups, nextCursor, matchLimit: 50, scope: { bbox: '117,20,123.8,26.6' }, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: '先依新近刊登分頁' });
+    const cursor = randomUUID(), m = match();
+    const r = parseHomeMatches(home([{ wish: { ...wish(), password: 'drop' }, ...page([m]), nextCursor: cursor }, { wish: { ...wish(), id: 7 }, ...page([]) }]), api);
+    expect(r.nextCursor).toBeNull(); expect(r.groups.map(g => g.wish.id)).toEqual([1, 7]);
+    expect(r.groups[0].wish).toEqual(wish()); expect(r.groups[0].wish).not.toHaveProperty('password');
+    expect(r.groups[0].page).toMatchObject({ nextCursor: cursor, scannedCandidates: 1 }); expect(r.groups[0].page.items[0]).toMatchObject({ wishItemId: 1, score: 60 });
+    expect(r.groups[1].page.items).toEqual([]);
+    expect(parseHomeMatches(home([{ wish: wish(), ...page([]) }], 1), api).nextCursor).toBe(1);
+    for (const bad of [null, [], { groups: {}, nextCursor: null }, home([{ wish: wish(), ...page([]) }, { wish: wish(), ...page([]) }]), home([{ wish: wish(), ...page([]) }], 5),
+      home([{ wish: wish(), ...page([{ ...m, wishItemId: 2 }]) }]), home([{ wish: wish(), ...page([]), ordering: 'SCORE' }]), home([{ wish: { ...wish(), id: 0 }, ...page([]) }]), home([{ ...page([]) }]), home(Array.from({ length: 101 }, (_, i) => ({ wish: { ...wish(), id: i + 1 }, ...page([]) })))])
+      expect(() => parseHomeMatches(bad, api)).toThrow();
   });
   it('projects private eligible wishes without leaking extra API fields', () => { const r = parseMatchWishes({ items: [{ ...wish(), password: 'drop' }], nextCursor: null }); expect(r.items[0]).toEqual(wish()); expect(r.items[0]).not.toHaveProperty('password'); });
   it.each([{ id: 0 }, { name: '' }, { name: 'x'.repeat(201) }, { maxPrice: -1 }, { maxPrice: NaN }, { maxPrice: 1e12 + 1 }, { priceCurrency: 'bad' }, { wishlist: { id: 0, title: 'x', isPublic: false } }])('rejects malformed wishlist metadata %p', overrides => expect(() => parseMatchWishes({ items: [{ ...wish(), ...overrides }], nextCursor: null })).toThrow());

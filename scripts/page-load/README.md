@@ -87,6 +87,8 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 
   貼進去後：`await __plbFrame.load('/wishes')` 量回訪、`await __plbFrame.inApp('/wishes')` 量 App 內切頁、`__plbFrame.links('^/wishlists/\\d+$')` 取框架內目前頁面的連結（找需要識別碼的頁面）、`__plbFrame.close()` 收掉框架。結果只有時間、數量與去掉識別碼的請求路徑，不含頁面文字。每次量測的 `injected` 會記下觀測程式放進去的時刻，以及在那之前頁面是否已經送出 API（應為 0）。「第一次造訪」要清空快取才量得到，這個做法不量。
 
+  要一次量完登入後的所有頁面，接著貼 `in-frame-driver.js`：它會自己找出需要識別碼的頁面（願望清單、聊天室、追蹤對象），每頁量回訪與切頁各 2 次，並把讀取頻率壓在每分鐘 20 次以下；進度看 `__plbProgress`，結果在 `__plbResults`。量測期間分頁要保持在最上層。
+
   `in-frame-runner.check.cjs` 用本機隔離環境檢查這個做法：同一批頁面用它量和用 `page-load-budget.cjs` 量，數字應該一致。
 
 - **`in-app-probe.js`**：直接裝在分頁本身，只量 App 內切頁（`await __plbGo('/wishes')`），視窗是瀏覽器當下的大小。
@@ -98,5 +100,5 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 - `routes.json` 全部路由；`signedIn` 需登入、`guestOnly` 只在未登入時量、`textLoaders: false` 表示該頁內文本來就會提到「載入」。
 - `local-stack.cjs` 本機隔離環境。
 - `head-of-line-check.cjs` 互相拖累檢查。
-- `in-frame-runner.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、產生貼入程式、本機對照檢查。
+- `in-frame-runner.js`、`in-frame-driver.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、整批執行、產生貼入程式、本機對照檢查。
 - `in-app-probe.js` 已登入分頁用的切頁探針。

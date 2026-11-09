@@ -104,16 +104,3 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER public_catalog_mark AFTER INSERT OR UPDATE OR DELETE ON "Listing"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();
-CREATE TRIGGER public_catalog_mark AFTER INSERT OR UPDATE OR DELETE ON "ListingMedia"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();
-CREATE TRIGGER public_catalog_mark AFTER INSERT OR UPDATE OR DELETE ON "ListingLocation"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();
-CREATE TRIGGER public_catalog_mark AFTER INSERT OR UPDATE OR DELETE ON "ExternalSourceLead"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();
-CREATE TRIGGER public_catalog_mark AFTER INSERT OR UPDATE OR DELETE ON "ExternalListingCandidate"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();
-CREATE TRIGGER public_catalog_mark AFTER UPDATE ON "ExternalListingSource"
-  FOR EACH ROW EXECUTE FUNCTION public_catalog_mark();

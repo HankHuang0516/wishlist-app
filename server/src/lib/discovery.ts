@@ -62,46 +62,62 @@ async function scan<T extends {id: string}>(read: (cursor?: string) => Promise<T
     cursor = next;
   }
 }
+// One public product per source row. The full scan below and the read model in
+// publicCatalog.ts both build products here, so the two cannot drift apart.
+export type DiscoveryListingRow = Prisma.ListingGetPayload<{select: typeof publicListingSelect}>;
+export type DiscoveryCandidateRow = Prisma.ExternalListingCandidateGetPayload<{select: typeof externalCandidateSelect}>;
+export const discoveryListingWhere = (now: Date): Prisma.ListingWhereInput => ({status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}});
+export function listingProduct(r: DiscoveryListingRow, now: Date, mapPresentation: boolean): DiscoveryProduct {
+  const c = classifyDiscovery(r.title,r.category);
+  return {kind:'listing',id:r.id,key:'listing:'+r.id,title:r.title,description:r.description??'',...c,classificationMethod:c.method,
+    brand:r.brand,price:r.currency==='TWD'&&r.price!==null?Number(r.price):null,priceText:r.price?.toString()??'',currency:r.currency,priceUnitVerified:true,
+    thumbnailUrl:r.media[0]?.thumbnailUrl??null,photos:r.media.map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),
+    county:r.location?.county??null,district:r.location?.district??null,condition:r.condition,sourceLabel:'Wishlist',stockStatus:r.status,canonicalUrl:null,detailPath:'/listings/'+r.id,
+    date:(r.publishedAt??r.createdAt).toISOString(),dateBasis:r.publishedAt?'PUBLISHED':'COLLECTED',dateEarliest:null,
+    ...(mapPresentation?{mapLocation:r.location&&r.mapVisibleUntil&&r.mapVisibleUntil>now?{coordinates:[r.location.publicLongitude,r.location.publicLatitude] as [number,number],precision:'APPROXIMATE_2KM' as const,visibleUntil:r.mapVisibleUntil.toISOString()}:null}:{})};
+}
+export function leadProduct(r: Parameters<typeof leadCurrent>[0], now: Date, mapPresentation: boolean): DiscoveryProduct | null {
+  if (!leadCurrent(r,now)) return null;
+  const d=leadDTO(r,true,true), c=classifyDiscovery(r.title), p=sourcePrice(d.publicFacts);
+  return {kind:'source',id:r.id,key:'source:'+r.id,title:r.title,description:r.summary,...c,classificationMethod:c.method,
+    price:p.price,priceText:p.text,currency:p.currency,priceUnitVerified:p.unitVerified,thumbnailUrl:d.media?.[0]?.thumbnailUrl??null,
+    photos:(d.media??[]).map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),county:r.county,district:r.district,
+    condition:statedCondition(r.title),sourceLabel:new URL(r.canonicalUrl).hostname.replace(/^www\./,''),stockStatus:'UNKNOWN',canonicalUrl:r.canonicalUrl,
+    detailPath:'/explore?view=source-leads&source='+r.id+'&presentation=1&photos=2&approximate=1&unlocated=1',
+    date:d.firstObservedAt??(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null,
+    ...(mapPresentation?{mapLocation:d.locationPrecision!=='CONTACT_FOR_LOCATION'&&d.longitude!==null&&d.latitude!==null?{coordinates:[d.longitude,d.latitude] as [number,number],precision:d.locationPrecision==='COUNTY_ILLUSTRATION'?'COUNTY_ILLUSTRATION' as const:'PUBLIC_MEETING_POINT' as const}:null}:{})};
+}
+export function candidateProduct(row: DiscoveryCandidateRow, now: Date, mapPresentation: boolean): DiscoveryProduct | null {
+  const d=publicCandidate(row,now); if(!d)return null; const c=classifyDiscovery(d.title);
+  return {kind:'external',id:d.id,key:'external:'+d.id,title:d.title,description:d.description??'',...c,classificationMethod:c.method,
+    price:d.priceTwd===undefined?null:Number(d.priceTwd),priceText:d.priceTwd??'',currency:'TWD',priceUnitVerified:true,thumbnailUrl:d.thumbnailUrl,
+    photos:d.imageUrl?[{id:d.id,url:d.imageUrl,thumbnailUrl:d.thumbnailUrl??d.imageUrl}]:[],county:d.county,district:d.district,condition:d.condition,
+    sourceLabel:d.source.host,stockStatus:'UNKNOWN',canonicalUrl:d.canonicalUrl,cpAllowed:row.source.aiProcessingAllowed,detailPath:'/explore?view=external&external='+d.id,
+    date:d.observedAt.toISOString(),dateBasis:'COLLECTED',dateEarliest:null,
+    ...(mapPresentation?{mapLocation:{coordinates:[d.location.longitude,d.location.latitude] as [number,number],precision:'DISTRICT_CENTER' as const}}:{})};
+}
+// Every public product, for the callers that need the whole set (matching, price
+// comparison, admin tools). Served from the read model when it is ready; the full
+// scan remains the reference and the fallback.
 export async function loadDiscovery(now = new Date(), mapPresentation=false, viewerId?: number) {
   const privatePreview = await privateStorePreviewProducts(viewerId, now, mapPresentation);
   if (privatePreview !== null) return privatePreview;
+  const catalog = await import('./publicCatalog');
+  if (await catalog.catalogReady(now)) return catalog.catalogProducts(now, mapPresentation, true);
+  return scanDiscovery(now, mapPresentation);
+}
+export async function scanDiscovery(now = new Date(), mapPresentation=false) {
   const products: DiscoveryProduct[] = [];
   await prisma.$transaction(async tx => {
-    const listings = await scan(cursor => tx.listing.findMany({where:{id:{notIn:privateReviewListingIds()},status:{in:['ACTIVE','RESERVED']},expiresAt:{gt:now},NOT:{title:{startsWith:NON_SALE_QA_PREFIX}}},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
-    for (const r of listings) {
-      const c = classifyDiscovery(r.title,r.category);
-      products.push({kind:'listing',id:r.id,key:'listing:'+r.id,title:r.title,description:r.description??'',...c,classificationMethod:c.method,
-        brand:r.brand,price:r.currency==='TWD'&&r.price!==null?Number(r.price):null,priceText:r.price?.toString()??'',currency:r.currency,priceUnitVerified:true,
-        thumbnailUrl:r.media[0]?.thumbnailUrl??null,photos:r.media.map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),
-        county:r.location?.county??null,district:r.location?.district??null,condition:r.condition,sourceLabel:'Wishlist',stockStatus:r.status,canonicalUrl:null,detailPath:'/listings/'+r.id,
-        date:(r.publishedAt??r.createdAt).toISOString(),dateBasis:r.publishedAt?'PUBLISHED':'COLLECTED',dateEarliest:null,
-        ...(mapPresentation?{mapLocation:r.location&&r.mapVisibleUntil&&r.mapVisibleUntil>now?{coordinates:[r.location.publicLongitude,r.location.publicLatitude] as [number,number],precision:'APPROXIMATE_2KM' as const,visibleUntil:r.mapVisibleUntil.toISOString()}:null}:{})});
-    }
+    const listings = await scan(cursor => tx.listing.findMany({where:{id:{notIn:privateReviewListingIds()},...discoveryListingWhere(now)},select:publicListingSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
+    for (const r of listings) products.push(listingProduct(r,now,mapPresentation));
     if (process.env.SOURCE_LEADS_PUBLIC_ENABLED === '1') {
       const leads = await scan(cursor=>tx.externalSourceLead.findMany({where:{status:'PUBLISHED'},orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
-      for (const r of leads) {
-        if (!leadCurrent(r,now)) continue;
-        const d=leadDTO(r,true,true), c=classifyDiscovery(r.title), p=sourcePrice(d.publicFacts);
-        products.push({kind:'source',id:r.id,key:'source:'+r.id,title:r.title,description:r.summary,...c,classificationMethod:c.method,
-          price:p.price,priceText:p.text,currency:p.currency,priceUnitVerified:p.unitVerified,thumbnailUrl:d.media?.[0]?.thumbnailUrl??null,
-          photos:(d.media??[]).map(m=>({id:m.id,url:m.imageUrl,thumbnailUrl:m.thumbnailUrl})),county:r.county,district:r.district,
-          condition:statedCondition(r.title),sourceLabel:new URL(r.canonicalUrl).hostname.replace(/^www\./,''),stockStatus:'UNKNOWN',canonicalUrl:r.canonicalUrl,
-          detailPath:'/explore?view=source-leads&source='+r.id+'&presentation=1&photos=2&approximate=1&unlocated=1',
-          date:d.firstObservedAt??(r.postedLatestAt??r.createdAt).toISOString(),dateBasis:r.postedLatestAt?'SOURCE_POST_RANGE':'COLLECTED',dateEarliest:r.postedEarliestAt?.toISOString()??null,
-          ...(mapPresentation?{mapLocation:d.locationPrecision!=='CONTACT_FOR_LOCATION'&&d.longitude!==null&&d.latitude!==null?{coordinates:[d.longitude,d.latitude] as [number,number],precision:d.locationPrecision==='COUNTY_ILLUSTRATION'?'COUNTY_ILLUSTRATION' as const:'PUBLIC_MEETING_POINT' as const}:null}:{})});
-      }
+      for (const r of leads) { const product=leadProduct(r,now,mapPresentation); if(product)products.push(product); }
     }
     if (process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED === '1') {
       const candidates = await scan(cursor=>tx.externalListingCandidate.findMany({where:{status:'APPROVED'},select:externalCandidateSelect,orderBy:{id:'asc'},take:500,...(cursor?{cursor:{id:cursor},skip:1}:{})}));
-      for (const row of candidates) {
-        const d=publicCandidate(row,now); if(!d)continue; const c=classifyDiscovery(d.title);
-        products.push({kind:'external',id:d.id,key:'external:'+d.id,title:d.title,description:d.description??'',...c,classificationMethod:c.method,
-          price:d.priceTwd===undefined?null:Number(d.priceTwd),priceText:d.priceTwd??'',currency:'TWD',priceUnitVerified:true,thumbnailUrl:d.thumbnailUrl,
-          photos:d.imageUrl?[{id:d.id,url:d.imageUrl,thumbnailUrl:d.thumbnailUrl??d.imageUrl}]:[],county:d.county,district:d.district,condition:d.condition,
-          sourceLabel:d.source.host,stockStatus:'UNKNOWN',canonicalUrl:d.canonicalUrl,cpAllowed:row.source.aiProcessingAllowed,detailPath:'/explore?view=external&external='+d.id,
-          date:d.observedAt.toISOString(),dateBasis:'COLLECTED',dateEarliest:null,
-          ...(mapPresentation?{mapLocation:{coordinates:[d.location.longitude,d.location.latitude] as [number,number],precision:'DISTRICT_CENTER' as const}}:{})});
-      }
+      for (const row of candidates) { const product=candidateProduct(row,now,mapPresentation); if(product)products.push(product); }
     }
   },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead,timeout:20_000});
   return products;

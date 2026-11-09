@@ -49,6 +49,7 @@ import externalListingRoutes from './routes/externalListingRoutes';
 import { startExternalCandidateExpiryWorker } from './lib/externalCandidateExpiry';
 import { startMediaErasureWorker } from './lib/mediaErasureWorker';
 import { startEclawRecognitionWorker } from './lib/eclawRecognitionQueue';
+import { startPublicCatalogWorker } from './lib/publicCatalog';
 
 import helmet from 'helmet';
 import { configureProxyTrust } from './lib/proxyTrust';
@@ -261,4 +262,5 @@ const stopBillingWorker = startBillingWorker();
 const stopMediaErasureWorker = startMediaErasureWorker();
 const stopEclawRecognitionWorker = startEclawRecognitionWorker();
 const stopExternalCandidateExpiryWorker = startExternalCandidateExpiryWorker();
-server.once('close', () => { stopBillingWorker(); stopPushWorker(); stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });
+const stopPublicCatalogWorker = startPublicCatalogWorker();
+server.once('close', () => { stopPublicCatalogWorker(); stopBillingWorker(); stopPushWorker(); stopMediaErasureWorker(); stopEclawRecognitionWorker(); stopExternalCandidateExpiryWorker(); });

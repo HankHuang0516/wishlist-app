@@ -15,6 +15,7 @@ import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
 import { ListingFlickrStorage } from '../lib/listingFlickrStorage';
 import { Router, Response } from 'express';
+import { catalogReady, catalogSourceCount } from '../lib/publicCatalog';
 import {sourceLeadLimits} from '../middleware/sourceLeadLimits';
 import rateLimit from 'express-rate-limit';
 import { Prisma } from '@prisma/client';
@@ -329,6 +330,7 @@ export function createSourceLeadRoutes() {
             if (Object.keys(req.query).length) throw new LeadError('INVALID_QUERY');
             const now = new Date();
             if (!enabled()) return res.json({ count: 0, enabled: false });
+            if (await catalogReady(now)) return res.json({ count: await catalogSourceCount(now, true), enabled: true });
             const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED' } });
             return res.json({ count: rows.filter(row => leadCurrent(row, now)).length, enabled: true });
         } catch (e) { return fail(res, e); }

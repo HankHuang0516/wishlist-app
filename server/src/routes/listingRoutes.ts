@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth';
 import { abandonListingCreation, getListingCreation, changeListingStatus, createListing, editListing, extendListingExpiry, getListing, myListings, publishListing, searchListings } from '../controllers/listingController';
-import { getMatchWishes, matchWishListings } from '../controllers/wishlistMatchController';
+import { getMatchWishes, homeMatches, matchWishListings } from '../controllers/wishlistMatchController';
 import { abandonListingManagement, readListingManagement, submitListingManagement } from '../controllers/listingManagementController';
 import { setListingMapPresence } from '../controllers/listingController';
 
@@ -13,6 +13,7 @@ router.get('/', searchListings);
 router.get('/mine', (_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); }, authenticateToken, myListings);
 router.get('/match-wishes', authenticateToken, getMatchWishes);
 router.get('/matches', authenticateToken, matchWishListings);
+router.get('/home-matches', authenticateToken, homeMatches);
 router.get('/creation-receipts/:clientListingId', authenticateToken, getListingCreation);
 router.post('/creation-receipts/:clientListingId/abandon', authenticateToken, writes, abandonListingCreation);
 router.get('/management-operations/:clientActionId', authenticateToken, readListingManagement);

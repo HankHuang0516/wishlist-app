@@ -100,6 +100,51 @@ describe('private explainable matching / PostgreSQL', () => {
     it('keeps query values literal, with no SQL injection or unsupported price matches', async () => {
         const id = await seed(); expect((await match({ q: "' OR '1'='1" })).body.items).toEqual([]); expect((await match({ brand: "Sony' OR '1'='1" })).body.items).toEqual([]); expect((await match({ maxPrice: '3000' })).body.items).toEqual([]); expect((await match({ minPrice: '4500' })).body.items).toEqual([]); expect((await match({ q: '合成測試' })).body.items[0].listing.id).toBe(id);
     });
+    it('answers the home page in one read: each wish with the same first page and cursor the per-wish endpoint gives', async () => {
+        const sony = await Promise.all(['Sony 相機A', 'Sony 相機B', 'Sony 相機C'].map(title => seed(title)));
+        const offMap = await seed('Sony 相機 不在地圖', { mapVisibleUntil: new Date(Date.now() - 1000) });
+        await seed('Sony 相機 自己的', { ownerUserId: buyer });
+        const canon = await seed('Canon 相機 EOS', { brand: 'Canon' });
+        await prisma.item.createMany({ data: [{ name: 'Canon 相機', wishlistId }, { name: 'x', wishlistId }, { name: 'Sony 相機 隱藏', wishlistId, isHidden: true }] });
+        const wishes = (await call('/match-wishes')).body.items as { id: number; name: string }[];
+        expect(wishes.map(w => w.name)).toEqual(['x', 'Canon 相機', 'Sony 相機']);
+        const home = await call('/home-matches').query({ matchLimit: '2' });
+        expect(home.status).toBe(200); expect(home.headers['cache-control']).toBe('private, no-store');
+        expect(home.body).toMatchObject({ nextCursor: null, matchLimit: 2, scope: { bbox: '117,20,123.8,26.6' }, ordering: 'RECENT_CANDIDATES_PAGE_SCORE' });
+        expect(home.body.groups.map((g: { wish: { id: number } }) => g.wish.id)).toEqual(wishes.map(w => w.id));
+        for (const group of home.body.groups) {
+            const wish = wishes.find(w => w.id === group.wish.id)!;
+            const alone = await call('/matches').query({ wishItemId: String(wish.id), bbox: '117,20,123.8,26.6', limit: '2' });
+            expect(alone.status).toBe(200);
+            expect(group).toEqual({ ...alone.body, wish });
+        }
+        const [insufficient, canonGroup, sonyGroup] = home.body.groups;
+        expect(insufficient.items).toEqual([]); expect(insufficient.notice).toContain('不足');
+        expect(canonGroup.items.map((v: { listing: { id: string } }) => v.listing.id)).toEqual([canon]); expect(canonGroup.nextCursor).toBeNull();
+        expect(sonyGroup.items).toHaveLength(2); expect(sonyGroup.scannedCandidates).toBe(2); expect(sonyGroup.nextCursor).not.toBeNull();
+        expect(sonyGroup.items.every((v: { wishItemId: number }) => v.wishItemId === wishId)).toBe(true);
+        const rest = await call('/matches').query({ wishItemId: String(wishId), bbox: '117,20,123.8,26.6', limit: '2', cursor: sonyGroup.nextCursor });
+        expect(rest.status).toBe(200); expect(rest.body.nextCursor).toBeNull();
+        const found = [...sonyGroup.items, ...rest.body.items].map((v: { listing: { id: string } }) => v.listing.id);
+        expect(new Set(found)).toEqual(new Set(sony)); expect(found).not.toContain(offMap);
+        for (const group of home.body.groups) for (const item of group.items) for (const value of ['phoneNumber', 'password', 'apiKey', 'clientListingId', 'requestHash', 'meetup']) expect(item.listing).not.toHaveProperty(value);
+    });
+    it('keeps the home read private, paged by wish and strict about its query', async () => {
+        await seed();
+        await prisma.item.create({ data: { name: 'Canon 相機', wishlistId } });
+        expect((await isolatedHttp.get('/api/listings/home-matches')).status).toBe(401);
+        expect((await call('/home-matches', third)).body.groups).toEqual([]);
+        await prisma.wishlist.update({ where: { id: wishlistId }, data: { isPublic: true } });
+        expect((await call('/home-matches', third)).body.groups).toEqual([]);
+        const first = await call('/home-matches').query({ limit: '1' });
+        expect(first.status).toBe(200); expect(first.body.groups).toHaveLength(1); expect(first.body.nextCursor).toBe(first.body.groups[0].wish.id);
+        const second = await call('/home-matches').query({ limit: '1', cursor: String(first.body.nextCursor) });
+        expect(second.status).toBe(200); expect(second.body.nextCursor).toBeNull();
+        expect(new Set([first.body.groups[0].wish.name, second.body.groups[0].wish.name])).toEqual(new Set(['Sony 相機', 'Canon 相機']));
+        expect(second.body.groups[0].items.map((v: { listing: { id: string } }) => v.listing.id)).toEqual(second.body.groups[0].wish.name === 'Sony 相機' ? [expect.any(String)] : []);
+        expect((await call('/home-matches', third).query({ cursor: String(wishId) })).status).toBe(404);
+        for (const query of [{ limit: '101' }, { matchLimit: '101' }, { matchLimit: '0' }, { wishItemId: String(wishId) }, { bbox: '121,25,122,26' }]) expect((await call('/home-matches').query(query)).status).toBe(400);
+    });
     it('does not recommend a same-brand fridge or a mismatched explicit model, and handles near-term UTC expiry', async () => {
         await seed('Sony 冰箱'); await seed('Canon 相機', { brand: 'Canon' }); const keep = await seed('Sony 相機 A7', { expiresAt: new Date(Date.now() + 15 * 60000) });
         // A same-brand title is insufficient when a wish names the model.

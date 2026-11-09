@@ -1,7 +1,42 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readAllMatchWishes, readHomeMatches } from './homeMatches';
-import { makeWish, makeMatch, makeMatchPage, makeListing, uuid } from '../__tests__/fixtures/marketplace';
+import { readAllMatchWishes, readHomeMatches, readHomeOverview } from './homeMatches';
+import { makeWish, makeMatch, makeMatchPage, makeHomePage, makeListing, uuid } from '../__tests__/fixtures/marketplace';
 import { marketplaceOrigin } from './marketplaceUrl';
+import { parseWishMatchPage } from './wishData';
+
+describe('the home page in one read', () => {
+  it('returns every wish with its first page, following the wish cursor in backend order', async () => {
+    const more = uuid();
+    const read = vi.fn(async (path: string) => path.includes('cursor=20')
+      ? makeHomePage([{ wish: makeWish(7), items: [makeMatch(7)] }])
+      : makeHomePage([{ wish: makeWish(20), items: [makeMatch(20), makeMatch(20)], nextCursor: more }], 20));
+    const overview = await readHomeOverview(read, marketplaceOrigin(), { local: true });
+    expect(overview.wishes.map(wish => wish.id)).toEqual([20, 7]);
+    expect(overview.firstPages.get(20)).toMatchObject({ nextCursor: more }); expect(overview.firstPages.get(20)!.items).toHaveLength(2);
+    expect(overview.firstPages.get(7)).toMatchObject({ nextCursor: null });
+    expect(read.mock.calls.map(([path]) => path)).toEqual(['/listings/home-matches?limit=100', '/listings/home-matches?limit=100&cursor=20']);
+  });
+  it('rejects a repeated page, a repeated wish and a group whose page is malformed', async () => {
+    await expect(readHomeOverview(async () => makeHomePage([{ wish: makeWish() }], 1), marketplaceOrigin())).rejects.toThrow('重複');
+    await expect(readHomeOverview(async () => ({ ...makeHomePage([{ wish: makeWish(1) }, { wish: makeWish(1) }]) }), marketplaceOrigin())).rejects.toThrow();
+    await expect(readHomeOverview(async () => ({ ...makeHomePage([{ wish: makeWish(1), items: [makeMatch(2)] }]) }), marketplaceOrigin(), { local: true })).rejects.toThrow();
+  });
+  it('spends no request on a wish whose first page is complete, and reads on from the cursor of one that is not', async () => {
+    const cursor = uuid(), later = makeMatch(1, makeListing('後一頁'), 99);
+    const read = vi.fn(async (_path: string) => makeMatchPage([later]));
+    const firstPage = (wishId: number, nextCursor: string | null) => parseWishMatchPage(makeMatchPage([makeMatch(wishId)], nextCursor), wishId, marketplaceOrigin(), true);
+    const first = new Map([[1, firstPage(1, cursor)], [2, firstPage(2, null)]]);
+    const result = await readHomeMatches([makeWish(1), makeWish(2)], 19, marketplaceOrigin(), read, { local: true, firstPages: first });
+    expect(read).toHaveBeenCalledTimes(1); expect(read.mock.calls[0][0]).toContain('wishItemId=1&'); expect(read.mock.calls[0][0]).toContain('cursor=' + cursor);
+    expect(result.groups.map(group => group.matches.length)).toEqual([2, 1]); expect(result.groups[0].matches[0].score).toBe(99);
+    expect(result.failedWishIds).toEqual([]);
+  });
+  it('treats a first page whose cursor comes back again as a failed wish, not a complete one', async () => {
+    const cursor = uuid();
+    const result = await readHomeMatches([makeWish(1)], 19, marketplaceOrigin(), async () => makeMatchPage([makeMatch()], cursor), { local: true, firstPages: new Map([[1, { items: [], nextCursor: cursor }]]) });
+    expect(result.failedWishIds).toEqual([1]); expect(result.groups).toEqual([]);
+  });
+});
 
 describe('complete homepage match pagination', () => {
   it('loads every wish in backend cursor order, not assumed numeric ascending order', async () => {

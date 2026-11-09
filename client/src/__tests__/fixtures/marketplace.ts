@@ -12,6 +12,10 @@ export const makeMatch = (wishItemId = 1, listing = makeListing(), score = 80) =
   reasons: [{ code: 'NAME', text: '名稱符合' }, { code: 'BUDGET', text: '在預算內' }] });
 export const makeMatchPage = (items: ReturnType<typeof makeMatch>[] = [], nextCursor: string | null = null) => ({ items, nextCursor,
   scannedCandidates: items.length, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: '文字配對不保證同一型號，請核對照片。' });
+/** The home read: every wish with the first page of its matches; `nextCursor` on a group names the page after it. */
+export const makeHomePage = (groups: { wish: ReturnType<typeof makeWish>; items?: ReturnType<typeof makeMatch>[]; nextCursor?: string | null }[] = [], nextCursor: number | null = null) => ({
+  groups: groups.map(group => ({ wish: group.wish, ...makeMatchPage(group.items ?? [], group.nextCursor ?? null) })), nextCursor,
+  matchLimit: 50, scope: { bbox: '117,20,123.8,26.6' }, ordering: 'RECENT_CANDIDATES_PAGE_SCORE', notice: '先依新近刊登分頁，每頁按吻合度排序；文字吻合不保證同一型號或商品真偽' });
 export const responseOk = (value: unknown) => ({ ok: true, status: 200, json: async () => value });
 export function makeExternalListing() {
   const now = Date.now();

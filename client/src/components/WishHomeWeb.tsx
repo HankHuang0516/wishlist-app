@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Camera, Images, Search, MapPin, RefreshCw, ChevronDown } from 'lucide-react';
 import { api } from '../lib/marketplaceApi';
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
-import { readAllMatchWishes, readHomeMatches, type MatchGroup } from '../lib/homeMatches';
+import { readHomeMatches, readHomeOverview, type MatchGroup } from '../lib/homeMatches';
 import { type MatchWish, type WishMatch } from '../lib/wishData';
 import { listingPrice } from '../lib/listingSearch';
 import { resultCamera } from '../lib/exploreMapView';
@@ -51,11 +51,13 @@ export default function WishHomeWeb({ token, userId, children }: { token: string
     const read = (path: string) => api<unknown>(token, path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
     void (async () => {
       try {
-        const all = await readAllMatchWishes(read, controller.signal);
+        // One request brings every wish with the first page of its matches; only a wish with more pages reads on.
+        const overview = await readHomeOverview(read, marketplaceOrigin(), { local: import.meta.env.DEV, signal: controller.signal });
         if (!active) return;
+        const all = overview.wishes;
         setWishes(all); setSelected(old => all.some(w => w.id === old) ? old : all[0]?.id ?? null);
         const result = await readHomeMatches(all, userId, marketplaceOrigin(), read, {
-          local: import.meta.env.DEV, signal: controller.signal,
+          local: import.meta.env.DEV, signal: controller.signal, firstPages: overview.firstPages,
           onProgress: (finished, total) => { if (active) setProgress(homeText('progress', { finished, total })); },
         });
         if (!active) return;

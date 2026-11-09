@@ -4,7 +4,8 @@ import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
 import { discoveryPage, discoveryQuery, scanDiscovery, type DiscoveryProduct } from '../../lib/discovery';
-import { buildCatalog, catalogDiscoveryPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, reconcileCatalog } from '../../lib/publicCatalog';
+import { buildCatalog, catalogDiscoveryPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog } from '../../lib/publicCatalog';
+import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
 import { createLoopbackRequest } from './loopbackHttp';
@@ -148,6 +149,45 @@ it('counts public source references like the full scan and honours the feature s
   expect((await http.get('/discovery')).body.counts.source).toBe(0);
   expect((await http.get('/source-leads/summary')).body).toEqual({ count: 0, enabled: false });
   process.env.SOURCE_LEADS_PUBLIC_ENABLED = '1';
+});
+// What the map page did before: read every page of the list, then keep one point per place.
+async function mapFromEveryListPage() {
+  type Listed = { id: string; latitude: number | null; longitude: number | null; publicPlaceName: string | null };
+  const listed: Listed[] = [];
+  for (let cursor: string | null = null, pages = 0; pages < 200; pages++) {
+    const page: { items: Listed[]; nextCursor: string | null } = (await http.get('/source-leads?presentation=1&photos=2&approximate=1' + (cursor ? '&cursor=' + cursor : ''))).body;
+    listed.push(...page.items);
+    cursor = page.nextCursor;
+    if (!cursor) return { pages: pages + 1, summary: groupSourceMap(listed) };
+  }
+  throw Error('The list did not end');
+}
+it('answers the source map in one read with the places and counts of the whole paged list', async () => {
+  const now = new Date(), { pages, summary } = await mapFromEveryListPage();
+  expect(pages).toBeGreaterThan(3); expect(summary.points.length).toBeGreaterThan(1);
+  expect(summary.total).toBe(summary.points.reduce((sum, point) => sum + point.count, 0));
+  expect(await catalogSourceMap(now)).toEqual(summary);
+  expect(await scanSourceMap(now)).toEqual(summary);
+  expect((await http.get('/source-leads/map')).body).toEqual({ ...summary, enabled: true });
+  // A reference without a place is in the public count but never on the map.
+  expect(await catalogSourceCount(now)).toBeGreaterThan(summary.total);
+  // The next read after a write already has it; a withdrawn reference leaves its place.
+  const added = lead(905, now, { title: '剛剛新增、有概略位置的合成來源' });
+  leadIds.push(added.id);
+  await prisma.externalSourceLead.create({ data: added });
+  const grown = (await http.get('/source-leads/map')).body;
+  expect(grown.total).toBe(summary.total + 1);
+  expect(grown).toEqual({ ...(await mapFromEveryListPage()).summary, enabled: true });
+  await prisma.externalSourceLead.update({ where: { id: added.id }, data: { status: 'WITHDRAWN' } });
+  expect((await http.get('/source-leads/map')).body).toEqual({ ...summary, enabled: true });
+  // The same answer while the read model is switched off, nothing while the feature is, and no parameters.
+  process.env.PUBLIC_CATALOG_DISABLED = '1';
+  expect((await http.get('/source-leads/map')).body).toEqual({ ...summary, enabled: true });
+  delete process.env.PUBLIC_CATALOG_DISABLED;
+  process.env.SOURCE_LEADS_PUBLIC_ENABLED = '0';
+  expect((await http.get('/source-leads/map')).body).toEqual({ total: 0, points: [], enabled: false });
+  process.env.SOURCE_LEADS_PUBLIC_ENABLED = '1';
+  expect((await http.get('/source-leads/map?bbox=1')).body).toEqual({ errorCode: 'INVALID_QUERY' });
 });
 it('answers the ordinary feed, the count and a single product without reading any source table', async () => {
   const touched: string[] = [];

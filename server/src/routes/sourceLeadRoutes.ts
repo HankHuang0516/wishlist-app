@@ -15,7 +15,8 @@ import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
 import { ListingFlickrStorage } from '../lib/listingFlickrStorage';
 import { Router, Response } from 'express';
-import { catalogReady, catalogSourceCount } from '../lib/publicCatalog';
+import { catalogReady, catalogSourceCount, catalogSourceMap } from '../lib/publicCatalog';
+import { scanSourceMap } from '../lib/sourceLeadMap';
 import {sourceLeadLimits} from '../middleware/sourceLeadLimits';
 import rateLimit from 'express-rate-limit';
 import { Prisma } from '@prisma/client';
@@ -333,6 +334,16 @@ export function createSourceLeadRoutes() {
             if (await catalogReady(now)) return res.json({ count: await catalogSourceCount(now, true), enabled: true });
             const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED' } });
             return res.json({ count: rows.filter(row => leadCurrent(row, now)).length, enabled: true });
+        } catch (e) { return fail(res, e); }
+    });
+    // The places the source map draws, in one answer: every public reference that has a place (approximate
+    // places included), grouped by that place. The list itself stays paged at GET /.
+    router.get('/map', async (req, res) => {
+        try {
+            if (Object.keys(req.query).length) throw new LeadError('INVALID_QUERY');
+            const now = new Date();
+            if (!enabled()) return res.json({ total: 0, points: [], enabled: false });
+            return res.json({ ...(await catalogReady(now) ? await catalogSourceMap(now, true) : await scanSourceMap(now)), enabled: true });
         } catch (e) { return fail(res, e); }
     });
     router.get('/coordinate-layer', async (_req, res) => { try {

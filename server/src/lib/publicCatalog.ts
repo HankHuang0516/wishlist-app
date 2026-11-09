@@ -7,6 +7,8 @@ import { externalCandidateSelect } from '../routes/externalListingRoutes';
 import { EXTERNAL_OBSERVATION_MAX_AGE_MS } from './externalListingIntake';
 import { NON_SALE_QA_PREFIX } from './listingRules';
 import { privateReviewListingIds } from './privateReviewDemo';
+import { CONTACT_LOCATION_TYPE } from './sourceContactLocation';
+import type { SourceMapSummary } from './sourceLeadMap';
 import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { normalizeWish } from './wishlistMatch';
 import { discoveryCatalog } from './discoveryCatalog';
@@ -328,6 +330,19 @@ export async function catalogSourceCount(now = new Date(), synced = false): Prom
   await insist(now, synced);
   const [row] = await prisma.$queryRaw<Array<{ count: number }>>`SELECT count(*)::int AS "count" FROM "PublicCatalogEntry" e WHERE e."kind" = 'source' AND e."visible"`;
   return row?.count ?? 0;
+}
+
+// The places of the public source references that have one, each with how many references share it and its first
+// reference by id. The same answer as scanSourceMap(); the caller applies the feature switch.
+export async function catalogSourceMap(now = new Date(), synced = false): Promise<SourceMapSummary> {
+  await insist(now, synced);
+  const points = await prisma.$queryRaw<SourceMapSummary['points']>`
+    SELECT min(l."id") AS "id", l."latitude", l."longitude", count(*)::int AS "count", (array_agg(l."publicPlaceName" ORDER BY l."id"))[1] AS "publicPlaceName"
+    FROM "PublicCatalogEntry" e JOIN "ExternalSourceLead" l ON l."id" = e."refId"
+    WHERE e."kind" = 'source' AND e."visible" AND l."latitude" IS NOT NULL AND l."longitude" IS NOT NULL
+      AND l."evidence"->>'locationType' IS DISTINCT FROM ${CONTACT_LOCATION_TYPE}
+    GROUP BY l."latitude", l."longitude" ORDER BY 1`;
+  return { total: points.reduce((sum, point) => sum + point.count, 0), points };
 }
 
 // One page of discovery, with the same result discoveryPage() gives over the full

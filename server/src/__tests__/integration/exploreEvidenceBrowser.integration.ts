@@ -1,5 +1,5 @@
 /** Built Web + compiled public handler + isolated DB. No real sources/images/accounts. */
-import {webQaBrowser,webQaEvidence} from './webQaBrowser';
+import {webQaArgs,webQaBrowser,webQaEvidence} from './webQaBrowser';
 import express from 'express';
 import request from 'supertest';
 import {createServer} from 'http';
@@ -46,7 +46,7 @@ describe('actual Explore query evidence display and download',()=>{
   app.use('/api/discovery',require('../../../dist/routes/discoveryRoutes').createDiscoveryRoutes());
   app.use('/api/product-wishes',require('../../../dist/routes/productWishRoutes').createProductWishRoutes());
   server=createServer(app);await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
-  const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run','--disable-background-networking']});
+  const qa=webQaBrowser();browser=await qa.puppeteer.launch({executablePath:qa.executablePath,headless:true,args:['--no-first-run',...webQaArgs]});
  },60000);
  afterAll(async()=>{
   if(db){await db.retailPriceObservation.deleteMany({where:{id:{in:retailObservationIds}}});await db.discoveryCpRun.deleteMany({where:{model:retailModel}});}

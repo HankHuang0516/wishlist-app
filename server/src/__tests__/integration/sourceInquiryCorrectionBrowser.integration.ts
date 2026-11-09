@@ -15,7 +15,7 @@ import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
 import { transferSnapshot } from '../../lib/sourceLeadRules';
 import { createLoopbackRequest } from './loopbackHttp';
 import { fixture } from './consignmentFixture';
-import { webQaBrowser, webQaEvidence } from './webQaBrowser';
+import { webQaArgs, webQaBrowser, webQaEvidence } from './webQaBrowser';
 const run=process.env.TEST_DATABASE_URL?describe:describe.skip;
 run('built source inquiry correction and restart',()=>{
  let buyer:number,leadId:string,browser:any;
@@ -35,7 +35,7 @@ run('built source inquiry correction and restart',()=>{
  test('desktop/mobile: normal login, correct, withdraw, reload, ask again and recover a lost correction receipt',async()=>{
   buyer=(await prisma.user.create({data:{phoneNumber:phone,password:await bcrypt.hash(password,4),apiKey:key,name:'合成詢問測試帳號',inquiryWeekStart:inquiryWeek().startsAt,inquiryFreeUsed:1}})).id;
   const item=fixture().lead;item.archiveItemId='SYNTHETIC-INQUIRY-CORRECTION-BROWSER';leadId=(await prisma.externalSourceLead.create({data:item})).id;
-  const qa=webQaBrowser();browser=await qa.puppeteer.launch({headless:true,executablePath:qa.executablePath,args:['--disable-background-networking']});
+  const qa=webQaBrowser();browser=await qa.puppeteer.launch({headless:true,executablePath:qa.executablePath,args:webQaArgs});
   const page=await browser.newPage();await page.setViewport({width:1280,height:1000});
   await page.evaluateOnNewDocument((host:string,forceColdStorage:boolean)=>{
    if(window!==window.top||location.origin!==host)return;

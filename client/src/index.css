@@ -24,4 +24,13 @@ html:root textarea::placeholder {
   .animate-shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }
+  /* A waiting line that shows only when the wait is long enough to notice, so a page whose
+     code is already at hand does not flash it for a frame. */
+  @keyframes late-reveal {
+    from { visibility: hidden; }
+    to { visibility: visible; }
+  }
+  .late-reveal {
+    animation: late-reveal 0s linear 150ms both;
+  }
 }

@@ -305,4 +305,5 @@ async function main() {
   process.exitCode = status;
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 2; });
+module.exports = { startServer, waitFor, waitForCatalog };
+if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 2; });

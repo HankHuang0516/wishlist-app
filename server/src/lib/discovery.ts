@@ -99,11 +99,15 @@ export function candidateProduct(row: DiscoveryCandidateRow, now: Date, mapPrese
 // Every public product, for the callers that need the whole set (matching, price
 // comparison, admin tools). Served from the read model when it is ready; the full
 // scan remains the reference and the fallback.
-export async function loadDiscovery(now = new Date(), mapPresentation=false, viewerId?: number) {
-  const privatePreview = await privateStorePreviewProducts(viewerId, now, mapPresentation);
-  if (privatePreview !== null) return privatePreview;
-  const catalog = await import('./publicCatalog');
-  if (await catalog.catalogReady(now)) return catalog.catalogProducts(now, mapPresentation, true);
+// `declined`: the caller has just asked the read model itself (and looked for a
+// private preview) and was refused, so the full scan is used without asking again.
+export async function loadDiscovery(now = new Date(), mapPresentation=false, viewerId?: number, declined=false) {
+  if (!declined) {
+    const privatePreview = await privateStorePreviewProducts(viewerId, now, mapPresentation);
+    if (privatePreview !== null) return privatePreview;
+    const catalog = await import('./publicCatalog');
+    if (await catalog.catalogReady(now)) return catalog.catalogProducts(now, mapPresentation, true);
+  }
   return scanDiscovery(now, mapPresentation);
 }
 export async function scanDiscovery(now = new Date(), mapPresentation=false) {

@@ -27,12 +27,14 @@ export function createDiscoveryRoutes() {
       if(query.sort==='cp'&&!cp)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
       const now=new Date(),map=query.presentation==='map';
       // The ordinary feed reads one page from the read model; a private preview keeps its own product list.
-      if(!recommended&&!cp&&await privateStorePreviewProducts(req.user?.id,now,map)===null&&await catalogReady(now)){
+      const ordinary=!recommended&&!cp&&await privateStorePreviewProducts(req.user?.id,now,map)===null;
+      if(ordinary&&await catalogReady(now)){
         const page=await catalogDiscoveryPage(query,now,true);
         void warmThumbnails(page.items.map(item=>item.thumbnailUrl));
         return res.json({...page,items:await withRetailReferences(page.items)});
       }
-      let products=await loadDiscovery(now,map,req.user?.id);
+      // Reached by an ordinary read only when the read model has just declined: the full scan answers, without asking it again.
+      let products=await loadDiscovery(now,map,req.user?.id,ordinary);
       if(recommended){ products=await recommendDiscovery(products,req.user!.id,wish===undefined?undefined:Number(wish));if(req.query.sort===undefined)query.sort='recommended'; }
       if(cp){
         const evaluated=await attachCp(products),scoped=discoveryPage(evaluated,{...query,cursor:'',limit:60}),scopeProducts=filterDiscovery(evaluated,query);
@@ -54,7 +56,8 @@ export function createDiscoveryRoutes() {
           !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id))
         throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
       const key=req.params.kind+':'+req.params.id.toLowerCase(),now=new Date(),viewer=(req as AuthRequest).user?.id;
-      const product=await privateStorePreviewProducts(viewer,now,false)===null&&await catalogReady(now)?await catalogProduct(key,now,true):(await loadDiscovery(now,false,viewer)).find(p=>p.key===key);
+      const direct=await privateStorePreviewProducts(viewer,now,false)===null;
+      const product=direct&&await catalogReady(now)?await catalogProduct(key,now,true):(await loadDiscovery(now,false,viewer,direct)).find(p=>p.key===key);
       if(!product)throw new DiscoveryError(404,'DISCOVERY_PRODUCT_UNAVAILABLE');
       return res.json(discoveryPage(await withRetailReferences([product]),discoveryQuery({})));
     } catch(e) {return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'DISCOVERY_UNAVAILABLE'});}

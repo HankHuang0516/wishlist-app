@@ -4,7 +4,7 @@ import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
 import { discoveryPage, discoveryQuery, scanDiscovery, type DiscoveryProduct } from '../../lib/discovery';
-import { buildCatalog, catalogDiscoveryPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog } from '../../lib/publicCatalog';
+import { buildCatalog, catalogDiscoveryPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
 import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
@@ -228,3 +228,127 @@ it('repairs an entry that no longer matches its source row, and the full scan st
   expect(scanned.status).toBe(200);
   expect(comparable(projected.body)).toEqual(comparable(scanned.body));
 });
+
+// ---- a reader and another builder at the same time --------------------------------
+// Test instrument: counts the page reads of the full scan, and can stop one rebuild
+// step at the moment it reads its source rows, which is after it has taken its marks
+// and before it commits.
+let scans = 0;
+let gate: { holds: (ids: string[]) => boolean; reached: () => void; released: Promise<void> } | null = null;
+prisma.$use(async (params, next) => {
+  if (params.model === 'ExternalSourceLead' && params.action === 'findMany') {
+    if (params.args?.take === 500) scans++;
+    const ids = params.args?.where?.id?.in, held = gate;
+    if (held && Array.isArray(ids) && held.holds(ids)) { gate = null; held.reached(); await held.released; }
+  }
+  return next(params);
+});
+// Runs `body` while another builder (the background worker, or a second server
+// process; here buildCatalog) is stopped in the step whose source rows `holds`
+// describes. `finish` lets that builder run to its end.
+async function duringHeldStep(holds: (ids: string[]) => boolean, body: (finish: () => Promise<void>, bypasses: () => string[]) => Promise<void>) {
+  let reached!: () => void, release!: () => void;
+  const stopped = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('No rebuild step read the expected source rows')), 20_000);
+    reached = () => { clearTimeout(timer); resolve(); };
+  });
+  gate = { holds, reached, released: new Promise<void>(resolve => { release = resolve; }) };
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const builder = buildCatalog();
+  builder.catch(() => undefined); // Reported where it is awaited.
+  try {
+    await stopped;
+    scans = 0;
+    await body(async () => { release(); await builder; }, () => warn.mock.calls.map(call => String(call[0])).filter(line => line.startsWith('Public catalogue bypassed')));
+  } finally {
+    gate = null; release();
+    await builder.catch(() => undefined);
+    warn.mockRestore();
+  }
+}
+const found = (response: { body: { items: DiscoveryProduct[] } }) => response.body.items.map(p => p.id);
+
+it('waits for a write that another step is rebuilding instead of scanning, and then shows it', async () => {
+  await buildCatalog(); expect(await catalogReady()).toBe(true);
+  const added = lead(960, new Date(), { title: '別的步驟正在重建的合成來源' });
+  leadIds.push(added.id);
+  await prisma.externalSourceLead.create({ data: added });
+  await duringHeldStep(ids => ids.includes(added.id), async (finish, bypasses) => {
+    let answered = false;
+    const reading = http.get('/discovery?q=' + encodeURIComponent('別的步驟正在重建 ' + run)).then(response => { answered = true; return response; });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(answered).toBe(false);
+    await finish();
+    const response = await reading;
+    expect(response.status).toBe(200);
+    expect(found(response)).toEqual([added.id]);
+    expect(scans).toBe(0);
+    expect(bypasses()).toEqual([]);
+  });
+}, 60_000);
+it('rebuilds a pending write in a step of its own, so background work never keeps it from readers', async () => {
+  await buildCatalog(); expect(await catalogReady()).toBe(true);
+  const before = lead(961, new Date(), { title: '背景重算之前寫入的合成來源' });
+  leadIds.push(before.id);
+  await prisma.externalSourceLead.create({ data: before });
+  // What the worker does once a day: every entry is marked for re-derivation.
+  await reconcileCatalog();
+  // The first step that rebuilds anything besides that write is the one that is stopped.
+  await duringHeldStep(ids => ids.some(id => id !== before.id), async (finish, bypasses) => {
+    expect(found(await http.get('/discovery?q=' + encodeURIComponent('背景重算之前寫入 ' + run)))).toEqual([before.id]);
+    // A write that arrives while the background step is in progress is rebuilt by its reader.
+    const during = lead(962, new Date(), { title: '背景重算期間寫入的合成來源' });
+    leadIds.push(during.id);
+    await prisma.externalSourceLead.create({ data: during });
+    expect(found(await http.get('/discovery?q=' + encodeURIComponent('背景重算期間寫入 ' + run)))).toEqual([during.id]);
+    expect(scans).toBe(0);
+    expect(bypasses()).toEqual([]);
+    await finish();
+    expect(await catalogReady()).toBe(true);
+  });
+}, 60_000);
+it('answers from the full scan, once, when the step it waits for takes too long, and from the read model again afterwards', async () => {
+  await buildCatalog(); expect(await catalogReady()).toBe(true);
+  const added = lead(963, new Date(), { title: '重建步驟遲遲不結束的合成來源' });
+  leadIds.push(added.id);
+  await prisma.externalSourceLead.create({ data: added });
+  const url = '/discovery?q=' + encodeURIComponent('重建步驟遲遲不結束 ' + run);
+  await duringHeldStep(ids => ids.includes(added.id), async (finish, bypasses) => {
+    const waited = await http.get(url);
+    expect(waited.status).toBe(200);
+    expect(found(waited)).toEqual([added.id]);
+    expect(scans).toBeGreaterThan(0);
+    // One request waits once: the full scan is not preceded by a second look at the read model.
+    expect(bypasses()).toEqual(['Public catalogue bypassed, full scan used: reason busy, reads so far 1']);
+    await finish();
+    scans = 0;
+    expect(found(await http.get(url))).toEqual([added.id]);
+    expect(scans).toBe(0);
+    expect(bypasses()).toHaveLength(1);
+  });
+}, 60_000);
+it('takes the marks of one class and no more than a step asks for, whichever plan the database chooses', async () => {
+  await buildCatalog(); expect(await catalogReady()).toBe(true); // Nothing is pending, so the only marks are the ones made here.
+  const undo = Error('undo');
+  // Left to itself the planner makes the choice of marks once. With these switched off
+  // the choice becomes the inner side of a nested loop, which is the plan the database
+  // keeps for a table that is usually empty: the server's own case.
+  const plans = { chosen: [] as string[], nestedLoop: ['enable_hashjoin', 'enable_mergejoin', 'enable_material', 'enable_hashagg', 'enable_sort'] };
+  const seen: Record<string, number[]> = {};
+  for (const [plan, off] of Object.entries(plans)) {
+    await expect(prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe('SET LOCAL plan_cache_mode = force_custom_plan'); // Planned at each execution, under the settings below.
+      for (const name of off) await tx.$executeRawUnsafe('SET LOCAL ' + name + ' = off');
+      // Three marks made by writes, then 300 made by the background re-derivation.
+      await tx.$executeRaw`INSERT INTO "PublicCatalogDirty" ("kind", "refId", "priority") SELECT 'source', 'limit-check-' || n, CASE WHEN n <= 3 THEN 0 ELSE 1 END FROM generate_series(1, 303) AS n`;
+      const taken = async (maxPriority: number) => [(await takeMarks(tx, maxPriority, 40)).length,
+        (await tx.$queryRaw<Array<{ pending: number }>>`SELECT count(*)::int AS "pending" FROM "PublicCatalogDirty" WHERE "refId" LIKE 'limit-check-%'`)[0].pending];
+      // The worker's step takes the writes alone, then 40 background marks; a reader's step takes no background mark.
+      seen[plan] = [...await taken(1), ...await taken(1), ...await taken(0)];
+      throw undo; // Nothing made here is kept.
+    })).rejects.toBe(undo);
+  }
+  // Marks taken and marks left, after each of the three steps.
+  expect(seen).toEqual({ chosen: [3, 300, 40, 260, 0, 260], nestedLoop: [3, 300, 40, 260, 0, 260] });
+  expect(await prisma.publicCatalogDirty.count({ where: { refId: { startsWith: 'limit-check-' } } })).toBe(0);
+}, 60_000);

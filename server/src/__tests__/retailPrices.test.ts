@@ -18,6 +18,12 @@ test('does not invent prices when no exact reference was found and binds immutab
   expect(retailIdentity({...comic,title:'四大名著漫畫版：三國演義02'})).not.toBe(retailIdentity(comic));
   expect(retailIdentity({...p,title:'LEGO 21318 樹屋'})).toBe('lego:set:21318');
   expect(retailIdentity({...p,title:'LEGO 21319'})).not.toBe('lego:set:21318');
+  // 2026-11-10: a second-hand bookshop's 【店名/分類_架號】書名_作者 names the book by its title alone
+  const shelf={...book,subId:'fiction'};
+  expect(retailIdentity({...shelf,title:'【露天書寶二手書T1/一般小說_W4H】邊城_沈從文'})).toBe('book:title:邊城');
+  expect(retailIdentity({...shelf,title:'【露天書寶二手書T1/原文小說_WW9】Pretty Little Liars #3: Perfect'})).toBe('book:title:prettylittleliars3perfect');
+  expect(retailIdentity({...shelf,title:'The Missing Bookshop (Colour Fiction)_Katie Clapham'})).toBe('book:title:themissingbookshop');
+  expect(retailIdentity({...shelf,title:'二手《邊城》沈從文'})).toBe('book:title:邊城');
  });
  test('accepts Taiwanese original-price suffix and market-list label, never a promotional amount',()=>{
   const body={...input(),priceType:'RETAIL_REGULAR',sourceUrl:'https://www.momoshop.com.tw/product/1',evidenceQuote:'Galaxy Buds3 市售價 4,990 元；促銷價 990 元'};
@@ -136,6 +142,16 @@ test('Hank 2026-10-30 broader identity: short model codes and Apple families, ne
  expect(retailIdentity({...e,title:'Apple AirPods Pro 二手'})).toBeNull();
  expect(retailIdentity({...e,title:'Apple Watch Series 9 45mm GPS 午夜色'})).toBe('apple:watch:series9:45mm:gps');
  expect(retailIdentity({...e,title:'Apple Watch Ultra 2 49mm LTE 鈦色'})).toBe('apple:watch:ultra2:49mm:lte');
+ // 2026-11-10: Ultra is GPS + 行動網路 only; the case size is never a generation; premium cases and Hermès are their own variants
+ expect(retailIdentity({...e,title:'Apple Watch Ultra 3 49mm 黑色+黑越野錶環 二手'})).toBe('apple:watch:ultra3:49mm:lte');
+ expect(retailIdentity({...e,title:'Apple Watch Ultra 49mm GPS + 行動網路 LTE'})).toBe('apple:watch:ultra1:49mm:lte');
+ expect(retailIdentity({...e,title:'Apple Watch SE 40mm GPS 太空灰（二手）'})).toBe('apple:watch:se1:40mm:gps');
+ expect(retailIdentity({...e,title:'Apple Watch SE 2 44mm GPS 鋁殼＋副廠錶帶'})).toBe('apple:watch:se2:44mm:gps');
+ expect(retailIdentity({...e,title:'Apple Watch Series 12 46mm GPS 鋁金屬'})).toBe('apple:watch:series12:46mm:gps');
+ expect(retailIdentity({...e,title:'Apple Watch Series 12 46mm LTE 鈦金屬 二手'})).toBe('apple:watch:series12:46mm:lte:titanium');
+ expect(retailIdentity({...e,title:'Apple Watch Series 8 45mm LTE 不鏽鋼 銀'})).toBe('apple:watch:series8:45mm:lte:stainless');
+ expect(retailIdentity({...e,title:'Apple Watch 愛馬仕 Hermès Ultra 3 49mm 銀鈦金屬'})).toBeNull();
+ expect(retailIdentity({...e,title:'Apple Watch 運動型錶帶 45mm 午夜色'})).toBeNull(); // a strap is not a 45th-generation watch
  expect(retailIdentity({...e,title:'Apple iPad mini（A17 Pro）Wi-Fi 128GB 星光色'})).toBe('apple:ipad-mini:a17pro:wifi:128gb');
  expect(retailIdentity({...e,title:'Apple MacBook Air 13 2020 M1 8GB/256GB 灰'})).toBe('apple:macbook-air:13:m1:256gb');
  expect(retailIdentity({...e,title:'Apple iPhone Air 256GB 天藍'})).toBe('apple:iphone-air:256gb');

@@ -24,8 +24,11 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
         if (p.subId === 'comics' && !/漫畫|漫画|comic/.test(t)) return null;
         const isbn = t.match(/(?:isbn[:： ]*)?(97[89][\d-]{10,16})/);
         if (isbn) return 'book:isbn:' + isbn[1].replace(/-/g, '');
-        const quoted = t.match(/[《〈]([^》〉]+)[》〉]/);
-        const name = (quoted?.[1] ?? t.split(/…|\.\.\.|市售價|建議售價|新品原價|定價|原價|NT\$|TWD/i)[0]).replace(/[（(][^）)]*[）)]/g, '').replace(/二手|精裝|平裝|童書|繪本|四大名著|漫畫版|漫畫|硬殼/g, '').replace(/[^\p{L}\p{N}]/gu, '').replace(/0+(\d+)$/, '$1');
+        // Second-hand bookshops list 【店名/分類_架號】書名_作者 (露天書寶, 2026-11-10: 84 such books carried the shelf tag and
+        // author in their identity, so no catalogue page could ever match them). Only the title names the book.
+        const body = t.replace(/【[^】]*】/g, ' ').split('_')[0];
+        const quoted = body.match(/[《〈]([^》〉]+)[》〉]/);
+        const name = (quoted?.[1] ?? body.split(/…|\.\.\.|市售價|建議售價|新品原價|定價|原價|NT\$|TWD/i)[0]).replace(/[（(][^）)]*[）)]/g, '').replace(/二手|精裝|平裝|童書|繪本|四大名著|漫畫版|漫畫|硬殼/g, '').replace(/[^\p{L}\p{N}]/gu, '').replace(/0+(\d+)$/, '$1');
         return name.length >= 2 ? 'book:title:' + name + (p.subId === 'comics' ? ':comics' : '') : null;
     }
     // Only the standard white OLED console set: never a display-only unit,
@@ -89,12 +92,17 @@ function appleFamilyIdentity(t: string, capacity: RegExpMatchArray | null): stri
         const anc = kind === 'base' && /anc|主動降噪|降噪/.test(t) ? ':anc' : '';
         return 'apple:airpods:' + kind + ':' + g + anc;
     }
-    const watch = t.match(/apple\s*watch\s*(series\s*(\d{1,2})|se\s*(\d)?|ultra\s*(\d)?|(\d{1,2}))/);
+    if (/apple\s*watch/.test(t) && /herm[eè]s|愛馬仕/.test(t)) return null; // Hermès editions are priced as their own product
+    // A generation digit is never the start of the case size: "SE 40mm" is the first SE, "Ultra 49mm" the first Ultra.
+    const watch = t.match(/apple\s*watch\s*(series\s*(\d{1,2})(?!\d|\s*mm)|se(?:\s*(\d)(?!\d|\s*mm))?|ultra(?:\s*(\d)(?!\d|\s*mm))?|(\d{1,2})(?!\d|\s*mm))/);
     if (watch) {
         const line = watch[2] || watch[5] ? 'series' + (watch[2] ?? watch[5]) : watch[1].startsWith('se') ? 'se' + (watch[3] ?? '1') : 'ultra' + (watch[4] ?? '1');
         const mm = t.match(/(\d{2})\s*mm/)?.[1];
-        const radio = /lte|cellular|行動網路/.test(t) ? 'lte' : 'gps';
-        return mm ? 'apple:watch:' + line + ':' + mm + 'mm:' + radio : null;
+        // Ultra is sold only as GPS + 行動網路 (2026-11-10); any other line that says nothing about the radio is the GPS model.
+        const radio = line.startsWith('ultra') || /lte|cellular|行動網路/.test(t) ? 'lte' : 'gps';
+        // Titanium, stainless steel and ceramic cases are priced apart from aluminium; Ultra is titanium by design.
+        const material = line.startsWith('ultra') ? '' : /鈦金屬|鈦合金|titanium/.test(t) ? ':titanium' : /不鏽鋼|不銹鋼|stainless/.test(t) ? ':stainless' : /陶瓷|ceramic/.test(t) ? ':ceramic' : '';
+        return mm ? 'apple:watch:' + line + ':' + mm + 'mm:' + radio + material : null;
     }
     const tablet = t.match(/ipad\s*(air|mini|pro)\b/);
     if (tablet) {

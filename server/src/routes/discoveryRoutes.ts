@@ -6,6 +6,7 @@ import {attachCp,evaluateCp,cpTargets} from '../lib/discoveryCp';
 import {retailReferences} from '../lib/retailPrices';
 import {catalogDiscoveryPage,catalogProduct,catalogReady} from '../lib/publicCatalog';
 import {privateStorePreviewProducts} from '../lib/privateStorePreview';
+import {warmThumbnails} from '../lib/mediaWarm';
 
 async function withRetailReferences(products: Awaited<ReturnType<typeof loadDiscovery>>) {
   const references=await retailReferences(products);
@@ -28,6 +29,7 @@ export function createDiscoveryRoutes() {
       // The ordinary feed reads one page from the read model; a private preview keeps its own product list.
       if(!recommended&&!cp&&await privateStorePreviewProducts(req.user?.id,now,map)===null&&await catalogReady(now)){
         const page=await catalogDiscoveryPage(query,now,true);
+        void warmThumbnails(page.items.map(item=>item.thumbnailUrl));
         return res.json({...page,items:await withRetailReferences(page.items)});
       }
       let products=await loadDiscovery(now,map,req.user?.id);
@@ -38,7 +40,9 @@ export function createDiscoveryRoutes() {
         const page=discoveryPage(ready,query);
         return res.json({...page,categories:scoped.categories,counties:scoped.counties,cpStatus:{evaluated:scopeProducts.filter(p=>p.cp).length,scored:scopeProducts.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined).length,pending:cpTargets(scopeProducts,new Set(scopeProducts.filter(p=>p.cp).map(p=>p.key))).length,providerConfigured:!!process.env.GEMINI_API_KEY,threshold:75,assessments:scopeProducts.filter(p=>p.cp).slice(0,12).map(p=>({key:p.key,title:p.title,score:p.cp!.score,reasons:p.cp!.reasons,evaluatedAt:p.cp!.evaluatedAt,retail:p.cp!.retail,conversion:p.cp!.conversion}))}});
       }
-      return res.json(discoveryPage(await withRetailReferences(products),query));
+      const page=discoveryPage(await withRetailReferences(products),query);
+      void warmThumbnails(page.items.map(item=>item.thumbnailUrl));
+      return res.json(page);
     }catch(e){return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'DISCOVERY_UNAVAILABLE'});}
   };
   router.get('/for-you',authenticateToken,read);

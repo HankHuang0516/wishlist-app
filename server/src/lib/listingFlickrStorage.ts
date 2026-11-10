@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'crypto';
 import sharp from 'sharp';
+import { ByteCache } from './mediaByteCache';
 
 export class FlickrMediaUnavailable extends Error {
     constructor() { super('Flickr media storage is unavailable'); }
@@ -10,6 +11,17 @@ export class FlickrOrphanedUpload extends FlickrMediaUnavailable {
 
 type FlickrSize = { label: string; source: string };
 const MAX_REMOTE_BYTES = 6 * 1024 * 1024;
+// Renditions read from Flickr stay in memory for a day: a photo's bytes at one URL never change, and every visitor of
+// a list page asks for the same thumbnails. Thumbnails and full-size images have separate budgets so a few large
+// images cannot push out hundreds of thumbnails. MEDIA_CACHE_MB sets the total (0 turns the cache off).
+const CACHE_MB = process.env.MEDIA_CACHE_MB === undefined ? 64 : Math.max(0, Number(process.env.MEDIA_CACHE_MB) || 0);
+const SMALL_RENDITION_BYTES = 96 * 1024;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const smallRenditions = new ByteCache(Math.floor(CACHE_MB * 0.75 * 1024 * 1024), CACHE_TTL_MS);
+const largeRenditions = new ByteCache(Math.floor(CACHE_MB * 0.25 * 1024 * 1024), CACHE_TTL_MS);
+const inFlight = new Map<string, Promise<Buffer>>();
+export function clearMediaCache() { smallRenditions.clear(); largeRenditions.clear(); inFlight.clear(); }
+export function mediaCacheStats() { return { small: smallRenditions.stats(), large: largeRenditions.stats(), inFlight: inFlight.size }; }
 const UPLOAD_URL = 'https://up.flickr.com/services/upload/';
 const REST_URL = 'https://www.flickr.com/services/rest/';
 
@@ -49,7 +61,9 @@ function source(sizes: FlickrSize[], photoId: string, labels: string[]) {
 }
 
 export class ListingFlickrStorage {
-    constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+    // Resolved at call time so a global fetch installed later (tests, instrumentation) is the one used.
+    constructor(private readonly fetchGiven?: typeof fetch) {}
+    private get fetchImpl(): typeof fetch { return this.fetchGiven ?? fetch; }
     async ready() {
         credentials();
         const status = await this.rest('flickr.auth.oauth.checkToken', {});
@@ -87,8 +101,29 @@ export class ListingFlickrStorage {
         }
     }
 
-    async read(url: string, photoId: string) {
-        const response = await this.fetchImpl(validatedFlickrSource(url, photoId), { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+    /** Whether a rendition is already in memory, so a warm-up can skip it without touching Flickr. */
+    cached(url: string, photoId: string) {
+        const source = validatedFlickrSource(url, photoId);
+        return smallRenditions.has(source) || largeRenditions.has(source);
+    }
+
+    /** The rendition's bytes: from memory when read recently, otherwise from Flickr once, however many callers wait. */
+    async read(url: string, photoId: string): Promise<Buffer> {
+        const source = validatedFlickrSource(url, photoId);
+        const cached = smallRenditions.get(source) ?? largeRenditions.get(source);
+        if (cached) return cached;
+        const pending = inFlight.get(source);
+        if (pending) return pending;
+        const reading = this.readRemote(source).then(bytes => {
+            (bytes.length <= SMALL_RENDITION_BYTES ? smallRenditions : largeRenditions).set(source, bytes);
+            return bytes;
+        }).finally(() => { if (inFlight.get(source) === reading) inFlight.delete(source); });
+        inFlight.set(source, reading);
+        return reading;
+    }
+
+    private async readRemote(source: string) {
+        const response = await this.fetchImpl(source, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
         if (!response.ok || !response.body || !/^image\/jpeg(?:;|$)/i.test(response.headers.get('content-type') ?? '') ||
             Number(response.headers.get('content-length') || 0) > MAX_REMOTE_BYTES) throw new FlickrMediaUnavailable();
         const chunks: Buffer[] = []; let length = 0;

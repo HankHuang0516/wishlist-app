@@ -10,6 +10,7 @@ import { createSemiAutoImportRoutes } from './semiAutoImportRoutes';
 import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {isContactLocation} from '../lib/sourceContactLocation';
+import { warmThumbnails } from '../lib/mediaWarm';
 import {activePublicCommentRoute,publicCommentRoute,publicCommentPayload,relayIdentity} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
@@ -318,6 +319,8 @@ export function createSourceLeadRoutes() {
                     break;
                 }
             }
+            // The browser asks for the thumbnails in view one round trip after this reply; have them in memory by then.
+            if (req.query.presentation === '1') void warmThumbnails(items.map(item => (item as { media?: { thumbnailUrl: string }[] }).media?.[0]?.thumbnailUrl));
             return res.json({ items, nextCursor: exhausted ? null : next, enabled: true });
         }
         catch (e) {

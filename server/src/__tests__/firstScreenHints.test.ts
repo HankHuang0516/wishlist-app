@@ -12,6 +12,7 @@ jest.mock('../lib/publicCatalog', () => ({ catalogReady: jest.fn(), catalogFirst
 jest.mock('../lib/publicLeadList', () => ({ publicLeadList: jest.fn() }));
 jest.mock('../lib/mediaWarm', () => ({ warmThumbnails: jest.fn(async () => ({ considered: 0, read: 0 })) }));
 const ready = catalogReady as jest.Mock, firstPage = catalogFirstPage as jest.Mock, leadList = publicLeadList as jest.Mock;
+const { warmThumbnails } = jest.requireMock('../lib/mediaWarm') as { warmThumbnails: jest.Mock };
 
 const origin = 'https://wishlist-app-production.up.railway.app/api';
 const uuid = (n: number) => 'ab427730-60af-40c4-b568-' + String(n).padStart(12, '0');
@@ -47,13 +48,16 @@ describe('the explore page', () => {
 });
 
 describe('the source map', () => {
-  it('names the first lead\'s large photo and the first seven rows\' thumbnails, asked for without a referrer', async () => {
-    leadList.mockResolvedValue({ items: [lead(0), lead(1, false), ...Array.from({ length: 9 }, (_, n) => lead(n + 2))], nextCursor: null });
+  it('names the first lead\'s large photo and the first twelve rows\' thumbnails, asked for without a referrer, and warms them', async () => {
+    leadList.mockResolvedValue({ items: [lead(0), lead(1, false), ...Array.from({ length: 20 }, (_, n) => lead(n + 2))], nextCursor: null });
     const hints = (await sourceLeadHints())!;
     expect(leadList).toHaveBeenCalledWith({ q: '', box: null, cursor: null, unlocated: false, approximate: true, presentation: true, photos: true });
     expect(hints.route).toBe('source-leads');
     expect(hints.reads).toEqual([]);
-    expect(hints.images).toEqual([lead(0).media[0].imageUrl, ...[0, 2, 3, 4, 5, 6].map(n => lead(n).media[0].thumbnailUrl)].map(url => ({ url, referrerPolicy: 'no-referrer' })));
+    const rows = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => lead(n).media[0].thumbnailUrl);
+    expect(hints.images).toEqual([lead(0).media[0].imageUrl, ...rows].map(url => ({ url, referrerPolicy: 'no-referrer' })));
+    // The list itself warms only its first eight; a first visit asks for all of these at once.
+    expect(warmThumbnails).toHaveBeenLastCalledWith(rows, 12);
   });
 
   it('keeps the list for a minute, uses it up to ten minutes while reading it again, and then waits for a new one', async () => {

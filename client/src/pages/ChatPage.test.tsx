@@ -276,8 +276,13 @@ describe('private chat web parity', () => {
     api.mockImplementation(async (...args) => { const result = await base(...args); if (args[1].endsWith('/messages') && args[2]?.method === 'POST') throw new Error('lost ACK'); return result; });
     const view = render(roomView()); await screen.findByText('No messages yet. Say hello.');
     const original = '中文原訊息 250.7500 USD {version}';
-    fireEvent.change(screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' }), { target: { value: original } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' })); await screen.findByText(/Message delivery is unconfirmed/);
+    const field = screen.getByRole('textbox', { name: 'Item message (up to 2000 characters)' });
+    // History can render before the photo pending-journal restore settles, and a
+    // click on a Send control that is still disabled is lost. Send once it is ready.
+    await waitFor(() => expect(field).toBeEnabled());
+    fireEvent.change(field, { target: { value: original } });
+    const send = screen.getByRole('button', { name: 'Send message' });
+    await waitFor(() => expect(send).toBeEnabled()); fireEvent.click(send); await screen.findByText(/Message delivery is unconfirmed/);
     const body = data.get(key)!; expect(JSON.parse(body)).toEqual({ clientMessageId: rows[0].clientMessageId, text: original });
     expect(posts()).toHaveLength(1); view.unmount(); localStorage.setItem('user-locale', 'zh-TW');
     render(roomView()); await screen.findByText('原訊息已確認送出。');
@@ -319,8 +324,13 @@ describe('private chat web parity', () => {
     await screen.findByText(/不代表沒有對話/); expect(screen.queryByText(/其他商品尚無聊天/)).not.toBeInTheDocument();
   });
   it('commits the exact body before a single POST and renders the confirmed outgoing message', async () => {
-    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: '  合成測試面交詢問  ' } });
-    const send = screen.getByRole('button', { name: '傳送訊息' }); fireEvent.click(send); fireEvent.click(send); await screen.findByText('合成測試面交詢問'); expect(posts()).toHaveLength(1);
+    render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const field = screen.getByRole('textbox', { name: /商品聊天訊息/ });
+    // Both clicks must reach a Send control that is ready; see the lost-reply test above.
+    await waitFor(() => expect(field).toBeEnabled());
+    fireEvent.change(field, { target: { value: '  合成測試面交詢問  ' } });
+    const send = screen.getByRole('button', { name: '傳送訊息' });
+    await waitFor(() => expect(send).toBeEnabled()); fireEvent.click(send); fireEvent.click(send); await screen.findByText('合成測試面交詢問'); expect(posts()).toHaveLength(1);
     expect(JSON.parse(posts()[0][2].body).text).toBe('合成測試面交詢問'); expect(store.save.mock.invocationCallOrder[0]).toBeLessThan(api.mock.invocationCallOrder.find((_, index) => api.mock.calls[index][2]?.method === 'POST')!); expect(data.has(key)).toBe(false);
   });
   it('freezes uncertain text and retries the same body only after an explicit click', async () => {
@@ -349,7 +359,14 @@ describe('private chat web parity', () => {
   });
   it('never writes if secure persistence fails or if the component leaves while persistence awaits', async () => {
     let done!: () => void; store.save.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
-    const view = render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。'); fireEvent.change(screen.getByRole('textbox', { name: /商品聊天訊息/ }), { target: { value: 'fixture' } }); fireEvent.click(screen.getByRole('button', { name: '傳送訊息' })); await waitFor(() => expect(done).toBeDefined()); view.unmount(); await act(async () => done()); expect(posts()).toHaveLength(0);
+    const view = render(roomView()); await screen.findByText('還沒有訊息，打聲招呼吧。');
+    const field = screen.getByRole('textbox', { name: /商品聊天訊息/ });
+    // The save under test starts only if the click reaches a Send control that is ready.
+    await waitFor(() => expect(field).toBeEnabled());
+    fireEvent.change(field, { target: { value: 'fixture' } });
+    const send = screen.getByRole('button', { name: '傳送訊息' });
+    await waitFor(() => expect(send).toBeEnabled()); fireEvent.click(send);
+    await waitFor(() => expect(done).toBeDefined()); view.unmount(); await act(async () => done()); expect(posts()).toHaveLength(0);
   });
   it('blocks new messages for blocked/archived rooms but preserves readable history', async () => {
     room = makeRoom({ blocked: true, blockedByOther: true, lastMessageSequence: 1 }); rows = [makeMessage(1, { senderUserId: 43 })];

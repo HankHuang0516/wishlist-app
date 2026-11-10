@@ -160,28 +160,32 @@ async function existingVars(database) {
   } finally { await db.$disconnect(); }
 }
 
-// Every real listing has a photo, and its page shows an error instead of a listing that has none. The fixture's
-// first listing therefore gets one: a synthetic picture from this repository, put through the server's own encoder
-// and kept in the run's temporary folder, where the server is told to look for photos.
+// Every real listing has a photo, and its page shows an error instead of a listing that has none. The seller's
+// listings therefore get one each: a synthetic picture from this repository, put through the server's own encoder
+// and kept in the run's temporary folder, where the server is told to look for photos. They are also the newest
+// products, so the first explore cards show these thumbnails as production's show theirs.
 const PHOTO = path.join(root, 'mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png');
-async function givePhoto(database, listingId, base, volume) {
+async function givePhotos(database, listingId, base, volume) {
   const { PrismaClient } = require(path.join(root, 'server/node_modules/@prisma/client'));
   const { encodeListingPhoto } = require(path.join(root, 'server/dist/lib/listingPhoto'));
   const db = new PrismaClient({ datasources: { db: { url: database } } });
   try {
-    const listing = await db.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true } });
-    if (!listing) throw new Error('The fixture has no listing to give a photo to; run with --seed fresh');
+    const first = await db.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true } });
+    if (!first) throw new Error('The fixture has no listing to give a photo to; run with --seed fresh');
     const photo = await encodeListingPhoto(fs.readFileSync(PHOTO), 'image/png');
-    // A kept fixture keeps its photo's identity; the files are this run's.
-    const earlier = await db.listingMedia.findFirst({ where: { listingId }, orderBy: { position: 'asc' }, select: { id: true } });
-    const id = earlier ? earlier.id : randomUUID(), address = base + '/api/listing-media/' + id;
-    const data = { imageUrl: address + '/image', thumbnailUrl: address + '/thumbnail', contentHash: photo.contentHash, width: photo.width, height: photo.height, byteSize: photo.byteSize };
-    if (earlier) await db.listingMedia.update({ where: { id }, data });
-    else await db.listingMedia.create({ data: { id, ownerUserId: listing.ownerUserId, listingId, position: 0, ...data } });
-    const folder = path.join(volume, 'listing-media', id);
-    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(path.join(folder, 'image.webp'), photo.image, { mode: 0o600 });
-    fs.writeFileSync(path.join(folder, 'thumbnail.webp'), photo.thumbnail, { mode: 0o600 });
+    const listings = await db.listing.findMany({ where: { ownerUserId: first.ownerUserId }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+    for (const listing of listings) {
+      // A kept fixture keeps its photos' identity; the files are this run's.
+      const earlier = await db.listingMedia.findFirst({ where: { listingId: listing.id }, orderBy: { position: 'asc' }, select: { id: true } });
+      const id = earlier ? earlier.id : randomUUID(), address = base + '/api/listing-media/' + id;
+      const data = { imageUrl: address + '/image', thumbnailUrl: address + '/thumbnail', contentHash: photo.contentHash, width: photo.width, height: photo.height, byteSize: photo.byteSize };
+      if (earlier) await db.listingMedia.update({ where: { id }, data });
+      else await db.listingMedia.create({ data: { id, ownerUserId: first.ownerUserId, listingId: listing.id, position: 0, ...data } });
+      const folder = path.join(volume, 'listing-media', id);
+      fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(folder, 'image.webp'), photo.image, { mode: 0o600 });
+      fs.writeFileSync(path.join(folder, 'thumbnail.webp'), photo.thumbnail, { mode: 0o600 });
+    }
   } finally { await db.$disconnect(); }
 }
 
@@ -298,7 +302,7 @@ async function main() {
   };
   try {
     fs.mkdirSync(volume, { mode: 0o700 });
-    await givePhoto(database, fixture.vars.listingId, base, volume);
+    await givePhotos(database, fixture.vars.listingId, base, volume);
     await boot();
     proxy = await startProxy(options.proxyPort, options.serverPort, options.latency, certificate(secrets));
     // This process talks to its own proxy only; the browser is told separately.

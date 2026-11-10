@@ -14,6 +14,11 @@ exports.verifyFirstScreen = dist => {
   for (const later of ['<link rel="stylesheet"', '<script type="module"']) {
     assert.ok(html.indexOf(later) > scripts[0].index, `The boot script must come before the page's ${later}.`);
   }
+  // The server writes its hints in place of this marker (server/src/lib/firstScreenHints.ts); the boot script reads
+  // them, so they must come before it.
+  const hints = '<!-- FIRST_SCREEN_HINTS -->';
+  assert.equal(html.split(hints).length, 2, 'The built page must keep the marker for the server\'s hints exactly once.');
+  assert.ok(html.indexOf(hints) < scripts[0].index, 'The server\'s hints must come before the boot script.');
   const text = scripts[0][1], from = text.indexOf('/*plan:*/') + '/*plan:*/'.length, to = text.indexOf('/*:plan*/');
   assert.ok(to > from, 'The boot script must carry its plan.');
   const plan = JSON.parse(text.slice(from, to));

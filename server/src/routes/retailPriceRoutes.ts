@@ -79,6 +79,28 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
     catch (e) {
         return fail(s, e);
     } });
+    // Withdraw a verified price that turned out to be wrong (2026-11-10: catalogue lookups matched a camera body to an
+    // accessory). The row stays as history; expiring it removes the reference, the CP built on it, and lets the product
+    // become a candidate again. The reason is appended to the notes so the receipt says why.
+    r.post('/observations/:id/expire', async (q, s) => { try {
+        const id = String(q.params.id ?? '');
+        if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id) || Object.keys(q.body ?? {}).some(k => k !== 'reason'))
+            throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
+        const reason = q.body?.reason;
+        if (typeof reason !== 'string' || !reason.trim() || reason.length > 300 || /[<>\u0000-\u001f]/.test(reason))
+            throw new DiscoveryError(400, 'RETAIL_INVALID_OBSERVATION');
+        const old = await prisma.retailPriceObservation.findUnique({ where: { id } });
+        if (!old)
+            throw new DiscoveryError(404, 'RETAIL_OBSERVATION_UNAVAILABLE');
+        const now = new Date();
+        if (old.expiresAt <= now)
+            return s.json({ id, status: old.status, expiredAt: old.expiresAt.toISOString(), alreadyExpired: true });
+        const row = await prisma.retailPriceObservation.update({ where: { id }, data: { expiresAt: now, notes: [old.notes, `撤回 ${now.toISOString().slice(0, 19)}Z：${reason.trim()}`].filter(Boolean).join('\n').slice(0, 500) } });
+        return s.json({ id, status: row.status, expiredAt: row.expiresAt.toISOString(), alreadyExpired: false });
+    }
+    catch (e) {
+        return fail(s, e);
+    } });
     r.post('/evaluate', async (q, s) => { try {
         if (Object.keys(q.body ?? {}).join(',') !== 'productKeys' || !Array.isArray(q.body.productKeys) || q.body.productKeys.length < 1 || q.body.productKeys.length > CP_BATCH_SIZE || new Set(q.body.productKeys).size !== q.body.productKeys.length || q.body.productKeys.some((k: unknown) => typeof k !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');

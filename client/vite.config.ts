@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import packageJson from './package.json'
+import { firstScreen } from './vite-first-screen'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -15,6 +16,7 @@ export default defineConfig({
       transformIndexHtml: { order: 'post', handler: () => [{ tag: 'meta', attrs: { name: 'wishlist-web-version', content: packageJson.version }, injectTo: 'head' }] },
       generateBundle() { this.emitFile({ type: 'asset', fileName: 'web-version.json', source: JSON.stringify({ version: packageJson.version }) }); },
     },
+    firstScreen(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false, // The UI owns registration and never automatically reloads forms.
@@ -49,8 +51,13 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         importScripts: ['/pwa-cache-policy.js'],
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        globIgnores: ['**/web-version.json'], // Read current server metadata, never the worker's old version.
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        globIgnores: [
+          '**/web-version.json', // Read current server metadata, never the worker's old version.
+          // The landing page shows the WebP copies. The originals stay on the server for pages opened before
+          // that change, but no browser has to download them ahead of time any more.
+          'features/*.png',
+        ],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/manage(?:\/|$)/],  // Don't serve index.html for /api/* routes
         runtimeCaching: [

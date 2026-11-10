@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { earlyResponse } from '../firstScreen/early';
 export class ApiFailure extends Error {
   readonly status: number;
   readonly code: string;
@@ -39,9 +40,14 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
   if (remaining > 0) throw new ApiFailure('請求暫時受限，請稍後再試。', 429, 'RATE_LIMIT_COOLDOWN', remaining);
   deadlines[group] = 0;
   if(interestRoute)deadlines.interest=0;
-  const response = await fetch(`${API_URL}${path}`, { ...init, cache: 'no-store', headers: {
+  const url = `${API_URL}${path}`, signal = init.signal ?? AbortSignal.timeout(30_000);
+  // For a visitor who is not signed in, this very read may have been sent before the page existed
+  // (firstScreen/boot.ts). Its answer is then this request's answer; otherwise nothing changes.
+  const waiting = token === null ? earlyResponse(url, init, signal) : null;
+  const early = waiting && await waiting;
+  const response = early ?? await fetch(url, { ...init, cache: 'no-store', headers: {
     ...(token === null ? {} : { Authorization: `Bearer ${token}` }), ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers,
-  }, signal: init.signal ?? AbortSignal.timeout(30_000), redirect: 'error' });
+  }, signal, redirect: 'error' });
   observed?.(response.status);
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string; errorCode?: string };
@@ -55,5 +61,8 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
     if (delay) {const scope=interestLimited?'interest':group;deadlines[scope] = Math.max(deadlines[scope], now + delay);}
     throw new ApiFailure(body.error || `操作失敗（${response.status}）`, response.status, body.errorCode, delay);
   }
-  return response.status === 204 ? undefined as T : await response.json() as T;
+  const value = response.status === 204 ? undefined as T : await response.json() as T;
+  // An early answer was read to its end before it got here, so it cannot fail the way a cancelled download does.
+  if (early && signal.aborted) throw signal.reason;
+  return value;
 }

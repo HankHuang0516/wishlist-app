@@ -10,6 +10,8 @@ import { Analytics } from "./utils/analytics";
 import WebUpdateProvider from './context/WebUpdateContext';
 import WebAppInstallProvider from './context/WebAppInstallContext';
 import { ProductNoticeVisitProvider } from './context/ProductNoticeVisitContext';
+// Not a lazily loaded page itself: it chooses between two that are, so neither waits for the other's code.
+import ExploreRoute from './pages/ExploreRoute';
 
 const SourceEvidenceRegistryPage = createLazyPage(() => import('./pages/SourceEvidenceRegistryPage'));
 const SourceManagerPage = createLazyPage(() => import('./pages/SourceManagerPage'));
@@ -42,7 +44,6 @@ const ManualListingPage = createLazyPage(() => import('./pages/ManualListingPage
 const PublicListingPage = createLazyPage(() => import('./pages/PublicListingPage'));
 const AccountDeletionPage = createLazyPage(() => import('./pages/AccountDeletionPage'));
 const MyListingsPage = createLazyPage(() => import('./pages/MyListingsPage'));
-const ExplorePage = createLazyPage(() => import('./pages/ExploreRoute'));
 const ListingReportsPage = createLazyPage(() => import('./pages/ListingReportsPage'));
 const ChatPage = createLazyPage(() => import('./pages/ChatPage'));
 const WishesPage = createLazyPage(() => import('./pages/WishesPage'));
@@ -91,7 +92,7 @@ function App() {
             <Route path="sell" element={<ListingBatchPage />} />
             <Route path="sell/manual" element={<ManualListingPage />} />
             <Route path="my-listings" element={<MyListingsPage />} />
-            <Route path="explore" element={<ExplorePage />} />
+            <Route path="explore" element={<ExploreRoute />} />
             <Route path="reports" element={<ListingReportsPage />} />
             <Route path="chat" element={<ChatPage />} />
             <Route path="listings/:id" element={<PublicListingPage />} />

@@ -17,7 +17,8 @@ export type DiscoveryCategory={id:string;label:string;en:string;icon:string;coun
 export type DiscoveryPage={items:DiscoveryProduct[];categories:DiscoveryCategory[];nextCursor:string|null;snapshot:string;total:number;counts:{listing:number;source:number;external:number};counties:string[];complete:true;generatedAt:string;unknownPriceExcluded:boolean;mapTotals?:{located:number;unmapped:number};cpStatus?:{evaluated:number;scored:number;pending:number;providerConfigured:boolean;threshold:number;assessments?:{retail?:RetailPriceReference;conversion?:RetailConversion;key:string;title:string;score:number|null;reasons:{zh:string;en:string}[];evaluatedAt:string}[]}};
 export type DiscoveryFilters={q:string;main:string;sub:string;source:string;condition:string;county:string;min:string;max:string;sort:string;feed:string;display:string;mode:'list'|'map'};
 export const defaultDiscovery:DiscoveryFilters={q:'',main:'',sub:'',source:'all',condition:'',county:'',min:'',max:'',sort:'newest',feed:'latest',display:'grid',mode:'list'};
-export function isLegacyExplore(search:string){const p=new URLSearchParams(search);return ['view','scope','bbox','wish','wishItemId','listing','external','brand','category','delivery','minPrice','maxPrice','radius'].some(k=>p.has(k))||p.has('source')&&!['all','listing','source','external'].includes(p.get('source')!);}
+// Defined once, next to the script that fetches a page's code before the page exists, so the two cannot disagree.
+export {isLegacyExplore} from '../firstScreen/boot';
 export function readDiscovery(search:string):DiscoveryFilters{
   const p=new URLSearchParams(search), r={...defaultDiscovery};
   for(const k of Object.keys(r) as (keyof DiscoveryFilters)[])if(p.has(k)){if(k==='mode')r.mode=p.get(k)==='map'?'map':'list';else r[k]=p.get(k)!;}

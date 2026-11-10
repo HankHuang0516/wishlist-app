@@ -77,7 +77,7 @@ export default function Home() {
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-pink-50 to-white">
                     <div className="h-32 md:h-48 overflow-hidden">
                         <img
-                            src="/features/feature1.png"
+                            src="/features/feature1.webp"
                             alt={t('home.feature1.title')}
                             className="w-full h-full object-cover"
                         />
@@ -94,7 +94,7 @@ export default function Home() {
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-purple-50 to-white">
                     <div className="h-32 md:h-48 overflow-hidden">
                         <img
-                            src="/features/feature2.png"
+                            src="/features/feature2.webp"
                             alt={t('home.feature2.title')}
                             className="w-full h-full object-cover"
                         />
@@ -111,7 +111,7 @@ export default function Home() {
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-green-50 to-white">
                     <div className="h-32 md:h-48 overflow-hidden">
                         <img
-                            src="/features/feature3.png"
+                            src="/features/feature3.webp"
                             alt={t('home.feature3.title')}
                             className="w-full h-full object-cover"
                         />
@@ -128,7 +128,7 @@ export default function Home() {
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 bg-gradient-to-b from-red-50 to-white">
                     <div className="h-32 md:h-48 overflow-hidden">
                         <img
-                            src="/features/feature4.png"
+                            src="/features/feature4.webp"
                             alt={t('home.feature4.title')}
                             className="w-full h-full object-cover"
                         />

@@ -160,11 +160,37 @@ async function existingVars(database) {
   } finally { await db.$disconnect(); }
 }
 
+// Every real listing has a photo, and its page shows an error instead of a listing that has none. The fixture's
+// first listing therefore gets one: a synthetic picture from this repository, put through the server's own encoder
+// and kept in the run's temporary folder, where the server is told to look for photos.
+const PHOTO = path.join(root, 'mobile/qa-fixtures/synthetic-used-orange-desk-lamp.png');
+async function givePhoto(database, listingId, base, volume) {
+  const { PrismaClient } = require(path.join(root, 'server/node_modules/@prisma/client'));
+  const { encodeListingPhoto } = require(path.join(root, 'server/dist/lib/listingPhoto'));
+  const db = new PrismaClient({ datasources: { db: { url: database } } });
+  try {
+    const listing = await db.listing.findUnique({ where: { id: listingId }, select: { ownerUserId: true } });
+    if (!listing) throw new Error('The fixture has no listing to give a photo to; run with --seed fresh');
+    const photo = await encodeListingPhoto(fs.readFileSync(PHOTO), 'image/png');
+    // A kept fixture keeps its photo's identity; the files are this run's.
+    const earlier = await db.listingMedia.findFirst({ where: { listingId }, orderBy: { position: 'asc' }, select: { id: true } });
+    const id = earlier ? earlier.id : randomUUID(), address = base + '/api/listing-media/' + id;
+    const data = { imageUrl: address + '/image', thumbnailUrl: address + '/thumbnail', contentHash: photo.contentHash, width: photo.width, height: photo.height, byteSize: photo.byteSize };
+    if (earlier) await db.listingMedia.update({ where: { id }, data });
+    else await db.listingMedia.create({ data: { id, ownerUserId: listing.ownerUserId, listingId, position: 0, ...data } });
+    const folder = path.join(volume, 'listing-media', id);
+    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(folder, 'image.webp'), photo.image, { mode: 0o600 });
+    fs.writeFileSync(path.join(folder, 'thumbnail.webp'), photo.thumbnail, { mode: 0o600 });
+  } finally { await db.$disconnect(); }
+}
+
 // ---- server and delay proxy --------------------------------------------------
-function startServer(database, port, base, secret) {
-  // A fixed environment: no Railway, admin, provider, mail or signing values.
+function startServer(database, port, base, secret, volume) {
+  // A fixed environment: no Railway, admin, provider, mail or signing values. The one Railway name below only says
+  // where photos are kept, and points at the run's own temporary folder.
   const env = { PATH: process.env.PATH || '/usr/bin:/bin', NODE_ENV: 'production', TZ: 'Asia/Taipei', PORT: String(port), DATABASE_URL: database, TEST_DATABASE_URL: database,
-    JWT_SECRET: secret, CLIENT_URL: base, API_URL: base + '/api', SOURCE_LEADS_PUBLIC_ENABLED: '1' };
+    JWT_SECRET: secret, CLIENT_URL: base, API_URL: base + '/api', SOURCE_LEADS_PUBLIC_ENABLED: '1', ...(volume ? { RAILWAY_VOLUME_MOUNT_PATH: volume } : {}) };
   const child = spawn(process.execPath, [path.join(root, 'server/dist/index.js')], { cwd: path.join(root, 'server'), env, stdio: ['ignore', 'pipe', 'pipe'] });
   const log = [];
   const keep = chunk => { log.push(String(chunk)); if (log.length > 400) log.shift(); };
@@ -255,7 +281,7 @@ async function main() {
   const varsFile = path.join(options.out, 'vars.json');
   fs.writeFileSync(varsFile, JSON.stringify(fixture.vars, null, 1));
   const secrets = fs.mkdtempSync(path.join(os.tmpdir(), 'page-load-session-'));
-  const sessionFile = path.join(secrets, 'session.json');
+  const sessionFile = path.join(secrets, 'session.json'), volume = path.join(secrets, 'volume');
   // One signing secret for the whole run, so a restart keeps the synthetic session valid.
   const secret = randomBytes(32).toString('hex');
   let server = null, proxy, status = 0;
@@ -267,10 +293,12 @@ async function main() {
   // one pass from spending the next one's budget; the budgets themselves stay on.
   const boot = async () => {
     await halt();
-    server = startServer(database, options.serverPort, base, secret);
+    server = startServer(database, options.serverPort, base, secret, volume);
     await waitFor('http://127.0.0.1:' + options.serverPort + '/web-version.json').catch(error => { throw new Error(error.message + '\n' + server.log.slice(-15).join('')); });
   };
   try {
+    fs.mkdirSync(volume, { mode: 0o700 });
+    await givePhoto(database, fixture.vars.listingId, base, volume);
     await boot();
     proxy = await startProxy(options.proxyPort, options.serverPort, options.latency, certificate(secrets));
     // This process talks to its own proxy only; the browser is told separately.

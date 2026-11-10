@@ -2,6 +2,7 @@ import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import prisma from './prisma';
 import { Prisma, type RetailPriceObservation } from '@prisma/client';
 import { discoveryHash, DiscoveryError, type DiscoveryProduct } from './discovery';
+import { msrpReference, retailMsrpTable } from './retailMsrpTable';
 export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 'subId'>): string | null {
     if (/非正品|仿品|仿冒|造型款|replica|knockoff/i.test(p.title))
         return null;
@@ -33,14 +34,15 @@ export function retailIdentity(p: Pick<DiscoveryProduct, 'title' | 'mainId' | 's
         if (/switch\s*2|lite|特仕|限定|薩爾達|zelda|漆彈|斯普拉遁|朱紫|瑪利歐|mario|單螢幕|單主機|不含|遊戲組|遊戲套|紅藍|電光藍/.test(t)) return null;
         return /白色|white/.test(t) ? 'nintendo:switch:oled:white:standard-console' : null;
     }
-    const iphone = t.match(/iphone\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini)?/);
+    // iPhone 16e / 17e are their own line (2026-11-10): the e suffix becomes the variant instead of folding into the base model.
+    const iphone = t.match(/iphone\s*(\d{1,2})(e)?\s*(pro\s*max|pro|plus|mini)?/);
     if (iphone)
-        return capacity ? 'iphone:' + iphone[1] + ':' + (iphone[2] ?? 'base').replace(/\s/g, '') + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
+        return capacity ? 'iphone:' + iphone[1] + ':' + (iphone[2] ? 'e' : (iphone[3] ?? 'base').replace(/\s/g, '')) + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
     // A seventh-generation iPad price must retain capacity and radio variant.
     // iPad 10.2 7代 is a common Taiwanese retailer spelling of iPad 7.
     if (/\bipad\b/.test(t) && !/ipad\s*(?:air|pro|mini)/.test(t)) {
         const seventh = /ipad\s*7\b|ipad\s*10\.2\s*(?:吋\s*)?7代|ipad.*第\s*7\s*代/.test(t);
-        const radio = /cellular|lte|4g|行動網路/.test(t) ? 'cellular' : /wi[ -]?fi/.test(t) ? 'wifi' : null;
+        const radio = /cellular|lte|\b4g\b|行動網路/.test(t) ? 'cellular' : /wi[ -]?fi/.test(t) ? 'wifi' : null; // \b: 64GB is not 4G
         if (seventh) return capacity && radio ? 'ipad:7:' + radio + ':' + capacity[1] + (capacity[2] === 'g' ? 'gb' : capacity[2]) : null;
     }
     const buds = t.match(/galaxy\s*buds\s*(\d+)\s*(pro|fe)?\b/);
@@ -97,7 +99,7 @@ function appleFamilyIdentity(t: string, capacity: RegExpMatchArray | null): stri
     const tablet = t.match(/ipad\s*(air|mini|pro)\b/);
     if (tablet) {
         const chip = t.match(/\b(m\d|a\d{2}\s*pro|a\d{2})\b/)?.[1]?.replace(/\s/g, '') ?? gen(t.slice((tablet.index ?? 0) + tablet[0].length));
-        const radio = /cellular|lte|5g|4g|行動網路/.test(t) ? 'cellular' : 'wifi';
+        const radio = /cellular|lte|\b5g\b|\b4g\b|行動網路/.test(t) ? 'cellular' : 'wifi'; // \b: 64GB / 256GB are capacities, not radios
         return chip && cap ? 'apple:ipad-' + tablet[1] + ':' + chip + ':' + radio + ':' + cap : null;
     }
     const mac = t.match(/macbook\s*(air|pro|neo)?/);
@@ -231,6 +233,13 @@ export async function retailReferences(products: DiscoveryProduct[], now = new D
         const old = out.get(r.productKey);
         if (!old || old.priceType !== 'MANUFACTURER_MSRP' && fact.priceType === 'MANUFACTURER_MSRP' || old.priceType === fact.priceType && fact.price < old.price)
             out.set(r.productKey, fact);
+    }
+    // No observation for the product: the manufacturer price table answers by identity (retailMsrpTable.ts).
+    for (const p of products) {
+        if (out.has(p.key)) continue;
+        const identity = retailIdentity(p);
+        if (!retailMsrpTable.has(identity)) continue;
+        out.set(p.key, msrpReference(p, identity, retailBinding(p))!);
     }
     return out;
 }

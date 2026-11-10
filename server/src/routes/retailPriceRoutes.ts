@@ -5,6 +5,7 @@ import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
 import { loadDiscovery, DiscoveryError } from '../lib/discovery';
 import { retailBinding, retailIdentity, retailObservation, retailObservationMatches } from '../lib/retailPrices';
+import { retailMsrpTable } from '../lib/retailMsrpTable';
 import { evaluateCp, attachCp, cpTargets, cpCapacity, CP_BATCH_SIZE } from '../lib/discoveryCp';
 export function createRetailPriceAdmin(getCredential: () => unknown = () => process.env.ADMIN_API_KEY) {
     const r = Router();
@@ -12,6 +13,8 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
     r.use((_q, s, n) => { s.set('Cache-Control', 'private, no-store'); n(); });
     r.use(rateLimit({ windowMs: 60000, limit: 30, standardHeaders: true, legacyHeaders: false }));
     const fail = (s: any, e: unknown) => s.status(e instanceof DiscoveryError ? e.status : 503).json({ errorCode: e instanceof DiscoveryError ? e.code : 'RETAIL_PRICE_UNAVAILABLE' });
+    // Read-only summary of the manufacturer price table, for the pipeline and the monitor.
+    r.get('/msrp-table', (_q, s) => s.json({ version: retailMsrpTable.version, verifiedAt: retailMsrpTable.verifiedAt, identities: retailMsrpTable.size, rows: retailMsrpTable.rows, families: retailMsrpTable.identities().reduce<Record<string, number>>((acc, id) => { const f = id.split(':').slice(0, 2).join(':'); acc[f] = (acc[f] ?? 0) + 1; return acc; }, {}) }));
     r.get('/candidates', async (q, s) => { try {
         if (Object.keys(q.query).some(k => !['limit','source','productKey'].includes(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
@@ -32,7 +35,8 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         ` : [];
         const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash));
         // Direct lookup stays within the same public/AI-allowed catalog and returns its current binding.
-        const waiting = all.filter(p => (source === 'all' || p.kind === source) && (productKey ? p.key === productKey : !covered.has(p.key + ':' + retailBinding(p)))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
+        // A product the manufacturer price table already answers needs no lookup (retailMsrpTable.ts).
+        const waiting = all.filter(p => (source === 'all' || p.kind === source) && (productKey ? p.key === productKey : !covered.has(p.key + ':' + retailBinding(p)) && !retailMsrpTable.has(retailIdentity(p)))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
         return s.json({ baseline: 'ORIGINAL_NEW_RETAIL', policyVersion: 3, items: waiting.slice(0, limit).map(p => ({ productKey: p.key, title: p.title, description: p.description, price: p.price, currency: p.currency, condition: p.condition, identity: retailIdentity(p), bindingHash: retailBinding(p), canonicalUrl: p.canonicalUrl })), remaining: waiting.length });
     }
     catch (e) {

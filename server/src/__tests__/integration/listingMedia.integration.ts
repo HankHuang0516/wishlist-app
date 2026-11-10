@@ -27,6 +27,7 @@ const savedRoot = process.env.LISTING_MEDIA_STORAGE_ROOT;
 const savedMode = process.env.NODE_ENV;
 const savedProvider = process.env.LISTING_MEDIA_STORAGE_PROVIDER;
 const savedPilotUserId = process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID;
+const savedThumbnailAge = process.env.MEDIA_THUMBNAIL_MAX_AGE_S;
 const token = (id: number) => jwt.sign({ id }, secret, { expiresIn: '1h' });
 const upload = (id = seller, clientUploadId: string = randomUUID(), input?: Buffer, mime = 'image/jpeg',
     purpose?: 'MANUAL_PHOTO' | 'BATCH_ITEM') => {
@@ -45,6 +46,7 @@ const listingBody = (mediaId: string, publish = true) => ({ clientListingId: ran
 beforeAll(async () => {
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     process.env.NODE_ENV = 'test'; root = await fs.mkdtemp(path.join(os.tmpdir(), 'wishlist-media-api-test-')); process.env.LISTING_MEDIA_STORAGE_ROOT = root;
+    delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S;
     const run = randomUUID(); const users = await Promise.all(['seller', 'third'].map(role => prisma.user.create({ data: { phoneNumber: `${run}-${role}`, password: 'synthetic-unused-password', isEmailVerified: true } })));
     [seller, third] = users.map(x => x.id);
     jpeg = await sharp({ create: { width: 640, height: 480, channels: 3, background: '#cc8855' } }).jpeg()
@@ -64,6 +66,7 @@ afterAll(async () => {
     if (savedMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedMode;
     if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
     if (savedPilotUserId === undefined) delete process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID; else process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = savedPilotUserId;
+    if (savedThumbnailAge === undefined) delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S; else process.env.MEDIA_THUMBNAIL_MAX_AGE_S = savedThumbnailAge;
     if (root) await fs.rm(root, { recursive: true, force: true }); // Exactly this suite's generated temp folder.
 });
 
@@ -189,7 +192,8 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
         expect((await image(photo.id)).status).toBe(404); expect((await image(photo.id, 'image', third)).status).toBe(404);
         const draft = await request(server).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id, false)); expect(draft.status).toBe(201);
         expect((await image(photo.id)).status).toBe(404); expect((await image(photo.id, 'thumbnail', third)).status).toBe(404);
-        expect((await image(photo.id, 'thumbnail', seller)).status).toBe(200);
+        const own = await image(photo.id, 'thumbnail', seller); expect(own.status).toBe(200);
+        expect(own.headers['cache-control']).toBe('private, no-store'); // only its owner may read it: no browser is told to keep it
     });
     it('queues only the owner’s unbound photo for listing AI and grants the worker a temporary image read', async () => {
         const saved = { enabled: process.env.MINIMAX_LISTING_AI_ENABLED, pilot: process.env.MINIMAX_LISTING_AI_PILOT_USER_ID,
@@ -265,6 +269,8 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
         expect(first.body.resource).toMatchObject({ imageUrl: photo.imageUrl, aiStatus: 'PENDING' });
         expect(repeat.status).toBe(201); expect(repeat.body.replayed).toBe(true);
         expect((await image(photo.id)).status).toBe(200);
+        const wishThumbnail = await image(photo.id, 'thumbnail'); expect(wishThumbnail.status).toBe(200);
+        expect(wishThumbnail.headers['cache-control']).toBe('private, no-store'); // a wish photo is not a listing on sale
         expect((await request(server).post(`/api/native-wishes/lists/${list.body.resource.id}/items`).set('Authorization', 'Bearer ' + token(third))
             .send({ clientRequestId: randomUUID(), name: 'steal', mediaId: photo.id })).status).toBe(404);
         expect((await request(server).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id))).status).not.toBe(201);
@@ -289,9 +295,20 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
     it('shows published photos publicly and stops public reads immediately on removal/expiry', async () => {
         const photo = (await upload()).body;
         const listing = await request(server).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id)); expect(listing.status).toBe(201);
-        expect((await image(photo.id)).status).toBe(200);
+        const full = await image(photo.id); expect(full.status).toBe(200); expect(full.headers['cache-control']).toBe('private, no-store');
+        // On sale, so everyone sees it: the thumbnail may stay in the viewer's browser for ten minutes, whoever asks.
+        for (const reader of [undefined, third, seller]) {
+            const shown = await image(photo.id, 'thumbnail', reader); expect(shown.status).toBe(200);
+            expect(shown.headers['cache-control']).toBe('private, max-age=600'); expect(shown.headers['content-type']).toBe('image/webp');
+        }
+        process.env.MEDIA_THUMBNAIL_MAX_AGE_S = '0';
+        try { expect((await image(photo.id, 'thumbnail')).headers['cache-control']).toBe('private, no-store'); }
+        finally { delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S; }
         await prisma.listing.update({ where: { id: listing.body.id }, data: { publishedAt: new Date('2020-01-01'), expiresAt: new Date('2020-02-01') } });
         expect((await image(photo.id)).status).toBe(404); expect((await image(photo.id, 'image', seller)).status).toBe(200);
+        // Off sale it is the owner's alone again, and not kept.
+        expect((await image(photo.id, 'thumbnail')).status).toBe(404);
+        const ownerOnly = await image(photo.id, 'thumbnail', seller); expect(ownerOnly.status).toBe(200); expect(ownerOnly.headers['cache-control']).toBe('private, no-store');
         await prisma.listing.update({ where: { id: listing.body.id }, data: { status: 'REMOVED' } }); expect((await image(photo.id)).status).toBe(404);
     });
     it('returns the same photo after an upload retry and rejects key reuse with different pixels', async () => {
@@ -368,6 +385,31 @@ describe('real listing photo upload / private read / PostgreSQL', () => {
             expect((await fs.readdir(path.join(root, otherUserUpload.body.id))).sort()).toEqual(['image.webp', 'thumbnail.webp']);
         } finally {
             ready.mockRestore(); uploadRemote.mockRestore(); readRemote.mockRestore(); removeRemote.mockRestore();
+            if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
+            if (savedPilotUserId === undefined) delete process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID; else process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = savedPilotUserId;
+        }
+    });
+    it('proxies a Flickr-stored listing on sale with a short browser lifetime for its thumbnail and answers a revalidation with 304', async () => {
+        process.env.LISTING_MEDIA_STORAGE_PROVIDER = 'flickr';
+        process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = String(seller);
+        const sources = { imageSource: 'https://live.staticflickr.com/22/223344_abc_h.jpg', thumbnailSource: 'https://live.staticflickr.com/22/223344_abc_n.jpg' };
+        const ready = jest.spyOn(ListingFlickrStorage.prototype, 'ready').mockResolvedValue();
+        const uploadRemote = jest.spyOn(ListingFlickrStorage.prototype, 'upload').mockResolvedValue({ photoId: '223344', ...sources });
+        const readRemote = jest.spyOn(ListingFlickrStorage.prototype, 'read').mockResolvedValue(await sharp(jpeg).jpeg().toBuffer());
+        try {
+            const photo = (await upload()).body;
+            const draft = await image(photo.id, 'thumbnail', seller); expect(draft.status).toBe(200);
+            expect(draft.headers['cache-control']).toBe('private, no-store');
+            expect((await request(server).post('/api/listings').set('Authorization', 'Bearer ' + token(seller)).send(listingBody(photo.id))).status).toBe(201);
+            const shown = await image(photo.id, 'thumbnail'); expect(shown.status).toBe(200);
+            expect(shown.headers['content-type']).toBe('image/jpeg'); expect(shown.headers['cache-control']).toBe('private, max-age=600');
+            expect(readRemote).toHaveBeenLastCalledWith(sources.thumbnailSource, '223344'); expect(shown.headers.etag).toBeTruthy();
+            const again = await image(photo.id, 'thumbnail').set('If-None-Match', shown.headers.etag);
+            expect(again.status).toBe(304); expect(again.headers['cache-control']).toBe('private, max-age=600'); expect(again.text || '').toBe('');
+            const full = await image(photo.id); expect(full.status).toBe(200); expect(full.headers['cache-control']).toBe('private, no-store');
+            expect(readRemote).toHaveBeenLastCalledWith(sources.imageSource, '223344');
+        } finally {
+            ready.mockRestore(); uploadRemote.mockRestore(); readRemote.mockRestore();
             if (savedProvider === undefined) delete process.env.LISTING_MEDIA_STORAGE_PROVIDER; else process.env.LISTING_MEDIA_STORAGE_PROVIDER = savedProvider;
             if (savedPilotUserId === undefined) delete process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID; else process.env.LISTING_MEDIA_FLICKR_PILOT_USER_ID = savedPilotUserId;
         }

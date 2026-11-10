@@ -9,6 +9,7 @@ import { isDiscoverable, isListingId } from '../lib/listingRules';
 import { encodeListingPhoto, PhotoInputError } from '../lib/listingPhoto';
 import { ListingMediaStorage, MediaStorageConfigurationError, PhotoVariant } from '../lib/listingMediaStorage';
 import { ListingFlickrStorage, FlickrMediaUnavailable, FlickrOrphanedUpload } from '../lib/listingFlickrStorage';
+import { photoCacheControl } from '../lib/mediaCachePolicy';
 import { isMinimaxWorker, listingAiEnabledFor } from '../lib/minimaxWorkerAuth';
 import { ListingSellerDraftError, parseListingSellerDraft } from '../lib/listingSellerDraft';
 import { ListingCreationError, listingCreationGate } from '../lib/listingCreation';
@@ -153,22 +154,26 @@ export async function getListingMedia(req: AuthRequest, res: Response) {
             flickrImageUrl: true, flickrThumbnailUrl: true, listing: { select: { status: true, expiresAt: true } },
             marketingJobsAsSource: { where: { status: 'PROCESSING' }, select: { id: true }, take: 1 } } });
         // The opaque URL is shared with EClaw for recognition after attachment.
-        const publicAccess = (record?.capturePurpose !== 'AI_MARKETING' || record.marketingSelected) &&
-            (record?.wishItemId != null || (!!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date())));
+        const shareable = record?.capturePurpose !== 'AI_MARKETING' || record.marketingSelected;
+        const onSale = shareable && !!record?.listing && isDiscoverable(record.listing.status, record.listing.expiresAt, new Date());
+        const publicAccess = shareable && (record?.wishItemId != null || onSale);
         const workerAccess = variant === 'image' && record?.aiDraftStatus === 'PROCESSING' &&
             listingAiEnabledFor(record.ownerUserId) && isMinimaxWorker(req.headers.authorization);
         const marketingWorkerAccess = variant === 'image' && !!record?.marketingJobsAsSource.length && isMinimaxWorker(req.headers.authorization);
         if (!record || (!publicAccess && record.ownerUserId !== req.user?.id && !workerAccess && !marketingWorkerAccess)) return res.status(404).json({ error: '照片不存在' });
+        // Only the thumbnail of a listing on sale may stay in the viewer's browser; a wish photo or one only the
+        // owner or a worker may read is never kept, whoever asks.
+        const cacheControl = photoCacheControl(variant, onSale);
         if (record.flickrPhotoId) {
             const source = variant === 'image' ? record.flickrImageUrl : record.flickrThumbnailUrl;
             if (!source) throw new FlickrMediaUnavailable();
             const bytes = await flickrStorage.read(source, record.flickrPhotoId);
-            return res.set({ 'Content-Type': 'image/jpeg', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store',
+            return res.set({ 'Content-Type': 'image/jpeg', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cacheControl,
                 'Content-Disposition': 'inline; filename="listing-photo.jpg"' }).send(bytes);
         }
         const file = await storage.open(id, variant as PhotoVariant);
         if (res.destroyed) { await file.close(); return; }
-        res.set({ 'Content-Type': 'image/webp', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store', 'Content-Disposition': 'inline; filename="listing-photo.webp"' });
+        res.set({ 'Content-Type': 'image/webp', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cacheControl, 'Content-Disposition': 'inline; filename="listing-photo.webp"' });
         const stream = file.createReadStream({ autoClose: true });
         stream.on('error', () => {
             if (!res.headersSent && !res.destroyed) { res.removeHeader('Content-Type'); res.status(404).json({ error: '照片不存在' }); }

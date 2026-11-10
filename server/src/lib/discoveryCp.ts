@@ -68,7 +68,9 @@ export function validateCpOutput(value: unknown, targets: CpTarget[], model: str
             dimensions = { price: conversion.pricePoints, specification: d.specification, condition: d.condition, evidence: d.evidence };
             score = Object.values(dimensions).reduce((a, b) => a + b, 0);
         }
-        else if (raw.dimensions !== null)
+        // INSUFFICIENT carries no score. The model sometimes still fills the dimensions object (zeros or guesses) instead
+        // of null; that field is irrelevant to an unscored verdict, so it is dropped rather than failing the whole batch.
+        else if (raw.dimensions !== null && raw.dimensions !== undefined && (typeof raw.dimensions !== 'object' || Array.isArray(raw.dimensions)))
             throw new DiscoveryError(503, 'CP_INVALID_EVALUATION');
         const standard = { zh: '新品原價不是目前最低新機價；真偽、庫存、運費與保固仍需另行確認。', en: 'Original-new price is not today’s lowest new price. Authenticity, stock, shipping and warranty need confirmation.' };
         out[raw.key] = { policyVersion, score, dimensions, confidence: score === null ? 'LOW' : 'MEDIUM', reasons: raw.reasons, limitations: [standard, ...raw.limitations.slice(0, 2)], basis: [{ key: ref.key, hash: discoveryHash(ref) }], productHash: discoveryHash(target.product), model, evaluatedAt: now.toISOString(), retail: ref, conversion };

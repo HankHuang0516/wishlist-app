@@ -63,6 +63,11 @@ export function renderListingShareHtml(template: string, listing: ListingShareDa
         meta('property', 'twitter:title', title),
         meta('property', 'twitter:description', description),
         ...(photo ? [meta('property', 'twitter:image', `${origin}/api/listing-media/${photo.id}/thumbnail`)] : []),
+        // The page shows the gallery's first photo as soon as it has the listing, which is a round trip after its
+        // code has run. Naming the photo here lets the browser fetch it alongside that code instead. The address
+        // (relative, so always the page's own origin) and the referrer policy are those of the page's <img>
+        // (ListingPhoto), so the browser hands this download to it rather than fetching the photo twice.
+        ...(listing.media[0] ? [`  <link rel="preload" as="image" href="/api/listing-media/${escapeHtml(listing.media[0].id)}/image" referrerpolicy="no-referrer" />`] : []),
     ].join('\n');
     return `${template.slice(0, start)}${START}\n${tags}\n  ${template.slice(end)}`;
 }

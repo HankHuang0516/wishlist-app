@@ -54,7 +54,31 @@ it('prefers an original seller photo over selected AI marketing artwork', async 
     const response = await http.get(`/listings/${listingId}`);
     expect(response.status).toBe(200);
     expect(response.text).toContain(`/api/listing-media/${photoId}/thumbnail`);
-    expect(response.text).not.toContain('b5509492-26d5-460d-ae47-c281bb313c1c');
+    // The artwork is never the preview picture. It is still the first picture of the page's gallery (see below).
+    expect(response.text).not.toMatch(/<meta [^>]*b5509492-26d5-460d-ae47-c281bb313c1c/);
+});
+
+it('names the first picture of the gallery so the browser can fetch it alongside the page’s code', async () => {
+    const hint = (id: string) => `<link rel="preload" as="image" href="/api/listing-media/${id}/image" referrerpolicy="no-referrer" />`;
+    const single = await http.get(`/listings/${listingId}`);
+    expect(single.text).toContain(hint(photoId));
+    expect(single.text.match(/rel="preload"/g)).toHaveLength(1);
+    // The gallery opens on whatever is positioned first, also when that is the selected artwork.
+    findUnique.mockResolvedValue(fakeListing({ media: [
+        { id: 'b5509492-26d5-460d-ae47-c281bb313c1c', capturePurpose: 'AI_MARKETING' },
+        { id: photoId, capturePurpose: 'MANUAL_PHOTO' },
+    ] }));
+    const artworkFirst = await http.get(`/listings/${listingId}`);
+    expect(artworkFirst.text).toContain(hint('b5509492-26d5-460d-ae47-c281bb313c1c'));
+    expect(artworkFirst.text).not.toContain(hint(photoId));
+    expect(artworkFirst.text.match(/rel="preload"/g)).toHaveLength(1);
+    // Inside the block the page replaces, so it can never be left behind for another product.
+    const block = artworkFirst.text.slice(artworkFirst.text.indexOf('LISTING_SHARE_META_START'), artworkFirst.text.indexOf('LISTING_SHARE_META_END'));
+    expect(block).toContain('rel="preload"');
+    findUnique.mockResolvedValue(fakeListing({ media: [] }));
+    expect((await http.get(`/listings/${listingId}`)).text).not.toContain('rel="preload"');
+    findUnique.mockResolvedValue(null);
+    expect((await http.get(`/listings/${listingId}`)).text).not.toContain('rel="preload"');
 });
 
 it.each([

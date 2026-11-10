@@ -15,7 +15,7 @@ const plan: FirstScreenPlan = {
   ],
   x: [
     { d: ['/source-leads/summary'], i: ['/features/feature1.webp', '/features/feature2.webp'] },
-    { q: ['/discovery?'], l: [4, 5, 6] },
+    { q: ['/discovery?'], g: ['/source-leads/summary'], l: [4, 5, 6] },
     { d: ['/listings/:id', '/product-interest?keys=listing%3A:id'] },
     { d: ['/source-leads/map'], o: ['https://tiles.example/7/106/53.png'] },
   ],
@@ -77,7 +77,6 @@ describe('the page\'s code, asked for alongside the main bundle', () => {
       const legacy = visit(address);
       expect(legacy.code).toEqual(['/assets/Legacy-d.js', '/assets/Map-e.js', '/assets/Map-e.css']);
       expect(legacy.links.map(link => link.rel + ':' + link.as)).toEqual(['modulepreload:script', 'modulepreload:script', 'preload:style']);
-      expect(legacy.fetch).not.toHaveBeenCalled();
     }
     for (const address of ['/explore', '/explore?q=mac', '/explore?source=listing', '/explore?main=electronics&sub=monitors&source=source'])
       expect(visit(address).code).toEqual(['/assets/Explore-c.js', '/assets/Explore-c.css', '/assets/Card-b.js']);
@@ -144,7 +143,13 @@ describe('the public reads of a visitor who is not signed in', () => {
   it('include the explore catalogue only for the plain address, whose request is known in advance', () => {
     expect(visit('/explore').reads).toEqual(['/api/discovery?']);
     expect(visit('/explore', { search: '?' }).reads).toEqual(['/api/discovery?']);
-    for (const address of ['/explore?q=mac', '/explore?sort=price-asc', '/explore?view=source-leads', '/explore?wish=1']) expect(visit(address).reads).toEqual([]);
+    for (const address of ['/explore?q=mac', '/explore?sort=price-asc', '/explore?source=listing']) expect(visit(address).reads).toEqual([]);
+  });
+
+  it('are the legacy explore page\'s own for a legacy address, whatever its query', () => {
+    for (const address of ['/explore?view=source-leads&source=' + id, '/explore?wish=1', '/explore?bbox=1,2,3,4&q=mac'])
+      expect(visit(address).reads).toEqual(['/api/source-leads/summary']);
+    expect(visit('/explore?wish=1', { stored: { 'wishlist.auth.session.v1': session } }).reads).toEqual([]);
   });
 });
 

@@ -12,7 +12,7 @@ if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error(
  * stays in memory, and a list reply warms the renditions it is about to be asked for. Flickr is a fake here. */
 describe('source thumbnails: read from Flickr once, warmed by the list reply', () => {
     const origin = 'https://wishlist-qa.invalid', admin = 'synthetic-media-warm-admin', prefix = 'SYNTHETIC-MEDIA-WARM-';
-    const oldFlag = process.env.SOURCE_LEADS_PUBLIC_ENABLED, oldApi = process.env.API_URL;
+    const oldFlag = process.env.SOURCE_LEADS_PUBLIC_ENABLED, oldApi = process.env.API_URL, oldAge = process.env.MEDIA_THUMBNAIL_MAX_AGE_S;
     const flickr = new Map<string, Buffer>();
     const realFetch = global.fetch;
     const fetched: string[] = [];
@@ -37,6 +37,7 @@ describe('source thumbnails: read from Flickr once, warmed by the list reply', (
     }
     beforeAll(async () => {
         process.env.SOURCE_LEADS_PUBLIC_ENABLED = '1'; process.env.API_URL = origin + '/api'; process.env.MEDIA_WARM_IN_TESTS = '1';
+        delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S; // the default lifetime is what these tests describe
         global.fetch = (async (input: RequestInfo | URL) => {
             const url = String(input instanceof Request ? input.url : input);
             fetched.push(url);
@@ -53,6 +54,7 @@ describe('source thumbnails: read from Flickr once, warmed by the list reply', (
         await prisma.externalSourceLead.deleteMany({ where: { archiveItemId: { startsWith: prefix } } });
         if (oldFlag === undefined) delete process.env.SOURCE_LEADS_PUBLIC_ENABLED; else process.env.SOURCE_LEADS_PUBLIC_ENABLED = oldFlag;
         if (oldApi === undefined) delete process.env.API_URL; else process.env.API_URL = oldApi;
+        if (oldAge === undefined) delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S; else process.env.MEDIA_THUMBNAIL_MAX_AGE_S = oldAge;
         await prisma.$disconnect();
     });
 
@@ -65,7 +67,7 @@ describe('source thumbnails: read from Flickr once, warmed by the list reply', (
         const a = await request(app).get('/api' + path), b = await request(app).get('/api' + path);
         expect(a.status).toBe(200); expect(b.status).toBe(200);
         expect(Buffer.from(a.body).equals(Buffer.from(b.body))).toBe(true); expect(a.headers['content-type']).toBe('image/jpeg');
-        expect(a.headers['cache-control']).toBe('private, no-store');
+        expect(a.headers['cache-control']).toBe('private, max-age=600');
         expect(fetched).toHaveLength(1); expect(fetched[0]).toMatch(/_abc_s\.jpg$/);
         expect(mediaCacheStats()).toMatchObject({ small: { entries: 1 } });
         // The lead's own currency check runs on every request: cached bytes do not outlive a withdrawal.
@@ -116,5 +118,35 @@ describe('source thumbnails: read from Flickr once, warmed by the list reply', (
         clearMediaCache(); clearThumbnailAliases();
         expect(await warmThumbnails([thumb])).toEqual({ considered: 1, read: 0 });
         expect(fetched).toHaveLength(3);
+    });
+
+    it('lets the viewer’s browser keep a current lead’s thumbnail for ten minutes and revalidate it, never the full photo', async () => {
+        const leadId = await importLead(6, 1);
+        const detail = await request(app).get('/api/source-leads/' + leadId).query({ presentation: '1', photos: '2', approximate: '1' });
+        expect(detail.status).toBe(200);
+        const [photo] = detail.body.media as { thumbnailUrl: string; imageUrl: string }[];
+        const thumbnail = new URL(photo.thumbnailUrl).pathname, full = new URL(photo.imageUrl).pathname;
+        try {
+            const first = await request(app).get(thumbnail);
+            expect(first.status).toBe(200); expect(first.headers['cache-control']).toBe('private, max-age=600');
+            expect(first.headers.etag).toBeTruthy();
+            // Past the lifetime the browser asks again with the tag it holds: unchanged bytes are not sent a second time.
+            const again = await request(app).get(thumbnail).set('If-None-Match', first.headers.etag);
+            expect(again.status).toBe(304); expect(again.headers['cache-control']).toBe('private, max-age=600');
+            expect(again.headers['content-type']).toBeUndefined(); expect(again.text || '').toBe('');
+            expect(fetched).toHaveLength(1);
+            const original = await request(app).get(full);
+            expect(original.status).toBe(200); expect(original.headers['cache-control']).toBe('private, no-store');
+            // The lifetime is a setting: 0 (or anything unreadable) puts the thumbnail back to no-store, an hour is the most.
+            for (const [value, expected] of [['0', 'private, no-store'], ['off', 'private, no-store'], ['45', 'private, max-age=45'], ['86400', 'private, max-age=3600']]) {
+                process.env.MEDIA_THUMBNAIL_MAX_AGE_S = value;
+                expect((await request(app).get(thumbnail)).headers['cache-control']).toBe(expected);
+            }
+            delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S;
+            // A revalidation is a full check, not a shortcut: once the lead is withdrawn the answer is 404, not "unchanged".
+            await prisma.externalSourceLead.update({ where: { id: leadId }, data: { status: 'WITHDRAWN' } });
+            const withdrawn = await request(app).get(thumbnail).set('If-None-Match', first.headers.etag);
+            expect(withdrawn.status).toBe(404);
+        } finally { delete process.env.MEDIA_THUMBNAIL_MAX_AGE_S; }
     });
 });

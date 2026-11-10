@@ -11,6 +11,7 @@ import {photoCompleteness} from '../lib/sourcePhotoInventory';
 import {isCountyIllustration} from '../lib/sourceCountyIllustration';
 import {isContactLocation} from '../lib/sourceContactLocation';
 import { warmThumbnails } from '../lib/mediaWarm';
+import { photoCacheControl } from '../lib/mediaCachePolicy';
 import {activePublicCommentRoute,publicCommentRoute,publicCommentPayload,relayIdentity} from '../lib/sourcePublicComment';
 import { privateContactField } from '../lib/listingPolicy';
 import { sourceLeadMedia, sourceLeadMediaDTO } from '../lib/sourceLeadMedia';
@@ -380,7 +381,8 @@ export function createSourceLeadRoutes() {
         if (!media) return res.sendStatus(404);
         const url = req.params.variant === 'image' ? media.imageUrl : media.thumbnailUrl;
         const bytes = await new ListingFlickrStorage().read(url, media.flickrPhotoId);
-        return res.set({'Content-Type':'image/jpeg','X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'}).send(bytes);
+        // A current lead's photos are public; its thumbnail may stay in the viewer's browser for a short time.
+        return res.set({'Content-Type':'image/jpeg','X-Content-Type-Options':'nosniff','Cache-Control':photoCacheControl(String(req.params.variant), true)}).send(bytes);
     } catch { return res.sendStatus(404); } });
     router.get('/:id', async (req, res) => { try {
         if (!enabled() || !isListingId(req.params.id))

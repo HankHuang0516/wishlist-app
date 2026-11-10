@@ -28,3 +28,5 @@ test('daily capacity is bounded, configurable, and sufficient for the intended b
   for(const bad of ['0','2001','abc','1.5','-1']){process.env.DISCOVERY_CP_DAILY_BATCH_CAP=bad;expect(()=>cpCapacity()).toThrow('CP_CAPACITY_CONFIGURATION_INVALID');}
  } finally { if(old===undefined)delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;else process.env.DISCOVERY_CP_DAILY_BATCH_CAP=old; }
 });
+
+test('an INSUFFICIENT verdict with a filled-in dimensions object is still unscored, not a failed batch',()=>{const t=cpTargets([make()]),raw=output(t).map(r=>({...r,verdict:'INSUFFICIENT',dimensions:{specification:0,condition:0,evidence:0}}));const r=validateCpOutput(raw,t,'m')['source:1'];expect(r.score).toBeNull();expect(r.dimensions).toBeNull();expect(r.confidence).toBe('LOW');const bad=output(t).map(r=>({...r,verdict:'INSUFFICIENT',dimensions:'none'}));expect(()=>validateCpOutput(bad,t,'m')).toThrow();});

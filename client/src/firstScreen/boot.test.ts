@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { firstScreenBoot, isLegacyExplore, type FirstScreenEnv, type FirstScreenLink, type FirstScreenPlan } from './boot';
+import { HINTS_ID, firstScreenBoot, isLegacyExplore, type FirstScreenEnv, type FirstScreenLink, type FirstScreenPlan } from './boot';
 
 const id = '9ebe73c9-c536-4d3e-9ae5-1c78eb0afc51';
 const plan: FirstScreenPlan = {
@@ -23,7 +23,7 @@ const plan: FirstScreenPlan = {
 const tombstone = JSON.stringify({ version: 1, api: 'https://wishlist.test/api', token: null, user: null });
 const session = JSON.stringify({ version: 1, api: 'https://wishlist.test/api', token: 'synthetic', user: { id: 7 } });
 
-type Visit = { stored?: Record<string, string>; storage?: 'denied'; modulepreload?: boolean; timeout?: boolean; search?: string; fetch?: () => Promise<unknown>; create?: () => FirstScreenLink };
+type Visit = { stored?: Record<string, string>; storage?: 'denied'; modulepreload?: boolean; timeout?: boolean; search?: string; fetch?: () => Promise<unknown>; create?: () => FirstScreenLink; hints?: string | null };
 function visit(address: string, options: Visit = {}) {
   const url = new URL(address, 'https://wishlist.test'), links: FirstScreenLink[] = [];
   const fetch = vi.fn<FirstScreenEnv['fetch']>(() => options.fetch ? options.fetch() : new Promise<unknown>(() => undefined));
@@ -32,6 +32,7 @@ function visit(address: string, options: Visit = {}) {
     document: {
       createElement: options.create ?? (() => ({ rel: '', as: '', href: '', crossOrigin: null, referrerPolicy: '', relList: { supports: token => token === 'modulepreload' && options.modulepreload !== false } })),
       head: { appendChild: link => links.push(link) },
+      ...(options.hints === undefined ? {} : { getElementById: (wanted: string) => wanted === HINTS_ID && options.hints !== null ? { textContent: options.hints ?? null } : null }),
     },
     localStorage: { getItem: key => { if (options.storage) throw new Error('denied'); return options.stored?.[key] ?? null; } },
     fetch,
@@ -194,5 +195,54 @@ describe('a failure', () => {
     firstScreenBoot({ a: [], r: [], x: [] }, { location: { pathname: '/', search: '' }, document: { createElement: none, head: { appendChild: none } }, localStorage: { getItem: none }, fetch: none });
     expect(none).not.toHaveBeenCalled();
     expect(() => firstScreenBoot(plan, {} as FirstScreenEnv)).not.toThrow();
+  });
+});
+
+describe('the reads the server named in the HTML', () => {
+  const interest = '/product-interest?keys=' + encodeURIComponent(['source:' + id, 'listing:' + id].join(','));
+  const hints = (route: string, reads: unknown) => JSON.stringify({ r: route, d: reads });
+
+  it('are sent with the page\'s own, for the plain address of the route they were written for', () => {
+    const plain = visit('/explore', { hints: hints('explore', [interest]) });
+    expect(plain.reads).toEqual(['/api/discovery?', '/api' + interest]);
+    expect(plain.fetch.mock.calls[1][1]).toEqual(plain.fetch.mock.calls[0][1]);
+    expect(Object.keys(plain.env.__wishlistFirstScreen!.d)).toEqual(['/api/discovery?', '/api' + interest]);
+    expect(visit('/explore', { search: '?', hints: hints('explore', [interest]) }).reads).toEqual(['/api/discovery?', '/api' + interest]);
+  });
+
+  it('are not sent for anyone signed in, for another route, an address with a query, or a legacy link', () => {
+    expect(visit('/explore', { hints: hints('explore', [interest]), stored: { 'wishlist.auth.session.v1': session } }).reads).toEqual([]);
+    expect(visit('/explore', { hints: hints('source-leads', [interest]) }).reads).toEqual(['/api/discovery?']);
+    expect(visit('/source-leads', { hints: hints('explore', [interest]) }).reads).toEqual(['/api/source-leads/map']);
+    expect(visit('/explore?q=mac', { hints: hints('explore', [interest]) }).reads).toEqual([]);
+    expect(visit('/explore?wish=1', { hints: hints('explore', [interest]) }).reads).toEqual(['/api/source-leads/summary']);
+  });
+
+  it.each([
+    ['no hints at all', null],
+    ['empty hints', ''],
+    ['hints that cannot be read', '{"r":"explore","d":['],
+    ['hints that are not an object', '"explore"'],
+    ['reads that are not a list', hints('explore', interest)],
+    ['a read on another host', hints('explore', ['//elsewhere.example/x'])],
+    ['an absolute address', hints('explore', ['https://elsewhere.example/api/x'])],
+    ['a read the API helper would refuse', hints('explore', ['/product-interest?keys=a b'])],
+    ['a broken escape', hints('explore', ['/product-interest?keys=%zz'])],
+    ['something that is not a path', hints('explore', [42])],
+  ])('name nothing when the page carries %s', (_name, text) => {
+    const { reads, code } = visit('/explore', { hints: text });
+    expect(reads).toEqual(['/api/discovery?']);
+    expect(code).toEqual(['/assets/Explore-c.js', '/assets/Explore-c.css', '/assets/Card-b.js']);
+  });
+
+  it('are kept to a few, however many are named', () => {
+    const many = Array.from({ length: 9 }, (_, n) => '/product-interest?keys=' + n);
+    expect(visit('/explore', { hints: hints('explore', many) }).reads).toEqual(['/api/discovery?', ...many.slice(0, 4).map(read => '/api' + read)]);
+  });
+
+  it('do not stop the page\'s code when reading them fails', () => {
+    const { reads, code } = visit('/explore', { create: undefined, hints: undefined });
+    expect(reads).toEqual(['/api/discovery?']);
+    expect(code).toHaveLength(3);
   });
 });

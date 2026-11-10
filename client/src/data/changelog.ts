@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.851',date:'2026-11-11',title:'探索與來源地圖第一次開啟的速度',type:'Fullstack',items:[{type:'Enhancement',content:'第一次打開探索時，前幾張商品縮圖與「詢問中／喜歡」人數改為和頁面程式同時開始下載，不再等商品清單回來才開始。'},{type:'Enhancement',content:'第一次打開來源線索地圖時，第一件的大圖與清單前幾張縮圖也同時開始下載。'}]},
  {version:'2.0.850',date:'2026-11-10',title:'商品頁第一次開啟的速度',type:'Fullstack',items:[{type:'Enhancement',content:'第一次打開商品頁時，第一張照片改為和頁面程式同時開始下載，不再等商品資料回來才開始。'},{type:'Enhancement',content:'未登入打開舊版探索連結時，公開來源數量和頁面程式同時讀取。'}]},
  {version:'2.0.849',date:'2026-11-10',title:'第一次開啟的速度',type:'Frontend',items:[{type:'Enhancement',content:'第一次造訪時，頁面需要的程式與公開資料改為和主程式同時開始下載，不再一段接一段等待；首頁、探索、商品頁與來源線索地圖的開啟時間各少一到兩次往返。'},{type:'Enhancement',content:'一般探索不再先下載地圖程式庫，開啟探索地圖或舊版分享連結時才載入。'},{type:'Enhancement',content:'首頁四張功能介紹圖改用 WebP，下載量由約 2.4 MB 降到約 0.26 MB，畫面相同。'}]},
  {version:'2.0.848',date:'2026-11-10',title:'首頁開啟速度',type:'Fullstack',items:[{type:'Enhancement',content:'登入後首頁的願望配對改為一次讀取全部願望與各自的第一頁配對，不再逐一願望等待；配對結果與排序和原本相同。'}]},

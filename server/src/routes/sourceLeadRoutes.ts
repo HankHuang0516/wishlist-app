@@ -19,6 +19,7 @@ import { ListingFlickrStorage } from '../lib/listingFlickrStorage';
 import { Router, Response } from 'express';
 import { catalogReady, catalogSourceCount, catalogSourceMap } from '../lib/publicCatalog';
 import { scanSourceMap } from '../lib/sourceLeadMap';
+import { publicLeadList } from '../lib/publicLeadList';
 import {sourceLeadLimits} from '../middleware/sourceLeadLimits';
 import rateLimit from 'express-rate-limit';
 import { Prisma } from '@prisma/client';
@@ -298,31 +299,10 @@ export function createSourceLeadRoutes() {
                 if (box.length !== 4 || box.some(v => !Number.isFinite(v)) || box[0] < 117 || box[2] > 123.8 || box[1] < 20 || box[3] > 26.6 || box[0] >= box[2] || box[1] >= box[3])
                     throw new LeadError('INVALID_BOUNDS');
             }
-            // Scan bounded batches until enough valid results; every cursor advances over
-            // expired/withdrawn records as well, so filtering cannot trap pagination.
-            const items = [];
-            let next = cursor, exhausted = false;
-            for (let scan = 0; scan < 20 && items.length < 25; scan++) {
-                const rows = await prisma.externalSourceLead.findMany({ where: { status: 'PUBLISHED', AND: [...(q ? [{ OR: [{ title: { contains: q, mode: 'insensitive' as const } }, { summary: { contains: q, mode: 'insensitive' as const } }] }] : []), ...(box ? [{ OR: [{ longitude: { gte: box[0], lte: box[2] }, latitude: { gte: box[1], lte: box[3] } }, ...(unlocated ? [{ latitude: null, recordOrigin: 'DB_MASTER' }] : [])] }] : [])] }, orderBy: { id: 'asc' }, take: 50, ...(next ? { cursor: { id: next }, skip: 1 } : {}) });
-                if (!rows.length) {
-                    exhausted = true;
-                    break;
-                }
-                for (const r of rows) {
-                    next = r.id;
-                    if (leadCurrent(r) && (!isCountyIllustration(r.evidence)||req.query.approximate==='1') && (!isContactLocation(r.evidence)||unlocated))
-                        items.push(leadDTO(r, req.query.presentation === '1',req.query.photos==='2'));
-                    if (items.length === 25)
-                        break;
-                }
-                if (rows.length < 50 && items.length < 25) {
-                    exhausted = true;
-                    break;
-                }
-            }
+            const { items, nextCursor } = await publicLeadList({ q, box, cursor, unlocated, approximate: req.query.approximate === '1', presentation: req.query.presentation === '1', photos: req.query.photos === '2' });
             // The browser asks for the thumbnails in view one round trip after this reply; have them in memory by then.
             if (req.query.presentation === '1') void warmThumbnails(items.map(item => (item as { media?: { thumbnailUrl: string }[] }).media?.[0]?.thumbnailUrl));
-            return res.json({ items, nextCursor: exhausted ? null : next, enabled: true });
+            return res.json({ items, nextCursor, enabled: true });
         }
         catch (e) {
             return fail(res, e);

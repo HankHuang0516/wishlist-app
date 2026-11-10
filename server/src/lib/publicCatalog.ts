@@ -378,10 +378,20 @@ function scope(now: Date, alias = Prisma.raw('e')) {
 }
 const locatedAt = (now: Date) => Prisma.sql`(e."mapLocation" IS NOT NULL AND (e."mapVisibleUntil" IS NULL OR e."mapVisibleUntil" > ${utc(now)}))`;
 const withMap = (row: { product: unknown; mapLocation: unknown; located: boolean }) => ({ ...(row.product as DiscoveryProduct), mapLocation: row.located ? row.mapLocation as MapLocation : null });
+// Newest first, ties by key. Keys are lowercase ASCII, where byte order is the order localeCompare gives.
+const NEWEST = Prisma.sql`r."date" DESC, r."key" COLLATE "C" ASC`;
 
 // Every public product, in the order the full scan returns them.
 // Readers call catalogReady(now) first and pass synced; called on their own they check for themselves.
 const insist = async (now: Date, synced: boolean) => { if (!synced && !(await catalogSync(now))) throw new DiscoveryError(503, 'DISCOVERY_UNAVAILABLE'); };
+
+// The first page of the ordinary feed (no filters, newest first), only the keys and thumbnails: what the explore
+// page's HTML names for the browser to fetch before the page has run (firstScreenHints.ts). The same rows in the
+// same order as catalogDiscoveryPage(discoveryQuery({})), without the facets and totals that make that one slow;
+// publicCatalog.integration.ts holds the two together. Call catalogReady(now) first.
+export async function catalogFirstPage(now = new Date(), limit = 24): Promise<Array<{ key: string; thumbnailUrl: string | null }>> {
+  return prisma.$queryRaw`SELECT r."key", r."thumbnailUrl" FROM "PublicCatalogEntry" r WHERE ${scope(now, Prisma.raw('r'))} ORDER BY ${NEWEST} LIMIT ${limit}`;
+}
 export async function catalogProducts(now = new Date(), map = false, synced = false): Promise<DiscoveryProduct[]> {
   await insist(now, synced);
   const products: DiscoveryProduct[] = [];
@@ -449,8 +459,7 @@ export async function catalogDiscoveryPage(query: DiscoveryQuery, now = new Date
   const base = Prisma.sql`SELECT e."key", e."kind", e."kindRank", e."refId", e."mainId", e."subId", e."thumbnailUrl", e."contentHash", e."price", e."date", ${located} AS "located"
     FROM "PublicCatalogEntry" e WHERE ${Prisma.join(where, ' AND ')}`;
   const category = Prisma.sql`${query.main ? Prisma.sql`r."mainId" = ${query.main}` : Prisma.sql`TRUE`} AND ${query.sub ? Prisma.sql`r."subId" = ${query.sub}` : Prisma.sql`TRUE`}`;
-  // Newest first, ties by key. Keys are lowercase ASCII, where byte order is the order localeCompare gives.
-  const newest = Prisma.sql`r."date" DESC, r."key" COLLATE "C" ASC`;
+  const newest = NEWEST;
   const order = Prisma.sql`${map ? Prisma.sql`r."located" DESC,` : Prisma.empty}
     ${query.sort === 'price-asc' ? Prisma.sql`(r."price" IS NULL) ASC, r."price" ASC,` : query.sort === 'price-desc' ? Prisma.sql`(r."price" IS NULL) ASC, r."price" DESC,` : Prisma.empty} ${newest}`;
   const queryHash = discoveryHash({ ...query, cursor: '', limit: 0 });

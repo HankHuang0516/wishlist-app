@@ -4,7 +4,7 @@ import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
 import { discoveryPage, discoveryQuery, scanDiscovery, type DiscoveryProduct } from '../../lib/discovery';
-import { buildCatalog, catalogDiscoveryPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
+import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
 import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
@@ -99,6 +99,32 @@ it.each([{ limit: '50' }, { limit: '13', sort: 'price-asc' }, { limit: '20', pre
   const now = new Date(), expected = await everyKey(query => fullScan(query, now), raw), actual = await everyKey(query => readModel(query, now), raw);
   expect(actual).toEqual(expected);
   expect(new Set(actual).size).toBe(actual.length);
+});
+
+// The explore page's HTML names the first page of the ordinary feed (lib/firstScreenHints.ts); it has to be the
+// page the feed then returns, also right after a write.
+it('names the same first page, in the same order and with the same thumbnails, as the ordinary feed', async () => {
+  const same = async () => {
+    const now = new Date();
+    expect(await catalogReady(now)).toBe(true);
+    const page = await catalogDiscoveryPage(discoveryQuery({}), now, true);
+    expect(page.items.length).toBe(24);
+    expect(await catalogFirstPage(now)).toEqual(page.items.map(item => ({ key: item.key, thumbnailUrl: item.thumbnailUrl ?? null })));
+    return page;
+  };
+  const before = await same();
+  // The newest source joins the first page and pushes the last product off; the photo of an on-site listing changes.
+  const added = lead(930, new Date(), { title: '剛剛新增、最新的合成來源' });
+  leadIds.push(added.id);
+  await prisma.externalSourceLead.create({ data: added });
+  const media = await prisma.listingMedia.create({ data: { ownerUserId: userId, listingId: listingIds[2], imageUrl: 'https://example.invalid/c.webp', thumbnailUrl: 'https://example.invalid/c-thumb.webp', contentHash: 'c'.repeat(64), position: 0 } });
+  const after = await same();
+  expect(after.items.map(item => item.key)).toContain('source:' + added.id);
+  expect(after.items.map(item => item.key)).not.toEqual(before.items.map(item => item.key));
+  expect(after.items.find(item => item.key === 'listing:' + listingIds[2])?.thumbnailUrl).toBe('https://example.invalid/c-thumb.webp');
+  await prisma.externalSourceLead.update({ where: { id: added.id }, data: { status: 'WITHDRAWN' } });
+  await prisma.listingMedia.delete({ where: { id: media.id } });
+  await same();
 });
 
 it('shows a write to the very next read and rejects the cursor of the previous result', async () => {

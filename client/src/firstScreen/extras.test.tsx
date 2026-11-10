@@ -16,7 +16,8 @@ import ExplorePage from '../pages/ExplorePage';
 import PublicListingPage from '../pages/PublicListingPage';
 import SourceLeadMapPage from '../pages/SourceLeadMapPage';
 import { makeListing, responseOk } from '../__tests__/fixtures/marketplace';
-import { firstScreenBoot, type FirstScreenEnv, type FirstScreenLink } from './boot';
+import { makeSourceLead } from '../__tests__/fixtures/sourceLead';
+import { HINTS_ID, firstScreenBoot, type FirstScreenEnv, type FirstScreenLink } from './boot';
 import { buildPlan, firstScreenExtras, parseRoutes, type FirstScreenChunk } from './plan';
 
 // The legacy explore page imports the map library; a visitor who is not signed in never gets as far as the map.
@@ -34,13 +35,17 @@ const plan = buildPlan(chunks, routes, firstScreenExtras);
 type Read = { path: string; init: unknown };
 const inOrder = (reads: Read[]) => [...reads].sort((a, b) => a.path.localeCompare(b.path));
 
-/** What the boot script sends and preloads for an address, for a browser with nobody signed in. */
-function ahead(address: string) {
+/** What the boot script sends and preloads for an address, for a browser with nobody signed in. `hints` is what
+ *  the server wrote into the page's HTML for it (server/src/lib/firstScreenHints.ts). */
+function ahead(address: string, hints?: unknown) {
   const url = new URL(address, 'https://wishlist.test'), links: FirstScreenLink[] = [];
   const sent = vi.fn<FirstScreenEnv['fetch']>(() => new Promise<unknown>(() => undefined));
   const env: FirstScreenEnv = {
     location: { pathname: url.pathname, search: url.search },
-    document: { createElement: () => ({ rel: '', as: '', href: '', crossOrigin: null, referrerPolicy: '' }), head: { appendChild: link => links.push(link) } },
+    document: {
+      createElement: () => ({ rel: '', as: '', href: '', crossOrigin: null, referrerPolicy: '' }), head: { appendChild: link => links.push(link) },
+      getElementById: id => id === HINTS_ID && hints !== undefined ? { textContent: JSON.stringify(hints) } : null,
+    },
     localStorage: { getItem: () => null },
     fetch: sent,
   };
@@ -131,6 +136,54 @@ describe('what the boot script sends ahead is what the page sends', () => {
     // A preloaded picture is only reused by an <img> that asks for it the same way.
     expect(tiles.every(image => image.getAttribute('referrerpolicy') === 'origin' && !image.hasAttribute('crossorigin'))).toBe(true);
     expect(early.images.every(link => link.referrerPolicy === 'origin' && link.crossOrigin === null)).toBe(true);
+  });
+
+  /* The server names what only the data knows (server/src/lib/firstScreenHints.ts). These two hold the page to
+   * what it writes: for explore, the interest read of the whole first page, the products' keys in order, and each
+   * card's thumbnail; for the source map, the first lead's large photo and every row's first thumbnail, asked for
+   * without a referrer. */
+  it('on the plain explore address, the interest read and the card pictures the server names', async () => {
+    const product = (n: number) => {
+      const id = 'ab427730-60af-40c4-b568-' + String(n).padStart(12, '0'), picture = 'https://wishlist.test/api/source-leads/' + id + '/media/' + id + '/thumbnail';
+      return { kind: 'source', id, key: 'source:' + id, title: '合成商品 ' + n, description: '公開來源參考', mainId: 'electronics', subId: 'monitors', price: 1000 + n, priceText: String(1000 + n),
+        currency: 'TWD', priceUnitVerified: true, photos: [{ id: 'p' + n, url: picture.replace(/thumbnail$/, 'image'), thumbnailUrl: picture }], thumbnailUrl: picture, county: '臺北市', district: null,
+        condition: 'UNKNOWN', stockStatus: 'UNKNOWN', canonicalUrl: 'https://example.invalid/product/' + n, date: '2026-10-24T00:00:00Z', dateBasis: 'SOURCE_POST_RANGE', dateEarliest: null };
+    };
+    const items = Array.from({ length: 24 }, (_, n) => product(n + 1));
+    const page = { items, categories: [{ id: 'electronics', label: '3C數位', en: 'Electronics', icon: 'monitor', count: 24, children: [{ id: 'monitors', label: '電腦螢幕', en: 'Monitors', count: 24, thumbnailUrl: null }] }],
+      nextCursor: null, snapshot: 'fixed', total: 24, counts: { listing: 0, source: 24, external: 0 }, counties: ['臺北市'], complete: true, generatedAt: '2026-10-24T00:00:00Z', unknownPriceExcluded: false };
+    const fetcher = vi.fn<(target: string, init?: RequestInit) => Promise<unknown>>(async target => new URL(target, 'https://wishlist.test').pathname.endsWith('/api/discovery') ? responseOk(page) : new Promise<never>(() => undefined));
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = show('/explore', '/explore', <ExploreDiscoveryPage />);
+    await waitFor(() => expect(fetcher.mock.calls.some(([target]) => target.includes('/product-interest'))).toBe(true));
+    // Written the way the server writes it.
+    const interest = '/product-interest?keys=' + encodeURIComponent(items.map(item => item.key).join(','));
+    const early = ahead('/explore', { r: 'explore', d: [interest] });
+    expect(early.reads.map(read => read.path)).toEqual(['/discovery?', interest]);
+    expect(asked(fetcher)).toEqual(early.reads);
+    // The cards' pictures are the products' thumbnails, in order, asked for like a preload link with no attributes.
+    const pictures = [...container.querySelectorAll('[data-testid="discovery-products"] img')];
+    expect(pictures.slice(0, 8).map(image => image.getAttribute('src'))).toEqual(items.slice(0, 8).map(item => item.thumbnailUrl));
+    expect(pictures.every(image => !image.hasAttribute('referrerpolicy') && !image.hasAttribute('crossorigin'))).toBe(true);
+  });
+
+  it('on the source map, the photos the server names', async () => {
+    const day = new Date(Date.now() - 86_400_000).toISOString();
+    const leads = Array.from({ length: 9 }, (_, n) => ({ ...makeSourceLead(n + 1), checkedAt: new Date().toISOString(), postedEarliestAt: day, postedLatestAt: day }));
+    const fetcher = vi.fn<(target: string, init?: RequestInit) => Promise<unknown>>(async target => {
+      const path = new URL(target, 'https://wishlist.test').pathname;
+      if (path.endsWith('/source-leads/map')) return responseOk({ enabled: true, total: leads.length, points: [{ id: leads[0].id, latitude: 23, longitude: 120.2, count: leads.length, publicPlaceName: '公開地點' }] });
+      if (path.endsWith('/source-leads')) return responseOk({ enabled: true, items: leads, nextCursor: null });
+      return new Promise<never>(() => undefined);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = show('/source-leads', '/source-leads', <SourceLeadMapPage />);
+    const large = leads[0].media[0].imageUrl;
+    await waitFor(() => expect(container.querySelector(`img[src="${large}"]`)).not.toBeNull());
+    expect(container.querySelector(`img[src="${large}"]`)!.getAttribute('referrerpolicy')).toBe('no-referrer');
+    const rows = [...container.querySelectorAll('[aria-label="來源商品清單"] img')];
+    expect(rows.map(image => image.getAttribute('src'))).toEqual(leads.map(lead => lead.media[0].thumbnailUrl));
+    expect(rows.every(image => image.getAttribute('referrerpolicy') === 'no-referrer' && !image.hasAttribute('crossorigin'))).toBe(true);
   });
 
   it('and every route with reads or pictures of its own is covered above', () => {

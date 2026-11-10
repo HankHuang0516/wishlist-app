@@ -5,7 +5,9 @@
  * shown and asks, in the same wave as the main bundle, for what that page would otherwise ask for one round trip at
  * a time:
  *   - the page's own code and styles (normally requested only after the main bundle has run);
- *   - for a browser that is not signed in, the public reads the page makes as it mounts, and its first images.
+ *   - for a browser that is not signed in, the public reads the page makes as it mounts, and its first images;
+ *     for some pages also reads that only the data can name, which the server writes into the HTML right above
+ *     this script (server/src/lib/firstScreenHints.ts).
  * Nothing here is needed for the page to work. Any failure is swallowed and the page loads the ordinary way.
  *
  * Keep this file free of imports and of DOM-lib globals: the build's own type check (no DOM) covers it too, and
@@ -48,7 +50,11 @@ export type FirstScreenLink = {
 /** The parts of `window` the script touches. */
 export type FirstScreenEnv = {
   location: { pathname: string; search: string };
-  document: { createElement(name: 'link'): FirstScreenLink; head: { appendChild(link: FirstScreenLink): unknown } };
+  document: {
+    createElement(name: 'link'): FirstScreenLink;
+    head: { appendChild(link: FirstScreenLink): unknown };
+    getElementById?(id: string): { textContent: string | null } | null;
+  };
   localStorage: { getItem(key: string): string | null };
   fetch(url: string, init: Record<string, unknown>): Promise<unknown>;
   AbortSignal?: { timeout?: (milliseconds: number) => unknown };
@@ -74,6 +80,22 @@ function signedOut(storage: FirstScreenEnv['localStorage']) {
   const row: unknown = JSON.parse(record);
   return typeof row === 'object' && row !== null
     && (row as { token?: unknown }).token === null && (row as { user?: unknown }).user === null;
+}
+
+// The same shape marketplaceApi accepts for a request path.
+const READ = /^\/[a-zA-Z0-9/_-]+(?:\?[a-zA-Z0-9_=&%+.,-]*)?$/;
+export const HINTS_ID = 'wishlist-first-screen';
+
+/** Reads the server named in this page's HTML for this route (server/src/lib/firstScreenHints.ts): what only the
+ *  data knows, such as the interest counts of the explore cards. Anything unexpected names nothing. */
+function hinted(env: FirstScreenEnv, route: string): string[] {
+  const element = env.document.getElementById ? env.document.getElementById(HINTS_ID) : null;
+  if (!element || !element.textContent) return [];
+  const value: unknown = JSON.parse(element.textContent);
+  if (typeof value !== 'object' || value === null || (value as { r?: unknown }).r !== route) return [];
+  const reads = (value as { d?: unknown }).d;
+  return Array.isArray(reads) ? reads.filter((read): read is string => typeof read === 'string' && read.length <= 4096
+    && READ.test(read) && read.indexOf('//') !== 0 && !/%(?![a-fA-F0-9]{2})/.test(read)).slice(0, 4) : [];
 }
 
 function matcher(template: string) {
@@ -107,8 +129,12 @@ export function firstScreenBoot(plan: FirstScreenPlan, env: FirstScreenEnv): voi
     // 1. The reads go first: they take the longest. They are exactly what the page itself sends for a visitor who is
     //    not signed in (no credentials, no Authorization), so the page can take the answer instead of asking again.
     if (guest) try {
-      const paths = (legacy ? extras.g || [] : (extras.d || []).concat(search === '' || search === '?' ? extras.q || [] : []))
-        .filter(path => path.indexOf(':id') < 0 || ID.test(parameter)).map(path => path.replace(':id', parameter));
+      const plain = search === '' || search === '?';
+      // The server names its reads only for the plain address of a page; never for a legacy link.
+      let named: string[] = [];
+      if (plain && !legacy) try { named = hinted(env, route[0]); } catch { /* No hints. */ }
+      const paths = (legacy ? extras.g || [] : (extras.d || []).concat(plain ? extras.q || [] : []))
+        .filter(path => path.indexOf(':id') < 0 || ID.test(parameter)).map(path => path.replace(':id', parameter)).concat(named);
       if (paths.length) {
         const init: Record<string, unknown> = { cache: 'no-store', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, redirect: 'error' };
         if (env.AbortSignal && typeof env.AbortSignal.timeout === 'function') init.signal = env.AbortSignal.timeout(30000);

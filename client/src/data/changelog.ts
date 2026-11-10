@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.849',date:'2026-11-10',title:'第一次開啟的速度',type:'Frontend',items:[{type:'Enhancement',content:'第一次造訪時，頁面需要的程式與公開資料改為和主程式同時開始下載，不再一段接一段等待；首頁、探索、商品頁與來源線索地圖的開啟時間各少一到兩次往返。'},{type:'Enhancement',content:'一般探索不再先下載地圖程式庫，開啟探索地圖或舊版分享連結時才載入。'},{type:'Enhancement',content:'首頁四張功能介紹圖改用 WebP，下載量由約 2.4 MB 降到約 0.26 MB，畫面相同。'}]},
  {version:'2.0.848',date:'2026-11-10',title:'首頁開啟速度',type:'Fullstack',items:[{type:'Enhancement',content:'登入後首頁的願望配對改為一次讀取全部願望與各自的第一頁配對，不再逐一願望等待；配對結果與排序和原本相同。'}]},
  {version:'2.0.847',date:'2026-11-10',title:'頁面開啟速度',type:'Fullstack',items:[{type:'Enhancement',content:'探索、首頁與探索內的商品詳情改讀預先整理好的公開目錄，開啟時間由數秒降到一秒左右，顯示內容與原本相同。'},{type:'Enhancement',content:'來源線索地圖先用一次讀取畫出所有位置與件數；清單改為捲到底或按「載入更多來源」再讀下一頁。'},{type:'Enhancement',content:'切換頁面不再固定等待，開過的頁面會立即顯示。'}]},
  {version:'2.0.820',date:'2026-10-26',title:'探索地圖與參考原價說明',type:'Fullstack',items:[{type:'Enhancement',content:'探索列表與地圖共用搜尋及篩選；依分類排列已載入商品縮圖，選取後可辨認原公開概略位置，沒有有效公開位置的商品另外列出。'},{type:'Enhancement',content:'商品以約參考原價幾折呈現比較，點擊可查看參考原價及來源；沒有足夠依據時不顯示折數。'},{type:'Fix',content:'私人草稿的照片與未使用行銷圖可一併移除，保留已使用生成額度；地圖讀取失敗時明確提示並可手動重載。'}]},

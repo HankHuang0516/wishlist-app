@@ -35,3 +35,4 @@ for (const url of [...install.icons.map(icon => icon.url), install.appleTouchIco
 }
 console.log('Installation PNG dimensions, Safari Home Screen icon, theme and public precache verified.');
 console.log('Version-specific icon review and actual build bytes verified.', require('./verify-web-icons.cjs').verifyWebIcons(path.join(__dirname, '..'), dist));
+console.log('First-screen boot script and the files it names verified.', require('./verify-first-screen.cjs').verifyFirstScreen(dist));

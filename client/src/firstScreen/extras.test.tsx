@@ -12,11 +12,15 @@ import { AuthContext } from '../context/AuthContext';
 import { ProductInterestProvider } from '../components/ProductInterest';
 import Home from '../pages/Home';
 import ExploreDiscoveryPage from '../pages/ExploreDiscoveryPage';
+import ExplorePage from '../pages/ExplorePage';
 import PublicListingPage from '../pages/PublicListingPage';
 import SourceLeadMapPage from '../pages/SourceLeadMapPage';
 import { makeListing, responseOk } from '../__tests__/fixtures/marketplace';
 import { firstScreenBoot, type FirstScreenEnv, type FirstScreenLink } from './boot';
 import { buildPlan, firstScreenExtras, parseRoutes, type FirstScreenChunk } from './plan';
+
+// The legacy explore page imports the map library; a visitor who is not signed in never gets as far as the map.
+vi.mock('../components/ExploreMapWeb', () => ({ default: () => null }));
 
 // The real route table and the real extras; only the bundle is made up, one file per page.
 const routes = parseRoutes(appSource);
@@ -89,8 +93,18 @@ describe('what the boot script sends ahead is what the page sends', () => {
     expect(early.code).toEqual(['/assets/ExploreDiscoveryPage.js']);
     expect(ahead('/explore?q=mac').reads).toEqual([]);
     expect(ahead('/explore?q=mac').code).toEqual(['/assets/ExploreDiscoveryPage.js']);
-    expect(ahead('/explore?view=source-leads').reads).toEqual([]);
-    expect(ahead('/explore?view=source-leads').code).toEqual(['/assets/ExplorePage.js']);
+  });
+
+  it('on a legacy explore address, which shows a visitor who is not signed in only the public source count', () => {
+    for (const address of ['/explore?view=source-leads&source=b5abf861-a66d-4072-876b-4f0ab3172dac', '/explore?wish=3', '/explore?listing=b5abf861-a66d-4072-876b-4f0ab3172dac']) {
+      const fetcher = unanswered(); vi.stubGlobal('fetch', fetcher);
+      show(address, '/explore', <ExplorePage />);
+      const early = ahead(address);
+      expect(early.reads).toHaveLength(1);
+      expect(asked(fetcher)).toEqual(early.reads);
+      expect(early.code).toEqual(['/assets/ExplorePage.js']);
+      cleanup(); vi.unstubAllGlobals();
+    }
   });
 
   it('on a listing, whose three reads leave together instead of one after another', async () => {

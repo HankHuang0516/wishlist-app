@@ -19,7 +19,8 @@ export type FirstScreenChunk = { fileName: string; isEntry: boolean; imports: st
  */
 export const firstScreenExtras: Record<string, FirstScreenExtras> = {
   '': { d: ['/source-leads/summary'], i: [1, 2, 3, 4].map(n => `/features/feature${n}.webp`) },
-  explore: { q: ['/discovery?'] },
+  // The legacy page shows a visitor who is not signed in only a prompt to sign in and the public source count.
+  explore: { q: ['/discovery?'], g: ['/source-leads/summary'] },
   'listings/:id': { d: ['/listings/:id', '/discovery/products/listing/:id', '/product-interest?keys=listing%3A:id'] },
   'source-leads': {
     d: ['/source-leads/map', '/source-leads?presentation=1&photos=2&approximate=1'],
@@ -92,7 +93,8 @@ export function buildPlan(chunks: FirstScreenChunk[], routes: FirstScreenRoute[]
 
   for (const [path, extra] of Object.entries(extras)) {
     const route = routes.find(candidate => candidate.path === path) ?? fail(`extras name a route that does not exist: "${path}".`);
-    const reads = [...(extra.d ?? []), ...(extra.q ?? [])];
+    const reads = [...(extra.d ?? []), ...(extra.q ?? []), ...(extra.g ?? [])];
+    if (extra.g && !route.legacy) fail(`"${path}" has no legacy page to make its legacy reads.`);
     for (const read of reads) if (!READ.test(read.replace(':id', '0')) || read.startsWith('//')) fail(`"${read}" is not a path under /api.`);
     if (reads.some(read => read.includes(':id')) && (route.path.match(/:/g) ?? []).length !== 1) fail(`"${path}" needs exactly one parameter for ':id'.`);
     for (const url of extra.i ?? []) if (!/^\/[A-Za-z0-9._/-]+$/.test(url) || url.startsWith('//')) fail(`"${url}" is not a same-origin image path.`);

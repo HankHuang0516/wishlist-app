@@ -18,6 +18,8 @@ export type FirstScreenExtras = {
   d?: string[];
   /** Public reads made only when the address has no query string. */
   q?: string[];
+  /** Public reads the legacy explore page makes instead of `d` and `q`, whatever its query. */
+  g?: string[];
   /** Same-origin images on the first screen of a visitor who is not signed in. */
   i?: string[];
   /** Images from another origin whose <img> asks for referrerpolicy="origin"; the same for every visitor. */
@@ -104,8 +106,8 @@ export function firstScreenBoot(plan: FirstScreenPlan, env: FirstScreenEnv): voi
 
     // 1. The reads go first: they take the longest. They are exactly what the page itself sends for a visitor who is
     //    not signed in (no credentials, no Authorization), so the page can take the answer instead of asking again.
-    if (guest && !legacy) try {
-      const paths = (extras.d || []).concat(search === '' || search === '?' ? extras.q || [] : [])
+    if (guest) try {
+      const paths = (legacy ? extras.g || [] : (extras.d || []).concat(search === '' || search === '?' ? extras.q || [] : []))
         .filter(path => path.indexOf(':id') < 0 || ID.test(parameter)).map(path => path.replace(':id', parameter));
       if (paths.length) {
         const init: Record<string, unknown> = { cache: 'no-store', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, redirect: 'error' };

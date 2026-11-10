@@ -63,7 +63,7 @@ describe('the files each route needs', () => {
   ];
   const extras: Record<string, FirstScreenExtras> = {
     '': { d: ['/source-leads/summary'], i: ['/features/feature1.webp'] },
-    explore: { q: ['/discovery?'] },
+    explore: { q: ['/discovery?'], g: ['/source-leads/summary'] },
     'listings/:id': { d: ['/listings/:id', '/product-interest?keys=listing%3A:id'], o: ['https://tile.openstreetmap.org/7/106/53.png'] },
   };
   const plan = buildPlan(chunks, routes, extras);
@@ -89,6 +89,7 @@ describe('the files each route needs', () => {
     expect(extra('')).toEqual(extras['']);
     expect(extra('listings/:id')).toEqual(extras['listings/:id']);
     expect(extra('explore').q).toEqual(['/discovery?']);
+    expect(extra('explore').g).toEqual(['/source-leads/summary']);
     expect(extra('explore').l!.map(index => plan.a[index])).toEqual(['Legacy.js', 'map.js', 'Card.js', 'icon.js', 'map.css']);
     expect(plan.r.find(route => route[0] === 'terms')![2]).toBe(-1);
     expect(plan.r.find(route => route[0] === '*')![2]).toBe(-1);
@@ -120,6 +121,8 @@ describe('the files each route needs', () => {
     ['an insecure image address', { '': { o: ['http://tile.example/1.png'] } }, /not an https image address/],
     ['an image address with a query', { '': { o: ['https://tile.example/1.png?key=1'] } }, /not an https image address/],
     ['legacy files written by hand', { explore: { l: [1] } }, /not written by hand/],
+    ['legacy reads on a route with no legacy page', { '': { g: ['/source-leads/summary'] } }, /no legacy page/],
+    ['a legacy read on another host', { explore: { g: ['https://elsewhere.example/x'] } }, /not a path under \/api/],
   ])('refuses %s', (_name, wrong, message) => {
     expect(() => buildPlan(chunks, routes, wrong)).toThrow(message);
   });
@@ -130,7 +133,8 @@ describe('the files each route needs', () => {
     const built = buildPlan([chunk('index', { isEntry: true }), ...names.map(name => page(name))], real, firstScreenExtras);
     expect(built.r).toHaveLength(real.length);
     expect(built.r.at(-1)![0]).toBe('*');
-    expect(built.x.flatMap(item => [...(item.d ?? []), ...(item.q ?? [])]).sort()).toEqual(Object.values(firstScreenExtras).flatMap(item => [...(item.d ?? []), ...(item.q ?? [])]).sort());
+    const reads = (item: FirstScreenExtras) => [...(item.d ?? []), ...(item.q ?? []), ...(item.g ?? [])];
+    expect(built.x.flatMap(reads).sort()).toEqual(Object.values(firstScreenExtras).flatMap(reads).sort());
   });
 });
 

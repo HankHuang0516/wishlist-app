@@ -19,10 +19,12 @@ export type FirstScreenImage = { url: string; referrerPolicy?: 'no-referrer' };
  *  for a visitor who is not signed in, exactly as the page will ask for them. */
 export type FirstScreenHints = { route: string; images: FirstScreenImage[]; reads: string[] };
 
-// How much of each page the first screen of a phone (390x844) shows. Explore: two columns of four rows. The source
-// map: the selected lead's photo and the list rows the browser loads at first, seven of them (measured 11/10).
+// How much of each page the browser of a phone (390x844) loads at first. Explore: two columns of four rows. The
+// source map: the selected lead's photo and the list rows the browser loads ahead of scrolling, which was seven in
+// most first visits measured on 11/10 and 11/11 and twelve in one; a row it loads that was not named here waits for
+// the list and, unwarmed, for Flickr (609 ms in that visit).
 export const EXPLORE_PICTURES = 8;
-export const SOURCE_LIST_PICTURES = 7;
+export const SOURCE_LIST_PICTURES = 12;
 
 /** The interest read of a page of products: every card subscribes, in order, and the store reads them in one
  *  request (client/src/lib/productInterest.ts). client/src/firstScreen/extras.test.tsx holds the page to this. */
@@ -57,7 +59,7 @@ async function readLeadHints(): Promise<FirstScreenHints | null> {
     const first = (item: (typeof items)[number] | undefined) => (item as { media?: Array<{ imageUrl: string; thumbnailUrl: string }> } | undefined)?.media?.[0];
     // The selected lead is the first one: its photo is shown large. Then the list rows, each with its first photo.
     const selected = first(items[0])?.imageUrl, thumbnails = items.slice(0, SOURCE_LIST_PICTURES).map(item => first(item)?.thumbnailUrl).filter(picture);
-    void warmThumbnails(thumbnails);
+    void warmThumbnails(thumbnails, SOURCE_LIST_PICTURES);
     const images = [...(picture(selected) ? [selected] : []), ...thumbnails].map(url => ({ url, referrerPolicy: 'no-referrer' as const }));
     return images.length ? { route: 'source-leads', images, reads: [] } : null;
 }

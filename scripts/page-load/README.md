@@ -41,7 +41,7 @@
 - 啟動程式只在正式建置時放入；開發伺服器與單元測試裡沒有它，頁面照原本的方式載入。
 - 「資料回來才知道網址」的東西它幫不上，要由伺服器在送出頁面時指名：
   - 商品頁：`/listings/:id` 的 HTML 帶一個 `<link rel="preload" as="image">` 指向相簿第一張照片（`server/src/lib/listingShareMeta.ts`）。
-  - 探索與來源線索地圖（只有不帶查詢條件的網址）：`server/src/lib/firstScreenHints.ts` 在 `index.html` 的 `<!-- FIRST_SCREEN_HINTS -->` 位置放入探索前 8 張卡片的縮圖、來源地圖第一件的大圖與清單前 7 張縮圖（都是 preload 連結），以及探索第一頁的「詢問中／喜歡」人數讀取（`<script type="application/json" id="wishlist-first-screen">`，由啟動程式只在未登入時送出）。探索的第一頁用讀取模型的精簡查詢 `catalogFirstPage` 算出，和 `/api/discovery` 的第一頁完全相同（`publicCatalog.integration.ts` 比對）；來源清單與 `/api/source-leads` 共用 `publicLeadList`，因為依 id 排序幾乎不變，保留一分鐘、最多用十分鐘。提示超過 150 ms 還沒算好、或任何失敗，就送原本的頁面。
+  - 探索與來源線索地圖（只有不帶查詢條件的網址）：`server/src/lib/firstScreenHints.ts` 在 `index.html` 的 `<!-- FIRST_SCREEN_HINTS -->` 位置放入探索前 8 張卡片的縮圖、來源地圖第一件的大圖與清單前 12 張縮圖（都是 preload 連結），以及探索第一頁的「詢問中／喜歡」人數讀取（`<script type="application/json" id="wishlist-first-screen">`，由啟動程式只在未登入時送出）。探索的第一頁用讀取模型的精簡查詢 `catalogFirstPage` 算出，和 `/api/discovery` 的第一頁完全相同（`publicCatalog.integration.ts` 比對）；來源清單與 `/api/source-leads` 共用 `publicLeadList`，因為依 id 排序幾乎不變，保留一分鐘、最多用十分鐘。提示超過 150 ms 還沒算好、或任何失敗，就送原本的頁面。
   - 預先下載的位址與 referrer 設定都和頁面的 `<img>` 相同，瀏覽器才會把這次下載交給那張圖而不是抓兩次。頁面改了卡片用哪張圖、或人數讀取的格式，`extras.test.tsx` 與 `firstScreenHints.test.ts` 會失敗。
   - 提示過時（例如剛好有新商品排到第一頁）只會多抓幾張沒用到的圖，頁面照舊自己讀需要的東西。
 

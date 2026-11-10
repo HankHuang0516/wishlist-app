@@ -75,6 +75,34 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 
 先單獨讀一個極小的靜態檔，再在一支重 API（預設 `/api/discovery`）進行時重讀。重 API 超過 `--budget`，或小檔被拖慢超過 `--allow`（預設 200 ms），就是 FAIL。
 
+## 背景重新推導期間的讀寫檢查
+
+伺服器啟動約一分鐘後、之後每 24 小時，背景工作會把公開目錄的每一列重新推導一次（見 `server/docs/public-catalog.md`）。2026-11-10 正式站在這段時間探索要 10–12 秒，其他 API 也跟著停住。這支腳本在本機重現同一個情境：
+
+```bash
+(cd server && npm run build) && (cd client && npm run build)
+TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/wishlist_marketplace_test_pageload \
+node scripts/page-load/catalog-contention-check.cjs --writes 4 --rounds 6 --out result.json
+```
+
+要先用 `local-stack.cjs` 在同一個 `wishlist_marketplace_test_*` 資料庫放好合成公開來源。腳本會：
+
+1. 啟動真正的伺服器建置（和 `local-stack.cjs` 同一組固定環境變數）。
+2. 每秒 `--writes` 次，直接在資料庫改一筆合成來源的標題（任何寫入都是這樣到達讀取模型），隨後像另一位訪客一樣查「剛改的那個標題」和探索第一頁；同時每 250 ms 讀一個極小的靜態檔，看伺服器有沒有停住。
+3. 在三種時候做這件事：伺服器閒著、背景工作自己的重新推導（啟動後約 60 秒）、另外 `--rounds` 輪（腳本放入同樣的標記來啟動）。
+
+FAIL 條件：
+
+- 重新推導期間任何一次探索回應超過 `--budget`（預設 1000 ms）、沒有顯示剛做的修改，或請求失敗。
+- 伺服器回報 `Public catalogue bypassed`（讀取模型答不了，改走全掃）。
+- 背景工作的步長不對。伺服器在每一輪結束時記一行 `Public catalogue upkeep: <列數> rows in <步數> steps …, longest step <毫秒> ms`，腳本據此判定：平均每步超過 80 列（一步最多取 40 個標記，另加最多 40 筆到期的項目）、最長的一步超過 `--budget`（讀取若剛好要等那一步，就等那麼久），或這一行的數目少於重新推導的輪數（步長無從判斷）。回應時間都在預算內也一樣 FAIL：本機一步重算幾千列只要一兩秒，正式站慢十倍。
+
+結束碼 1 是 FAIL，2 是腳本本身出錯。結束時會把改過的標題還原。
+
+參數：`--writes` 每秒寫入數（1–20，預設 2）、`--rounds` 追加輪數（0–20，預設 3）、`--budget`、`--server-port`（預設 18990）、`--proxy-port`（預設 18991；這裡沒有東西監聽它，只用來讓伺服器的網址設定與 `local-stack.cjs` 相同，啟動時才不會整個重建讀取模型）、`--out` 結果 JSON。`--writes 4 --rounds 6` 全程約兩分半（5,500 筆時每一輪約 170 步、9 秒）。
+
+本機的限制同上：一輪重新推導本機只要幾秒，正式站要數十秒，所以秒數偏樂觀。判讀時先看「有沒有改走全掃」和「答案對不對」，再看秒數。
+
 ## 已登入的瀏覽器分頁（正式站登入後的頁面）
 
 腳本不會、也不能在正式站登入。登入後才看得到的頁面，要由本人先在自己的瀏覽器登入，再把量測程式放進那個分頁執行。兩種做法，安裝期間頁面送出的所有非 GET 請求都會被擋下並列在結果裡，開頁面不會造成任何寫入（例如聊天已讀、草稿儲存）：
@@ -100,5 +128,6 @@ node scripts/page-load/head-of-line-check.cjs --budget 500
 - `routes.json` 全部路由；`signedIn` 需登入、`guestOnly` 只在未登入時量、`textLoaders: false` 表示該頁內文本來就會提到「載入」。
 - `local-stack.cjs` 本機隔離環境。
 - `head-of-line-check.cjs` 互相拖累檢查。
+- `catalog-contention-check.cjs` 背景重新推導期間的讀寫檢查。
 - `in-frame-runner.js`、`in-frame-driver.js`、`build-in-frame-payload.cjs`、`in-frame-runner.check.cjs` 已登入分頁用的框架量測、整批執行、產生貼入程式、本機對照檢查。
 - `in-app-probe.js` 已登入分頁用的切頁探針。

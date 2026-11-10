@@ -25,11 +25,16 @@ import { candidateProduct, discoveryHash, DiscoveryError, leadProduct, listingPr
 //   transaction as the change, whoever makes it.
 // - catalogSync() rebuilds the marked rows with the very functions the full scan
 //   uses (listingProduct, leadProduct, candidateProduct). Readers call it first,
-//   so a write is visible to the next read.
+//   so a write is visible to the next read. A marked row that another step is
+//   rebuilding at that moment is waited for, not rebuilt twice.
 // - A row whose public state depends on the clock carries refreshAt, the next
 //   instant at which it has to be rebuilt.
+// - The background worker re-derives every entry now and then. It works in short
+//   steps and never holds a write's mark together with background marks, so a
+//   reader waits for one short step at most.
 // - Until the first complete build has finished, and whenever
-//   PUBLIC_CATALOG_DISABLED=1, callers use the full scan instead.
+//   PUBLIC_CATALOG_DISABLED=1, callers use the full scan instead. So does a
+//   reader whose wait ran out (see bypass()).
 
 // Bump when anything that shapes a stored product changes (classification rules,
 // price parsing, product fields). Every entry is then rebuilt in the background.
@@ -153,15 +158,33 @@ async function rebuild(tx: Tx, refs: Ref[], now: Date): Promise<void> {
   if (remove.length || write.length) await tx.$executeRaw`UPDATE "PublicCatalogState" SET "version" = "version" + 1, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = 1`;
 }
 
+// Remove up to `limit` marks and return the rows they name. One call takes marks
+// of one class only: that of the first mark nobody else is holding, writes before
+// background marks. A write's mark is therefore never held for as long as a batch
+// of background marks takes, which readers would wait for.
+//
+// The marks are chosen in a materialised CTE, so they are chosen exactly once.
+// As DELETE ... WHERE id IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED) the choice
+// can be the inner side of a nested loop, the plan the database keeps for a table
+// that is usually empty. It is then made again for every mark, each time skipping
+// the ones this statement has already removed, and the statement takes every mark
+// of the class instead of `limit`: one step becomes the whole backlog.
+export async function takeMarks(tx: Tx, maxPriority: number, limit: number): Promise<Ref[]> {
+  return tx.$queryRaw<Ref[]>`
+    WITH "taken" AS MATERIALIZED (
+      SELECT "id" FROM "PublicCatalogDirty"
+      WHERE "priority" = (SELECT "priority" FROM "PublicCatalogDirty" WHERE "priority" <= ${maxPriority} ORDER BY "priority", "id" LIMIT 1 FOR UPDATE SKIP LOCKED)
+      ORDER BY "id" LIMIT ${limit} FOR UPDATE SKIP LOCKED)
+    DELETE FROM "PublicCatalogDirty" d USING "taken" WHERE d."id" = "taken"."id"
+    RETURNING d."kind", d."refId"`;
+}
+
 // Take up to `limit` marked rows (and rows whose clock deadline has passed) and
 // rebuild them. The marks are removed in the same transaction as the rebuild.
 async function drain(maxPriority: number, limit: number, clock: () => Date = () => new Date()): Promise<number> {
   return prisma.$transaction(async tx => {
     const now = clock();
-    const marks = await tx.$queryRaw<Ref[]>`
-      DELETE FROM "PublicCatalogDirty" WHERE "id" IN (
-        SELECT "id" FROM "PublicCatalogDirty" WHERE "priority" <= ${maxPriority} ORDER BY "priority", "id" LIMIT ${limit} FOR UPDATE SKIP LOCKED)
-      RETURNING "kind", "refId"`;
+    const marks = await takeMarks(tx, maxPriority, limit);
     const due = await tx.$queryRaw<Ref[]>`SELECT "kind", "refId" FROM "PublicCatalogEntry" WHERE "refreshAt" <= ${utc(now)} LIMIT ${limit}`;
     if (marks.length || due.length) await rebuild(tx, [...marks, ...due], now);
     return marks.length + due.length;
@@ -171,25 +194,71 @@ async function drain(maxPriority: number, limit: number, clock: () => Date = () 
 const WRITE = 0, BACKGROUND = 1;
 // More pending changes than this are not rebuilt inside a request.
 const SYNC_LIMIT = 2000;
-let syncing: Promise<void> | null = null;
+// A pending change that another step has taken is waited for: one look every
+// SYNC_WAIT_MS, SYNC_ROUNDS looks at most (about four seconds). Counted in looks,
+// not on the clock, so a stalled process cannot make every waiting reader give up
+// at once.
+const SYNC_WAIT_MS = 20, SYNC_ROUNDS = 150;
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+type Sync = 'ok' | 'backlog' | 'busy';
+// Rebuild what writes have marked and what the clock has made due. Says how many rows that was.
+async function absorb(clock?: () => Date): Promise<number> {
+  let rows = 0;
+  for (let step = 0; step < 20; step++) {
+    const taken = await drain(WRITE, 500, clock);
+    if (!taken) break;
+    rows += taken;
+  }
+  return rows;
+}
+let syncing: Promise<number> | null = null;
 // Bring the read model up to date with every committed write and say whether it
 // now is. Cheap when there is nothing to do: one indexed probe. When too much is
 // pending (a mass update), the answer is no: the caller uses the full scan, which
 // is always right, and the background worker catches up.
-export async function catalogSync(now = new Date()): Promise<boolean> {
-  for (let round = 0; round < 4; round++) {
+//
+// A mark is removed in the transaction that rebuilds its row, and stays visible to
+// the probe until that transaction commits. So "no write mark and nothing due"
+// means every write committed before the probe is in the entries, whoever rebuilt it.
+async function sync(now: Date): Promise<Sync> {
+  // A caller that asks about another moment (tests of deadlines) rebuilds as of that moment.
+  const moment = now, shifted = Math.abs(now.getTime() - Date.now()) > 1000;
+  for (let round = 0; round < SYNC_ROUNDS; round++) {
     const [probe] = await prisma.$queryRaw<Array<{ marks: number; due: boolean }>>`
       SELECT (SELECT count(*)::int FROM (SELECT 1 FROM "PublicCatalogDirty" WHERE "priority" = ${WRITE} LIMIT ${SYNC_LIMIT + 1}) m) AS "marks",
         EXISTS (SELECT 1 FROM "PublicCatalogEntry" WHERE "refreshAt" <= ${utc(now)}) AS "due"`;
-    if (!probe || (!probe.marks && !probe.due)) return true;
-    if (probe.marks > SYNC_LIMIT) return false;
-    // A caller that asks about another moment (tests of deadlines) rebuilds as of that moment.
-    const moment = now, shifted = Math.abs(now.getTime() - Date.now()) > 1000;
-    if (shifted) { for (let batch = 0; batch < 20 && await drain(WRITE, 500, () => moment) > 0; batch++); continue; }
-    syncing ??= (async () => { try { for (let batch = 0; batch < 20 && await drain(WRITE, 500) > 0; batch++); } finally { syncing = null; } })();
-    await syncing;
-    now = new Date();
+    if (!probe || (!probe.marks && !probe.due)) return 'ok';
+    if (probe.marks > SYNC_LIMIT) return 'backlog';
+    let rows: number;
+    if (shifted) rows = await absorb(() => moment);
+    else {
+      // Requests of this process share one absorption.
+      syncing ??= absorb().finally(() => { syncing = null; });
+      rows = await syncing;
+      now = new Date();
+    }
+    // Nothing could be taken: another step holds those marks and removes them when it commits.
+    if (!rows) await sleep(SYNC_WAIT_MS);
   }
+  return 'busy';
+}
+export async function catalogSync(now = new Date()): Promise<boolean> {
+  return await sync(now) === 'ok';
+}
+
+// A read the read model could not answer is answered by the full scan: right, but
+// slow. Each cause is reported when it starts and ever less often while it lasts:
+// at its 1st, 2nd, 4th, 8th… read. A minute without one starts the count again.
+// Counts only.
+type Bypass = 'disabled' | 'building' | 'backlog' | 'busy' | 'error';
+const BYPASS_EPISODE_MS = 60_000;
+const bypassed = new Map<Bypass, { reads: number; last: number }>();
+function bypass(reason: Bypass): false {
+  const now = Date.now(), entry = bypassed.get(reason) ?? { reads: 0, last: 0 };
+  bypassed.set(reason, entry);
+  if (now - entry.last >= BYPASS_EPISODE_MS) entry.reads = 0;
+  entry.last = now;
+  if ((++entry.reads & (entry.reads - 1)) === 0) console.warn('Public catalogue bypassed, full scan used: reason ' + reason + ', reads so far ' + entry.reads);
   return false;
 }
 
@@ -198,9 +267,9 @@ async function markAll(tx: Tx): Promise<void> {
   await tx.$executeRaw`
     INSERT INTO "PublicCatalogDirty" ("kind", "refId", "priority")
     SELECT 'listing', "id", ${BACKGROUND} FROM "Listing" WHERE "status" IN ('ACTIVE', 'RESERVED')
-    UNION ALL SELECT 'source', "id", ${BACKGROUND} FROM "ExternalSourceLead" WHERE "status" = 'PUBLISHED'
-    UNION ALL SELECT 'external', "id", ${BACKGROUND} FROM "ExternalListingCandidate" WHERE "status" = 'APPROVED'
-    UNION ALL SELECT "kind", "refId", ${BACKGROUND} FROM "PublicCatalogEntry"`;
+    UNION SELECT 'source', "id", ${BACKGROUND} FROM "ExternalSourceLead" WHERE "status" = 'PUBLISHED'
+    UNION SELECT 'external', "id", ${BACKGROUND} FROM "ExternalListingCandidate" WHERE "status" = 'APPROVED'
+    UNION SELECT "kind", "refId", ${BACKGROUND} FROM "PublicCatalogEntry"`;
 }
 let ready = false, readyCheckedAt = 0;
 async function readState(): Promise<{ fingerprint: string; readyAt: Date | null } | null> {
@@ -219,9 +288,12 @@ async function catalogBuilt(): Promise<boolean> {
 // True when the read model can answer for this moment: it is switched on, built,
 // and up to date with every committed write. Otherwise the caller uses the full scan.
 export async function catalogReady(now = new Date()): Promise<boolean> {
-  if (disabled()) return false;
-  try { return await catalogBuilt() && await catalogSync(now); }
-  catch { return false; }
+  if (disabled()) return bypass('disabled');
+  try {
+    if (!(await catalogBuilt())) return bypass('building');
+    const state = await sync(now);
+    return state === 'ok' || bypass(state);
+  } catch { return bypass('error'); }
 }
 // Start (or restart, after a rule or address change) a complete build.
 async function prepare(): Promise<void> {
@@ -259,8 +331,11 @@ export async function reconcileCatalog(): Promise<void> {
 }
 
 const RECONCILE_EVERY_MS = 24 * 3_600_000;
+// A run of upkeep longer than this many rows is reported when it ends.
+const UPKEEP_REPORT_ROWS = 200;
 export function startPublicCatalogWorker() {
   let stopped = false, running = false, prepared = false, size = 40, reconciledAt = Date.now() - RECONCILE_EVERY_MS + 60_000, timer: NodeJS.Timeout | undefined;
+  let run = { rows: 0, steps: 0, longest: 0, since: 0, until: 0 };
   const schedule = (ms: number) => { if (!stopped) { timer = setTimeout(() => void cycle(), ms); timer.unref(); } };
   async function cycle() {
     if (running || stopped) return;
@@ -268,11 +343,20 @@ export function startPublicCatalogWorker() {
     let worked = 0;
     try {
       if (!prepared) { await prepare(); prepared = true; }
-      // Small steps, so a first build or a reconciliation never holds the server up;
-      // larger ones while a backlog lasts, so a mass update is absorbed quickly.
+      const began = Date.now();
       worked = await drain(BACKGROUND, size);
-      size = worked >= size ? Math.min(size * 2, 400) : 40;
-      if (!worked) {
+      // Short steps: a reader that needs a row of the step in progress waits for
+      // that step. Larger ones only while the first build lasts, when nobody reads
+      // the entries yet.
+      size = worked >= size && !(await catalogBuilt()) ? Math.min(size * 2, 400) : 40;
+      if (worked) {
+        const ended = Date.now();
+        if (!run.steps) run.since = began;
+        run.rows += worked; run.steps++; run.longest = Math.max(run.longest, ended - began); run.until = ended;
+      } else {
+        // Counts and durations only.
+        if (run.rows >= UPKEEP_REPORT_ROWS) console.log('Public catalogue upkeep: ' + run.rows + ' rows in ' + run.steps + ' steps over ' + ((run.until - run.since) / 1000).toFixed(1) + ' s, longest step ' + run.longest + ' ms');
+        run = { rows: 0, steps: 0, longest: 0, since: 0, until: 0 };
         if (!(await catalogBuilt())) await finish();
         else if (Date.now() - reconciledAt >= RECONCILE_EVERY_MS) { reconciledAt = Date.now(); await reconcileCatalog(); }
       }

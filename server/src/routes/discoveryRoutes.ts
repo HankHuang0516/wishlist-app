@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken, optionalAuthenticateToken, AuthRequest } from '../middleware/auth';
-import { loadDiscovery, discoveryPage, discoveryQuery, DiscoveryError, recommendDiscovery, filterDiscovery } from '../lib/discovery';
+import { loadDiscovery, discoveryPage, discoveryQuery, DiscoveryError, recommendDiscovery, filterDiscovery, wishMatchGroups } from '../lib/discovery';
 import {attachCp,evaluateCp,cpTargets} from '../lib/discoveryCp';
 import {retailReferences} from '../lib/retailPrices';
 import {catalogDiscoveryPage,catalogProduct,catalogReady} from '../lib/publicCatalog';
@@ -48,6 +48,13 @@ export function createDiscoveryRoutes() {
     }catch(e){return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'DISCOVERY_UNAVAILABLE'});}
   };
   router.get('/for-you',authenticateToken,read);
+  // Every open wish of the account with its best matches, for the home page: no wish has to be chosen first.
+  router.get('/wish-matches',authenticateToken,async(req:AuthRequest,res)=>{
+    try{
+      if(Object.keys(req.query).length)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+      return res.json(await wishMatchGroups(req.user!.id));
+    }catch(e){return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'DISCOVERY_UNAVAILABLE'});}
+  });
   router.get('/cp',read);
   // Recheck current public eligibility and the exact model binding, without running AI.
   router.get('/products/:kind/:id',async(req,res)=>{

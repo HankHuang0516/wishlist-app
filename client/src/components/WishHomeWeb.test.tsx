@@ -2,154 +2,137 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WishHomeWeb from './WishHomeWeb';
-import { makeWish, makeMatch, makeMatchPage, makeHomePage, makeListing, responseOk, uuid } from '../__tests__/fixtures/marketplace';
-vi.mock('./ExploreMapWeb', () => ({ default: ({ items, onSelect, previewNotice }: { items: { id: string }[]; previewNotice: string; onSelect: (value: { kind: 'seller'; id: string }) => void }) => <div data-testid="home-map">{items.map(item => <button key={item.id} onClick={() => onSelect({ kind: 'seller', id: item.id })}>地圖商品 {item.id}</button>)}<p>{previewNotice}</p></div> }));
+import { responseOk } from '../__tests__/fixtures/marketplace';
+
 beforeEach(() => localStorage.setItem('user-locale', 'zh-TW'));
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-const view = (token = 'fixture', userId = 19) => <MemoryRouter><WishHomeWeb key={token} token={token} userId={userId} /></MemoryRouter>;
-describe('APP-equivalent homepage match UX', () => {
-  it('shows one best match per wish, expands alternatives, and puts the wish selector below matches', async () => {
-    const first = makeMatch(), best = makeMatch(1, makeListing('最匹配的三國演義'), 98);
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [first, best] }]))));
+
+let serial = 0;
+const product = (title: string, wishItemId: number, { price = 1200, budget = false, kind = 'source' as 'source' | 'listing', thumbnail = true } = {}) => {
+  const id = 'ab427730-60af-40c4-b568-' + String(++serial).padStart(12, '0'), picture = `https://wishlist.test/api/source-leads/${id}/media/${id}/thumbnail`;
+  return { kind, id, key: kind + ':' + id, title, description: '合成商品說明', mainId: 'electronics', subId: 'monitors', price, priceText: String(price), currency: 'TWD', priceUnitVerified: true,
+    photos: thumbnail ? [{ id: 'p' + serial, url: picture.replace(/thumbnail$/, 'image'), thumbnailUrl: picture }] : [], thumbnailUrl: thumbnail ? picture : null, county: '臺北市', district: null,
+    condition: 'USED', stockStatus: 'UNKNOWN', canonicalUrl: 'https://example.invalid/' + id, detailPath: '/listings/' + id, sourceLabel: '公開來源', date: '2026-11-10T00:00:00Z',
+    dateBasis: 'SOURCE_POST_RANGE', dateEarliest: null, match: { wishItemId, reasons: budget ? ['NAME', 'BUDGET'] : ['NAME'], score: budget ? 100 : 80 } };
+};
+const group = (id: number, name: string, items: ReturnType<typeof product>[], total = items.length, maxPrice: number | null = null) =>
+  ({ wish: { id, name, maxPrice, priceCurrency: 'TWD', wishlist: { id: 2, title: '生日願望' } }, total, items });
+const answer = (groups: ReturnType<typeof group>[]) => responseOk({ complete: true, generatedAt: '2026-11-11T00:00:00Z', groups });
+function Location() { return <output data-testid="location">{useLocation().pathname + useLocation().search}</output>; }
+const view = (token = 'fixture') => <MemoryRouter><WishHomeWeb key={token} token={token} userId={19} /><Location /></MemoryRouter>;
+
+describe('the signed-in home page matches every wish as it opens', () => {
+  it('reads every wish with its matches at once and shows the best of each, with nothing to choose first', async () => {
+    const monitor = [product('BenQ 合成電腦螢幕', 1, { budget: true, price: 900 }), product('另一台合成螢幕', 1), product('第三台合成螢幕', 1)];
+    const fetcher = vi.fn(async () => answer([group(1, '電腦螢幕', monitor, 3, 1000), group(2, '無線耳機', [product('Sony 合成耳機', 2)]), group(3, '小提琴', [], 0)]));
+    vi.stubGlobal('fetch', fetcher);
     render(view());
-    const bestLinks = await screen.findAllByRole('link', { name: /最匹配的三國演義/ });
-    expect(bestLinks).toHaveLength(2);
-    for (const link of bestLinks) expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${best.listing.id}`);
-    expect(screen.getByRole('button', { name: /共有2件吻合商品/ }).closest('a')).toBeNull();
-    expect(screen.queryByRole('link', { name: new RegExp(first.listing.title) })).not.toBeInTheDocument();
-    const expand = screen.getByRole('button', { name: /共有2件吻合商品/ });
-    expect(expand).toHaveAttribute('aria-expanded', 'false'); fireEvent.click(expand);
-    expect(screen.getByRole('link', { name: new RegExp(first.listing.title) })).toBeInTheDocument();
-    const chooser = screen.getByText('選願望交叉比對').closest('details')!;
-    expect(chooser).not.toHaveAttribute('open'); chooser.setAttribute('open', '');
-    expect(within(screen.getByRole('region')).getAllByRole('heading').map(el => el.textContent)).toEqual(['歡迎回來。', '願望吻合的商品', '願望：三國演義漫畫', '快捷功能 選用']);
-    expect(chooser.querySelector('summary')).toHaveTextContent('今天想找什麼？');
-    expect(screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ })).toHaveAttribute('href', '/explore?wish=1');
+    await screen.findByRole('button', { name: /BenQ 合成電腦螢幕/ });
+    // One read, signed in, for every wish.
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]).toEqual([expect.stringMatching(/\/api\/discovery\/wish-matches$/), expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer fixture' }) })]);
+    expect(screen.getByRole('heading', { name: /電腦螢幕.*預算 NT\$ 1,000/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '無線耳機' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /BenQ 合成電腦螢幕.*NT\$ 900.*公開來源 · 臺北市 · 符合願望與預算/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sony 合成耳機.*符合願望名稱/ })).toBeInTheDocument();
+    // Only the best of each wish until it is expanded.
+    expect(screen.queryByRole('button', { name: /另一台合成螢幕/ })).not.toBeInTheDocument();
+    const all = screen.getByRole('button', { name: '查看全部 3 件' });
+    expect(all).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(all);
+    expect(screen.getByRole('button', { name: /另一台合成螢幕/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收合結果' })).toHaveAttribute('aria-expanded', 'true');
+    // A wish nothing matches is named, so it is clear that every wish was checked.
+    expect(screen.getByText('這些願望目前沒有吻合的商品：小提琴')).toBeInTheDocument();
+    // No chooser, no comparing one wish at a time, no browse-everything button.
+    expect(screen.queryByText(/今天想找什麼/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/選願望交叉比對|在地圖交叉比對|不套用願望/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /瀏覽/ })).not.toBeInTheDocument();
   });
-  it('reads a wish beyond its first page only when the home read says there is more, and ranks across both', async () => {
-    const first = makeMatch(1, makeListing('第一頁的三國演義'), 70), later = makeMatch(1, makeListing('第二頁更吻合的三國演義'), 96), cursor = uuid();
-    const fetch = vi.fn(async (url: string) => responseOk(url.includes('home-matches')
-      ? makeHomePage([{ wish: makeWish(1), items: [first], nextCursor: cursor }, { wish: makeWish(2), items: [makeMatch(2)] }])
-      : makeMatchPage([later])));
-    vi.stubGlobal('fetch', fetch); render(view());
-    const links = await screen.findAllByRole('link', { name: /第二頁更吻合的三國演義/ });
-    expect(links).toHaveLength(2);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[1][0]).toContain('/listings/matches?wishItemId=1&');
-    expect(fetch.mock.calls[1][0]).toContain('cursor=' + cursor);
-    expect(screen.getByRole('button', { name: /共有2件吻合商品/ })).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(2);
+
+  it('opens a matched product\'s details right on the home page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('/wish-matches') ? answer([group(1, '電腦螢幕', [product('BenQ 合成電腦螢幕', 1)])]) : new Promise(() => undefined)));
+    render(view());
+    fireEvent.click(await screen.findByRole('button', { name: /BenQ 合成電腦螢幕/ }));
+    const dialog = screen.getByRole('dialog', { name: '商品詳情' });
+    expect(within(dialog).getByText('合成商品說明')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: '請 Wishlist AI 代問' })).toHaveAttribute('href', expect.stringMatching(/^\/chat\?source=/));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+    fireEvent.click(within(dialog).getByRole('button', { name: '關閉' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the first twelve of a long list and points to the wish picks in Explore for the rest', async () => {
+    const items = Array.from({ length: 12 }, (_, n) => product('合成耳機 ' + n, 2));
+    vi.stubGlobal('fetch', vi.fn(async () => answer([group(2, '無線耳機', items, 40)])));
+    render(view());
+    fireEvent.click(await screen.findByRole('button', { name: '查看全部 40 件' }));
+    expect(screen.getAllByRole('button', { name: /合成耳機 \d+/ })).toHaveLength(12);
+    expect(screen.getByRole('link', { name: '在探索看全部願望推薦' })).toHaveAttribute('href', '/explore?feed=for-you');
+  });
+
+  it('says a failure is a failure, not an empty result, and matches again on request', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) }).mockResolvedValue(answer([group(1, '電腦螢幕', [product('BenQ 合成電腦螢幕', 1)])]));
+    vi.stubGlobal('fetch', fetcher);
+    render(view());
+    expect(await screen.findByRole('alert')).toHaveTextContent('目前無法比對願望');
+    expect(screen.queryByText(/沒有吻合的商品/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新比對' }));
+    await screen.findByRole('button', { name: /BenQ 合成電腦螢幕/ });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
-  it('passes the single match ID for fresh lookup and automatic map framing', async () => {
-    const match = makeMatch(); vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [match] }]))));
-    render(view()); await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
-    screen.getByText('選願望交叉比對').closest('details')!.setAttribute('open', '');
-    const link = screen.getByRole('link', { name: /在地圖交叉比對三國演義漫畫/ });
-    const productLinks = await screen.findAllByRole('link', { name: new RegExp(match.listing.title) });
-    expect(productLinks).toHaveLength(2);
-    for (const productLink of productLinks) expect(productLink).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
-    expect(link).toHaveAttribute('href', `/explore?wish=1&listing=${match.listing.id}`);
+
+  it('refuses an answer that does not describe the account\'s wishes, instead of showing it', async () => {
+    const wrong = group(1, '電腦螢幕', [product('BenQ 合成電腦螢幕', 7)]);
+    vi.stubGlobal('fetch', vi.fn(async () => answer([wrong])));
+    render(view());
+    expect(await screen.findByRole('alert')).toHaveTextContent('目前無法比對願望');
+    expect(screen.queryByRole('button', { name: /BenQ/ })).not.toBeInTheDocument();
   });
-  it('shows incomplete failure instead of no matching items, and offers a retry', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url.includes('home-matches')) return responseOk(makeHomePage([{ wish: makeWish(), items: [makeMatch()], nextCursor: uuid() }])); throw new Error('offline'); }));
-    render(view()); expect(await screen.findByRole('alert')).toHaveTextContent('這不代表沒有商品');
-    expect(screen.queryByText(/目前沒有其他賣家/)).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: /重新整理願望與配對/ })).toBeEnabled();
-    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
+
+  it('invites a first wish when there are none, and says nothing about matches', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => answer([])));
+    render(view());
+    expect(await screen.findByRole('link', { name: '前往願望清單' })).toHaveAttribute('href', '/wishes');
+    expect(screen.queryByText(/沒有吻合的商品/)).not.toBeInTheDocument();
   });
-  it('retains a truthful empty map after a complete read without inventing items or issuing a search', async () => {
-    const fetch = vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish() }])));
-    vi.stubGlobal('fetch', fetch); render(view());
-    const map = await screen.findByTestId('home-map');
-    expect(map.parentElement).toHaveAttribute('aria-label', '沒有吻合商品標記的地圖概覽');
-    expect(map).toHaveTextContent('沒有吻合商品標記');
-    expect(within(map).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByRole('article')).not.toBeInTheDocument();
-    expect(screen.getByText(/目前沒有其他賣家的吻合商品/)).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '不套用願望，瀏覽商品地圖' }).every(link => link.getAttribute('href') === '/explore')).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][0]).toContain('/listings/home-matches?limit=100');
+
+  it('shows a product without a photo, and matches again when the page comes back into view', async () => {
+    const fetcher = vi.fn(async () => answer([group(1, '電腦螢幕', [product('沒有照片的合成螢幕', 1, { thumbnail: false })])]));
+    vi.stubGlobal('fetch', fetcher);
+    render(view());
+    await screen.findByRole('button', { name: /沒有照片的合成螢幕/ });
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
   });
-  it('does not label pending or failed wish reads as empty, and explicitly recovers to the empty overview', async () => {
-    let resolve!: (value: unknown) => void;
-    const fetch = vi.fn().mockImplementationOnce(() => new Promise(done => { resolve = done; }))
-      .mockResolvedValueOnce(responseOk(makeHomePage()));
-    vi.stubGlobal('fetch', fetch); render(view());
-    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重新整理願望與配對' })).toBeDisabled();
-    await act(async () => resolve({ ok: false, status: 503, json: async () => ({ error: 'unavailable' }) }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入願望或配對');
-    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
-    expect(screen.queryByText('先留下你的第一個願望')).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: '重新整理願望與配對' }));
-    await screen.findByTestId('home-map');
-    expect(screen.getByText('先留下你的第一個願望')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(2);
+
+  it('ignores a late answer for an account whose session was replaced', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(answer([group(5, '新帳號的願望', [product('新帳號的合成商品', 5)])])));
+    const { rerender } = render(view('first'));
+    rerender(view('second'));
+    await screen.findByRole('button', { name: /新帳號的合成商品/ });
+    await act(async () => { finish(answer([group(1, '舊帳號的私人願望', [product('舊帳號的合成商品', 1)])])); });
+    expect(screen.queryByText(/舊帳號/)).not.toBeInTheDocument();
   });
-  it('only shows the empty overview after an explicit successful retry of an incomplete match read', async () => {
-    let matchReads = 0;
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.includes('home-matches')) return responseOk(makeHomePage([{ wish: makeWish(), items: [], nextCursor: uuid() }]));
-      return ++matchReads === 1 ? { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) } : responseOk(makeMatchPage([]));
-    }));
-    render(view()); await screen.findByRole('alert');
-    expect(screen.queryByTestId('home-map')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '重新整理願望與配對' }));
-    await screen.findByTestId('home-map');
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    expect(screen.getByText(/目前沒有其他賣家的吻合商品/)).toBeInTheDocument();
-    expect(matchReads).toBe(2);
-  });
-  it('describes a confirmed empty overview in English while keeping the original search destination', async () => {
-    localStorage.setItem('user-locale', 'en-US');
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish() }]))));
-    render(view()); const map = await screen.findByTestId('home-map');
-    expect(map.parentElement).toHaveAttribute('aria-label', 'Map overview without matching item markers');
-    expect(map).toHaveTextContent('there are no matching item markers');
-    expect(screen.getByText(/No matching items from other sellers/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'View on map' })).toBeEnabled();
-    expect(screen.getAllByRole('link', { name: 'Browse the item map without a wish filter' }).every(link => link.getAttribute('href') === '/explore')).toBe(true);
-  });
-  it('ignores late private wishes when the account session is replaced', async () => {
-    let resolve!: (value: unknown) => void;
-    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => (init.headers as Record<string, string>).Authorization === 'Bearer fixture'
-      ? new Promise(done => { resolve = done; }) : Promise.resolve(responseOk(makeHomePage()))));
-    const mounted = render(view()); mounted.rerender(view('second', 20));
-    await screen.findByText('先留下你的第一個願望');
-    await act(async () => resolve(responseOk(makeHomePage([{ wish: makeWish() }]))));
-    expect(screen.queryByRole('radio', { name: /三國演義/ })).not.toBeInTheDocument();
-  });
-  it('keeps photo shortcuts optional and sends a Unicode search to the real explore route', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage())));
-    const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
-    render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
-    await screen.findByText('先留下你的第一個願望');
+
+  it('keeps the shortcuts and sends a search to Explore', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => answer([])));
+    render(view());
     expect(screen.getByRole('link', { name: '拍照新增願望' })).toHaveAttribute('href', '/wishes');
-    expect(screen.getByRole('link', { name: '連拍刊登' })).toHaveAttribute('href', '/sell');
-    fireEvent.change(screen.getByLabelText('搜尋商品'), { target: { value: ' 三國演義 & 漫畫 ' } });
-    fireEvent.click(screen.getByRole('button', { name: '在地圖查看' }));
-    expect(screen.getByTestId('path')).toHaveTextContent('/explore?q=' + encodeURIComponent('三國演義 & 漫畫'));
+    fireEvent.change(screen.getByLabelText('搜尋商品'), { target: { value: '三國 演義' } });
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/explore?q=' + encodeURIComponent('三國 演義'));
   });
-  it('deduplicates map photos shared by multiple wishes and preserves listing navigation', async () => {
-    const item = makeListing();
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(1), items: [makeMatch(1, item)] }, { wish: makeWish(2), items: [makeMatch(2, item)] }]))));
-    const Path = () => <output data-testid="path">{useLocation().pathname + useLocation().search}</output>;
-    render(<MemoryRouter><WishHomeWeb token="fixture" userId={19} /><Path /></MemoryRouter>);
-    const map = await screen.findByTestId('home-map'); expect(within(map).getAllByRole('button')).toHaveLength(1);
-    fireEvent.click(within(map).getByRole('button'));
-    expect(screen.getByTestId('path')).toHaveTextContent('/explore?listing=' + item.id);
-  });
-  it('provides the same match expansion, chooser and destination in English', async () => {
-    localStorage.setItem('user-locale', 'en-US'); const first = makeMatch(), second = makeMatch(1, makeListing('Other synthetic item'), 91);
-    vi.stubGlobal('fetch', vi.fn(async () => responseOk(makeHomePage([{ wish: makeWish(), items: [first, second] }]))));
-    render(view()); const expand = await screen.findByRole('button', { name: /has 2 matching items, View all/ });
-    fireEvent.click(expand); expect(screen.getByRole('button', { name: /has 2 matching items, Collapse results/ })).toHaveAttribute('aria-expanded', 'true');
-    const links = screen.getAllByRole('link', { name: /Other synthetic item/ }); expect(links).toHaveLength(2);
-    for (const link of links) expect(link).toHaveAttribute('href', '/explore?wish=1&listing=' + second.listing.id);
-    screen.getByText('Choose a wish to compare').closest('details')!.setAttribute('open', '');
-    expect(screen.getByRole('radiogroup', { name: 'Choose the wish to compare' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Batch photo listing' })).toHaveAttribute('href', '/sell');
+
+  it('says the same in English', async () => {
+    localStorage.setItem('user-locale', 'en-US');
+    vi.stubGlobal('fetch', vi.fn(async () => answer([group(1, 'Monitor', [product('BenQ monitor', 1, { budget: true }), product('Other monitor', 1)], 2, 1500), group(2, 'Violin', [], 0)])));
+    render(view());
+    expect(await screen.findByRole('button', { name: /BenQ monitor.*Public reference.*Matches the wish and its budget/ })).toBeInTheDocument();
+    expect(screen.getByText('Every wish is matched against all items for you.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View all 2' })).toBeInTheDocument();
+    expect(screen.getByText('No matching items yet for: Violin')).toBeInTheDocument();
   });
 });

@@ -146,6 +146,10 @@ async function main() {
   stage = 'install';
   await adb(['install', apk], 90000);
   installed = true;
+  // A warm shared emulator may sit on its lock screen; the app then resumes behind it and nothing is visible.
+  await adb(['shell', 'input', 'keyevent', 'KEYCODE_WAKEUP']);
+  await adb(['shell', 'wm', 'dismiss-keyguard']);
+  await sleep(600);
   await adb(['shell', 'am', 'start', '-n', packageName + '/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity']);
   stage = 'notice';
   const noticeEnd = Date.now() + 45000;
@@ -157,6 +161,9 @@ async function main() {
     const consent = nodeWith(screen, '我了解，繼續使用');
     if (consent) { await tap(consent); continue; }
     if (nodeWith(screen, '手機號碼或 Email')) break;
+    // Signed out, the app opens on guest browsing; its sign-in control leads to the login form.
+    const guestSignIn = nodeWith(screen, '登入或建立帳號');
+    if (guestSignIn) { await tap(guestSignIn); report.guestEntrySignInTapped = true; await sleep(850); continue; }
     if (screen.includes('使用條款與社群安全')) termsObserved = true;
     // This test has already verified a fresh, isolated visual-QA identity and
     // loopback-only API. Exercise the actual notice for its synthetic adult

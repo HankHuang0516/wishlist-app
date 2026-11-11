@@ -99,7 +99,7 @@ async function tapVisibleLoginButton() {
   throw new Error('Visible login button unavailable');
 }
 async function screenshot(name) {
-  if (!['pre-login-diagnostic', 'home-collapsed', 'home-expanded', 'home-scrolled'].includes(name)) throw new Error('Unsafe screenshot name');
+  if (!['pre-login-diagnostic', 'home-collapsed', 'home-expanded', 'home-scrolled', 'product-detail'].includes(name)) throw new Error('Unsafe screenshot name');
   const target = path.join(evidence, name + '.png');
   const bytes = await adbBytes(['exec-out', 'screencap', '-p']);
   const sharp = require('../../server/node_modules/sharp');
@@ -146,6 +146,10 @@ async function main() {
   stage = 'install';
   await adb(['install', apk], 90000);
   installed = true;
+  // A warm shared emulator may sit on its lock screen; the app then resumes behind it and nothing is visible.
+  await adb(['shell', 'input', 'keyevent', 'KEYCODE_WAKEUP']);
+  await adb(['shell', 'wm', 'dismiss-keyguard']);
+  await sleep(600);
   await adb(['shell', 'am', 'start', '-n', packageName + '/com.hank_huang0516.snack425e646aa6a74ad8a964aadeb4741fc1.MainActivity']);
   stage = 'notice';
   const noticeEnd = Date.now() + 45000;
@@ -157,6 +161,9 @@ async function main() {
     const consent = nodeWith(screen, '我了解，繼續使用');
     if (consent) { await tap(consent); continue; }
     if (nodeWith(screen, '手機號碼或 Email')) break;
+    // Signed out, the app opens on guest browsing; its sign-in control leads to the login form.
+    const guestSignIn = nodeWith(screen, '登入或建立帳號');
+    if (guestSignIn) { await tap(guestSignIn); report.guestEntrySignInTapped = true; await sleep(850); continue; }
     if (screen.includes('使用條款與社群安全')) termsObserved = true;
     // This test has already verified a fresh, isolated visual-QA identity and
     // loopback-only API. Exercise the actual notice for its synthetic adult
@@ -222,13 +229,17 @@ async function main() {
     report.keyboardBeforeSubmit = false;
   }
   await tapVisibleLoginButton();
+  // The home matches every open wish as it opens (GET /api/discovery/wish-matches): no wish is chosen first.
   stage = 'home-collapsed';
   await waitNode('所有願望吻合的商品', 45000);
   await waitText('二手深藍色陶瓷馬克杯', 45000);
-  await waitText('吻合 73 分');
+  await waitText('符合願望與預算');
   await waitText('查看全部 3 件');
   await sleep(1800); // Image download is separately inspected in the saved screenshot.
   await screenshot('home-collapsed');
+  const collapsed = await dump();
+  report.wishChooserAbsent = !['今天想找什麼？', '尋找這個願望的商品', '不套用願望，瀏覽全部商品'].some(label => collapsed.includes(xmlEscape(label)));
+  if (!report.wishChooserAbsent) throw new Error('The old wish chooser is still on the home');
   stage = 'home-expanded';
   await tap(await waitNode('深藍色陶瓷馬克杯共有3件吻合商品，查看全部'));
   await waitText('深藍陶瓷馬克杯（二手）');
@@ -236,8 +247,18 @@ async function main() {
   await screenshot('home-expanded');
   stage = 'home-scrolled';
   await adb(['shell', 'input', 'swipe', '160', '480', '160', '210', '360']);
-  await waitNode('在地圖交叉比對深藍色陶瓷馬克杯');
+  await waitText('這些願望目前沒有吻合的商品：橘色二手桌燈');
+  await waitNode('重新比對');
   await screenshot('home-scrolled');
+  stage = 'product-detail';
+  await adb(['shell', 'input', 'swipe', '160', '210', '160', '560', '360']);
+  const product = nodes(await dump()).find(node => /content-desc="二手深藍色陶瓷馬克杯，NT\$ 50，/.test(node));
+  if (!product) throw new Error('Best match product control not found');
+  await tap(product);
+  await waitText('商品詳情');
+  await waitText('商品說明');
+  await sleep(1200);
+  await screenshot('product-detail');
   report.passed = true;
 }
 (async () => {

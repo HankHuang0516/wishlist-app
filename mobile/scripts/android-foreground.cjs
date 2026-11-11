@@ -1,9 +1,10 @@
 // Read only the authoritative resumed-activity fields. Android 8 reports
-// mResumedActivity; newer releases also expose topResumedActivity.
+// mResumedActivity; newer releases also expose topResumedActivity, and Android 16
+// prints a plain `ResumedActivity:` line instead.
 function foregroundPackage(activity) {
   if (typeof activity !== 'string') return null;
   const packages = new Set();
-  for (const match of activity.matchAll(/^\s*(?:topResumedActivity|mResumedActivity)\s*[:=]\s*([^\n]+)$/gm)) {
+  for (const match of activity.matchAll(/^\s*(?:topResumedActivity|mResumedActivity|ResumedActivity)\s*[:=]\s*([^\n]+)$/gm)) {
     const component = match[1].match(/(?:^|\s)([A-Za-z][A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+(?:\s|}|$)/);
     if (component) packages.add(component[1]);
   }

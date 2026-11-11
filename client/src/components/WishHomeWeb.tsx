@@ -19,7 +19,7 @@ function Match({ item, hero = false, onOpen }: { item: DiscoveryProduct; hero?: 
   const photo = item.thumbnailUrl
     ? <img src={item.thumbnailUrl} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className={`${hero ? 'aspect-[4/3] w-full' : 'h-20 w-20 flex-none rounded-md'} bg-gray-100 object-cover`} />
     : <div aria-hidden="true" className={`${hero ? 'aspect-[4/3] w-full' : 'h-20 w-20 flex-none rounded-md'} flex items-center justify-center bg-gray-100 text-gray-400`}><Search className="h-6 w-6" /></div>;
-  return <button type="button" onClick={() => onOpen(item)} className={`${hero ? 'block w-full' : 'flex min-h-20 w-full items-center gap-3 rounded-md p-2'} text-left hover:bg-gray-50 focus-visible:outline-muji-primary`}>
+  return <button type="button" data-product-key={item.key} onClick={() => onOpen(item)} className={`${hero ? 'block w-full' : 'flex min-h-20 w-full items-center gap-3 rounded-md p-2'} text-left hover:bg-gray-50 focus-visible:outline-muji-primary`}>
     {photo}
     <span className={`block min-w-0 ${hero ? 'space-y-1 p-2 text-sm' : ''}`}>
       <span className="block break-words font-semibold text-gray-900">{item.title}</span>

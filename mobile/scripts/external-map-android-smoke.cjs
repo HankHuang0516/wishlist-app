@@ -731,7 +731,7 @@ async function main() {
   if (chatOnly) { await chatSequence(); passed = true; return; }
   stage = 'home-matches-section';
   await waitNode('所有願望吻合的商品');
-  await waitNode('今天想找什麼？');
+  await waitNode('重新比對');
   await screenshot('home');
   if (singleMapOnly) {
     stage = 'single-map-default';

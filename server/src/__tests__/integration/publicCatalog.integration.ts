@@ -3,8 +3,9 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
-import { discoveryPage, discoveryQuery, scanDiscovery, type DiscoveryProduct } from '../../lib/discovery';
-import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
+import { discoveryPage, discoveryQuery, recommendDiscovery, scanDiscovery, wishMatchGroups, WISH_MATCH_ITEMS, type DiscoveryProduct } from '../../lib/discovery';
+import { normalizeWish } from '../../lib/wishlistMatch';
+import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProductsMatching, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
 import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
@@ -125,6 +126,49 @@ it('names the same first page, in the same order and with the same thumbnails, a
   await prisma.externalSourceLead.update({ where: { id: added.id }, data: { status: 'WITHDRAWN' } });
   await prisma.listingMedia.delete({ where: { id: media.id } });
   await same();
+});
+
+// The home page matches every wish at once (lib/discovery.ts wishMatchGroups), reading only candidate products.
+// It has to give, for each wish, exactly what 你會想要 gives for that one wish, best first.
+it('matches every open wish against the candidates only, with the same rule and order as 你會想要 for that wish', async () => {
+  const buyer = (await prisma.user.create({ data: { phoneNumber: 'catalog-buyer-' + run, password: 'synthetic' } })).id;
+  try {
+    const list = await prisma.wishlist.create({ data: { userId: buyer, title: '合成願望 ' + run, items: { create: [
+      { name: '電腦螢幕', maxPrice: 1500, priceCurrency: 'TWD', aiStatus: 'SKIPPED' }, { name: 'MacBook Air', aiStatus: 'SKIPPED' },
+      { name: '無線耳機', aiStatus: 'SKIPPED' }, { name: '完全無關小提琴', aiStatus: 'SKIPPED' }, { name: '登山背包', isHidden: true, aiStatus: 'SKIPPED' },
+      { name: '兒童繪本', isPurchased: true, aiStatus: 'SKIPPED' },
+    ] } }, include: { items: true } });
+    const now = new Date();
+    expect(await catalogReady(now)).toBe(true);
+    const all = await catalogProducts(now, false, true), { groups } = await wishMatchGroups(buyer, now);
+    // Open wishes only, newest first.
+    expect(groups.map(group => group.wish.name)).toEqual(['完全無關小提琴', '無線耳機', 'MacBook Air', '電腦螢幕']);
+    const newest = (a: DiscoveryProduct, b: DiscoveryProduct) => Date.parse(b.date) - Date.parse(a.date) || a.key.localeCompare(b.key);
+    for (const group of groups) {
+      const expected = (await recommendDiscovery(all, buyer, group.wish.id)).sort((a, b) => b.match!.score - a.match!.score || newest(a, b));
+      expect(group.total).toBe(expected.length);
+      expect(group.items).toEqual(JSON.parse(JSON.stringify(expected.slice(0, WISH_MATCH_ITEMS))));
+    }
+    expect(groups.find(group => group.wish.name === '電腦螢幕')!.items.every(item => item.match!.reasons.includes('BUDGET') && item.price! <= 1500)).toBe(true);
+    expect(groups.find(group => group.wish.name === '無線耳機')!.total).toBeGreaterThan(WISH_MATCH_ITEMS);
+    expect(groups.find(group => group.wish.name === '完全無關小提琴')).toMatchObject({ total: 0, items: [] });
+    const macbook = list.items.find(item => item.name === 'MacBook Air')!;
+    expect(groups.find(group => group.wish.name === 'MacBook Air')!.wish).toEqual({ id: macbook.id, name: 'MacBook Air', maxPrice: null, priceCurrency: macbook.priceCurrency, wishlist: { id: list.id, title: '合成願望 ' + run } });
+    // The candidates are a superset of every product whose title holds a word, and nothing else.
+    const words = ['benq', '耳機'];
+    expect((await catalogProductsMatching(now, words)).map(p => p.key).sort()).toEqual(all.filter(p => words.some(word => normalizeWish(p.title + ' ' + p.description + ' ' + (p.brand ?? '')).includes(word))).map(p => p.key).sort());
+    // A seller never sees their own listings among the matches.
+    await prisma.wishlist.create({ data: { userId, title: '賣家自己的願望', items: { create: { name: 'MacBook Air 筆電', aiStatus: 'SKIPPED' } } } });
+    const seller = (await wishMatchGroups(userId, now)).groups[0];
+    expect(seller.total).toBeGreaterThan(0);
+    expect(seller.items.some(item => item.kind === 'listing' && listingIds.includes(item.id))).toBe(false);
+    expect((await recommendDiscovery(all, userId)).some(item => item.kind === 'listing' && listingIds.includes(item.id))).toBe(true);
+    // Through the route: signed in only, no parameters.
+    expect((await http.get('/discovery/wish-matches')).status).toBe(401);
+  } finally {
+    await prisma.wishlist.deleteMany({ where: { userId: { in: [buyer, userId] } } });
+    await prisma.user.deleteMany({ where: { id: buyer } });
+  }
 });
 
 it('shows a write to the very next read and rejects the cursor of the previous result', async () => {

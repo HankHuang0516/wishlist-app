@@ -385,6 +385,18 @@ const NEWEST = Prisma.sql`r."date" DESC, r."key" COLLATE "C" ASC`;
 // Readers call catalogReady(now) first and pass synced; called on their own they check for themselves.
 const insist = async (now: Date, synced: boolean) => { if (!synced && !(await catalogSync(now))) throw new DiscoveryError(503, 'DISCOVERY_UNAVAILABLE'); };
 
+// The public products whose text holds at least one of `words`, in the order catalogProducts gives: the candidates
+// of a wish match (discovery.ts wishMatchGroups), read without loading every product. searchText is
+// normalizeWish(title + ' ' + description + ' ' + brand) and a wish word has no spaces, so every product whose
+// normalized title holds a word is among these. Call catalogReady(now) first.
+export async function catalogProductsMatching(now: Date, words: string[]): Promise<DiscoveryProduct[]> {
+  if (!words.length) return [];
+  const any = Prisma.join(words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ');
+  const rows: Array<{ product: unknown }> = await prisma.$queryRaw`
+    SELECT e."product" FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND (${any}) ORDER BY e."kindRank", e."refId"`;
+  return rows.map(row => row.product as DiscoveryProduct);
+}
+
 // The first page of the ordinary feed (no filters, newest first), only the keys and thumbnails: what the explore
 // page's HTML names for the browser to fetch before the page has run (firstScreenHints.ts). The same rows in the
 // same order as catalogDiscoveryPage(discoveryQuery({})), without the facets and totals that make that one slow;

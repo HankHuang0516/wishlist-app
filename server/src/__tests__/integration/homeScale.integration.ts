@@ -5,6 +5,8 @@ import { randomUUID } from 'crypto';
 import { performance } from 'perf_hooks';
 import prisma from '../../lib/prisma';
 import listingRoutes from '../../routes/listingRoutes';
+import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
+import { buildCatalog } from '../../lib/publicCatalog';
 import { createLoopbackRequest } from './loopbackHttp';
 import { getApiUrl } from '../../config/constants';
 import authRoutes from '../../routes/authRoutes';
@@ -19,18 +21,22 @@ require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(proce
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated database required');
 process.env.JWT_SECRET = 'isolated-scale-test-only';
 process.env.API_URL='https://wishlist-qa.invalid/api';
-const app=express(); app.use(express.json()); app.use('/api/listings',listingRoutes);
+const app=express(); app.use(express.json()); app.use('/api/listings',listingRoutes); app.use('/api/discovery',createDiscoveryRoutes());
 app.use('/api/auth',authRoutes);app.get('/api/users/me',authenticateToken,getMe);app.get('/api/social/upcoming-birthdays',authenticateToken,getUpcomingBirthdays);
 app.use('/api/chat',chatRoutes);
 const http=createLoopbackRequest(app);
 let buyer:number,seller:number,other:number,wish:number,otherWish:number;
 const expected=new Set<string>();
 const auth=(id:number)=>'Bearer '+jwt.sign({id},process.env.JWT_SECRET!);
+// The home page matches wishes through /api/discovery and the read model; the full scan it falls back to stops at
+// 20,000 products by design. The suite seeds tens of thousands of listings at once, more than a read absorbs, so
+// the read model is brought up to date after each batch, as the server's background worker would.
+const catalogFlag=process.env.PUBLIC_CATALOG_DISABLED;delete process.env.PUBLIC_CATALOG_DISABLED;
 beforeAll(async()=>{
  const users=await Promise.all(['buyer','seller','other'].map((role,index)=>prisma.user.create({data:{phoneNumber:`091111110${index}`,password:bcrypt.hashSync('synthetic-local-only-pass',4),name:`SYNTHETIC ${role}`}}))); [buyer,seller,other]=users.map(x=>x.id);
  for(const [id,name] of [[buyer,'Sony 相機'],[other,'Canon 相機']] as const){const w=await prisma.wishlist.create({data:{userId:id,title:'SYNTHETIC isolated scale',items:{create:{name,maxPrice:5000,priceCurrency:'TWD'}}},include:{items:true}});if(id===buyer)wish=w.items[0].id;else otherWish=w.items[0].id;}
 });
-afterAll(async()=>{if(buyer)await prisma.user.deleteMany({where:{id:{in:[buyer,seller,other]}}});await prisma.$disconnect();});
+afterAll(async()=>{if(catalogFlag===undefined)delete process.env.PUBLIC_CATALOG_DISABLED;else process.env.PUBLIC_CATALOG_DISABLED=catalogFlag;if(buyer)await prisma.user.deleteMany({where:{id:{in:[buyer,seller,other]}}});await prisma.$disconnect();});
 it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fault and account-isolation matrix':'real PostgreSQL/HTTP: complete 10k,30k,50k catalogs, independent ID oracle and concurrent user isolation',async()=>{
  const {puppeteer,executablePath}=webQaBrowser();
  const browser=await puppeteer.launch({headless:true,executablePath,args:webQaArgs});
@@ -65,20 +71,26 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
    await prisma.listingLocation.createMany({data:rows.map(r=>({listingId:r.id,county:'臺北市',district:'中正區',publicLatitude:25.05,publicLongitude:121.51,precisionMeters:2200}))});
    await prisma.listingMedia.createMany({data:rows.map(r=>{const id=randomUUID();return{id,listingId:r.id,ownerUserId:seller,imageUrl:getApiUrl()+'/listing-media/'+id+'/image',thumbnailUrl:getApiUrl()+'/listing-media/'+id+'/thumbnail',contentHash:'SYNTHETIC-local-only'};})});seeded+=n;
   }
+  const catalogStart=performance.now();await buildCatalog();const catalogMs=Math.round(performance.now()-catalogStart);
   const start=performance.now();let cursor:string|undefined;const found:string[]=[];let pages=0,firstMs=0;
   do{const response=await http.get('/api/listings/matches').set('Authorization',auth(buyer)).query({wishItemId:String(wish),limit:'50',...(cursor?{cursor}:{})});expect(response.status).toBe(200);if(!pages)firstMs=performance.now()-start;found.push(...response.body.items.map((v:any)=>v.listing.id));cursor=response.body.nextCursor??undefined;pages++;expect(pages).toBeLessThan(1000);}while(cursor);
   expect(found.length).toBe(expected.size);expect(new Set(found)).toEqual(expected);
   const [wrong,none,own]=await Promise.all([http.get('/api/listings/matches').set('Authorization',auth(other)).query({wishItemId:String(wish)}),http.get('/api/listings/matches').set('Authorization',auth(other)).query({wishItemId:String(otherWish)}),http.get('/api/listings/matches').set('Authorization',auth(buyer)).query({wishItemId:String(wish),limit:'50'})]);
   expect(wrong.status).toBe(404);expect(none.body.items).toEqual([]);expect(own.body.items.every((v:any)=>expected.has(v.listing.id))).toBe(true);
-  console.log(JSON.stringify({catalog:size,expected:expected.size,returned:found.length,pages,firstPageMs:Math.round(firstMs),fullMs:Math.round(performance.now()-start),seedMs:Math.round(start-seedStart),oracle:'fixed index modulo 20, excluding modulo 200 SOLD; independent of matching implementation'}));
+  console.log(JSON.stringify({catalog:size,expected:expected.size,returned:found.length,pages,firstPageMs:Math.round(firstMs),fullMs:Math.round(performance.now()-start),seedMs:Math.round(catalogStart-seedStart),catalogMs,oracle:'fixed index modulo 20, excluding modulo 200 SOLD; independent of matching implementation'}));
   const uiStart=performance.now();
   if(size===sizes[0]){await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});await page.waitForSelector('#identifier');await page.type('#identifier','0911111100');await page.type('#password','synthetic-local-only-pass');await page.click('button[type="submit"]');await page.waitForFunction(()=>location.pathname==='/dashboard');await page.goto(origin+'/',{waitUntil:'domcontentloaded'});}else await page.reload({waitUntil:'domcontentloaded'});
-  await page.waitForFunction((count:number)=>Array.from(document.querySelectorAll('button[aria-expanded]')).some(b=>b.getAttribute('aria-label')?.replace(/,/g,'').includes(String(count))),{timeout:30000},expected.size);
-  const homeReadyMs=Math.round(performance.now()-uiStart);await page.click('button[aria-expanded]');
-  await page.waitForFunction((count:number)=>new Set(Array.from(document.querySelectorAll('a[href*="listing="]')).map(a=>new URL((a as HTMLAnchorElement).href).searchParams.get('listing'))).size===count,{timeout:30000},expected.size);
-  const visibleIds:string[]=await page.evaluate(()=>[...new Set(Array.from(document.querySelectorAll('a[href*="listing="]')).map(a=>new URL((a as HTMLAnchorElement).href).searchParams.get('listing')))]);
-  expect(new Set(visibleIds)).toEqual(expected);
-  expect(visibleIds).toEqual([...expected].sort((a,b)=>a.localeCompare(b)));
+  // The home page names how many items match the wish, all of them, and shows the best twelve when expanded.
+  const allLabel='查看全部 '+expected.size+' 件';
+  await page.waitForFunction((label:string)=>Array.from(document.querySelectorAll('button[aria-expanded]')).some(b=>b.textContent?.includes(label)),{timeout:30000},allLabel);
+  const homeReadyMs=Math.round(performance.now()-uiStart);
+  await page.evaluate((label:string)=>{(Array.from(document.querySelectorAll('button[aria-expanded]')).find(b=>b.textContent?.includes(label)) as HTMLButtonElement).click();},allLabel);
+  await page.waitForFunction(()=>document.querySelectorAll('[aria-labelledby="home-matches-heading"] [data-product-key]').length===12,{timeout:30000});
+  const visibleIds:string[]=await page.evaluate(()=>Array.from(document.querySelectorAll('[aria-labelledby="home-matches-heading"] [data-product-key]')).map(b=>b.getAttribute('data-product-key')!.replace(/^listing:/,'')));
+  expect(visibleIds.every(id=>expected.has(id))).toBe(true);
+  // Every match scores the same here, so the best twelve are the newest, ties by key: an oracle from the rows alone.
+  const rows=await prisma.listing.findMany({where:{id:{in:[...expected]}},select:{id:true,publishedAt:true}});
+  expect(visibleIds).toEqual(rows.sort((a,b)=>b.publishedAt!.getTime()-a.publishedAt!.getTime()||('listing:'+a.id).localeCompare('listing:'+b.id)).slice(0,12).map(row=>row.id));
   await page.screenshot({path:webQaEvidence(`scale-${size}-synthetic.png`)});
   console.log(JSON.stringify({uiCatalog:size,uiExpected:expected.size,uiRenderedUniqueIds:visibleIds.length,homeReadyMs,expandedFullMs:Math.round(performance.now()-uiStart),client:'actual compiled client/dist',auth:'normal UI login through actual auth controller',externalNetwork:'blocked; map tiles not accepted by this test'}));
  }
@@ -95,8 +107,8 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
  for(const [key,value] of Object.entries({brand:'Sony',category:'electronics',condition:'USED',delivery:'MEETUP',minPrice:'100',maxPrice:'4500',bbox:'121.49,25.03,121.53,25.07',radius:'10',view:'list'}))expect(new URL(page.url()).searchParams.get(key)).toBe(value);
  await page.goForward();await page.waitForFunction(()=>location.pathname==='/');await page.goBack();await page.waitForSelector('#explore-search');console.log(JSON.stringify({advancedBrowserHistory:'PASS',fields:['Chinese query','wish ID','brand','category','condition','delivery','price range','coarse bbox','wish radius','list mode'],preciseGpsStored:false}));
  const context=await browser.createBrowserContext();const second=await context.newPage();await second.setBypassServiceWorker(true);await second.setRequestInterception(true);second.on('request',bridge);await second.goto(origin+'/login',{waitUntil:'domcontentloaded'});await second.waitForSelector('#identifier');await second.type('#identifier','0911111102');await second.type('#password','synthetic-local-only-pass');await second.click('button[type="submit"]');await second.waitForFunction(()=>location.pathname==='/dashboard');await second.goto(origin+'/',{waitUntil:'domcontentloaded'});
- await second.waitForFunction(()=>{const section=document.querySelector('section[aria-labelledby="home-matches-heading"]');return !!section&&Array.from(section.querySelectorAll('button')).some(b=>!b.disabled&&(b.textContent?.includes('重新整理')||b.textContent?.includes('Refresh')));});
- expect(await second.$$eval('a[href*="listing="]',(a:any[])=>a.length)).toBe(0);console.log(JSON.stringify({secondBuyerHome:'PASS',wish:'Canon 相機',resultCount:0,crossUserSonyLeak:false,session:'separate normal UI login, no copied session'}));await context.close();
+ await second.waitForFunction(()=>{const section=document.querySelector('section[aria-labelledby="home-matches-heading"]');return !!section&&Array.from(section.querySelectorAll('button')).some(b=>!b.disabled&&(b.textContent?.includes('重新比對')||b.textContent?.includes('Match again')));});
+ expect(await second.$$eval('[data-product-key]',(a:any[])=>a.length)).toBe(0);console.log(JSON.stringify({secondBuyerHome:'PASS',wish:'Canon 相機',resultCount:0,crossUserSonyLeak:false,session:'separate normal UI login, no copied session'}));await context.close();
  const productIds=[...expected].slice(0,3), rooms:string[]=[];const sharedMessageKey=randomUUID();
  for(let i=0;i<3;i++){
   const opened=await http.post('/api/chat/conversations').set('Authorization',auth(buyer)).send({listingId:productIds[i]});expect(opened.status).toBe(201);rooms.push(opened.body.id);
@@ -162,8 +174,8 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
  await page.waitForSelector('#identifier');await page.type('#identifier','0911111102');await page.type('#password','synthetic-local-only-pass');await page.click('button[type="submit"]');
  await page.waitForFunction(()=>location.pathname==='/dashboard');releaseOldAccount();
  await page.goto(origin+'/',{waitUntil:'domcontentloaded'});
- await page.waitForFunction(()=>{const section=document.querySelector('section[aria-labelledby="home-matches-heading"]');return !!section&&Array.from(section.querySelectorAll('button')).some(b=>!b.disabled&&(b.textContent?.includes('重新整理')||b.textContent?.includes('Refresh')));});
- expect(await page.$$eval('a[href*="listing="]',(a:any[])=>a.length)).toBe(0);
+ await page.waitForFunction(()=>{const section=document.querySelector('section[aria-labelledby="home-matches-heading"]');return !!section&&Array.from(section.querySelectorAll('button')).some(b=>!b.disabled&&(b.textContent?.includes('重新比對')||b.textContent?.includes('Match again')));});
+ expect(await page.$$eval('[data-product-key]',(a:any[])=>a.length)).toBe(0);
  await page.goto(origin+'/chat?room='+rooms[0],{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>document.body.innerText.includes('無法')||document.body.innerText.includes('不存在'));
  expect(await page.evaluate(()=>document.body.innerText.includes('SYNTHETIC ROOM 0'))).toBe(false);
@@ -178,4 +190,5 @@ it(process.env.WEB_QA_FAULT_ONLY==='1'?'real PostgreSQL/HTTP/Web: 300-fixture fa
   }).catch(()=>({diagnosticFailed:true}));
   console.log(JSON.stringify({isolatedUiFailureUrl:page.url(),visibleSyntheticUi:(await page.evaluate(()=>document.body.innerText)).slice(0,4000),storageDiagnostics,traffic:traffic.slice(-60),pendingBridge:[...bridgeReads.values()].map(r=>({...r,ageMs:Math.round(performance.now()-r.started),started:undefined})),failedReads:failedReads.slice(-30)}));throw error;
  }finally{await browser.close();}
-},180000);
+// The read model is brought up to date after each batch: about 50 s for 50,000 listings on a laptop.
+},300000);

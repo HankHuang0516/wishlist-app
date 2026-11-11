@@ -126,20 +126,59 @@ export async function scanDiscovery(now = new Date(), mapPresentation=false) {
   },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead,timeout:20_000});
   return products;
 }
+type WishInput = { id: number; name: string; maxPrice: Prisma.Decimal | number | null; priceCurrency: string | null };
+type WishRule = { id: number; words: string[]; latin: string[]; budget: number | null };
+// A wish's keywords and budget, worked out once instead of once per product.
+const wishRule = (w: WishInput): WishRule => {
+  const words = wishKeywords(w.name);
+  return { id: w.id, words, latin: words.filter(x => !/[\p{Script=Han}]/u.test(x)), budget: w.maxPrice !== null && w.priceCurrency === 'TWD' ? Number(w.maxPrice) : null };
+};
+/** How a product (with its title already normalized) matches one wish, or null: at least half of the wish's
+ *  keywords, every Latin or number keyword, and within a budget given in TWD. The rule of 你會想要. */
+function wishMatch(p: DiscoveryProduct, title: string, rule: WishRule): DiscoveryProduct['match'] | null {
+  const found = rule.words.filter(x => title.includes(x));
+  if (!rule.words.length || found.length < Math.ceil(rule.words.length / 2) || rule.latin.some(x => !found.includes(x))) return null;
+  const reasons: ('NAME' | 'BUDGET')[] = ['NAME']; let score = found.length / rule.words.length * 80;
+  if (rule.budget !== null) { if (p.price === null || p.currency !== 'TWD' || p.price > rule.budget) return null; reasons.push('BUDGET'); score += 20; }
+  return { wishItemId: rule.id, reasons, score };
+}
 export async function recommendDiscovery(products: DiscoveryProduct[], userId: number, wishItemId?: number) {
   const wishes = await prisma.item.findMany({where:{wishlist:{userId},isPurchased:false,isHidden:false,...(wishItemId===undefined?{}:{id:wishItemId})},select:{id:true,name:true,maxPrice:true,priceCurrency:true},orderBy:{id:'desc'},take:500});
   if(wishItemId!==undefined&&!wishes.length)throw new DiscoveryError(404,'DISCOVERY_WISH_UNAVAILABLE');
+  const rules = wishes.map(wishRule);
   return products.flatMap(p=>{
     let best: DiscoveryProduct['match'];
-    for(const w of wishes){
-      const words=wishKeywords(w.name), title=normalizeWish(p.title), found=words.filter(x=>title.includes(x));
-      if(!words.length||found.length<Math.ceil(words.length/2)||words.filter(x=>!/[\p{Script=Han}]/u.test(x)).some(x=>!found.includes(x)))continue;
-      const reasons: ('NAME'|'BUDGET')[]=['NAME']; let score=found.length/words.length*80;
-      if(w.maxPrice!==null&&w.priceCurrency==='TWD') { if(p.price===null||p.currency!=='TWD'||p.price>Number(w.maxPrice))continue; reasons.push('BUDGET');score+=20; }
-      if(!best||score>best.score)best={wishItemId:w.id,reasons,score};
-    }
+    const title = normalizeWish(p.title);
+    for (const rule of rules) { const match = wishMatch(p, title, rule); if (match && (!best || match.score > best.score)) best = match; }
     return best?[{...p,match:best}]:[];
   });
+}
+
+// ---- every wish against every public product, for the signed-in home page ----
+export const WISH_MATCH_WISHES = 50, WISH_MATCH_ITEMS = 12;
+const newestFirst = (a: DiscoveryProduct, b: DiscoveryProduct) => Date.parse(b.date) - Date.parse(a.date) || a.key.localeCompare(b.key);
+/** Each of the account's open wishes (newest first, the ones 你會想要 matches) with the products that match it by the
+ *  same rule, best first: what the home page shows without anyone choosing a wish. Only candidates are read: the
+ *  products whose text holds one of the wishes' keywords. The account's own listings are left out. */
+export async function wishMatchGroups(userId: number, now = new Date()) {
+  const wishes = await prisma.item.findMany({ where: { wishlist: { userId }, isPurchased: false, isHidden: false },
+    select: { id: true, name: true, maxPrice: true, priceCurrency: true, wishlist: { select: { id: true, title: true } } }, orderBy: { id: 'desc' }, take: WISH_MATCH_WISHES });
+  const rules = wishes.map(wishRule), words = [...new Set(rules.flatMap(rule => rule.words))];
+  let products: DiscoveryProduct[] = [];
+  if (words.length) {
+    const preview = await privateStorePreviewProducts(userId, now, false);
+    const catalog = preview === null ? await import('./publicCatalog') : null;
+    products = preview ?? (await catalog!.catalogReady(now) ? await catalog!.catalogProductsMatching(now, words) : await loadDiscovery(now, false, userId, true));
+    const own = new Set((await prisma.listing.findMany({ where: { ownerUserId: userId }, select: { id: true } })).map(row => 'listing:' + row.id));
+    products = products.filter(p => !own.has(p.key));
+  }
+  const titles = new Map(products.map(p => [p.key, normalizeWish(p.title)]));
+  return { complete: true as const, generatedAt: now.toISOString(), groups: wishes.map((w, index) => {
+    const matched = products.flatMap(p => { const match = wishMatch(p, titles.get(p.key)!, rules[index]); return match ? [{ ...p, match }] : []; })
+      .sort((a, b) => b.match!.score - a.match!.score || newestFirst(a, b));
+    return { wish: { id: w.id, name: w.name, maxPrice: w.maxPrice === null ? null : Number(w.maxPrice), priceCurrency: w.priceCurrency, wishlist: w.wishlist },
+      total: matched.length, items: matched.slice(0, WISH_MATCH_ITEMS) };
+  }) };
 }
 export function filterDiscovery(all: DiscoveryProduct[], query: DiscoveryQuery,category=true) {
   const words=normalizeWish(query.q).split(' ').filter(Boolean);

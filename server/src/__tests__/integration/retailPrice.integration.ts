@@ -23,7 +23,7 @@ it('exposes bounded backfill capacity and exact public statuses only behind admi
  expect((await http.get('/retail/capacity')).status).toBe(401);
  expect((await http.get('/retail/evaluations?productKeys='+key)).status).toBe(401);
  const cap=await http.get('/retail/capacity').set('X-Admin-Key','synthetic-retail-admin');
- expect(cap.body).toMatchObject({dailyBatchCap:1000,batchSize:6,queueReadLimit:100});
+ expect(cap.body).toMatchObject({dailyBatchCap:1000,batchSize:12,queueReadLimit:100});
  const queue=await http.get('/retail/candidates?limit=100').set('X-Admin-Key','synthetic-retail-admin');expect(queue.status).toBe(200);
  const status=await http.get('/retail/evaluations?productKeys='+key).set('X-Admin-Key','synthetic-retail-admin');
  expect(status.status).toBe(200);expect(status.body.items[0]).toMatchObject({productKey:key,score:null,ready:false});

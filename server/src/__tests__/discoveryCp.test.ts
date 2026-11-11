@@ -16,14 +16,14 @@ test('does not block a model-verified retail-backed watch solely because categor
 
 test('exposes a 100-product worklist without enlarging the provider microbatch',()=>{
  const products=Array.from({length:100},(_,i)=>make(i));
- expect(cpTargets(products)).toHaveLength(6);
+ expect(cpTargets(products)).toHaveLength(12);
  expect(cpTargets(products,new Set(),100)).toHaveLength(100);
 });
 test('daily capacity is bounded, configurable, and sufficient for the intended backfill volume',()=>{
  const old=process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
  try {
   delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;
-  expect(cpCapacity()).toMatchObject({dailyBatchCap:1000,maximumProductsPerDay:6000,batchSize:6});
+  expect(cpCapacity()).toMatchObject({dailyBatchCap:1000,maximumProductsPerDay:12000,batchSize:12});
   process.env.DISCOVERY_CP_DAILY_BATCH_CAP='600';expect(cpCapacity().dailyBatchCap).toBe(600);
   for(const bad of ['0','2001','abc','1.5','-1']){process.env.DISCOVERY_CP_DAILY_BATCH_CAP=bad;expect(()=>cpCapacity()).toThrow('CP_CAPACITY_CONFIGURATION_INVALID');}
  } finally { if(old===undefined)delete process.env.DISCOVERY_CP_DAILY_BATCH_CAP;else process.env.DISCOVERY_CP_DAILY_BATCH_CAP=old; }

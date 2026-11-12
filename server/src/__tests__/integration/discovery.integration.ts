@@ -60,6 +60,10 @@ it('retains completed comparisons, invalidates expired retail or changed inputs,
  const provider=async(targets:any[])=>{calls++;expect(targets.every(t=>t.comparables.length===1&&t.comparables[0].key.startsWith('retail:'))).toBe(true);return targets.map(t=>({key:t.product.key,verdict:'COMPARABLE',basisKeys:[t.comparables[0].key],dimensions:{specification:25,condition:20,evidence:15},reasons:[{zh:'同型號新品原價比較。',en:'Same-model original-new comparison.'}],limitations:[{zh:'品況與庫存待確認。',en:'Condition and stock unconfirmed.'}]}));};
  const result=await evaluateCp(all,provider);expect(result.evaluated).toBe(6);expect(calls).toBe(1);const attached=await attachCp(all),scored=attached.filter(p=>p.cp);expect(scored).toHaveLength(6);
  const page=await http.get('/discovery/cp');expect(page.status).toBe(200);expect(page.body.total).toBe(6);expect(calls).toBe(1);
+ // The category counts are the picks (all six are monitors), whichever category the request narrows to; the area list keeps every county.
+ for(const path of ['/discovery/cp','/discovery/cp?main=books&limit=1']){const body=(await http.get(path)).body,electronics=body.categories.find((c:any)=>c.id==='electronics');
+  expect(electronics.count).toBe(6);expect(electronics.children.find((c:any)=>c.id==='monitors').count).toBe(6);expect(body.categories.reduce((n:number,c:any)=>n+c.count,0)).toBe(6);}
+ expect(page.body.counties).toEqual([...new Set(all.map(p=>p.county).filter(Boolean))].sort());expect(calls).toBe(1);
  // Provider-cache expiry alone must not remove unchanged, retail-backed picks.
  await prisma.discoveryCpRun.updateMany({where:{model,state:'COMPLETED'},data:{expiresAt:new Date(0)}});
  expect((await attachCp(all)).filter(p=>p.cp)).toHaveLength(6);

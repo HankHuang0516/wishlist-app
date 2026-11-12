@@ -193,6 +193,16 @@ export function retailObservation(value: unknown, p: DiscoveryProduct, now = new
         const amounts = [...normalized.matchAll(amountPattern)]
             .filter(x => !x[0].startsWith('網路價') || !/(?:促銷|優惠|限時|特價|折扣|折後|券後)\s*[:：-]?\s*$/.test(normalized.slice(0, x.index)))
             .map(x => Number(x[1] ?? x[2]));
+        // momo prints its own standing selling price as 促銷價; a limited offer is a separate 限時折後價 line.
+        // On momo's own product page (not a marketplace seller's) that price is the retailer's regular price, the
+        // way 網路價 is PChome's — only when the quote states no list price and nothing limited precedes the label.
+        if (priceType === 'RETAIL_REGULAR' && sourceHost === 'www.momoshop.com.tw' && !amounts.length) {
+            const page = new URL(sourceUrl);
+            const ownPage = /^\/product\/\d{4,12}$/.test(page.pathname) || (page.pathname === '/goods/GoodsDetail.jsp' && /^\d{4,12}$/.test(page.searchParams.get('i_code') ?? ''));
+            if (ownPage) amounts.push(...[...normalized.matchAll(/促銷價\s*[:：]?\s*(?:(?:NT\$?|NTD|TWD|新台幣|新臺幣|\$)\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*元)/g)]
+                .filter(x => !/(?:限時|優惠|特價|折扣|折後|券後|活動|限定)\s*[:：-]?\s*$/.test(normalized.slice(0, x.index)))
+                .map(x => Number(x[1] ?? x[2])));
+        }
         // This official store displays a single normal price without a label. Keep it
         // RETAIL_REGULAR (not MSRP), exact-model/size bound, and refuse promotion context.
         if (priceType === 'RETAIL_REGULAR' && sourceHost === 'www.onitsukatiger.com.tw' && /^\/SalePage\/Index\/\d+$/.test(new URL(sourceUrl).pathname) && identity?.startsWith('onitsuka:') && !/促銷|優惠|限時|特價|折扣|折後|券後|運費|滿額/.test(normalized)) {

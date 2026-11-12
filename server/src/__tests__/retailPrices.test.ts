@@ -31,6 +31,27 @@ test('does not invent prices when no exact reference was found and binds immutab
   expect(()=>retailObservation({...body,originalPrice:'990'},p)).toThrow();
   expect(()=>retailObservation({...body,evidenceQuote:'Galaxy Buds3 市售價 SGD 4990'},p)).toThrow();
  });
+ test('momo own page: the selling price label counts only without a list price and without a limited offer',()=>{
+  const body={...input(),originalPrice:'4290',priceType:'RETAIL_REGULAR',sourceUrl:'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=9956761',evidenceQuote:'Samsung Galaxy Buds3 促銷價 4,290 元'};
+  expect(Number(retailObservation(body,p).originalPrice)).toBe(4290);
+  expect(Number(retailObservation({...body,sourceUrl:'https://www.momoshop.com.tw/product/9956761'},p).originalPrice)).toBe(4290);
+  // the standing price is used, never the limited one printed beside it
+  expect(Number(retailObservation({...body,evidenceQuote:'Samsung Galaxy Buds3 促銷價 4,290 元 限時折後價 3,990 元'},p).originalPrice)).toBe(4290);
+  for(const patch of [
+   {originalPrice:'3990',evidenceQuote:'Samsung Galaxy Buds3 促銷價 4,290 元 限時折後價 3,990 元'},
+   {evidenceQuote:'Samsung Galaxy Buds3 限時促銷價 4,290 元'},
+   {evidenceQuote:'Samsung Galaxy Buds3 活動：促銷價 4,290 元'},
+   {evidenceQuote:'Samsung Galaxy Buds3 市售價 4,990 元；促銷價 4,290 元'},
+   {evidenceQuote:'Samsung Galaxy Buds3 Pro 促銷價 4,290 元'},
+   {sourceUrl:'https://www.momoshop.com.tw/TP/TP0009010/goodsDetail/TP00090100000199'},
+   {sourceUrl:'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=TP00090100000199'},
+   {sourceUrl:'https://www.momoshop.com.tw/search/searchShop.jsp?keyword=buds3'},
+   {sourceUrl:'https://www.tk3c.com/product/171191'},
+   {sourceUrl:'https://24h.pchome.com.tw/prod/DCBAJI-A900G6O6T'},
+   {sourceUrl:'https://www.momoshop.com.tw.attacker.invalid/product/9956761'},
+   {priceType:'MANUFACTURER_MSRP'},
+  ]) expect(()=>retailObservation({...body,...patch},p)).toThrow();
+ });
  test('normalizes punctuation in exact shoe model and excludes phone accessories',()=>{
   const shoe={...p,mainId:'fashion',subId:'shoes',title:'Nike CK6357006'};
   expect(retailIdentity({...shoe,title:'Nike CK6357-006'})).toBe(retailIdentity(shoe));

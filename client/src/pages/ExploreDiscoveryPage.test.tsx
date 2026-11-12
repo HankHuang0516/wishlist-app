@@ -102,6 +102,63 @@ it('keeps the feed’s own order first and adds the reference-price orders in th
  await waitFor(()=>expect(publicApi.mock.calls.at(-1)?.[0]).toBe('/discovery/cp?sort=retail-ratio-desc'));
 });
 
+it('reads the next page by itself when the list end scrolls near, but not after a failed read or on the map',async()=>{
+ type Watcher={callback:IntersectionObserverCallback;options?:IntersectionObserverInit;target?:Element;live:boolean};const watchers:Watcher[]=[];
+ vi.stubGlobal('IntersectionObserver',class{state:Watcher;constructor(callback:IntersectionObserverCallback,options?:IntersectionObserverInit){this.state={callback,options,live:true};watchers.push(this.state);}observe(target:Element){this.state.target=target;}disconnect(){this.state.live=false;}unobserve(){}takeRecords(){return [];}});
+ const near=()=>act(()=>{for(const w of watchers.filter(w=>w.live&&w.target))w.callback([{isIntersecting:true,target:w.target!} as IntersectionObserverEntry],{} as IntersectionObserver);});
+ const second={...p,id:'0e3c5a56-6d2f-4a0b-9d9b-6d6f1c2b7a11',key:'source:0e3c5a56-6d2f-4a0b-9d9b-6d6f1c2b7a11',title:'第二商品'},third={...second,id:'7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f',key:'source:7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f',title:'第三商品'};
+ // The map keeps its button: it shows one batch of places at a time.
+ publicApi.mockResolvedValueOnce({...page,items:[{...p,mapLocation:{coordinates:[120.236,23],precision:'PUBLIC_MEETING_POINT'}}],total:3,counts:{listing:0,source:3,external:0},nextCursor:'m1',mapTotals:{located:1,unmapped:2}});
+ const map=render(view('/explore?mode=map'));await screen.findByTestId('shared-discovery-map');await screen.findByRole('button',{name:'探索更多商品'});
+ expect(watchers.some(w=>w.live&&w.target)).toBe(false);map.unmount();
+ publicApi.mockResolvedValueOnce({...page,total:3,nextCursor:'c1'}).mockResolvedValueOnce({...page,items:[second],total:3,nextCursor:'c2'}).mockRejectedValueOnce(Error()).mockResolvedValue({...page,items:[third],total:3,nextCursor:null});
+ render(view());await screen.findByText('BenQ 合成螢幕');
+ await waitFor(()=>expect(watchers.filter(w=>w.live)[0]?.options?.rootMargin).toBe('0px 0px 600px 0px'));
+ expect(watchers.filter(w=>w.live).every(w=>w.target?.classList.contains('discovery-load-more'))).toBe(true);
+ await near();await screen.findByText('第二商品');
+ expect(publicApi.mock.calls.at(-1)?.[0]).toContain('cursor=c1');
+ // The third read fails: the list keeps what it has and waits for the visitor instead of reading again by itself.
+ await near();await screen.findByRole('alert');const calls=publicApi.mock.calls.length;
+ await near();await near();expect(publicApi.mock.calls.length).toBe(calls);
+ fireEvent.click(screen.getByRole('button',{name:'探索更多商品'}));await screen.findByText('第三商品');
+ expect(screen.queryByRole('button',{name:'探索更多商品'})).not.toBeInTheDocument();
+ vi.unstubAllGlobals();
+});
+it('in the filter drawer, counts the high-value picks of each category and on the apply button',async()=>{
+ const cpCategories=[{...categories[0],count:5,children:[{...categories[0].children[0],count:2}]}];
+ publicApi.mockImplementation(async(path:string)=>path.startsWith('/discovery/cp')?{...page,categories:cpCategories,total:path.includes('limit=1')?5:1}:page);
+ render(view());await screen.findByText('BenQ 合成螢幕');
+ fireEvent.click(screen.getByRole('button',{name:'篩選商品'}));const dialog=await screen.findByRole('dialog');
+ expect(within(dialog).getByRole('button',{name:'套用條件'})).toBeInTheDocument();
+ // Choosing 高CP激推 reads that feed once, without a category, and every list and the button follow the drawer's choice.
+ fireEvent.change(within(dialog).getByRole('combobox',{name:'瀏覽內容'}),{target:{value:'cp'}});
+ expect(await within(dialog).findByRole('button',{name:'套用條件（5 件）'})).toBeInTheDocument();
+ expect(publicApi.mock.calls.filter(c=>c[0].startsWith('/discovery/cp')).map(c=>c[0])).toEqual(['/discovery/cp?sort=cp&limit=1']);
+ expect(within(within(dialog).getByRole('combobox',{name:'主分類'})).getByRole('option',{name:'3C數位（5）'})).toBeInTheDocument();
+ fireEvent.change(within(dialog).getByRole('combobox',{name:'主分類'}),{target:{value:'electronics'}});
+ fireEvent.change(within(dialog).getByRole('combobox',{name:'子分類'}),{target:{value:'monitors'}});
+ expect(within(within(dialog).getByRole('combobox',{name:'子分類'})).getByRole('option',{name:'電腦螢幕（2）'})).toBeInTheDocument();
+ expect(within(dialog).getByRole('button',{name:'套用條件（2 件）'})).toBeInTheDocument();
+ // Another condition is another scope: the count waits for its own read.
+ fireEvent.change(within(dialog).getByRole('combobox',{name:'商品狀況'}),{target:{value:'USED'}});
+ expect(within(dialog).getByRole('button',{name:'套用條件'})).toBeInTheDocument();
+ await waitFor(()=>expect(publicApi.mock.calls.at(-1)?.[0]).toBe('/discovery/cp?condition=USED&sort=cp&limit=1'));
+ expect(await within(dialog).findByRole('button',{name:'套用條件（2 件）'})).toBeInTheDocument();
+ // Back to 最新上架: no counts.
+ fireEvent.change(within(dialog).getByRole('combobox',{name:'瀏覽內容'}),{target:{value:'latest'}});
+ expect(within(dialog).getByRole('button',{name:'套用條件'})).toBeInTheDocument();
+ expect(within(within(dialog).getByRole('combobox',{name:'主分類'})).getByRole('option',{name:'3C數位'})).toBeInTheDocument();
+});
+it('on the high-value feed itself, the loaded page’s counts answer the drawer without another read',async()=>{
+ publicApi.mockResolvedValue({...page,categories:[{...categories[0],count:4,children:[{...categories[0].children[0],count:4}]}],total:4});
+ render(view('/explore?feed=cp'));await screen.findByText('BenQ 合成螢幕');const reads=publicApi.mock.calls.length;
+ fireEvent.click(screen.getByRole('button',{name:'篩選商品'}));const dialog=await screen.findByRole('dialog');
+ expect(within(dialog).getByRole('button',{name:'套用條件（4 件）'})).toBeInTheDocument();
+ await new Promise(resolve=>setTimeout(resolve,400));expect(publicApi.mock.calls.length).toBe(reads);
+ // The budget dialog is not the filter drawer and keeps its plain button.
+ fireEvent.click(within(dialog).getByRole('button',{name:'關閉'}));fireEvent.click(screen.getByRole('button',{name:'預算'}));
+ expect(within(await screen.findByRole('dialog')).getByRole('button',{name:'套用條件'})).toBeInTheDocument();
+});
 it('lets a first-time user browse an interest category when no wishes match, without creating a wish',async()=>{
  api.mockImplementation(async(_token,path,options)=>path.startsWith('/discovery/for-you')?{...page,items:[],total:0,counts:{listing:0,source:0,external:0},categories:categories.map(c=>({...c,count:0,children:c.children.map(s=>({...s,count:0}))}))}:path.startsWith('/discovery')?publicApi(path,options):{lists:[],saved:[]});
  render(view('/explore?feed=for-you'));

@@ -73,6 +73,35 @@ it('preserves legacy filter deep links and restores the new feed sort explicitly
  expect(readDiscovery('?feed=for-you').sort).toBe('recommended');expect(readDiscovery('?feed=cp').sort).toBe('cp');expect(readDiscovery('?feed=for-you&sort=price-asc').sort).toBe('price-asc');
 });
 
+it('offers the reference-price orders in every feed and asks the server for them, with a note that uncompared items come last',async()=>{
+ for(const feed of ['latest','for-you','cp'])for(const sort of ['retail-ratio-asc','retail-ratio-desc','retail-savings-desc']){
+  expect(readDiscovery('?feed='+feed+'&sort='+sort).sort).toBe(sort);
+ }
+ expect(readDiscovery('?sort=retail-ratio').sort).toBe('newest');expect(readDiscovery('?sort=oldest').sort).toBe('newest');
+ render(view());await screen.findByText('BenQ 合成螢幕');
+ const toolbar=screen.getByRole('combobox',{name:'排序'});
+ expect(within(toolbar).getAllByRole('option').map(o=>o.textContent)).toEqual(['最新優先','價格低至高','價格高至低','原價折數低至高','原價折數高至低','比原價省最多']);
+ expect(screen.queryByText(/沒有參考原價的商品排在最後/)).not.toBeInTheDocument();
+ fireEvent.change(toolbar,{target:{value:'retail-ratio-asc'}});
+ await waitFor(()=>expect(publicApi.mock.calls.at(-1)?.[0]).toBe('/discovery?sort=retail-ratio-asc'));
+ expect(screen.getByTestId('location').textContent).toBe('?sort=retail-ratio-asc');
+ expect(await screen.findByText('已查到參考原價的商品依折數排在前面，沒有參考原價的商品排在最後。')).toBeInTheDocument();
+ fireEvent.change(screen.getByRole('combobox',{name:'排序'}),{target:{value:'retail-savings-desc'}});
+ await waitFor(()=>expect(publicApi.mock.calls.at(-1)?.[0]).toBe('/discovery?sort=retail-savings-desc'));
+ expect(await screen.findByText('已查到參考原價的商品依省下金額排在前面，沒有參考原價的商品排在最後。')).toBeInTheDocument();
+ // The filter drawer offers the same orders and keeps the chosen one.
+ fireEvent.click(screen.getByRole('button',{name:'篩選商品'}));
+ const drawerSort=within(await screen.findByRole('dialog')).getByRole('combobox',{name:'排序'});
+ expect(drawerSort).toHaveValue('retail-savings-desc');
+ expect(within(drawerSort).getAllByRole('option').map(o=>o.textContent)).toEqual(['最新優先','價格低至高','價格高至低','原價折數低至高','原價折數高至低','比原價省最多']);
+});
+it('keeps the feed’s own order first and adds the reference-price orders in the comparison feed',async()=>{
+ render(view('/explore?feed=cp'));await screen.findByText('BenQ 合成螢幕');
+ expect(within(screen.getByRole('combobox',{name:'排序'})).getAllByRole('option').map(o=>o.textContent)).toEqual(['比較結果優先','最新優先','價格低至高','價格高至低','原價折數低至高','原價折數高至低','比原價省最多']);
+ fireEvent.change(screen.getByRole('combobox',{name:'排序'}),{target:{value:'retail-ratio-desc'}});
+ await waitFor(()=>expect(publicApi.mock.calls.at(-1)?.[0]).toBe('/discovery/cp?sort=retail-ratio-desc'));
+});
+
 it('lets a first-time user browse an interest category when no wishes match, without creating a wish',async()=>{
  api.mockImplementation(async(_token,path,options)=>path.startsWith('/discovery/for-you')?{...page,items:[],total:0,counts:{listing:0,source:0,external:0},categories:categories.map(c=>({...c,count:0,children:c.children.map(s=>({...s,count:0}))}))}:path.startsWith('/discovery')?publicApi(path,options):{lists:[],saved:[]});
  render(view('/explore?feed=for-you'));

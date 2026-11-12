@@ -11,8 +11,10 @@ import type { SourceMapSummary } from './sourceLeadMap';
 import { SOURCE_VALIDITY_MS } from './sourceValidity';
 import { normalizeWish } from './wishlistMatch';
 import { discoveryCatalog } from './discoveryCatalog';
-import { candidateProduct, discoveryHash, DiscoveryError, leadProduct, listingProduct,
+import { candidateProduct, discoveryHash, DiscoveryError, isRetailSort, leadProduct, listingProduct, retailStanding,
   type DiscoveryCandidateRow, type DiscoveryListingRow, type DiscoveryProduct, type DiscoveryQuery } from './discovery';
+import { retailReferences } from './retailPrices';
+import { retailMsrpTable } from './retailMsrpTable';
 
 // Public catalogue read model.
 //
@@ -452,6 +454,41 @@ export async function catalogSourceMap(now = new Date(), synced = false): Promis
   return { total: points.reduce((sum, point) => sum + point.count, 0), points };
 }
 
+// ---- the retail orders ------------------------------------------------------------
+// A product's reference price is not stored in the catalogue: it comes from retail observations and the manufacturer
+// price table at read time (retailPrices.ts retailReferences), and the page attaches it to the products it shows. To
+// order by it, the reader works out the comparison of every product that can have one: the products with a verified
+// observation, and those whose text holds a word that every identity of a table family needs. Anything else has no
+// reference price, so it is not read. If the table ever holds an identity without such a word, every product is read.
+export type RetailStanding = { key: string; ratio: number; savings: number };
+const RETAIL_STANDING_TTL_MS = 30_000;
+let retailCache: { at: number; scope: string; standings: Promise<RetailStanding[]> } | null = null;
+export const forgetRetailStandings = () => { retailCache = null; };
+async function readRetailStandings(now: Date): Promise<RetailStanding[]> {
+  const words = retailMsrpTable.titleWords();
+  const named = words === null ? Prisma.sql`TRUE` : words.length ? Prisma.join(words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ') : Prisma.sql`FALSE`;
+  const rows: Array<{ product: unknown }> = await prisma.$queryRaw`
+    SELECT e."product" FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND ((${named}) OR e."key" IN (
+      SELECT r."productKey" FROM "RetailPriceObservation" r WHERE r."status" = 'VERIFIED' AND r."expiresAt" > ${now}))`;
+  const products = rows.map(row => row.product as DiscoveryProduct), references = await retailReferences(products, now);
+  return products.flatMap(p => {
+    const standing = references.has(p.key) ? retailStanding({ ...p, retail: references.get(p.key) }) : null;
+    return standing ? [{ key: p.key, ...standing }] : [];
+  });
+}
+/** Every public product's price against its reference price, as the explore card shows it. Kept for half a minute:
+ *  a page that follows another within that time orders by the same numbers. A result that has changed since a cursor
+ *  was issued is refused like any other change (catalogDiscoveryPage). Call catalogReady(now) first. */
+export function catalogRetailStandings(now = new Date()): Promise<RetailStanding[]> {
+  const scopeKey = JSON.stringify([process.env.SOURCE_LEADS_PUBLIC_ENABLED, process.env.EXTERNAL_LISTINGS_PUBLIC_ENABLED, privateReviewListingIds()]);
+  if (!retailCache || retailCache.scope !== scopeKey || now.getTime() - retailCache.at >= RETAIL_STANDING_TTL_MS || now.getTime() < retailCache.at) {
+    const standings = readRetailStandings(now), entry = { at: now.getTime(), scope: scopeKey, standings };
+    retailCache = entry;
+    standings.catch(() => { if (retailCache === entry) retailCache = null; });
+  }
+  return retailCache.standings;
+}
+
 // One page of discovery, with the same result discoveryPage() gives over the full
 // scan: filters, facets, ordering, totals and a cursor bound to the query and to
 // the exact rows it covers. The database does the set work; only the page's own
@@ -468,12 +505,26 @@ export async function catalogDiscoveryPage(query: DiscoveryQuery, now = new Date
   if (query.max !== undefined) where.push(Prisma.sql`e."price" IS NOT NULL AND e."price" <= ${query.max}::float8`);
   // Like the full scan, a map area only narrows the products that have a place on the map.
   if (map && query.bbox) where.push(Prisma.sql`(NOT ${located} OR (e."longitude" >= ${query.bbox[0]}::float8 AND e."longitude" <= ${query.bbox[2]}::float8 AND e."latitude" >= ${query.bbox[1]}::float8 AND e."latitude" <= ${query.bbox[3]}::float8))`);
+  // A retail order joins each product's comparison; the other orders read exactly what they read before.
+  const retail = isRetailSort(query.sort) ? await catalogRetailStandings(now) : null;
   const base = Prisma.sql`SELECT e."key", e."kind", e."kindRank", e."refId", e."mainId", e."subId", e."thumbnailUrl", e."contentHash", e."price", e."date", ${located} AS "located"
-    FROM "PublicCatalogEntry" e WHERE ${Prisma.join(where, ' AND ')}`;
+    ${retail ? Prisma.sql`, s."ratio", s."savings"` : Prisma.empty}
+    FROM "PublicCatalogEntry" e
+    ${retail ? Prisma.sql`LEFT JOIN jsonb_to_recordset(${JSON.stringify(retail)}::jsonb) AS s("key" text, "ratio" float8, "savings" float8) ON s."key" = e."key"` : Prisma.empty}
+    WHERE ${Prisma.join(where, ' AND ')}`;
   const category = Prisma.sql`${query.main ? Prisma.sql`r."mainId" = ${query.main}` : Prisma.sql`TRUE`} AND ${query.sub ? Prisma.sql`r."subId" = ${query.sub}` : Prisma.sql`TRUE`}`;
   const newest = NEWEST;
+  // As discovery.ts discoveryOrder: a missing value sorts last in both directions, then newest first.
+  const sorted: Record<string, Prisma.Sql> = {
+    'price-asc': Prisma.sql`(r."price" IS NULL) ASC, r."price" ASC,`, 'price-desc': Prisma.sql`(r."price" IS NULL) ASC, r."price" DESC,`,
+    'retail-ratio-asc': Prisma.sql`(r."ratio" IS NULL) ASC, r."ratio" ASC,`, 'retail-ratio-desc': Prisma.sql`(r."ratio" IS NULL) ASC, r."ratio" DESC,`,
+    'retail-savings-desc': Prisma.sql`(r."savings" IS NULL) ASC, r."savings" DESC,`,
+  };
   const order = Prisma.sql`${map ? Prisma.sql`r."located" DESC,` : Prisma.empty}
-    ${query.sort === 'price-asc' ? Prisma.sql`(r."price" IS NULL) ASC, r."price" ASC,` : query.sort === 'price-desc' ? Prisma.sql`(r."price" IS NULL) ASC, r."price" DESC,` : Prisma.empty} ${newest}`;
+    ${sorted[query.sort] ?? Prisma.empty} ${newest}`;
+  // What identifies a row's place in the result: its content and map state, and under a retail order its comparison.
+  const state = Prisma.sql`r."key" || r."contentHash" || CASE WHEN r."located" THEN '+' ELSE '-' END
+    ${retail ? Prisma.sql`|| coalesce(r."ratio"::text, '') || '/' || coalesce(r."savings"::text, '')` : Prisma.empty}`;
   const queryHash = discoveryHash({ ...query, cursor: '', limit: 0 });
   const stale = () => new DiscoveryError(409, 'DISCOVERY_RESULTS_CHANGED');
   let cursor: { snapshot?: unknown; query?: unknown; after?: unknown } | null = null;
@@ -502,8 +553,8 @@ export async function catalogDiscoveryPage(query: DiscoveryQuery, now = new Date
       (SELECT jsonb_build_object('total', count(*), 'listing', count(*) FILTER (WHERE r."kind" = 'listing'), 'source', count(*) FILTER (WHERE r."kind" = 'source'),
         'external', count(*) FILTER (WHERE r."kind" = 'external'), 'located', count(*) FILTER (WHERE r."located"),
         -- Which rows, in which state. Their order follows from that, so two independent sums identify the result without sorting it.
-        'signature', coalesce(sum(hashtextextended(r."key" || r."contentHash" || CASE WHEN r."located" THEN '+' ELSE '-' END, 0)::numeric), 0)::text || '/' ||
-          coalesce(sum(hashtextextended(r."key" || r."contentHash" || CASE WHEN r."located" THEN '+' ELSE '-' END, 1)::numeric), 0)::text)
+        'signature', coalesce(sum(hashtextextended(${state}, 0)::numeric), 0)::text || '/' ||
+          coalesce(sum(hashtextextended(${state}, 1)::numeric), 0)::text)
         FROM chosen r) AS "summary",
       (SELECT coalesce(jsonb_agg(d."county"), '[]'::jsonb) FROM (
         SELECT c."county" FROM "PublicCatalogEntry" c WHERE ${scope(now, Prisma.raw('c'))} AND c."county" IS NOT NULL AND c."county" <> '' GROUP BY c."county") d) AS "counties",

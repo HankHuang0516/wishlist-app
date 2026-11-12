@@ -3,9 +3,11 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
-import { discoveryPage, discoveryQuery, recommendDiscovery, scanDiscovery, wishMatchGroups, WISH_MATCH_ITEMS, type DiscoveryProduct } from '../../lib/discovery';
+import { discoveryPage, discoveryQuery, recommendDiscovery, retailStanding, scanDiscovery, wishMatchGroups, WISH_MATCH_ITEMS, type DiscoveryProduct } from '../../lib/discovery';
 import { normalizeWish } from '../../lib/wishlistMatch';
-import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProductsMatching, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
+import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProductsMatching, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, forgetRetailStandings, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
+import { retailBinding, retailObservation, retailReferences } from '../../lib/retailPrices';
+import { retailMsrpTable } from '../../lib/retailMsrpTable';
 import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
@@ -21,7 +23,7 @@ let userId: number;
 
 const names: Array<[string, number]> = [['BenQ GW2270 二手電腦螢幕', 900], ['Apple MacBook Air 筆電', 18500], ['Sony 無線耳機', 4200], ['兒童繪本套書', 600], ['IKEA 書桌', 0], ['登山背包', 1300]];
 const counties = ['臺北市', '新北市', '臺南市'];
-function lead(index: number, now: Date, extra: { title?: string; contact?: boolean } = {}) {
+function lead(index: number, now: Date, extra: { title?: string; contact?: boolean; unitStated?: boolean } = {}) {
   const [name, price] = names[index % names.length], county = counties[index % counties.length], point = countyIllustration(county)!;
   const id = randomUUID(), url = 'https://www.facebook.com/groups/9000000002/posts/' + id.replace(/-/g, '');
   const posted = new Date(now.getTime() - (1 + index % 30) * 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -37,7 +39,7 @@ function lead(index: number, now: Date, extra: { title?: string; contact?: boole
       publicPlace: false, locationType: located ? 'COUNTY_ILLUSTRATION' : 'SELLER_CONTACT_REQUIRED', sourceMeetingPointConfirmed: false, independentlyReviewed: true, selfWrittenSummary: true,
       noCopiedTextOrImages: true, noPrivateData: true, reviewRef: 'review:catalog-test', sourceCheckRef: 'source:catalog-test-check/' + index,
       ...(located ? { countyIllustration: { county, sourceUrl: url, sourceCountyRef: 'source:catalog-test-county/' + index, representativeKey: point.key, approvalRef: 'review:catalog-test-county', districtStatus: 'UNKNOWN' } } : {}),
-      publicFacts: { priceText: index % 7 === 3 ? '未標價' : 'NT$ ' + (price + index), priceUnitStatus: 'unknown', currencyStatus: 'TWD', sourceAccessNotice: '合成公開來源。', originalDateLabel: '合成刊登時間 ' + posted, locationRelation: located ? '概略位置，非取貨點。' : '未提供地區，需向賣家確認。', coordinateQualityNotes: [] },
+      publicFacts: { priceText: index % 7 === 3 ? '未標價' : 'NT$ ' + (price + index), priceUnitStatus: extra.unitStated ? 'SOURCE_STATED' : 'unknown', currencyStatus: 'TWD', sourceAccessNotice: '合成公開來源。', originalDateLabel: '合成刊登時間 ' + posted, locationRelation: located ? '概略位置，非取貨點。' : '未提供地區，需向賣家確認。', coordinateQualityNotes: [] },
     },
   }, now, true);
   return { id, ...data, recordOrigin: 'DB_MASTER', status: 'PUBLISHED' };
@@ -100,6 +102,70 @@ it.each([{ limit: '50' }, { limit: '13', sort: 'price-asc' }, { limit: '20', pre
   const now = new Date(), expected = await everyKey(query => fullScan(query, now), raw), actual = await everyKey(query => readModel(query, now), raw);
   expect(actual).toEqual(expected);
   expect(new Set(actual).size).toBe(actual.length);
+});
+
+// The retail orders: the route attaches each product's reference price before the full scan orders the list, and the read
+// model joins the same comparison in SQL. Some BenQ monitors get a verified observation (one of them unpriced), some
+// iPhones get their price from the manufacturer table alone, and everything else has no reference and must come last.
+it('orders by the reference-price comparison like the full scan, with every uncompared product last, and pages without gaps or repeats', async () => {
+  // Sources whose price unit the source states are compared like listings; the fixtures' other sources are not (the card shows no comparison for them).
+  const now = new Date(), retailIds: string[] = [], stated = { unitStated: true };
+  const added = [lead(700, now, { ...stated, title: 'Apple iPhone 15 128GB 黑色' }), lead(701, now, { ...stated, title: 'iPhone 15 128GB 粉色 二手' }), lead(702, now, { ...stated, title: 'iPhone 14 128GB 午夜色' }),
+    ...[703, 704, 705, 706].map(index => lead(index, now, { ...stated, title: 'BenQ GW2270 螢幕 標明單價' }))];
+  expect(retailMsrpTable.has('iphone:15:base:128gb') && retailMsrpTable.has('iphone:14:base:128gb')).toBe(true);
+  leadIds.push(...added.map(row => row.id));
+  await prisma.externalSourceLead.createMany({ data: added });
+  try {
+    const monitors = (await catalogProducts(new Date())).filter(p => p.title.startsWith('BenQ GW2270'));
+    // A stated unit but no price (703), three priced (704-706), two listings, and two sources whose unit is not stated: all get an observation.
+    const benq = [...monitors.filter(p => p.title.includes('標明單價')), ...monitors.filter(p => p.kind === 'listing').slice(0, 2), ...monitors.filter(p => p.kind === 'source' && !p.priceUnitVerified && p.price !== null).slice(0, 2)];
+    expect(benq.map(p => [p.price === null, p.priceUnitVerified]).sort()).toEqual([[false, false], [false, false], [false, true], [false, true], [false, true], [false, true], [false, true], [true, true]]);
+    for (const [index, p] of benq.entries()) {
+      const id = randomUUID(), price = String(4990 + index * 37); retailIds.push(id);
+      await prisma.retailPriceObservation.create({ data: retailObservation({ requestId: id, productKey: p.key, bindingHash: retailBinding(p), status: 'VERIFIED', originalPrice: price, currency: 'TWD', priceType: 'MANUFACTURER_MSRP',
+        sourceUrl: 'https://www.benq.com/zh-tw/monitor.html', sourceTitle: 'Synthetic original price evidence', sourceProductTitle: 'BenQ GW2270', sourcePeriod: '2026-10', evidenceQuote: 'BenQ GW2270 新品原價 NT$' + price, checkedAt: new Date().toISOString() }, p) });
+    }
+    forgetRetailStandings();
+    const at = new Date(), scanned = await scanDiscovery(at), references = await retailReferences(scanned, at);
+    const attach = (products: DiscoveryProduct[]) => products.map(p => references.has(p.key) ? { ...p, retail: references.get(p.key)! } : p);
+    const withRetail = attach(scanned), withRetailMap = attach(await scanDiscovery(at, true));
+    expect(withRetail.filter(p => p.retail).length).toBe(benq.length + 3);
+    const compared = (sort: string) => discoveryPage(withRetail, discoveryQuery({ sort, limit: '60' })).items;
+    for (const sort of ['retail-ratio-asc', 'retail-ratio-desc', 'retail-savings-desc']) {
+      for (const raw of [{ sort }, { sort, limit: '60' }, { sort, limit: '9' }, { sort, q: 'gw2270' }, { sort, main: 'electronics' }, { sort, presentation: 'map', limit: '60' }, { sort, min: '100', max: '20000' }] as Array<Record<string, string>>) {
+        const full = discoveryPage(raw.presentation ? withRetailMap : withRetail, discoveryQuery(raw)), model = await catalogDiscoveryPage(discoveryQuery(raw), at);
+        expect({ raw, keys: model.items.map(p => p.key), total: model.total, more: model.nextCursor !== null, categories: model.categories, counts: model.counts })
+          .toEqual({ raw, keys: full.items.map(p => p.key), total: full.total, more: full.nextCursor !== null, categories: full.categories, counts: full.counts });
+      }
+      const fullKeys = await everyKey(query => Promise.resolve(discoveryPage(withRetail, discoveryQuery(query))), { sort, limit: '11' });
+      const modelKeys = await everyKey(query => catalogDiscoveryPage(discoveryQuery(query), at), { sort, limit: '11' });
+      expect(modelKeys).toEqual(fullKeys); expect(new Set(modelKeys).size).toBe(modelKeys.length);
+      // The compared products (priced, with a reference) first, in the asked direction; then the rest, newest first.
+      const ranked = compared(sort).filter(p => retailStanding(p));
+      expect(fullKeys.slice(0, ranked.length)).toEqual(ranked.map(p => p.key));
+      expect(ranked.length).toBe(3 + 3 + 2);
+      const ratios = ranked.map(p => sort === 'retail-savings-desc' ? retailStanding(p)!.savings : retailStanding(p)!.ratio);
+      expect(ratios).toEqual([...ratios].sort((a, b) => sort === 'retail-ratio-asc' ? a - b : b - a));
+    }
+    // Through the route: the products come with their reference price, the cheapest against it first.
+    const response = await http.get('/discovery?sort=retail-ratio-asc&limit=4');
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((p: DiscoveryProduct) => p.key)).toEqual(compared('retail-ratio-asc').slice(0, 4).map(p => p.key));
+    expect(response.body.items.every((p: DiscoveryProduct) => p.retail && p.retail.productKey === p.key)).toBe(true);
+    // A comparison that changes after a page was read invalidates its cursor, even though no product changed.
+    const before = await http.get('/discovery?sort=retail-savings-desc&limit=4');
+    const comparedAt = benq.findIndex(p => p.price !== null && p.priceUnitVerified);
+    await prisma.retailPriceObservation.update({ where: { id: retailIds[comparedAt] }, data: { expiresAt: new Date(0) } });
+    forgetRetailStandings();
+    expect((await http.get('/discovery?sort=retail-savings-desc&limit=4&cursor=' + before.body.nextCursor)).body.errorCode).toBe('DISCOVERY_RESULTS_CHANGED');
+    // The newest-first feed is not affected by any of this.
+    const plain = await http.get('/discovery?limit=4');
+    expect(plain.body.items.map((p: DiscoveryProduct) => p.key)).toEqual(discoveryPage(scanned, discoveryQuery({ limit: '4' })).items.map(p => p.key));
+  } finally {
+    await prisma.retailPriceObservation.deleteMany({ where: { id: { in: retailIds } } });
+    await prisma.externalSourceLead.deleteMany({ where: { id: { in: added.map(row => row.id) } } });
+    forgetRetailStandings();
+  }
 });
 
 // The explore page's HTML names the first page of the ordinary feed (lib/firstScreenHints.ts); it has to be the

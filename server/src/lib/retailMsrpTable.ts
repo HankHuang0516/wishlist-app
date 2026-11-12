@@ -20,6 +20,16 @@ function valid(row: RetailMsrpRow): boolean {
 const TABLE = new Map<string, RetailMsrpRow>();
 for (const row of RETAIL_MSRP_ROWS) if (valid(row) && !TABLE.has(row.identity)) TABLE.set(row.identity, row);
 
+// The word a product's title has to hold for retailIdentity() to give an identity of each table family: its rule for
+// that family only matches a title with the word in it (iphone, ipad, airpods, "apple watch", macbook). The title is
+// read lowercased after NFKC, and the catalogue's search text keeps every run of letters of it, so a product whose
+// search text lacks all of these words can have no table price. Add the family here when the table gains one.
+const FAMILY_WORDS: Array<[prefix: string, word: string]> = [
+    ['apple:airpods:', 'airpods'], ['apple:watch:', 'watch'], ['apple:ipad-', 'ipad'], ['apple:macbook-', 'macbook'], ['apple:iphone-', 'iphone'],
+    ['iphone:', 'iphone'], ['ipad:', 'ipad'],
+];
+export const msrpFamilyWord = (identity: string) => FAMILY_WORDS.find(([prefix]) => identity.startsWith(prefix))?.[1] ?? null;
+
 export const retailMsrpTable = {
     version: RETAIL_MSRP_TABLE_VERSION,
     verifiedAt: RETAIL_MSRP_VERIFIED_AT,
@@ -28,6 +38,11 @@ export const retailMsrpTable = {
     has: (identity: string | null | undefined) => !!identity && TABLE.has(identity),
     row: (identity: string | null | undefined) => (identity ? TABLE.get(identity) ?? null : null),
     identities: () => [...TABLE.keys()],
+    /** The words of every family in the table, or null when an identity belongs to no known family (then nothing can be skipped). */
+    titleWords: (): string[] | null => {
+        const words = [...TABLE.keys()].map(msrpFamilyWord);
+        return words.some(word => word === null) ? null : [...new Set(words as string[])];
+    },
 };
 
 // The reference carries the table version in its key and the table's verification time as checkedAt, so its hash is

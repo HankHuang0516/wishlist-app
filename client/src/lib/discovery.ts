@@ -16,6 +16,11 @@ export type DiscoveryProduct = {
 export type DiscoveryCategory={id:string;label:string;en:string;icon:string;count:number;children:{id:string;label:string;en:string;count:number;thumbnailUrl:string|null}[]};
 export type DiscoveryPage={items:DiscoveryProduct[];categories:DiscoveryCategory[];nextCursor:string|null;snapshot:string;total:number;counts:{listing:number;source:number;external:number};counties:string[];complete:true;generatedAt:string;unknownPriceExcluded:boolean;mapTotals?:{located:number;unmapped:number};cpStatus?:{evaluated:number;scored:number;pending:number;providerConfigured:boolean;threshold:number;assessments?:{retail?:RetailPriceReference;conversion?:RetailConversion;key:string;title:string;score:number|null;reasons:{zh:string;en:string}[];evaluatedAt:string}[]}};
 export type DiscoveryFilters={q:string;main:string;sub:string;source:string;condition:string;county:string;min:string;max:string;sort:string;feed:string;display:string;mode:'list'|'map'};
+// Orders the server can read a list in (server/src/lib/discovery.ts DISCOVERY_SORTS). The retail ones compare the asking
+// price with the reference price; products without that comparison come after every product that has one.
+export const RETAIL_SORTS=['retail-ratio-asc','retail-ratio-desc','retail-savings-desc'];
+export const isRetailSort=(sort:string)=>RETAIL_SORTS.includes(sort);
+const SORTS=['newest','price-asc','price-desc','recommended','cp',...RETAIL_SORTS];
 export const defaultDiscovery:DiscoveryFilters={q:'',main:'',sub:'',source:'all',condition:'',county:'',min:'',max:'',sort:'newest',feed:'latest',display:'grid',mode:'list'};
 // Defined once, next to the script that fetches a page's code before the page exists, so the two cannot disagree.
 export {isLegacyExplore} from '../firstScreen/boot';
@@ -26,7 +31,7 @@ export function readDiscovery(search:string):DiscoveryFilters{
   if(!['grid','list'].includes(r.display))r.display='grid';
   if(!['list','map'].includes(r.mode))r.mode='list';
   if(!p.has('sort'))r.sort=r.feed==='for-you'?'recommended':r.feed==='cp'?'cp':'newest';
-  if(!['newest','price-asc','price-desc','recommended','cp'].includes(r.sort)||r.sort==='recommended'&&r.feed!=='for-you'||r.sort==='cp'&&r.feed!=='cp')r.sort='newest';
+  if(!SORTS.includes(r.sort)||r.sort==='recommended'&&r.feed!=='for-you'||r.sort==='cp'&&r.feed!=='cp')r.sort='newest';
   return r;
 }
 export function discoverySearch(f:DiscoveryFilters){const p=new URLSearchParams();for(const k of Object.keys(f) as (keyof DiscoveryFilters)[])if(f[k]&&f[k]!==defaultDiscovery[k])p.set(k,f[k]);return p;}

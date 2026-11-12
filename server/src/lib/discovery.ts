@@ -28,12 +28,24 @@ export type DiscoveryProduct = {
 };
 export type DiscoveryQuery = { q: string; main: string; sub: string; source: string; condition: string; county: string; min?: number; max?: number; sort: string; cursor: string; limit: number;presentation?:'map';bbox?:[number,number,number,number] };
 export class DiscoveryError extends Error { constructor(public status: number, public code: string) { super(code); } }
+// Orders a product list can be read in. The retail ones compare the asking price with the product's reference price.
+export const RETAIL_SORTS = ['retail-ratio-asc', 'retail-ratio-desc', 'retail-savings-desc'] as const;
+export const DISCOVERY_SORTS = ['newest', 'price-asc', 'price-desc', 'recommended', 'cp', ...RETAIL_SORTS] as const;
+export const isRetailSort = (sort: string) => (RETAIL_SORTS as readonly string[]).includes(sort);
+/** The comparison the explore card shows (client lib/retailComparison.ts): asking price ÷ reference price × 10 is the
+ *  「約參考原價 N 折」 number, and the reference price minus the asking price is what the buyer saves against it. Only a TWD
+ *  price with a verified unit is compared, as on the card; any other product has no comparison and sorts after those that do. */
+export function retailStanding(p: Pick<DiscoveryProduct, 'price' | 'currency' | 'priceUnitVerified' | 'retail' | 'cp'>): { ratio: number; savings: number } | null {
+  const reference = p.retail ?? p.cp?.retail;
+  if (!reference || !Number.isFinite(reference.price) || reference.price <= 0 || p.price === null || !Number.isFinite(p.price) || p.price < 0 || p.currency !== 'TWD' || !p.priceUnitVerified) return null;
+  return { ratio: p.price / reference.price * 10, savings: reference.price - p.price };
+}
 export const discoveryHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export function discoveryQuery(v: Record<string, unknown>): DiscoveryQuery {
   if (!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k => !['q','main','sub','source','condition','county','min','max','sort','cursor','limit','presentation','bbox'].includes(k)) || Object.values(v).some(x => typeof x !== 'string')) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
   const q = String(v.q ?? '').trim(), main = String(v.main ?? ''), sub = String(v.sub ?? ''), source = String(v.source ?? 'all'), condition = String(v.condition ?? ''), county = String(v.county ?? ''), sort = String(v.sort ?? 'newest'), cursor = String(v.cursor ?? '');
   const group = discoveryCatalog.find(c => c.id === main);
-  if (q.length > 80 || /[\u0000-\u001f\u007f]/.test(q) || main && !group || sub && !group?.children.some(s => s.id === sub) || !['all','listing','source','external'].includes(source) || !['','NEW','USED','UNKNOWN'].includes(condition) || county && !/^[\p{Script=Han}]{2,8}[市縣區鄉鎮里]$/u.test(county) || !['newest','price-asc','price-desc','recommended','cp'].includes(sort) || cursor.length > 600) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
+  if (q.length > 80 || /[\u0000-\u001f\u007f]/.test(q) || main && !group || sub && !group?.children.some(s => s.id === sub) || !['all','listing','source','external'].includes(source) || !['','NEW','USED','UNKNOWN'].includes(condition) || county && !/^[\p{Script=Han}]{2,8}[市縣區鄉鎮里]$/u.test(county) || !(DISCOVERY_SORTS as readonly string[]).includes(sort) || cursor.length > 600) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
   const number = (key: string) => { if (v[key] === undefined || v[key] === '') return undefined; if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(v[key] as string)) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY'); return Number(v[key]); };
   const min = number('min'), max = number('max'), limit = v.limit === undefined ? 24 : Number(v.limit);
   if (min !== undefined && max !== undefined && min > max || !Number.isInteger(limit) || limit < 1 || limit > 60) throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
@@ -184,12 +196,34 @@ export function filterDiscovery(all: DiscoveryProduct[], query: DiscoveryQuery,c
   const words=normalizeWish(query.q).split(' ').filter(Boolean);
   return all.filter(p=>(!category||(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub))&&(query.source==='all'||p.kind===query.source)&&(!query.condition||p.condition===query.condition)&&(!query.county||p.county===query.county)&&words.every(w=>normalizeWish(p.title+' '+p.description+' '+(p.brand??'')).includes(w))&&(query.min===undefined||p.price!==null&&p.price>=query.min)&&(query.max===undefined||p.price!==null&&p.price<=query.max)&&(!query.bbox||!p.mapLocation||p.mapLocation.coordinates[0]>=query.bbox[0]&&p.mapLocation.coordinates[0]<=query.bbox[2]&&p.mapLocation.coordinates[1]>=query.bbox[1]&&p.mapLocation.coordinates[1]<=query.bbox[3]));
 }
+// A value that is missing sorts after every present one, in both directions; ties fall back to newest first.
+const known = (a: number | null | undefined, b: number | null | undefined, direction: 1 | -1) =>
+  a === null || a === undefined ? (b === null || b === undefined ? 0 : 1) : b === null || b === undefined ? -1 : (a - b) * direction;
+/** The order of a product list. publicCatalog.ts catalogDiscoveryPage gives the same order in SQL. */
+export function discoveryOrder(query: Pick<DiscoveryQuery, 'sort' | 'presentation'>) {
+  const value = (p: DiscoveryProduct): [number | null | undefined, 1 | -1] | null => {
+    switch (query.sort) {
+      case 'price-asc': return [p.price, 1];
+      case 'price-desc': return [p.price, -1];
+      case 'retail-ratio-asc': return [retailStanding(p)?.ratio, 1];
+      case 'retail-ratio-desc': return [retailStanding(p)?.ratio, -1];
+      case 'retail-savings-desc': return [retailStanding(p)?.savings, -1];
+      case 'cp': return [p.cp?.score ?? 0, -1];
+      case 'recommended': return [p.match?.score ?? 0, -1];
+      default: return null;
+    }
+  };
+  return (a: DiscoveryProduct, b: DiscoveryProduct) => {
+    if (query.presentation === 'map' && !!a.mapLocation !== !!b.mapLocation) return a.mapLocation ? -1 : 1;
+    const x = value(a), y = value(b);
+    return (x && y ? known(x[0], y[0], x[1]) : 0) || newestFirst(a, b);
+  };
+}
 export function discoveryPage(all: DiscoveryProduct[], query: DiscoveryQuery) {
   const base=filterDiscovery(all,query,false);
   const categories=discoveryCatalog.map(c=>({...c,count:base.filter(p=>p.mainId===c.id).length,children:c.children.map(s=>({...s,count:base.filter(p=>p.mainId===c.id&&p.subId===s.id).length,thumbnailUrl:base.find(p=>p.mainId===c.id&&p.subId===s.id&&p.thumbnailUrl)?.thumbnailUrl??null}))}));
   const rows=base.filter(p=>(!query.main||p.mainId===query.main)&&(!query.sub||p.subId===query.sub));
-  const newest=(a:DiscoveryProduct,b:DiscoveryProduct)=>Date.parse(b.date)-Date.parse(a.date)||a.key.localeCompare(b.key);
-  rows.sort((a,b)=>query.presentation==='map'&&!!a.mapLocation!==!!b.mapLocation?(a.mapLocation?-1:1):query.sort.startsWith('price-')?(a.price===null?b.price===null?newest(a,b):1:b.price===null?-1:(query.sort==='price-asc'?a.price-b.price:b.price-a.price)||newest(a,b)):query.sort==='cp'?(b.cp?.score??0)-(a.cp?.score??0)||newest(a,b):query.sort==='recommended'?(b.match?.score??0)-(a.match?.score??0)||newest(a,b):newest(a,b));
+  rows.sort(discoveryOrder(query));
   const signature=discoveryHash(rows), queryHash=discoveryHash({...query,cursor:'',limit:0});
   let start=0;
   if(query.cursor){try{const c=JSON.parse(Buffer.from(query.cursor,'base64url').toString());if(c.snapshot!==signature||c.query!==queryHash||typeof c.after!=='string')throw Error();start=rows.findIndex(r=>r.key===c.after)+1;if(!start)throw Error();}catch{throw new DiscoveryError(409,'DISCOVERY_RESULTS_CHANGED');}}

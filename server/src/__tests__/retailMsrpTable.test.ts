@@ -1,4 +1,5 @@
-import { retailMsrpTable, msrpReference, msrpTableHash } from '../lib/retailMsrpTable';
+import { retailMsrpTable, msrpReference, msrpTableHash, msrpFamilyWord } from '../lib/retailMsrpTable';
+import { normalizeWish } from '../lib/wishlistMatch';
 import { RETAIL_MSRP_ROWS } from '../lib/retailMsrpTableData';
 import { retailIdentity, retailBinding } from '../lib/retailPrices';
 import type { DiscoveryProduct } from '../lib/discovery';
@@ -49,4 +50,13 @@ test('a product whose identity is in the table gets a stable manufacturer refere
   expect(msrpReference(product('Sony WH-1000XM5 二手', { subId: 'audio' }), 'electronics:audio:wh1000xm5', 'x')).toBeNull();
   expect(msrpReference(p, null, retailBinding(p))).toBeNull();
   expect(msrpTableHash()).toMatch(/^[0-9a-f]{64}$/);
+});
+
+test('every table identity belongs to a family whose word its product title must hold, so the retail order can skip the rest', () => {
+  for (const identity of retailMsrpTable.identities()) expect({ identity, word: msrpFamilyWord(identity) }).toEqual({ identity, word: expect.any(String) });
+  expect(retailMsrpTable.titleWords()?.sort()).toEqual(['airpods', 'ipad', 'iphone', 'macbook', 'watch']);
+  for (const row of RETAIL_MSRP_ROWS) expect(normalizeWish(row.sourceProductTitle)).toContain(msrpFamilyWord(row.identity));
+  // A title that spells the family with other characters in between still reaches the catalogue search text as the word.
+  expect(normalizeWish('ＩＰＨＯＮＥ 15 128GB')).toContain('iphone');
+  expect(msrpFamilyWord('sony:camera:a7')).toBeNull();
 });

@@ -1,5 +1,5 @@
 import {classifyDiscovery,discoveryCatalog,sourcePrice} from '../lib/discoveryCatalog';
-import {discoveryPage,discoveryQuery,type DiscoveryProduct} from '../lib/discovery';
+import {discoveryPage,discoveryQuery,retailStanding,DISCOVERY_SORTS,type DiscoveryProduct} from '../lib/discovery';
 const product=(i:number,extra:Partial<DiscoveryProduct>={}):DiscoveryProduct=>({kind:'source',id:String(i),key:'source:'+i,title:'二手電腦螢幕 '+i,description:'公開來源',mainId:'electronics',subId:'monitors',classificationMethod:'TITLE_RULE',price:i,priceText:String(i),currency:'TWD',priceUnitVerified:true,thumbnailUrl:null,photos:[],county:'臺北市',district:null,condition:'UNKNOWN',sourceLabel:'example.invalid',stockStatus:'UNKNOWN',canonicalUrl:'https://example.invalid/'+i,detailPath:'/explore',date:'2026-10-24T00:00:00Z',dateBasis:'SOURCE_POST_RANGE',dateEarliest:null,...extra});
 test('subcategory IDs are unique within parents and title rules preserve accessories vs phones',()=>{
  expect(new Set(discoveryCatalog.map(c=>c.id)).size).toBe(discoveryCatalog.length);
@@ -38,6 +38,40 @@ test('sorts source post dates with site publication dates; unknown prices stay l
  expect(discoveryPage(all,discoveryQuery({sort:'price-desc'})).items.map(p=>p.id)).toEqual(['2','3','1']);
  expect(discoveryPage(all,discoveryQuery({max:'300'})).total).toBe(2);
  expect(discoveryPage(all,discoveryQuery({condition:'USED'})).total).toBe(0);
+});
+const reference=(price:number)=>({id:'r'+price,key:'retail:r'+price,productKey:'x',bindingHash:'h',identity:'i',price,currency:'TWD' as const,priceType:'MANUFACTURER_MSRP' as const,sourceUrl:'https://www.apple.com/tw/',sourceTitle:'t',sourceProductTitle:'t',evidenceQuote:'q',sourcePeriod:null,checkedAt:'2026-11-10T00:00:00Z'});
+test('orders by the reference-price comparison the card shows; products without one stay last in every direction',()=>{
+ // 1: 1.8 折 (save 820)  2: 5 折 (save 10000)  3: 9 折 (save 100)  4: no reference  5: price above the reference  6: reference but price unknown
+ // 7: reference only through its CP evaluation (2 折, save 4000)  8: price in another currency  9: unverified unit  10: newer twin of 1
+ const all=[product(1,{price:180,retail:reference(1000)}),product(2,{price:10000,retail:reference(20000)}),product(3,{price:900,retail:reference(1000)}),product(4,{price:5}),
+  product(5,{price:1200,retail:reference(1000)}),product(6,{price:null,retail:reference(1000)}),product(7,{price:1000,cp:{retail:reference(5000),score:80,confidence:'MEDIUM',reasons:[],limitations:[],basis:[],model:'m',evaluatedAt:'2026-11-10T00:00:00Z',dimensions:null}}),
+  product(8,{price:100,currency:'USD',retail:reference(1000)}),product(9,{price:100,priceUnitVerified:false,retail:reference(1000)}),product(10,{price:180,retail:reference(1000),date:'2026-10-25T00:00:00Z'})];
+ const ids=(sort:string)=>discoveryPage(all,discoveryQuery({sort})).items.map(p=>p.id);
+ expect(ids('retail-ratio-asc')).toEqual(['10','1','7','2','3','5',...['4','6','8','9']]);
+ expect(ids('retail-ratio-desc')).toEqual(['5','3','2','7','10','1',...['4','6','8','9']]);
+ expect(ids('retail-savings-desc')).toEqual(['2','7','10','1','3','5',...['4','6','8','9']]);
+ // The uncompared keep newest-first among themselves (equal dates here, so key order).
+ expect(retailStanding(all[0])?.ratio).toBeCloseTo(1.8,10);expect(retailStanding(all[0])?.savings).toBe(820);
+ expect(retailStanding(all[4])).toEqual({ratio:12,savings:-200});
+ for(const p of [all[3],all[5],all[7],all[8]])expect(retailStanding(p)).toBeNull();
+});
+test('pages through a retail order exactly once and refuses a cursor once a comparison changes',()=>{
+ const all=Array.from({length:75},(_,i)=>product(i,{price:100+i,...(i%3?{retail:reference(1000+(i%7)*100)}:{}),date:new Date(Date.UTC(2026,9,1,0,i)).toISOString()}));
+ for(const sort of ['retail-ratio-asc','retail-ratio-desc','retail-savings-desc']){
+  const expected=discoveryPage(all,discoveryQuery({sort,limit:'60'})).items.map(p=>p.id).concat(discoveryPage(all,discoveryQuery({sort,limit:'60',cursor:discoveryPage(all,discoveryQuery({sort,limit:'60'})).nextCursor!})).items.map(p=>p.id));
+  const seen:string[]=[];let page=discoveryPage(all,discoveryQuery({sort,limit:'7'}));seen.push(...page.items.map(p=>p.id));
+  while(page.nextCursor){page=discoveryPage(all,discoveryQuery({sort,limit:'7',cursor:page.nextCursor}));seen.push(...page.items.map(p=>p.id));}
+  expect(seen).toEqual(expected);expect(new Set(seen).size).toBe(75);
+  // The 25 products without a reference come after all 50 with one.
+  expect(seen.slice(50).every(id=>Number(id)%3===0)).toBe(true);
+ }
+ const first=discoveryPage(all,discoveryQuery({sort:'retail-ratio-asc',limit:'7'}));
+ const repriced=all.map(p=>p.id==='40'?{...p,retail:reference(9000)}:p);
+ expect(()=>discoveryPage(repriced,discoveryQuery({sort:'retail-ratio-asc',limit:'7',cursor:first.nextCursor!}))).toThrow('DISCOVERY_RESULTS_CHANGED');
+});
+test('accepts each listed order and nothing else',()=>{
+ for(const sort of DISCOVERY_SORTS)expect(discoveryQuery({sort}).sort).toBe(sort);
+ for(const sort of ['retail-ratio','retail-savings-asc','oldest','distance','RETAIL-RATIO-ASC'])expect(()=>discoveryQuery({sort})).toThrow();
 });
 test('searches an explicitly stated brand even when it is absent from the product title',()=>{
  expect(discoveryPage([product(1,{title:'合成螢幕',description:'公開測試',brand:'BenQ'})],discoveryQuery({q:'benq'})).total).toBe(1);

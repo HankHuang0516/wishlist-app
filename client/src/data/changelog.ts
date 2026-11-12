@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.853',date:'2026-11-12',title:'探索排序新增原價折數與省最多',type:'Fullstack',items:[{type:'New',content:'探索頁的排序新增「原價折數低至高」「原價折數高至低」「比原價省最多」，三個動態（你會想要、最新上架、高CP激推）都能用；依商品卡上「約參考原價 N 折」的同一組數字排序。'},{type:'Enhancement',content:'排序在伺服器端完成，往下載入更多時順序連續、不重複不漏；還沒有參考原價的商品一律排在最後，並在清單上方說明。'}]},
  {version:'2.0.852',date:'2026-11-11',title:'首頁自動比對所有願望',type:'Fullstack',items:[{type:'Enhancement',content:'登入後的首頁一打開就把每個願望和所有商品（站內刊登與公開來源）比對好，每個願望直接顯示最吻合的商品，不必再一個一個選願望去探索搜尋。'},{type:'Enhancement',content:'點商品直接在首頁看詳情；移除「今天想找什麼？」願望選單、「不套用願望，瀏覽商品地圖」與首頁地圖預覽。'}]},
  {version:'2.0.851',date:'2026-11-11',title:'探索與來源地圖第一次開啟的速度',type:'Fullstack',items:[{type:'Enhancement',content:'第一次打開探索時，前幾張商品縮圖與「詢問中／喜歡」人數改為和頁面程式同時開始下載，不再等商品清單回來才開始。'},{type:'Enhancement',content:'第一次打開來源線索地圖時，第一件的大圖與清單前幾張縮圖也同時開始下載。'}]},
  {version:'2.0.850',date:'2026-11-10',title:'商品頁第一次開啟的速度',type:'Fullstack',items:[{type:'Enhancement',content:'第一次打開商品頁時，第一張照片改為和頁面程式同時開始下載，不再等商品資料回來才開始。'},{type:'Enhancement',content:'未登入打開舊版探索連結時，公開來源數量和頁面程式同時讀取。'}]},

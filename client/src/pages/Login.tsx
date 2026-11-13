@@ -1,22 +1,19 @@
-import { Link,useNavigate,useSearchParams } from 'react-router-dom';
+import { useNavigate,useSearchParams } from 'react-router-dom';
 import { useEffect,useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Card,CardContent,CardHeader,CardTitle,CardFooter } from '../components/ui/Card';
 import { t } from '../utils/localization';
 import { Analytics } from '../utils/analytics';
-import { Eye,EyeOff } from 'lucide-react';
 import { SECURITY_NOTICES,type SecurityNotice } from '../lib/accountSecurityWeb';
 import { authReturnTo } from '../lib/authReturnTo';
 import { authSession } from '../lib/authSession';
 import { AuthFlowError,authIssue,authText,emailPayload,emailRequestAck } from '../lib/authFlowWeb';
 import { useAuthRequest } from '../lib/useAuthRequest';
-import { AuthRecoveryLinks } from '../components/AuthRecovery';
+import { AuthField,AuthLink,AuthLinks,AuthMessage,AuthPage,AuthPasswordField,AuthSubmit,AuthSwitch } from '../components/AuthLayout';
 import ProductNoticeWeb from '../components/ProductNoticeWeb';
 
 export default function Login() {
-  const [identifier,setIdentifier]=useState(''),[password,setPassword]=useState(''),[showPassword,setShowPassword]=useState(false);
+  const [identifier,setIdentifier]=useState(''),[password,setPassword]=useState('');
   const [error,setError]=useState(''),[showResend,setShowResend]=useState(false),[resendSuccess,setResendSuccess]=useState('');
   const {login,isAuthenticated}=useAuth(),navigate=useNavigate(),[params]=useSearchParams();
   const {busy,run}=useAuthRequest(params.toString());
@@ -39,20 +36,25 @@ export default function Login() {
     try{const payload=emailPayload(identifier);const ack=await run('/resend-verification',payload);if(!ack)return;emailRequestAck(ack);setResendSuccess(authText('requestAccepted'));setError('');}
     catch(failure){setError(authIssue(failure));}
   }
-  return <div className="flex items-center justify-center min-h-[60vh] p-4"><Card className="w-full max-w-md">
-    <CardHeader className="text-center"><CardTitle className="text-2xl">{t('login.title')}</CardTitle><p className="text-sm text-muji-secondary">{t('login.subtitle')}</p></CardHeader>
-    <form onSubmit={submit}><CardContent className="space-y-4">
-      <ProductNoticeWeb disabled={busy}/>
-      {securityNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{securityNotice}</p>}
-      {error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
-      {resendSuccess&&<p role="status" className="rounded-lg bg-green-50 p-3 text-green-800">{resendSuccess}</p>}
-      {showResend&&<Button type="button" variant="outline" onClick={()=>void resend()} disabled={busy} className="w-full min-h-[44px]">{authText(busy?'processing':'resend')}</Button>}
-      <div className="space-y-2"><label htmlFor="identifier">{t('login.phoneOrEmail')}</label><Input id="identifier" autoComplete="username" maxLength={254} required value={identifier} onChange={event=>setIdentifier(event.target.value)} disabled={busy} className="min-h-[44px]"/></div>
-      <div className="space-y-2"><label htmlFor="password">{t('login.password')}</label><div className="relative"><Input id="password" type={showPassword?'text':'password'} autoComplete="current-password" required value={password} onChange={event=>setPassword(event.target.value)} disabled={busy} className="min-h-[44px] pr-12"/>
-        <button type="button" disabled={busy} onClick={()=>setShowPassword(!showPassword)} aria-label={authText(showPassword?'hide':'show')} aria-pressed={showPassword} className="absolute right-0 top-0 h-full min-w-[44px] flex items-center justify-center text-muji-secondary">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button>
-      </div></div>
-      <Link to="/forgot-password" className="min-h-[44px] flex items-center justify-end text-sm underline">{t('login.forgotPassword')}</Link>
-    </CardContent><CardFooter className="flex flex-col gap-4"><Button type="submit" disabled={busy} className="w-full min-h-[44px]">{busy?t('login.signingIn'):t('login.signIn')}</Button><p className="text-sm">{t('login.noAccount')} <Link to="/register" className="underline">{t('login.signUp')}</Link></p></CardFooter></form>
-    <CardFooter className="block"><AuthRecoveryLinks/></CardFooter>
-  </Card></div>;
+  // Verification help belongs to the one failure that needs it. The inline resend uses the email just entered;
+  // someone who signed in by phone is sent to the page that asks for the email instead.
+  const resendInline=identifier.includes('@');
+  return <AuthPage title={t('login.title')} subtitle={t('login.subtitle')} below={<ProductNoticeWeb disabled={busy}/>}>
+    <form onSubmit={submit} className="space-y-4">
+      {securityNotice&&<AuthMessage tone="info">{securityNotice}</AuthMessage>}
+      {error&&<AuthMessage tone="error">{error}</AuthMessage>}
+      {resendSuccess&&<AuthMessage tone="success">{resendSuccess}</AuthMessage>}
+      {showResend&&<div>
+        {resendInline&&<Button type="button" variant="outline" onClick={()=>void resend()} disabled={busy} className="h-11 w-full">{authText(busy?'processing':'resend')}</Button>}
+        <AuthLinks links={resendInline?['haveVerify']:['resend','haveVerify']}/>
+      </div>}
+      <AuthField id="identifier" label={t('login.phoneOrEmail')} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={254} required value={identifier} onChange={event=>setIdentifier(event.target.value)} disabled={busy}/>
+      <div>
+        <AuthPasswordField id="password" label={t('login.password')} value={password} onChange={setPassword} disabled={busy} current/>
+        <div className="flex justify-end"><AuthLink to="/forgot-password">{t('login.forgotPassword')}</AuthLink></div>
+      </div>
+      <AuthSubmit disabled={busy}>{busy?t('login.signingIn'):t('login.signIn')}</AuthSubmit>
+    </form>
+    <AuthSwitch prompt={t('login.noAccount')} to="/register" label={t('login.signUp')}/>
+  </AuthPage>;
 }

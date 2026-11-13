@@ -1,3 +1,9 @@
+## Sign-in and account pages — 2.0.855
+
+Sign-in, registration, forgot password, resend verification, reset password and email verification share one layout (`AuthLayout.tsx`): a card with the title, the form and only the links that follow from that step, and the privacy policy and terms as one line of small print. The sign-in page lists no recovery links of its own; resending a verification email is offered only after a sign-in is rejected as unverified (inline for an email sign-in, a link to the resend page for a phone sign-in). "I have a verification link" lives on the resend page, the registration confirmation and that rejection; "I have a reset link" lives on the forgot-password page. No route or endpoint was removed.
+
+The Weesh → Wishlist.ai notice is a single closed line under the sign-in and registration forms. It carries a marker until this browser, or this visit, has acknowledged it, and stays reopenable afterwards. Its text, its three-field browser record, the read-back check and the visit-only continuation are unchanged; acknowledging still does not create an account, import data or accept terms. The header no longer links to sign-in from the sign-in page itself. Native APP and backend are unchanged.
+
 ## Explore query evidence — 2.0.733
 
 Existing Explore reads retain only same-query conditions, HTTP status, pages, public IDs, terminal status, filtering and cap evidence. Read-only Query evidence and JSON export add no requests. Disabled,404 fallback, skipped, failed, cancelled and incomplete reads never establish a complete successful zero. Source refresh cycles and non-atomic pagination are disclosed. Qualified stock remains unknown. No tokens, headers, response text, account data, new endpoint or permission changes. Preserve concurrent My reports restoration PR165; native and icon artwork remain unchanged.

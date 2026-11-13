@@ -42,10 +42,17 @@ Verify that the chat summary and open dialog agree immediately after confirm/can
 - Verify full multiline notes, nullable fields, zero USD budget, strict ACK target/fields, current 404 vs failed reads, explicit exact-record cleanup without another mutation, cleanup failure, unavailable/corrupt storage, another tab replacement and late old-account results.
 - Distinguish a confirmed write from a failed later read. Exercise both languages and narrow-screen recovery with real compiled handlers and isolated PostgreSQL; preserve the before-fix reproduction and exact-candidate CI/deployment readback. Permanent-deletion execution requires its existing explicit human confirmation and is not implied by these non-destructive checks.
 
+### Sign-in and account page links
+
+- At 360–390px wide the sign-in button is visible without scrolling. The sign-in page holds the two fields, forgot password, the button, sign-up, the notice line and the two legal links, and nothing else.
+- Each account page links only to its next steps and never to itself: forgot password → reset link, sign-in; resend verification → verification link, sign-in; reset password → new reset email, sign-in; email verification → resend, sign-in; registration → sign-in.
+- Resend verification appears on sign-in only after an unverified rejection. Check both an email and a phone sign-in, in Chinese and English.
+
 ### Product notice visit lifetime
 
-- Reproduce storage failure, explicitly continue for this visit, then navigate login → registration within one App root. The notice stays collapsed, original form input is unchanged before navigation and no authentication request is sent.
-- A cold reload or new App root rechecks storage and reminds again when no confirmed acknowledgement exists. A different validated service cannot borrow the visit acknowledgement. Busy form requests disable both notice choices.
+- The notice is one closed line under the sign-in and registration forms and never sits between the title and the fields. Until it is acknowledged the line carries a marker; opening it shows the full text and both choices.
+- Reproduce storage failure, explicitly continue for this visit, then navigate login → registration within one App root. The notice stays collapsed and unmarked, original form input is unchanged before navigation and no authentication request is sent.
+- A cold reload or new App root rechecks storage and marks the line again when no confirmed acknowledgement exists. A different validated service cannot borrow the visit acknowledgement. Busy form requests disable both notice choices. A remembered notice stays on the page, unmarked, and can be reopened.
 - Verify confirmed persistence separately from visit-only continuation, with real browser storage restrictions in an isolated QA frame. Record the QA environment and build mode; do not claim a local development build is the published production bundle. Production readback checks the actual release and normal remembered flow.
 
 ### Every-release Web H icon review

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { GuestEntryScreen } from '../GuestEntryScreen';
 const fixture = vi.hoisted(() => ({ save: vi.fn(async () => {}), fetch: vi.fn() }));
 vi.mock('expo-secure-store', () => ({ setItemAsync: fixture.save, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device-only' }));
+vi.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 vi.mock('../GuestExploreScreen', () => ({ GuestExploreScreen: ({ active, onSignIn }: any) => {
   const [opened, setOpened] = useState(false);
   return active ? <div><span>{opened ? 'Public detail' : 'Public listings'}</span><button onClick={() => setOpened(true)}>Read public product</button><button onClick={onSignIn}>登入或建立帳號</button></div> : null;

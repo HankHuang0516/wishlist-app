@@ -449,22 +449,23 @@ final class NativeQaTests: XCTestCase {
             for label in ["顯示名稱", "手機號碼（選填）", "Email", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
             try safeScreenshot("qa-optional-phone-register")
             if ProcessInfo.processInfo.environment["NATIVE_QA_REVIEW_REMEDIATION"] == "1" { try tap("返回訪客瀏覽"); return }
-            try tap("返回登入")
+            // Registration returns through its "已有帳號？登入" line; sign-in itself lists no recovery steps.
+            try tap("登入")
+            checkpoint("anonymous-login-links")
+            try required("手機號碼或 Email")
+            for label in ["返回登入", "重新寄送驗證信", "我已有驗證連結", "我已有重設連結"] {
+                guard !element(label, kind: .button).exists else { throw Failure.invalidIdentity }
+            }
             checkpoint("anonymous-forgot")
             try tap("忘記密碼")
             try required("註冊時的 Email")
-            try tap("返回登入")
-            checkpoint("anonymous-resend")
-            try tap("重新寄送驗證信")
-            try required("註冊時的 Email")
-            try tap("返回登入")
-            checkpoint("anonymous-verify")
-            try tap("我已有 Email 驗證連結")
-            try required("Email 驗證連結或驗證碼")
-            try tap("返回登入")
             checkpoint("anonymous-reset")
-            try tap("我已有密碼重設連結")
+            try tap("我已有重設連結")
             for label in ["密碼重設連結或驗證碼", "新密碼", "再次輸入新密碼"] { try required(label, scroll: true) }
+            // A spent link leads back to requesting a new one, then to sign-in. The resend and
+            // verification steps open only after a rejected sign-in, a registration or a link.
+            try tap("重新申請密碼重設信")
+            try required("註冊時的 Email")
             try tap("返回登入")
             checkpoint("anonymous-final-login")
             try required("手機號碼或 Email")

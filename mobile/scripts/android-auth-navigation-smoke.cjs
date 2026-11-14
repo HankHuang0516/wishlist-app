@@ -59,7 +59,7 @@ function openLink(mode) {
   screenshot('product-notice'); await tapLabel('我了解，繼續使用');
   await awaitLabels(['Wishlist.ai', '手機號碼或 Email', '密碼']); screenshot('login');
   await tapLabel('建立帳號'); await awaitLabels(['顯示名稱', '手機號碼', 'Email']); screenshot('register');
-  await tapLabel('返回登入'); await awaitLabels(['手機號碼或 Email']);
+  await tapLabel('登入'); await awaitLabels(['手機號碼或 Email']); // registration's "已有帳號？登入" line
   await tapLabel('忘記密碼'); await awaitLabels(['忘記密碼', '註冊時的 Email']); screenshot('forgot');
   openLink('verify-email'); const verifyXml = await awaitLabels(['驗證 Email', 'Email 驗證連結或驗證碼']);
   if (!verifyXml.includes('不會自動操作或切換登入帳號')) throw new Error('Deep link confirmation notice absent'); screenshot('verify-link');

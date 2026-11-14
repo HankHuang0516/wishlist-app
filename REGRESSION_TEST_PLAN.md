@@ -47,6 +47,8 @@ Verify that the chat summary and open dialog agree immediately after confirm/can
 - At 360–390px wide the sign-in button is visible without scrolling. The sign-in page holds the two fields, forgot password, the button, sign-up, the notice line and the two legal links, and nothing else.
 - Each account page links only to its next steps and never to itself: forgot password → reset link, sign-in; resend verification → verification link, sign-in; reset password → new reset email, sign-in; email verification → resend, sign-in; registration → sign-in.
 - Resend verification appears on sign-in only after an unverified rejection. Check both an email and a phone sign-in, in Chinese and English.
+- The native app follows the same rule (`mobile/src/AuthScreen.tsx`). On a 320×640 device the whole sign-in screen fits without scrolling: brand, title, one line, the two fields with the password reveal, forgot password, the button, "還沒有帳號？建立帳號" and one line with the two policy links. Registration returns through "已有帳號？登入"; forgot password offers the pasted reset link; a rejected unverified sign-in and a new registration both land on the resend step, which offers the pasted verification link. A registration the service reports as already existing adds forgot password under its message. A signed-in person opening a recovery link sees that step and "關閉，返回目前帳號" only.
+- The password fields start hidden: the QA input bridges and the Android smoke scripts address them as secure fields by their labels (`手機號碼或 Email`, `密碼`), so neither the labels nor the hidden default may change without changing those tools.
 
 ### Product notice visit lifetime
 

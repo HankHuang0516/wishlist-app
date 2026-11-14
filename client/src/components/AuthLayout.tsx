@@ -57,8 +57,8 @@ export function AuthAction({ to, children }: { to: string; children: ReactNode }
 
 // "No account? Sign up" and its mirror on the registration page.
 export function AuthSwitch({ prompt, to, label }: { prompt: string; to: string; label: string }) {
-  return <p className="mt-2 flex min-h-11 flex-wrap items-center justify-center gap-x-1.5 text-sm text-gray-600">
-    <span>{prompt}</span><Link to={to} className="font-medium text-muji-primary underline underline-offset-4">{label}</Link>
+  return <p className="mt-2 flex min-h-11 flex-wrap items-center justify-center gap-x-0.5 text-sm text-gray-600">
+    <span>{prompt}</span><Link to={to} className="inline-flex min-h-11 items-center px-1 font-medium text-muji-primary underline underline-offset-4">{label}</Link>
   </p>;
 }
 

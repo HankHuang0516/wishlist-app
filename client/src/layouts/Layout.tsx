@@ -49,7 +49,7 @@ export default function Layout() {
                     {isAuthenticated && <div className="hidden sm:block order-3 mt-2 w-full border-t border-gray-100 pt-2 sm:order-none sm:ml-auto sm:mt-0 sm:w-auto sm:border-0 sm:pt-0"><WebNavigation unreadCount={unreadCount} /></div>}
                     <div className="flex items-center gap-1">
                         {isAuthenticated ? <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('logout')} title={webShellText('logout')} onClick={logout}><LogOut className="h-5 w-5 text-red-500" aria-hidden="true" /></Button>
-                            : <Link to="/login" className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm hover:bg-gray-100">{managerPage?'一般會員登入':webShellText('login')}</Link>}
+                            : location.pathname!=='/login'&&<Link to="/login" className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm hover:bg-gray-100">{managerPage?'一般會員登入':webShellText('login')}</Link>}
                         <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={webShellText('help')} onClick={() => setIsFeedbackOpen(true)}><CircleHelp className="h-5 w-5" aria-hidden="true" /></Button>
                     </div>
                 </div>

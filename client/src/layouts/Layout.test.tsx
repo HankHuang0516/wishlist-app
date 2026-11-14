@@ -42,3 +42,17 @@ it('keeps public login and policy links usable without locale storage', () => {
   expect(screen.getByRole('link', { name: 'Account deletion' })).toHaveAttribute('href', '/account-deletion');
   const mobile=screen.getByRole('navigation');expect(within(mobile).getAllByRole('link')).toHaveLength(4);for(const path of ['/explore','/wishes','/chat','/settings'])expect(within(mobile).getAllByRole('link').some(link=>link.getAttribute('href')===path)).toBe(true);
 });
+
+it('does not point the sign-in page at itself from the header, and keeps the link everywhere else', () => {
+  auth.isAuthenticated = false;
+  const view = render(<MemoryRouter initialEntries={['/login']}><Layout /></MemoryRouter>);
+  expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Wishlist.ai' })).toHaveAttribute('href', '/');
+  expect(screen.getByRole('button', { name: 'Feedback and help' })).toBeInTheDocument();
+  view.unmount();
+  for (const route of ['/register', '/forgot-password', '/explore']) {
+    const other = render(<MemoryRouter initialEntries={[route]}><Layout /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    other.unmount();
+  }
+});

@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.855',date:'2026-11-13',title:'登入與帳號頁面重新整理',type:'Frontend',items:[{type:'Enhancement',content:'登入頁只留下標題、帳號、密碼、忘記密碼、登入按鈕與註冊入口，手機上不用捲動就能按登入；隱私權政策與使用條款收成頁面下方一行小字。'},{type:'Enhancement',content:'「Weesh → Wishlist.ai：帳號與資料說明」移到登入與註冊表單下方，預設收合成一行，點開可閱讀並記住；內容與記住的方式不變。'},{type:'Enhancement',content:'重新寄送驗證信只在登入被告知 Email 尚未驗證時出現；「我已有驗證連結」「我已有重設連結」移到重寄驗證信與忘記密碼頁。註冊、忘記密碼、重設密碼、Email 驗證改用同一套版面，每頁只列出下一步會用到的連結。'}]},
  {version:'2.0.854',date:'2026-11-12',title:'探索自動載入與高CP分類件數',type:'Fullstack',items:[{type:'Enhancement',content:'探索商品列表滑到接近底部時自動載入下一批商品；讀取失敗或需要稍候時改由「探索更多商品」按鈕手動重試，地圖模式維持按鈕。'},{type:'Enhancement',content:'篩選頁選擇「高CP激推」時，主分類、子分類選項與「套用條件」按鈕會顯示該分類目前的高CP商品件數；高CP激推的分類選單件數也改為計算激推商品本身。'}]},
  {version:'2.0.853',date:'2026-11-12',title:'探索排序新增原價折數與省最多',type:'Fullstack',items:[{type:'New',content:'探索頁的排序新增「原價折數低至高」「原價折數高至低」「比原價省最多」，三個動態（你會想要、最新上架、高CP激推）都能用；依商品卡上「約參考原價 N 折」的同一組數字排序。'},{type:'Enhancement',content:'排序在伺服器端完成，往下載入更多時順序連續、不重複不漏；還沒有參考原價的商品一律排在最後，並在清單上方說明。'}]},
  {version:'2.0.852',date:'2026-11-11',title:'首頁自動比對所有願望',type:'Fullstack',items:[{type:'Enhancement',content:'登入後的首頁一打開就把每個願望和所有商品（站內刊登與公開來源）比對好，每個願望直接顯示最吻合的商品，不必再一個一個選願望去探索搜尋。'},{type:'Enhancement',content:'點商品直接在首頁看詳情；移除「今天想找什麼？」願望選單、「不套用願望，瀏覽商品地圖」與首頁地圖預覽。'}]},

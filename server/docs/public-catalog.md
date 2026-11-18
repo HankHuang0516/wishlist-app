@@ -52,16 +52,34 @@ Public catalogue upkeep: <列數> rows in <步數> steps over <秒數> s, longes
 | `GET /api/discovery/products/:kind/:id` | 以鍵查單筆 |
 | `GET /api/source-leads/summary` | 對 `PublicCatalogEntry` 計數 |
 | `GET /api/source-leads/map`（來源地圖的位置與各位置件數） | 一個 SQL 敘述：目前公開的來源項目接回來源列取座標，依座標分組。讀取模型不可用時改由 `scanSourceMap()` 全掃，結果相同 |
-| `/api/discovery/for-you`、`/api/discovery/cp`、`POST /cp-evaluations`、`/api/retail-price-admin/*` | 仍取得全部商品再運算（`loadDiscovery()`），但商品來自已存好的項目，不再逐筆重驗與重組。超過 20,000 筆時這幾支仍會回 `DISCOVERY_SCAN_CAPACITY` |
+| `GET /api/discovery/cp`（高CP激推）、`POST /api/discovery/cp-evaluations`、`GET /api/retail-price-admin/pending-evaluations` | 只讀「可能有參考原價」的商品（`{ retail: true }`）：有效原價紀錄的商品，加上搜尋文字含原價表家族字的商品。沒有參考原價就不會有 CP 分數，其他商品不必讀。`/cp` 的地區清單另外用一個彙總查詢取全部商品的縣市 |
+| `GET /api/discovery/for-you`（你會想要）、`GET /api/discovery/wish-matches`（首頁） | 只讀搜尋文字含任一願望關鍵字的商品（`{ words }`） |
+| `GET /api/retail-price-admin/evaluations`、`POST …/observations`、`POST …/evaluate`，以及評分寫入前的重驗 | 以鍵查指定商品（`{ keys }`） |
+| `GET /api/retail-price-admin/candidates`（查價佇列）、`GET …/coverage` | 逐批走過全部商品（每批 500 件，`eachDiscovery()`），每批只留下需要的東西：佇列留排序最前面的 `limit` 件與總數，覆蓋率只留計數。帶 `productKey` 的查價改以鍵查 |
+
+### 需要「在記憶體裡運算商品」的端點：只讀需要的部分
+
+2026-11-16 公開商品超過 20,000 件，當時還是「先取得全部商品再運算」的端點（高CP激推、你會想要、`cp-evaluations`、`/api/retail-price-admin/*`）從那一刻起全部回 503 `DISCOVERY_SCAN_CAPACITY`：APP 與網頁的高CP激推顯示「商品暫時無法讀取」，查價與評分流水線停擺。2026-11-19 改成各端點指名自己需要的部分：
+
+- `loadDiscoveryPart(part)`（`lib/discovery.ts`）→ `catalogPart(part)`（`lib/publicCatalog.ts`）。`part` 是 `{ keys }`、`{ words }` 或 `{ retail: true }`，回傳順序與 `catalogProducts()` 相同。呼叫端仍要自己篩選：讀取模型不可用或有私人預覽時，回來的是全部商品（`whole: true`）。
+- `eachDiscovery(visit)` → `catalogEach(visit)`：一批一批給，不把整個目錄放進記憶體，也沒有件數上限。各批是分開的查詢，不是同一個快照：走訪期間改動的商品只會看到一次（舊狀態或新狀態）。
+- `catalogProducts()`／`loadDiscovery()`（全部商品）還在，但只剩全掃備援、私人預覽與測試在用，20,000 件上限照舊。**新的端點不要再呼叫它們**：要在記憶體裡運算商品，先想清楚需要哪一部分；真的每一件都要看，用 `eachDiscovery()`。
+
+2026-11-19 正式站的大小：公開商品約 24,700 件、商品 JSON 合計約 62 MB；`{ retail: true }` 是 1,445 件、4.5 MB。
 
 分頁代碼（cursor）的規則不變：只對「同一組查詢條件、同一批結果」有效，結果有任何增減或內容改變就回 409 `DISCOVERY_RESULTS_CHANGED`。
 
 ## 已知的成長特性
+
+讀取模型不可用時的全掃（`scanDiscovery()`）仍有 20,000 件上限，而且在這個大小下本來就超過交易的 20 秒時限。也就是說目錄超過 20,000 件之後，「什麼時候走全掃」列的那幾種情況不再是「慢但正確」，而是回 503，直到讀取模型恢復。平常不會遇到（讀取模型存在資料庫裡，部署不會重建）；會遇到的是改了 `CATALOG_PROJECTION_VERSION` 或 `API_URL` 之後的重建期間（24,000 件約兩分鐘）、一次超過 2,000 筆的大量更新，以及 `PUBLIC_CATALOG_DISABLED=1`。要動這些之前先想好這段時間探索頁會讀不到。
+
+`{ retail: true }` 這一部分會隨有效原價紀錄變多而變大，`{ words }` 的大小取決於願望用字（很常見的字會選到很多商品）。這兩種都是一次查詢、沒有件數上限。`candidates` 與 `coverage` 走訪全部商品，時間與目錄大小成正比（正式站 24,000 件約 4–6 秒）。
 
 一般列表每次請求仍會讓資料庫掃過符合條件的列來算總數與分類數量（不經過 Node、不搬商品內容）。本機量測：5,500 筆時整支 API 的伺服器時間約 50 ms，20,000 筆約 80–130 ms。要再壓平，可以把這些彙總依目錄版本（`PublicCatalogState.version`）快取。
 
 ## 驗證
 
 - `src/__tests__/integration/publicCatalog.integration.ts`：29 種查詢條件下與全掃逐欄比對、分頁順序、寫入後立即可見、撤下後舊分頁代碼失效、站內商品／照片／地點／原生 SQL 寫入都會反映、到期時刻、大量異動時退回全掃、項目被改壞後自動修正、關閉開關；另一個步驟正在重算某筆寫入時，讀取等它而不全掃；待處理的寫入自成一步，不被背景重新推導擋住；等太久時只全掃一次並記錄，之後回到讀取模型；取標記的敘述在資料庫自己選的計畫與巢狀迴圈計畫下，都只取一類、不超過一步要求的數量。
+- 同一支整合測試的「answers the feeds that work on products in memory from part of the catalogue」：`{ keys }`、`{ words }`、`{ retail: true }` 與逐批走訪各自和全部商品比對（內容與順序）；高CP激推、你會想要、查價佇列、覆蓋率、待評分、評分狀態這些路由，讀取模型開著（只讀部分）與關掉（全掃握有全部商品，就是舊的做法）各打一次，回應逐欄相同；並確認開著的時候沒有任何一支呼叫 `catalogProducts()`。
 - `src/__tests__/publicCatalogRefresh.test.ts`：把時鐘走過每一個期限（含前後各一毫秒），確認存下來的項目與全掃在同一時刻的結果一致。
 - `scripts/page-load/`：頁面載入預算檢查、「互相拖累」檢查，以及背景重新推導期間的讀寫檢查 `catalog-contention-check.cjs`（見該資料夾 README）。背景工作的步長與上面那行 `upkeep` 紀錄由這支腳本用真正的伺服器程序驗證：平均每步超過 80 列或最長一步超過預算就是 FAIL。整合測試不涵蓋背景工作本身（它要等啟動後 60 秒才重新推導）。

@@ -3,19 +3,24 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { parseLead, leadCurrent } from '../../lib/sourceLeadRules';
 import { countyIllustration, COUNTY_ILLUSTRATION_LABEL, COUNTY_ILLUSTRATION_SOURCE, UNKNOWN_SOURCE_DISTRICT } from '../../lib/sourceCountyIllustration';
-import { discoveryPage, discoveryQuery, recommendDiscovery, retailStanding, scanDiscovery, wishMatchGroups, WISH_MATCH_ITEMS, type DiscoveryProduct } from '../../lib/discovery';
+import { discoveryPage, discoveryQuery, recommendDiscovery, recommendedDiscovery, retailStanding, scanDiscovery, wishMatchGroups, WISH_MATCH_ITEMS, type DiscoveryProduct } from '../../lib/discovery';
+import { attachCp, cpTargets, evaluateCp, type CpTarget } from '../../lib/discoveryCp';
+import { cpCoverage } from '../../lib/cpCoverage';
 import { normalizeWish } from '../../lib/wishlistMatch';
-import { buildCatalog, catalogDiscoveryPage, catalogFirstPage, catalogProduct, catalogProductsMatching, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, forgetRetailStandings, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
-import { retailBinding, retailObservation, retailReferences } from '../../lib/retailPrices';
+import * as publicCatalog from '../../lib/publicCatalog';
+import { buildCatalog, catalogCounties, catalogDiscoveryPage, catalogEach, catalogFirstPage, catalogPart, catalogProduct, catalogProducts, catalogReady, catalogSourceCount, catalogSourceMap, forgetRetailStandings, reconcileCatalog, takeMarks } from '../../lib/publicCatalog';
+import { retailBinding, retailIdentity, retailObservation, retailReferences } from '../../lib/retailPrices';
 import { retailMsrpTable } from '../../lib/retailMsrpTable';
 import { groupSourceMap, scanSourceMap } from '../../lib/sourceLeadMap';
 import { createDiscoveryRoutes } from '../../routes/discoveryRoutes';
+import { createRetailPriceAdmin } from '../../routes/retailPriceRoutes';
 import { createSourceLeadRoutes } from '../../routes/sourceLeadRoutes';
 import { createLoopbackRequest } from './loopbackHttp';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw Error('Isolated DB required');
 
-const app = express(); app.use(express.json()); app.use('/discovery', createDiscoveryRoutes()); app.use('/source-leads', createSourceLeadRoutes());
+const ADMIN = 'synthetic-catalog-admin';
+const app = express(); app.use(express.json()); app.use('/discovery', createDiscoveryRoutes()); app.use('/source-leads', createSourceLeadRoutes()); app.use('/retail', createRetailPriceAdmin(() => ADMIN));
 const http = createLoopbackRequest(app);
 const run = randomUUID().slice(0, 8), flags = { source: process.env.SOURCE_LEADS_PUBLIC_ENABLED, off: process.env.PUBLIC_CATALOG_DISABLED };
 const leadIds: string[] = [], listingIds: string[] = [];
@@ -222,7 +227,7 @@ it('matches every open wish against the candidates only, with the same rule and 
     expect(groups.find(group => group.wish.name === 'MacBook Air')!.wish).toEqual({ id: macbook.id, name: 'MacBook Air', maxPrice: null, priceCurrency: macbook.priceCurrency, wishlist: { id: list.id, title: '合成願望 ' + run } });
     // The candidates are a superset of every product whose title holds a word, and nothing else.
     const words = ['benq', '耳機'];
-    expect((await catalogProductsMatching(now, words)).map(p => p.key).sort()).toEqual(all.filter(p => words.some(word => normalizeWish(p.title + ' ' + p.description + ' ' + (p.brand ?? '')).includes(word))).map(p => p.key).sort());
+    expect((await catalogPart({ words }, now)).map(p => p.key).sort()).toEqual(all.filter(p => words.some(word => normalizeWish(p.title + ' ' + p.description + ' ' + (p.brand ?? '')).includes(word))).map(p => p.key).sort());
     // A seller never sees their own listings among the matches.
     await prisma.wishlist.create({ data: { userId, title: '賣家自己的願望', items: { create: { name: 'MacBook Air 筆電', aiStatus: 'SKIPPED' } } } });
     const seller = (await wishMatchGroups(userId, now)).groups[0];
@@ -236,6 +241,139 @@ it('matches every open wish against the candidates only, with the same rule and 
     await prisma.user.deleteMany({ where: { id: buyer } });
   }
 });
+
+// The feeds that work on products in memory (high-value picks, 你會想要, the retail admin tools) used to read every
+// product first, and answered 503 from the day the catalogue passed 20,000 products. Each now reads the part it
+// needs. The full scan still holds every product, so it is the reference: with the read model switched off the same
+// requests take the old path, and every answer has to be the same.
+it('answers the feeds that work on products in memory from part of the catalogue, as the whole catalogue answers them', async () => {
+  const now = new Date(), stated = { unitStated: true }, retailIds: string[] = [], model = 'synthetic-catalog-cp-' + run, oldModel = process.env.DISCOVERY_CP_MODEL;
+  const buyerKey = randomUUID(), buyer = (await prisma.user.create({ data: { phoneNumber: 'catalog-part-' + run, password: 'synthetic', apiKey: buyerKey } })).id;
+  // More products than one batch of the batch reader (two in three with a price a lookup can use, so the lookup queue
+  // is chosen across batches), two the price table answers, and five monitors that get an observation.
+  const added = [...Array.from({ length: 520 }, (_, index) => lead(2000 + index, now, { contact: index % 4 === 0, unitStated: index % 3 !== 0 })),
+    lead(2600, now, { ...stated, title: 'Apple iPhone 15 128GB 黑色' }), lead(2601, now, { ...stated, title: 'iPhone 14 128GB 午夜色 二手' }),
+    ...[2602, 2603, 2604, 2605, 2606].map(index => lead(index, now, { ...stated, title: 'BenQ GW2270 二手螢幕 部分讀取' }))];
+  await prisma.externalSourceLead.createMany({ data: added });
+  process.env.DISCOVERY_CP_MODEL = model;
+  // The module's own exports object: the import above is a read-only view of it.
+  const whole = jest.spyOn(require('../../lib/publicCatalog'), 'catalogProducts');
+  try {
+    expect(await catalogReady()).toBe(true);
+    const monitors = (await catalogPart({ words: ['部分讀取'] })).filter(p => added.some(row => row.id === p.id));
+    expect(monitors.map(p => [p.condition, p.priceUnitVerified, p.price !== null])).toEqual(Array(5).fill(['USED', true, true]));
+    for (const p of monitors) {
+      const id = randomUUID(); retailIds.push(id);
+      await prisma.retailPriceObservation.create({ data: retailObservation({ requestId: id, productKey: p.key, bindingHash: retailBinding(p), status: 'VERIFIED', originalPrice: '9990', currency: 'TWD', priceType: 'MANUFACTURER_MSRP',
+        sourceUrl: 'https://www.benq.com/zh-tw/monitor.html', sourceTitle: 'Synthetic original price evidence', sourceProductTitle: 'BenQ GW2270', sourcePeriod: '2026-10', evidenceQuote: 'BenQ GW2270 新品原價 NT$9990', checkedAt: new Date().toISOString() }, p) });
+    }
+    forgetRetailStandings();
+    // Scores for the five monitors and the second-hand iPhone: three monitors are cheap enough to be picks.
+    const phone = (await catalogPart({ keys: ['source:' + added[521].id] }))[0], scoredKeys = [...monitors, phone].map(p => p.key);
+    const provider = async (targets: CpTarget[]) => targets.map(t => ({ key: t.product.key, verdict: 'COMPARABLE', basisKeys: [t.comparables[0].key], dimensions: { specification: 25, condition: 20, evidence: 15 },
+      reasons: [{ zh: '同型號新品原價比較。', en: 'Same-model original-new comparison.' }], limitations: [{ zh: '品況與庫存待確認。', en: 'Condition and stock unconfirmed.' }] }));
+    expect(await evaluateCp(await catalogPart({ keys: scoredKeys }), provider)).toMatchObject({ state: 'COMPLETE', evaluated: 6, cached: false });
+    const list = await prisma.wishlist.create({ data: { userId: buyer, title: '部分讀取願望 ' + run, items: { create: [
+      { name: '電腦螢幕', maxPrice: 5000, priceCurrency: 'TWD', aiStatus: 'SKIPPED' }, { name: 'iPhone 14', aiStatus: 'SKIPPED' }, { name: '完全無關小提琴', aiStatus: 'SKIPPED' }] } }, include: { items: true } });
+    const wishIds = list.items.map(item => item.id), monitorWish = list.items.find(item => item.name === '電腦螢幕')!.id;
+
+    // ---- the parts themselves, against every product ----
+    const at = new Date(), all = await catalogProducts(at), allMap = await catalogProducts(at, true);
+    const text = (p: DiscoveryProduct) => normalizeWish(p.title + ' ' + p.description + ' ' + (p.brand ?? ''));
+    expect(all.length).toBeGreaterThan(500);
+    const keys = [all[0].key, all[Math.floor(all.length / 2)].key, all[all.length - 1].key, 'source:' + randomUUID()];
+    expect(await catalogPart({ keys }, at)).toEqual(all.filter(p => keys.includes(p.key)));
+    expect(await catalogPart({ keys }, at, true)).toEqual(allMap.filter(p => keys.includes(p.key)));
+    const words = ['benq', '耳機'];
+    expect(await catalogPart({ words }, at)).toEqual(all.filter(p => words.some(word => text(p).includes(word))));
+    expect(await catalogPart({ words }, at, true)).toEqual(allMap.filter(p => words.some(word => text(p).includes(word))));
+    expect([await catalogPart({ keys: [] }, at), await catalogPart({ words: [] }, at)]).toEqual([[], []]);
+    // The retail part: a product with a verified observation or a word of a price-table family, so every product with a reference price.
+    const observed = new Set((await prisma.retailPriceObservation.findMany({ where: { status: 'VERIFIED', expiresAt: { gt: at } }, select: { productKey: true } })).map(row => row.productKey));
+    const retail = await catalogPart({ retail: true }, at), references = await retailReferences(all, at);
+    expect(retail).toEqual(all.filter(p => observed.has(p.key) || retailMsrpTable.titleWords()!.some(word => text(p).includes(word))));
+    expect(references.size).toBeGreaterThanOrEqual(7);
+    expect([...references.keys()].filter(key => !retail.some(p => p.key === key))).toEqual([]);
+    expect(retail.length).toBeLessThan(all.length / 2);
+    // The batch reader: every product once, in the same order, 500 at a time.
+    const batches: DiscoveryProduct[][] = [];
+    await catalogEach(batch => { batches.push(batch); }, at);
+    expect(batches.length).toBeGreaterThan(1);
+    expect(batches.slice(0, -1).every(batch => batch.length === 500)).toBe(true);
+    expect(batches.flat()).toEqual(all);
+    expect(await catalogCounties(at)).toEqual([...new Set(all.map(p => p.county).filter((county): county is string => !!county))].sort());
+    // 你會想要 from the candidates of the wishes is 你會想要 over every product.
+    for (const wish of [undefined, ...wishIds]) for (const map of [false, true])
+      expect(await recommendedDiscovery(buyer, wish, at, map)).toEqual(await recommendDiscovery(map ? allMap : all, buyer, wish));
+    expect((await recommendedDiscovery(buyer, monitorWish, at)).length).toBeGreaterThan(0);
+    await expect(recommendedDiscovery(buyer, 2147483000, at)).rejects.toMatchObject({ status: 404, code: 'DISCOVERY_WISH_UNAVAILABLE' });
+
+    // ---- the routes: the same requests with the read model on (parts) and off (the full scan holds everything) ----
+    const paths = ['/discovery/cp', '/discovery/cp?limit=2', '/discovery/cp?main=electronics&sub=monitors&sort=price-asc', '/discovery/cp?presentation=map', '/discovery/cp?main=books',
+      '/discovery/cp?q=gw2270&county=' + encodeURIComponent(monitors[0].county ?? '臺北市'), '/discovery/for-you', '/discovery/for-you?presentation=map&wish=' + monitorWish,
+      '/retail/candidates?limit=100', '/retail/candidates?limit=7&source=listing', '/retail/candidates?productKey=' + monitors[0].key, '/retail/coverage', '/retail/pending-evaluations?limit=100',
+      '/retail/evaluations?productKeys=' + [...scoredKeys, all[0].key].join(',')];
+    const answers = async () => {
+      const out: Record<string, { status: number; body: any }> = {};
+      for (const path of paths) {
+        const response = await (path.startsWith('/retail') ? http.get(path).set('X-Admin-Key', ADMIN) : http.get(path).set('X-Api-Key', buyerKey));
+        // As `comparable` above: the snapshot token (and the cursor made of it) and the clock may differ between the two paths.
+        const { snapshot, nextCursor, generatedAt, checkedAt, ...body } = response.body;
+        out[path] = { status: response.status, body: { ...body, more: nextCursor !== undefined && nextCursor !== null } };
+      }
+      return out;
+    };
+    whole.mockClear();
+    const part = await answers();
+    expect(await http.post('/retail/evaluate').set('X-Admin-Key', ADMIN).send({ productKeys: scoredKeys }).then(r => [r.status, r.body])).toEqual([200, { state: 'COMPLETE', evaluated: 0, reason: 'INSUFFICIENT_RETAIL_PRICE_EVIDENCE' }]);
+    expect(await http.post('/discovery/cp-evaluations').set('X-Api-Key', buyerKey).send({ q: '部分讀取' }).then(r => [r.status, r.body])).toEqual([200, { state: 'COMPLETE', evaluated: 0, reason: 'INSUFFICIENT_RETAIL_PRICE_EVIDENCE' }]);
+    // Not one of these read every product.
+    expect(whole).not.toHaveBeenCalled();
+    process.env.PUBLIC_CATALOG_DISABLED = '1';
+    const full = await answers();
+    delete process.env.PUBLIC_CATALOG_DISABLED;
+    expect(Object.values(part).map(answer => answer.status)).toEqual(paths.map(() => 200));
+    expect(part).toEqual(full);
+    // And the answers are not empty ones: the three cheap monitors and the iPhone are picks, the two dear monitors are scored only.
+    const picks = part['/discovery/cp'].body;
+    const cheap = monitors.filter(p => p.price! < 5000).map(p => p.key);
+    expect(cheap).toHaveLength(3);
+    expect(picks.total).toBeGreaterThanOrEqual(4);
+    for (const key of [...cheap, phone.key]) expect(picks.items.some((p: DiscoveryProduct) => p.key === key) || picks.total > picks.items.length).toBe(true);
+    expect(part['/discovery/cp?main=electronics&sub=monitors&sort=price-asc'].body.items.filter((p: DiscoveryProduct) => p.title.includes('部分讀取')).map((p: DiscoveryProduct) => p.key).sort()).toEqual([...cheap].sort());
+    expect(picks.cpStatus.scored).toBeGreaterThanOrEqual(6);
+    expect(picks.counties).toEqual(await catalogCounties());
+    expect(part['/discovery/for-you'].body.total).toBeGreaterThan(0);
+    expect(part['/retail/coverage'].body.byKind.source.total).toBe(all.filter(p => p.kind === 'source').length);
+    expect(part['/retail/coverage'].body.byKind.source.highCp).toBeGreaterThanOrEqual(4);
+    // The admin answers that go through every product a batch at a time, against the same answers worked out the way
+    // they were when every product was in memory: one filter and one sort for the lookup queue, one count for the coverage.
+    const evaluatedAll = await attachCp(all), stated2 = (p: DiscoveryProduct) => Number(!!retailIdentity(p) && ['NEW', 'USED'].includes(p.condition));
+    const live = new Set((await prisma.retailPriceObservation.findMany({ where: { expiresAt: { gt: new Date() } }, select: { productKey: true, bindingHash: true } })).map(row => row.productKey + ':' + row.bindingHash));
+    const queue = all.filter(p => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified && !live.has(p.key + ':' + retailBinding(p)) && !retailMsrpTable.has(retailIdentity(p)))
+      .sort((a, b) => stated2(b) - stated2(a) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
+    expect(queue.length).toBeGreaterThan(100);
+    expect(part['/retail/candidates?limit=100'].body.remaining).toBe(queue.length);
+    expect(part['/retail/candidates?limit=100'].body.items.map((item: { productKey: string }) => item.productKey)).toEqual(queue.slice(0, 100).map(p => p.key));
+    expect(part['/retail/candidates?limit=7&source=listing'].body.items.map((item: { productKey: string }) => item.productKey)).toEqual(queue.filter(p => p.kind === 'listing').slice(0, 7).map(p => p.key));
+    expect(part['/retail/coverage'].body.byKind).toEqual(cpCoverage(evaluatedAll).byKind);
+    expect(part['/retail/pending-evaluations?limit=100'].body.items.map((item: { productKey: string }) => item.productKey))
+      .toEqual(cpTargets(evaluatedAll, new Set(evaluatedAll.filter(p => p.cp).map(p => p.key)), 100).map(target => target.product.key));
+    expect(part['/retail/candidates?productKey=' + monitors[0].key].body).toMatchObject({ remaining: 1, items: [{ productKey: monitors[0].key, bindingHash: retailBinding(monitors[0]) }] });
+    expect(part['/retail/evaluations?productKeys=' + [...scoredKeys, all[0].key].join(',')].body.items.filter((item: { score: number | null }) => item.score !== null)).toHaveLength(6);
+  } finally {
+    whole.mockRestore();
+    delete process.env.PUBLIC_CATALOG_DISABLED;
+    if (oldModel === undefined) delete process.env.DISCOVERY_CP_MODEL; else process.env.DISCOVERY_CP_MODEL = oldModel;
+    await prisma.discoveryCpRun.deleteMany({ where: { model } });
+    await prisma.retailPriceObservation.deleteMany({ where: { id: { in: retailIds } } });
+    await prisma.externalSourceLead.deleteMany({ where: { id: { in: added.map(row => row.id) } } });
+    await prisma.wishlist.deleteMany({ where: { userId: buyer } });
+    await prisma.user.deleteMany({ where: { id: buyer } });
+    forgetRetailStandings();
+  }
+  expect(await catalogReady()).toBe(true);
+}, 120_000);
 
 it('shows a write to the very next read and rejects the cursor of the previous result', async () => {
   const first = await http.get('/discovery?limit=5&q=' + run);

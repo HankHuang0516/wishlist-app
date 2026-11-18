@@ -1,9 +1,10 @@
 import type { DiscoveryProduct } from './discovery';
 import { cpTargets } from './discoveryCp';
 import { retailIdentity } from './retailPrices';
-export function cpCoverage(products: DiscoveryProduct[]) {
+/** The coverage counts, added to a batch of products at a time: the catalogue is counted without being held whole. */
+export function cpCoverageCount() {
   const result = Object.fromEntries(['listing', 'source', 'external'].map(kind => [kind, { total:0, scored:0, highCp:0, assessedUnscored:0, originalPriceVerified:0, readyForEvaluation:0, missingPrice:0, missingModel:0, missingCondition:0, missingReference:0, excluded:0, pending:0 }]));
-  for (const p of products) {
+  const add = (products: DiscoveryProduct[]) => { for (const p of products) {
     const row = result[p.kind]; row.total++;
     if (p.retail) row.originalPriceVerified++;
     if (p.cp?.score !== null && p.cp?.score !== undefined) { row.scored++; if (p.cp.score >= 75) row.highCp++; continue; }
@@ -16,6 +17,11 @@ export function cpCoverage(products: DiscoveryProduct[]) {
     else if (cpTargets([p]).length) row.readyForEvaluation++;
     else if (!p.retail) row.missingReference++;
     else row.excluded++;
-  }
-  return { complete:true, baseline:'ORIGINAL_NEW_RETAIL', policyVersion:3, byKind:result, checkedAt:new Date().toISOString() };
+  } };
+  return { add, report: () => ({ complete:true, baseline:'ORIGINAL_NEW_RETAIL', policyVersion:3, byKind:result, checkedAt:new Date().toISOString() }) };
+}
+export function cpCoverage(products: DiscoveryProduct[]) {
+  const count = cpCoverageCount();
+  count.add(products);
+  return count.report();
 }

@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from './prisma';
-import { discoveryHash, DiscoveryError, loadDiscovery, type DiscoveryProduct } from './discovery';
+import { discoveryHash, DiscoveryError, loadDiscoveryPart, type DiscoveryProduct } from './discovery';
 import { retailIdentity, retailBinding, retailReferences, retailConversion, type RetailReference } from './retailPrices';
 const policyVersion = 3, ttl = 24 * 3600000;
 // 2026-11-11 (Hank): twelve products per provider request. The Gemini free tier counts requests (20 a day), not
@@ -120,7 +120,7 @@ export async function evaluateCp(products: DiscoveryProduct[], provider: (target
     try {
         const result = validateCpOutput(await provider(targets, model), targets, model);
         const keys = new Set(targets.map(t => t.product.key));
-        const current = (await loadDiscovery()).filter(p => keys.has(p.key)), currentRefs = await retailReferences(current);
+        const current = (await loadDiscoveryPart({ keys: [...keys] })).products.filter(p => keys.has(p.key)), currentRefs = await retailReferences(current);
         for (const target of targets) {
             const p = current.find(p => p.key === target.product.key), ref = currentRefs.get(target.product.key);
             if (!p || !ref || !eligible({ ...p, retail: ref }) || discoveryHash(cpFacts(p)) !== discoveryHash(target.product) || discoveryHash(ref) !== discoveryHash(target.comparables[0]))

@@ -1,9 +1,9 @@
-import { cpCoverage } from '../lib/cpCoverage';
+import { cpCoverageCount } from '../lib/cpCoverage';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import prisma from '../lib/prisma';
 import { marketplaceAdmin } from '../middleware/marketplaceAdmin';
-import { loadDiscovery, DiscoveryError } from '../lib/discovery';
+import { loadDiscoveryPart, eachDiscovery, DiscoveryError, type DiscoveryProduct } from '../lib/discovery';
 import { retailBinding, retailIdentity, retailObservation, retailObservationMatches } from '../lib/retailPrices';
 import { retailMsrpTable } from '../lib/retailMsrpTable';
 import { evaluateCp, attachCp, cpTargets, cpCapacity, CP_BATCH_SIZE } from '../lib/discoveryCp';
@@ -25,30 +25,48 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         if (!['all','listing','source','external'].includes(source)) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const productKey = q.query.productKey;
         if (productKey !== undefined && (typeof productKey !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(productKey))) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
-        const all = (await loadDiscovery()).filter(p => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified);
-        const attempts = all.length ? await prisma.$queryRaw<Array<{ productKey: string; bindingHash: string }>>`
-            SELECT DISTINCT a."productKey", a."bindingHash" FROM "RetailPriceObservation" a
-            JOIN jsonb_to_recordset(${JSON.stringify(all.map(p => ({ productKey: p.key, bindingHash: retailBinding(p) })))}::jsonb)
-              AS f("productKey" text, "bindingHash" text)
-              ON a."productKey" = f."productKey" AND a."bindingHash" = f."bindingHash"
-            WHERE a."expiresAt" > ${new Date()}
-        ` : [];
-        const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash));
-        // Direct lookup stays within the same public/AI-allowed catalog and returns its current binding.
-        // A product the manufacturer price table already answers needs no lookup (retailMsrpTable.ts).
-        const waiting = all.filter(p => (source === 'all' || p.kind === source) && (productKey ? p.key === productKey : !covered.has(p.key + ':' + retailBinding(p)) && !retailMsrpTable.has(retailIdentity(p)))).sort((a, b) => Number(!!retailIdentity(b) && ['NEW','USED'].includes(b.condition)) - Number(!!retailIdentity(a) && ['NEW','USED'].includes(a.condition)) || Number(!!retailIdentity(b)) - Number(!!retailIdentity(a)) || a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
-        return s.json({ baseline: 'ORIGINAL_NEW_RETAIL', policyVersion: 3, items: waiting.slice(0, limit).map(p => ({ productKey: p.key, title: p.title, description: p.description, price: p.price, currency: p.currency, condition: p.condition, identity: retailIdentity(p), bindingHash: retailBinding(p), canonicalUrl: p.canonicalUrl })), remaining: waiting.length });
+        // The products a lookup can be asked for: public, AI-allowed, with a price in TWD whose unit is known.
+        const priced = (p: DiscoveryProduct) => p.cpAllowed !== false && p.price !== null && p.price > 0 && p.currency === 'TWD' && p.priceUnitVerified && (source === 'all' || p.kind === source);
+        type Waiting = { product: DiscoveryProduct; identity: string | null; bindingHash: string; rank: number };
+        // An identity with a stated condition first, then any identity, then the oldest.
+        const waits = (p: DiscoveryProduct): Waiting => { const identity = retailIdentity(p); return { product: p, identity, bindingHash: retailBinding(p), rank: identity ? ['NEW','USED'].includes(p.condition) ? 2 : 1 : 0 }; };
+        const order = (a: Waiting, b: Waiting) => b.rank - a.rank || a.product.date.localeCompare(b.product.date) || a.product.key.localeCompare(b.product.key);
+        let waiting: Waiting[] = [], remaining = 0;
+        if (productKey) {
+            // Direct lookup stays within the same public/AI-allowed catalog and returns its current binding.
+            waiting = (await loadDiscoveryPart({ keys: [productKey] })).products.filter(p => p.key === productKey && priced(p)).map(waits);
+            remaining = waiting.length;
+        }
+        // The queue is every such product without a live observation of its current version. Each one is looked at, a
+        // batch at a time; only the first `limit` of the order and the count are kept.
+        else await eachDiscovery(async batch => {
+            // A product the manufacturer price table already answers needs no lookup (retailMsrpTable.ts).
+            const open = batch.filter(priced).map(waits).filter(w => !retailMsrpTable.has(w.identity));
+            if (!open.length) return;
+            const attempts = await prisma.$queryRaw<Array<{ productKey: string; bindingHash: string }>>`
+                SELECT DISTINCT a."productKey", a."bindingHash" FROM "RetailPriceObservation" a
+                JOIN jsonb_to_recordset(${JSON.stringify(open.map(w => ({ productKey: w.product.key, bindingHash: w.bindingHash })))}::jsonb)
+                  AS f("productKey" text, "bindingHash" text)
+                  ON a."productKey" = f."productKey" AND a."bindingHash" = f."bindingHash"
+                WHERE a."expiresAt" > ${new Date()}
+            `;
+            const covered = new Set(attempts.map(a => a.productKey + ':' + a.bindingHash)), uncovered = open.filter(w => !covered.has(w.product.key + ':' + w.bindingHash));
+            remaining += uncovered.length;
+            waiting = [...waiting, ...uncovered].sort(order).slice(0, limit);
+        });
+        return s.json({ baseline: 'ORIGINAL_NEW_RETAIL', policyVersion: 3, items: waiting.slice(0, limit).map(({ product: p, identity, bindingHash }) => ({ productKey: p.key, title: p.title, description: p.description, price: p.price, currency: p.currency, condition: p.condition, identity, bindingHash, canonicalUrl: p.canonicalUrl })), remaining });
     }
     catch (e) {
         return fail(s, e);
     } });
-    r.get('/coverage', async (_q, s) => { try { return s.json(cpCoverage(await attachCp(await loadDiscovery()))); } catch (e) { return fail(s,e); } });
+    // Every product is counted, a batch at a time.
+    r.get('/coverage', async (_q, s) => { try { const count = cpCoverageCount(); await eachDiscovery(async batch => count.add(await attachCp(batch))); return s.json(count.report()); } catch (e) { return fail(s,e); } });
     r.get('/capacity', (_q, s) => { try { return s.json(cpCapacity()); } catch (e) { return fail(s,e); } });
     r.get('/evaluations', async (q, s) => { try {
         if (Object.keys(q.query).join(',') !== 'productKeys' || typeof q.query.productKeys !== 'string') throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
         const keys = q.query.productKeys.split(',');
         if (!keys.length || keys.length > 100 || new Set(keys).size !== keys.length || keys.some(k => !/^(listing|source|external):[a-f0-9-]{36}$/.test(k))) throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
-        const products = await attachCp((await loadDiscovery()).filter(p => keys.includes(p.key) && p.cpAllowed !== false));
+        const products = await attachCp((await loadDiscoveryPart({ keys })).products.filter(p => keys.includes(p.key) && p.cpAllowed !== false));
         return s.json({ items: products.map(p => ({ productKey: p.key, bindingHash: retailBinding(p), score: p.cp?.score ?? null, evaluatedAt: p.cp?.evaluatedAt ?? null, ready: cpTargets([p], new Set(p.cp ? [p.key] : [])).length > 0 })) });
     } catch (e) { return fail(s, e); } });
     r.get('/pending-evaluations', async (q, s) => { try {
@@ -57,14 +75,16 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
         const limit = Number(q.query.limit ?? 6);
         if (!Number.isInteger(limit) || limit < 1 || limit > 100)
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
-        const all = await attachCp(await loadDiscovery());
+        // Only a product with a reference price can be waiting for an evaluation.
+        const all = await attachCp((await loadDiscoveryPart({ retail: true })).products);
         return s.json({ items: cpTargets(all, new Set(all.filter(p => p.cp).map(p => p.key)), limit).map(t => ({ productKey: t.product.key, title: t.product.title, originalPrice: t.comparables[0].price })) });
     }
     catch (e) {
         return fail(s, e);
     } });
     r.post('/observations', async (q, s) => { try {
-        const body = q.body, p = (await loadDiscovery()).find(p => p.key === body?.productKey);
+        const body = q.body, key = typeof body?.productKey === 'string' ? body.productKey : '';
+        const p = key.length > 0 && key.length <= 60 ? (await loadDiscoveryPart({ keys: [key] })).products.find(p => p.key === key) : undefined;
         if (!p)
             throw new DiscoveryError(404, 'RETAIL_PRODUCT_UNAVAILABLE');
         const data = retailObservation(body, p), old = await prisma.retailPriceObservation.findUnique({ where: { id: data.id } });
@@ -104,7 +124,7 @@ export function createRetailPriceAdmin(getCredential: () => unknown = () => proc
     r.post('/evaluate', async (q, s) => { try {
         if (Object.keys(q.body ?? {}).join(',') !== 'productKeys' || !Array.isArray(q.body.productKeys) || q.body.productKeys.length < 1 || q.body.productKeys.length > CP_BATCH_SIZE || new Set(q.body.productKeys).size !== q.body.productKeys.length || q.body.productKeys.some((k: unknown) => typeof k !== 'string' || !/^(listing|source|external):[a-f0-9-]{36}$/.test(k)))
             throw new DiscoveryError(400, 'RETAIL_INVALID_QUERY');
-        return s.json(await evaluateCp((await loadDiscovery()).filter(p => q.body.productKeys.includes(p.key))));
+        return s.json(await evaluateCp((await loadDiscoveryPart({ keys: q.body.productKeys })).products.filter(p => q.body.productKeys.includes(p.key))));
     }
     catch (e) {
         return fail(s, e);

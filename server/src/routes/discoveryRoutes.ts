@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken, optionalAuthenticateToken, AuthRequest } from '../middleware/auth';
-import { loadDiscovery, discoveryPage, discoveryQuery, DiscoveryError, recommendDiscovery, filterDiscovery, wishMatchGroups } from '../lib/discovery';
+import { loadDiscovery, loadDiscoveryPart, discoveryPage, discoveryQuery, DiscoveryError, recommendedDiscovery, filterDiscovery, wishMatchGroups } from '../lib/discovery';
 import {attachCp,evaluateCp,cpTargets} from '../lib/discoveryCp';
 import {retailReferences} from '../lib/retailPrices';
-import {catalogDiscoveryPage,catalogProduct,catalogReady} from '../lib/publicCatalog';
+import {catalogCounties,catalogDiscoveryPage,catalogProduct,catalogReady} from '../lib/publicCatalog';
 import {privateStorePreviewProducts} from '../lib/privateStorePreview';
 import {warmThumbnails} from '../lib/mediaWarm';
 
@@ -33,17 +33,23 @@ export function createDiscoveryRoutes() {
         void warmThumbnails(page.items.map(item=>item.thumbnailUrl));
         return res.json({...page,items:await withRetailReferences(page.items)});
       }
-      // Reached by an ordinary read only when the read model has just declined: the full scan answers, without asking it again.
-      let products=await loadDiscovery(now,map,req.user?.id,ordinary);
-      if(recommended){ products=await recommendDiscovery(products,req.user!.id,wish===undefined?undefined:Number(wish));if(req.query.sort===undefined)query.sort='recommended'; }
       if(cp){
-        const evaluated=await attachCp(products),scopeProducts=filterDiscovery(evaluated,query);
+        // A pick has a score, a score needs a reference price: only the products that can have one are read, never
+        // the whole catalogue (it stopped fitting in one request at 20,000 products, and this feed answered 503).
+        const candidates=await loadDiscoveryPart({retail:true},now,map,req.user?.id);
+        const evaluated=await attachCp(candidates.products),scopeProducts=filterDiscovery(evaluated,query);
         const ready=evaluated.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined&&p.cp.score>=75&&p.cp.confidence==='MEDIUM');if(req.query.sort===undefined)query.sort='cp';
         const page=discoveryPage(ready,query);
         // The category counts are the picks themselves, so the category lists say how many picks each one holds; the
-        // area list keeps every county in scope.
-        return res.json({...page,counties:[...new Set(evaluated.map(p=>p.county).filter((v):v is string=>!!v))].sort(),cpStatus:{evaluated:scopeProducts.filter(p=>p.cp).length,scored:scopeProducts.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined).length,pending:cpTargets(scopeProducts,new Set(scopeProducts.filter(p=>p.cp).map(p=>p.key))).length,providerConfigured:!!process.env.GEMINI_API_KEY,threshold:75,assessments:scopeProducts.filter(p=>p.cp).slice(0,12).map(p=>({key:p.key,title:p.title,score:p.cp!.score,reasons:p.cp!.reasons,evaluatedAt:p.cp!.evaluatedAt,retail:p.cp!.retail,conversion:p.cp!.conversion}))}});
+        // area list keeps every county in scope, also the counties of the products that were not read.
+        const counties=candidates.whole?[...new Set(evaluated.map(p=>p.county).filter((v):v is string=>!!v))].sort():await catalogCounties(now,true);
+        return res.json({...page,counties,cpStatus:{evaluated:scopeProducts.filter(p=>p.cp).length,scored:scopeProducts.filter(p=>p.cp?.score!==null&&p.cp?.score!==undefined).length,pending:cpTargets(scopeProducts,new Set(scopeProducts.filter(p=>p.cp).map(p=>p.key))).length,providerConfigured:!!process.env.GEMINI_API_KEY,threshold:75,assessments:scopeProducts.filter(p=>p.cp).slice(0,12).map(p=>({key:p.key,title:p.title,score:p.cp!.score,reasons:p.cp!.reasons,evaluatedAt:p.cp!.evaluatedAt,retail:p.cp!.retail,conversion:p.cp!.conversion}))}});
       }
+      let products:Awaited<ReturnType<typeof loadDiscovery>>;
+      // 你會想要 reads the products that hold a keyword of a wish, not every product.
+      if(recommended){ products=await recommendedDiscovery(req.user!.id,wish===undefined?undefined:Number(wish),now,map);if(req.query.sort===undefined)query.sort='recommended'; }
+      // Reached by an ordinary read only when the read model has just declined: the full scan answers, without asking it again.
+      else products=await loadDiscovery(now,map,req.user?.id,ordinary);
       const page=discoveryPage(await withRetailReferences(products),query);
       void warmThumbnails(page.items.map(item=>item.thumbnailUrl));
       return res.json(page);
@@ -74,7 +80,8 @@ export function createDiscoveryRoutes() {
   router.post('/cp-evaluations',authenticateToken,rateLimit({windowMs:10*60_000,limit:2,keyGenerator:(req:AuthRequest)=>'cp-owner-'+req.user!.id,standardHeaders:true,legacyHeaders:false,message:{errorCode:'CP_RATE_LIMIT'}}),async(req:AuthRequest,res)=>{
     try{
       if(Object.keys(req.query).length)throw new DiscoveryError(400,'INVALID_DISCOVERY_QUERY');
-      const query=discoveryQuery(req.body),all=await loadDiscovery(new Date(),query.presentation==='map'),matching=filterDiscovery(all,query);
+      // Only a product with a reference price is evaluated, so only the products that can have one are read.
+      const query=discoveryQuery(req.body),all=(await loadDiscoveryPart({retail:true},new Date(),query.presentation==='map')).products,matching=filterDiscovery(all,query);
       return res.json(await evaluateCp(matching));
     }catch(e){return res.status(e instanceof DiscoveryError?e.status:503).json({errorCode:e instanceof DiscoveryError?e.code:'CP_EVALUATION_UNAVAILABLE'});}
   });

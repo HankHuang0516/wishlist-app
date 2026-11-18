@@ -383,20 +383,63 @@ const withMap = (row: { product: unknown; mapLocation: unknown; located: boolean
 // Newest first, ties by key. Keys are lowercase ASCII, where byte order is the order localeCompare gives.
 const NEWEST = Prisma.sql`r."date" DESC, r."key" COLLATE "C" ASC`;
 
-// Every public product, in the order the full scan returns them.
 // Readers call catalogReady(now) first and pass synced; called on their own they check for themselves.
 const insist = async (now: Date, synced: boolean) => { if (!synced && !(await catalogSync(now))) throw new DiscoveryError(503, 'DISCOVERY_UNAVAILABLE'); };
 
-// The public products whose text holds at least one of `words`, in the order catalogProducts gives: the candidates
-// of a wish match (discovery.ts wishMatchGroups), read without loading every product. searchText is
-// normalizeWish(title + ' ' + description + ' ' + brand) and a wish word has no spaces, so every product whose
-// normalized title holds a word is among these. Call catalogReady(now) first.
-export async function catalogProductsMatching(now: Date, words: string[]): Promise<DiscoveryProduct[]> {
-  if (!words.length) return [];
-  const any = Prisma.join(words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ');
-  const rows: Array<{ product: unknown }> = await prisma.$queryRaw`
-    SELECT e."product" FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND (${any}) ORDER BY e."kindRank", e."refId"`;
-  return rows.map(row => row.product as DiscoveryProduct);
+// ---- part of the catalogue ---------------------------------------------------------
+// Matching, the reference-price comparison and the admin tools work on products in memory. They name the part
+// they need and only that part is read. Nobody reads the whole catalogue to filter it afterwards: catalogProducts
+// refuses at 20,000 products, and from the day the catalogue passed that (2026-11-16) every caller that still
+// asked for all of it answered 503.
+export type CatalogPart =
+  /** These products. */
+  | { keys: string[] }
+  /** The products whose text holds at least one of these words: the candidates of a wish match. searchText is
+   *  normalizeWish(title + ' ' + description + ' ' + brand) and a wish word has no spaces, so every product whose
+   *  normalized title holds a word is among them. */
+  | { words: string[] }
+  /** The products that can have a reference price, and so a high-value score: see "the retail orders" below. */
+  | { retail: true };
+function partOf(part: CatalogPart, now: Date): Prisma.Sql | null {
+  if ('keys' in part) return part.keys.length ? Prisma.sql`e."key" IN (${Prisma.join(part.keys)})` : null;
+  if ('words' in part) return part.words.length ? Prisma.sql`(${Prisma.join(part.words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ')})` : null;
+  const words = retailMsrpTable.titleWords();
+  const named = words === null ? Prisma.sql`TRUE` : words.length ? Prisma.join(words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ') : Prisma.sql`FALSE`;
+  return Prisma.sql`((${named}) OR e."key" IN (SELECT r."productKey" FROM "RetailPriceObservation" r WHERE r."status" = 'VERIFIED' AND r."expiresAt" > ${now}))`;
+}
+/** The public products of `part`, in the order catalogProducts gives. */
+export async function catalogPart(part: CatalogPart, now = new Date(), map = false, synced = false): Promise<DiscoveryProduct[]> {
+  await insist(now, synced);
+  const where = partOf(part, now);
+  if (!where) return [];
+  const rows: Array<{ product: unknown; mapLocation: unknown; located: boolean }> = await prisma.$queryRaw`
+    SELECT e."product", ${map ? Prisma.sql`e."mapLocation", ${locatedAt(now)}` : Prisma.sql`NULL AS "mapLocation", FALSE`} AS "located"
+    FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND ${where} ORDER BY e."kindRank", e."refId"`;
+  return rows.map(row => map ? withMap(row) : row.product as DiscoveryProduct);
+}
+/** The counties of every public product, sorted: the area list of a feed that was built from part of the catalogue. */
+export async function catalogCounties(now = new Date(), synced = false): Promise<string[]> {
+  await insist(now, synced);
+  const rows: Array<{ county: string }> = await prisma.$queryRaw`
+    SELECT e."county" FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND e."county" IS NOT NULL AND e."county" <> '' GROUP BY e."county"`;
+  return rows.map(row => row.county).sort();
+}
+/** Every public product, 500 at a time in the order catalogProducts gives, for the callers that have to look at each
+ *  one (the admin counts and queues). A caller keeps what it needs of a batch, not the products, so the catalogue is
+ *  never held whole and no size refuses it. The batches are separate reads: a product that changes while the pass
+ *  runs is seen once, in its old state or its new one. */
+export async function catalogEach(visit: (batch: DiscoveryProduct[]) => void | Promise<void>, now = new Date(), synced = false): Promise<void> {
+  await insist(now, synced);
+  let after: { kindRank: number; refId: string } | null = null;
+  for (;;) {
+    const rows: Array<{ product: unknown; kindRank: number; refId: string }> = await prisma.$queryRaw`
+      SELECT e."product", e."kindRank", e."refId" FROM "PublicCatalogEntry" e
+      WHERE ${scope(now)} ${after ? Prisma.sql`AND (e."kindRank", e."refId") > (${after.kindRank}, ${after.refId})` : Prisma.empty}
+      ORDER BY e."kindRank", e."refId" LIMIT 500`;
+    if (rows.length) await visit(rows.map(row => row.product as DiscoveryProduct));
+    if (rows.length < 500) return;
+    after = rows[rows.length - 1];
+  }
 }
 
 // The first page of the ordinary feed (no filters, newest first), only the keys and thumbnails: what the explore
@@ -406,6 +449,8 @@ export async function catalogProductsMatching(now: Date, words: string[]): Promi
 export async function catalogFirstPage(now = new Date(), limit = 24): Promise<Array<{ key: string; thumbnailUrl: string | null }>> {
   return prisma.$queryRaw`SELECT r."key", r."thumbnailUrl" FROM "PublicCatalogEntry" r WHERE ${scope(now, Prisma.raw('r'))} ORDER BY ${NEWEST} LIMIT ${limit}`;
 }
+// Every public product, in the order the full scan returns them. No request path asks for this any more (see
+// "part of the catalogue" above); it is what the part readers are checked against, and what loadDiscovery() gives.
 export async function catalogProducts(now = new Date(), map = false, synced = false): Promise<DiscoveryProduct[]> {
   await insist(now, synced);
   const products: DiscoveryProduct[] = [];
@@ -418,7 +463,7 @@ export async function catalogProducts(now = new Date(), map = false, synced = fa
         ORDER BY e."kindRank", e."refId" LIMIT 500`;
       for (const row of rows) products.push(map ? withMap(row) : row.product as DiscoveryProduct);
       if (rows.length < 500) return;
-      // The same ceiling as the full scan: these callers hold the whole set in memory.
+      // The same ceiling as the full scan: the caller holds the whole set in memory.
       if (products.length >= 20_000) throw new DiscoveryError(503, 'DISCOVERY_SCAN_CAPACITY');
       after = rows[rows.length - 1];
     }
@@ -465,12 +510,7 @@ const RETAIL_STANDING_TTL_MS = 30_000;
 let retailCache: { at: number; scope: string; standings: Promise<RetailStanding[]> } | null = null;
 export const forgetRetailStandings = () => { retailCache = null; };
 async function readRetailStandings(now: Date): Promise<RetailStanding[]> {
-  const words = retailMsrpTable.titleWords();
-  const named = words === null ? Prisma.sql`TRUE` : words.length ? Prisma.join(words.map(word => Prisma.sql`position(${word} in e."searchText") > 0`), ' OR ') : Prisma.sql`FALSE`;
-  const rows: Array<{ product: unknown }> = await prisma.$queryRaw`
-    SELECT e."product" FROM "PublicCatalogEntry" e WHERE ${scope(now)} AND ((${named}) OR e."key" IN (
-      SELECT r."productKey" FROM "RetailPriceObservation" r WHERE r."status" = 'VERIFIED' AND r."expiresAt" > ${now}))`;
-  const products = rows.map(row => row.product as DiscoveryProduct), references = await retailReferences(products, now);
+  const products = await catalogPart({ retail: true }, now, false, true), references = await retailReferences(products, now);
   return products.flatMap(p => {
     const standing = references.has(p.key) ? retailStanding({ ...p, retail: references.get(p.key) }) : null;
     return standing ? [{ key: p.key, ...standing }] : [];

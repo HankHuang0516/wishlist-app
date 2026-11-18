@@ -9,6 +9,7 @@ import { externalCandidateSelect, publicCandidate } from '../routes/externalList
 import { classifyDiscovery, discoveryCatalog, sourcePrice, statedCondition } from './discoveryCatalog';
 import { wishKeywords, normalizeWish } from './wishlistMatch';
 import { privateStorePreviewProducts } from './privateStorePreview';
+import type { CatalogPart } from './publicCatalog';
 
 export type DiscoveryProduct = {
   kind: 'listing' | 'source' | 'external'; id: string; key: string; title: string; description: string;
@@ -108,9 +109,11 @@ export function candidateProduct(row: DiscoveryCandidateRow, now: Date, mapPrese
     date:d.observedAt.toISOString(),dateBasis:'COLLECTED',dateEarliest:null,
     ...(mapPresentation?{mapLocation:{coordinates:[d.location.longitude,d.location.latitude] as [number,number],precision:'DISTRICT_CENTER' as const}}:{})};
 }
-// Every public product, for the callers that need the whole set (matching, price
-// comparison, admin tools). Served from the read model when it is ready; the full
-// scan remains the reference and the fallback.
+// Every public product: the answer when the read model has declined an ordinary read,
+// and a private preview's own list. Served from the read model when it is ready; the
+// full scan remains the reference and the fallback. Both refuse at 20,000 products,
+// so the callers that work on products in memory (matching, price comparison, admin
+// tools) ask for the part they need instead: loadDiscoveryPart and eachDiscovery below.
 // `declined`: the caller has just asked the read model itself (and looked for a
 // private preview) and was refused, so the full scan is used without asking again.
 export async function loadDiscovery(now = new Date(), mapPresentation=false, viewerId?: number, declined=false) {
@@ -121,6 +124,24 @@ export async function loadDiscovery(now = new Date(), mapPresentation=false, vie
     if (await catalog.catalogReady(now)) return catalog.catalogProducts(now, mapPresentation, true);
   }
   return scanDiscovery(now, mapPresentation);
+}
+/** Part of the public products, for the callers that work on products in memory. They name what they need
+ *  (publicCatalog.ts CatalogPart) and still filter what comes back, because a `whole` list holds more: `whole` says
+ *  the list is every product there is, either a private preview or the full scan the read model could not replace. */
+export async function loadDiscoveryPart(part: CatalogPart, now = new Date(), mapPresentation=false, viewerId?: number): Promise<{ products: DiscoveryProduct[]; whole: boolean }> {
+  const privatePreview = await privateStorePreviewProducts(viewerId, now, mapPresentation);
+  if (privatePreview !== null) return { products: privatePreview, whole: true };
+  const catalog = await import('./publicCatalog');
+  if (await catalog.catalogReady(now)) return { products: await catalog.catalogPart(part, now, mapPresentation, true), whole: false };
+  return { products: await scanDiscovery(now, mapPresentation), whole: true };
+}
+/** Every public product, a batch at a time in the order loadDiscovery gives, for the callers that have to look at
+ *  each one. They keep what they need of a batch, so the catalogue is never held whole (publicCatalog.ts catalogEach). */
+export async function eachDiscovery(visit: (batch: DiscoveryProduct[]) => void | Promise<void>, now = new Date()): Promise<void> {
+  const catalog = await import('./publicCatalog');
+  if (await catalog.catalogReady(now)) return catalog.catalogEach(visit, now, true);
+  const all = await scanDiscovery(now);
+  for (let start = 0; start < all.length; start += 500) await visit(all.slice(start, start + 500));
 }
 export async function scanDiscovery(now = new Date(), mapPresentation=false) {
   const products: DiscoveryProduct[] = [];
@@ -154,16 +175,28 @@ function wishMatch(p: DiscoveryProduct, title: string, rule: WishRule): Discover
   if (rule.budget !== null) { if (p.price === null || p.currency !== 'TWD' || p.price > rule.budget) return null; reasons.push('BUDGET'); score += 20; }
   return { wishItemId: rule.id, reasons, score };
 }
-export async function recommendDiscovery(products: DiscoveryProduct[], userId: number, wishItemId?: number) {
+// The rules of the account's open wishes, or of the one wish named: what 你會想要 matches against.
+async function recommendRules(userId: number, wishItemId?: number): Promise<WishRule[]> {
   const wishes = await prisma.item.findMany({where:{wishlist:{userId},isPurchased:false,isHidden:false,...(wishItemId===undefined?{}:{id:wishItemId})},select:{id:true,name:true,maxPrice:true,priceCurrency:true},orderBy:{id:'desc'},take:500});
   if(wishItemId!==undefined&&!wishes.length)throw new DiscoveryError(404,'DISCOVERY_WISH_UNAVAILABLE');
-  const rules = wishes.map(wishRule);
-  return products.flatMap(p=>{
-    let best: DiscoveryProduct['match'];
-    const title = normalizeWish(p.title);
-    for (const rule of rules) { const match = wishMatch(p, title, rule); if (match && (!best || match.score > best.score)) best = match; }
-    return best?[{...p,match:best}]:[];
-  });
+  return wishes.map(wishRule);
+}
+const bestMatches = (products: DiscoveryProduct[], rules: WishRule[]) => products.flatMap(p=>{
+  let best: DiscoveryProduct['match'];
+  const title = normalizeWish(p.title);
+  for (const rule of rules) { const match = wishMatch(p, title, rule); if (match && (!best || match.score > best.score)) best = match; }
+  return best?[{...p,match:best}]:[];
+});
+/** Of `products`, the ones that match an open wish of the account (or the one named), each with its best match. */
+export async function recommendDiscovery(products: DiscoveryProduct[], userId: number, wishItemId?: number) {
+  return bestMatches(products, await recommendRules(userId, wishItemId));
+}
+/** 你會想要: every public product that matches an open wish of the account (or the one named). The same answer as
+ *  recommendDiscovery over every product, reading only the candidates: the products whose text holds a wish's keyword. */
+export async function recommendedDiscovery(userId: number, wishItemId?: number, now = new Date(), mapPresentation=false) {
+  const rules = await recommendRules(userId, wishItemId);
+  const { products } = await loadDiscoveryPart({ words: [...new Set(rules.flatMap(rule => rule.words))] }, now, mapPresentation, userId);
+  return bestMatches(products, rules);
 }
 
 // ---- every wish against every public product, for the signed-in home page ----
@@ -178,9 +211,7 @@ export async function wishMatchGroups(userId: number, now = new Date()) {
   const rules = wishes.map(wishRule), words = [...new Set(rules.flatMap(rule => rule.words))];
   let products: DiscoveryProduct[] = [];
   if (words.length) {
-    const preview = await privateStorePreviewProducts(userId, now, false);
-    const catalog = preview === null ? await import('./publicCatalog') : null;
-    products = preview ?? (await catalog!.catalogReady(now) ? await catalog!.catalogProductsMatching(now, words) : await loadDiscovery(now, false, userId, true));
+    products = (await loadDiscoveryPart({ words }, now, false, userId)).products;
     const own = new Set((await prisma.listing.findMany({ where: { ownerUserId: userId }, select: { id: true } })).map(row => 'listing:' + row.id));
     products = products.filter(p => !own.has(p.key));
   }

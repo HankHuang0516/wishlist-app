@@ -7,6 +7,9 @@ routes.add('/sell/manual');
 export function analyticsPath(pathname: string) {
   if (routes.has(pathname)) return pathname;
   if (/^\/listings\/[0-9a-f-]{36}$/i.test(pathname)) return '/listings/item';
+  if (/^\/products\/(listing|source|external)\/[0-9a-f-]{36}$/i.test(pathname)) return '/products/item';
+  // The last part of a shared wish's address is the key to it and never leaves the page.
+  if (/^\/shared-wishes\/[A-Za-z0-9_-]{22}$/.test(pathname)) return '/shared-wishes/item';
   if (/^\/wishlists\/[1-9]\d*$/.test(pathname)) return '/wishlists/list';
   if (/^\/users\/[1-9]\d*\/profile$/.test(pathname)) return '/users/user/profile';
   if (/^\/users\/[1-9]\d*\/wishlists$/.test(pathname)) return '/users/user/wishlists';

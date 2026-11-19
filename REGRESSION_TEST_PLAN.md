@@ -42,6 +42,14 @@ Verify that the chat summary and open dialog agree immediately after confirm/can
 - Verify full multiline notes, nullable fields, zero USD budget, strict ACK target/fields, current 404 vs failed reads, explicit exact-record cleanup without another mutation, cleanup failure, unavailable/corrupt storage, another tab replacement and late old-account results.
 - Distinguish a confirmed write from a failed later read. Exercise both languages and narrow-screen recovery with real compiled handlers and isolated PostgreSQL; preserve the before-fix reproduction and exact-candidate CI/deployment readback. Permanent-deletion execution requires its existing explicit human confirmation and is not implied by these non-destructive checks.
 
+### Saving and sharing a product; sharing a wish — Web 2.0.856, APP 2.0.23
+
+- Every product's own page or dialog — a listing (`/listings/:id`), a public-source or partner product (`/products/:kind/:id`, and the product dialog in Explore and on the signed-in home), and the three product pages in the APP — carries the same pair: 加入願望清單 and 分享商品. Explore's list cards carry the bookmark on the web and in the APP.
+- 加入願望清單: one wishlist adds directly; several ask which. The result is said beside the button on a product's own page (in the APP the list chooser opens over the product page on both iOS and Android). Signed out, the button leads to sign-in; on the web a product page is returned to afterwards.
+- 分享商品 hands on `看看「名稱」｜價格` and, on the next line, the address of the product's page. That page opens without an account. The words are the same from the web page and the APP; a browser without a share sheet copies them, and one that can do neither shows them to copy by hand.
+- 分享這個願望 (the APP's 願望 tab and the web's 我的願望): the owner first sees the exact text and address, then shares or copies. The address is `/shared-wishes/<token>`; only the server makes the token and only the owner is given it. Opened without an account it shows the wish's name and budget and nothing else: never the photo, notes, links, the list or the owner. Editing the wish shows there; deleting the wish ends the address; a made-up address reads as a wish that is gone.
+- Check the link previews (the first HTML of `/products/:kind/:id` and `/shared-wishes/<token>`), and that analytics receives only `/products/item` and `/shared-wishes/item`.
+
 ### Sign-in and account page links
 
 - At 360–390px wide the sign-in button is visible without scrolling. The sign-in page holds the two fields, forgot password, the button, sign-up, the notice line and the two legal links, and nothing else.

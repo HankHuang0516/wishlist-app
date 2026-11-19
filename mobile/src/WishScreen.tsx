@@ -3,7 +3,7 @@ import { NativeDisclosure } from './NativeDisclosure';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { wishShareMessage } from './wishShare';
+import { wishShareMessage, wishShareUrl } from './wishShare';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -46,11 +46,20 @@ export function WishScreen({ api, apiUrl, userId, onExplore }: { api: ReturnType
   const begin = () => { if (!active.current || locked.current) return false; locked.current = true; setBusy(true); setError(''); return true; };
   const end = () => { locked.current = false; if (active.current) setBusy(false); };
   const blocked = busy || !ready || pending !== null;
+  // The wish's shared page has an address only the server can make. It is asked for when the owner shares, and the
+  // owner sees the exact text and address before the share menu opens.
+  const linking = useRef(false);
   async function shareWish(wish: ManagedWish) {
-    if (blocked) return;
-    Alert.alert('分享這個願望？', wishShareMessage(wish), [
+    if (blocked || linking.current) return;
+    linking.current = true;
+    let message: string;
+    try { message = wishShareMessage(wish, wishShareUrl(await api(root + '/items/' + wish.id + '/share-link'), apiUrl, __DEV__)); }
+    catch { if (active.current) Alert.alert('暫時無法取得分享連結', '願望仍保存在清單，可稍後再試。'); return; }
+    finally { linking.current = false; }
+    if (!active.current) return;
+    Alert.alert('分享這個願望？', message + '\n\n收到的人不必登入就能打開連結，只會看到願望的名稱與預算。', [
       { text: '取消', style: 'cancel' },
-      { text: '開啟分享選單', onPress: () => { void Share.share({ message: wishShareMessage(wish), title: wish.name }).catch(() => Alert.alert('暫時無法分享', '願望仍保存在清單，可稍後再試。')); } },
+      { text: '開啟分享選單', onPress: () => { void Share.share({ message, title: wish.name }).catch(() => Alert.alert('暫時無法分享', '願望仍保存在清單，可稍後再試。')); } },
     ]);
   }
   async function loadLists(cursor: number | null = null) {

@@ -6,6 +6,8 @@ import {Ionicons} from '@expo/vector-icons';
 import {ListingPhoto} from './ListingPhoto';
 import {NativeDisclosure} from './NativeDisclosure';
 import {ProductInterest} from './ProductInterestView';
+import {NativeProductActions} from './NativeProductActions';
+import {NativeProductWishHost} from './NativeProductWishes';
 import {listingPrice, type PublicListing} from './listingSearch';
 import {iosColors, iosRadius, iosType} from './iosTheme';
 
@@ -51,6 +53,7 @@ export function ListingDetailContent({api,apiUrl,listing, userId, error, reasons
         <Text accessibilityRole="header" style={s.title}>{listing.title}</Text>
         <Text style={s.price}>{listingPrice(listing)}</Text><ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind="listing" id={listing.id} title={listing.title} price={listing.price}/>
         <Text style={s.secondary}>{listing.condition==='NEW'?'新品':'二手'} · {listing.location.county} {listing.location.district}{listing.status==='RESERVED'?' · 已保留':''}</Text>
+        <NativeProductActions product={{kind:'listing',id:listing.id,title:listing.title}} price={listingPrice(listing)} apiUrl={apiUrl}/>
         <View style={s.interest}><ProductInterest kind="listing" id={listing.id} readOnly={own}/></View>
         <View style={s.seller}>
           <View style={s.avatar}><Text style={s.avatarText}>{(listing.owner.name||'用戶').slice(0,1)}</Text></View>
@@ -68,6 +71,7 @@ export function ListingDetailContent({api,apiUrl,listing, userId, error, reasons
 
       </View>
     </ScrollView>
+    <NativeProductWishHost/>
     {!own && <View style={s.footer}>{!!error&&<Text accessibilityRole="alert" style={s.error}>{error}</Text>}<Pressable accessibilityRole="button" accessibilityLabel={contacting?'正在開啟聊天…':'聊聊詢問'} disabled={contacting} accessibilityState={{disabled:contacting,busy:contacting}} style={[s.contact,contacting&&s.disabled]} onPress={()=>void contact()}><Ionicons name="chatbubble-outline" color="white" size={21}/><Text style={s.contactText}>{contacting?'正在開啟聊天…':'聊聊詢問'}</Text></Pressable></View>}
   </View>;
 }

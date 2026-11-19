@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BookmarkPlus as Heart } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiFailure } from '../lib/marketplaceApi';
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
@@ -47,6 +47,8 @@ const Context = createContext<{
     busy: boolean;
     ready: boolean;
     toggle: (p: Product) => void;
+    status: ReactNode;
+    host: (change: number) => void;
 } | null>(null);
 function parseState(v: unknown): State { const r = v as State; if (!r || !Array.isArray(r.lists) || !Array.isArray(r.saved) || r.lists.some(l => !integer(l.id) || typeof l.title !== 'string' || typeof l.isPublic !== 'boolean' || !Number.isSafeInteger(l.remaining) || l.remaining < 0) || r.saved.some(s => !/^(listing|source|external):[a-f0-9-]{36}$/.test(s.productKey) || !integer(s.itemId) || !integer(s.wishlistId)))
     throw Error('Invalid wish state'); return r; }
@@ -56,6 +58,10 @@ function readPending(key: string): Pending | null { const raw = localStorage.get
 export function ProductWishProvider({ children }: {
     children: ReactNode;
 }) { const { token, user } = useAuth(); return token && user ? <OwnerWishes key={user.id + ':' + token} token={token} userId={user.id}>{children}</OwnerWishes> : <>{children}</>; }
+/** For a page that is handed its owner's session instead of reading it from the sign-in context. */
+export function OwnerProductWishProvider({ token, userId, children }: { token: string; userId: number; children: ReactNode }) {
+    return <OwnerWishes key={userId + ':' + token} token={token} userId={userId}>{children}</OwnerWishes>;
+}
 function OwnerWishes({ token, userId, children }: {
     token: string;
     userId: number;
@@ -64,7 +70,10 @@ function OwnerWishes({ token, userId, children }: {
     const [state, setState] = useState<State>({ lists: [], saved: [] }), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState<{
         removed: boolean;
         wishlistId: number;
-    } | null>(null), [pending, setPending] = useState<Pending | null>(null), [choice, setChoice] = useState<Choice | null>(null), [selected, setSelected] = useState<number | null>(null);
+    } | null>(null), [pending, setPending] = useState<Pending | null>(null), [choice, setChoice] = useState<Choice | null>(null), [selected, setSelected] = useState<number | null>(null), [hosts, setHosts] = useState(0);
+    // A product's own page or dialog shows the result beside its button (ProductWishStatus); the box below the page is
+    // for the lists, where no one place belongs to the product.
+    const host = useRef((change: number) => setHosts(count => count + change)).current;
     const active = useRef(true), gate = useRef(false), request = useRef<AbortController | null>(null), pendingKey = `wishlist-product-wish:${marketplaceOrigin()}:${userId}:pending`;
     async function load(clear = true) { if (clear)
         setError(''); const c = new AbortController(); request.current?.abort(); request.current = c; try {
@@ -173,12 +182,29 @@ function OwnerWishes({ token, userId, children }: {
     catch {
         setError(say('無法保存操作紀錄，尚未送出，請檢查瀏覽器儲存空間。', 'The operation was not sent. Check browser storage.'));
     } }
-    return <Context.Provider value={{ saved: state.saved, busy, ready, toggle }}>{children}
- {(error || notice || pending) && <div className="my-3 rounded-xl border bg-white p-3 text-sm" role="status">{error && <p>{error}</p>}{notice && <p>{notice.removed ? say('已從願望清單移除。', 'Removed from wishlist.') : say('已加入願望清單。', 'Added to wishlist.')} <Link className="underline" to={'/wishlists/' + notice.wishlistId}>{say('查看願望', 'View wishlist')}</Link></p>}{pending && <div className="mt-2 flex gap-3"><button disabled={busy} className="min-h-11 underline" onClick={() => void check(pending)}>{say('查核操作結果', 'Check result')}</button><button disabled={busy} className="min-h-11 underline" onClick={() => void submit(pending)}>{say('重試原操作', 'Retry original operation')}</button></div>}{!pending && error && <button disabled={busy} className="min-h-11 underline" onClick={() => void load()}>{say('重新核對清單', 'Check wishlists again')}</button>}</div>}
+    const status = (error || notice || pending) ? <div className="my-3 rounded-xl border bg-white p-3 text-sm" role="status">{error && <p>{error}</p>}{notice && <p>{notice.removed ? say('已從願望清單移除。', 'Removed from wishlist.') : say('已加入願望清單。', 'Added to wishlist.')} <Link className="underline" to={'/wishlists/' + notice.wishlistId}>{say('查看願望', 'View wishlist')}</Link></p>}{pending && <div className="mt-2 flex gap-3"><button disabled={busy} className="min-h-11 underline" onClick={() => void check(pending)}>{say('查核操作結果', 'Check result')}</button><button disabled={busy} className="min-h-11 underline" onClick={() => void submit(pending)}>{say('重試原操作', 'Retry original operation')}</button></div>}{!pending && error && <button disabled={busy} className="min-h-11 underline" onClick={() => void load()}>{say('重新核對清單', 'Check wishlists again')}</button>}</div> : null;
+    return <Context.Provider value={{ saved: state.saved, busy, ready, toggle, status, host }}>{children}
+ {hosts === 0 && status}
  {choice && <MarketplaceDialog placement="bottom" title={choice.action === 'ADD' ? say('加入願望清單', 'Add to wishlist') : say('從願望清單移除', 'Remove from wishlist')} closeLabel={say('關閉', 'Close')} onClose={() => setChoice(null)}><p className="mb-4 text-sm text-gray-500">{choice.product.title}</p><fieldset className="space-y-2"><legend className="sr-only">{say('選擇願望清單', 'Choose a wishlist')}</legend>{state.lists.map(l => { const disabled = choice.action === 'REMOVE' ? choice.saved?.wishlistId !== l.id : l.remaining === 0; return <label key={l.id} className={'flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border p-3 ' + (disabled ? 'opacity-50' : '')}><input type="radio" name="product-wish-destination" value={l.id} checked={selected === l.id} disabled={disabled} onChange={() => setSelected(l.id)}/><span>{l.title}<small className="block text-gray-500">{l.isPublic ? say('公開清單', 'Public list') : say('私人清單', 'Private list')}{disabled ? ' · ' + (choice.action === 'REMOVE' ? say('未加入此清單', 'Not in this list') : say('已滿', 'Full')) : ''}</small></span></label>; })}</fieldset>{!state.lists.length ? <Link className="mt-4 inline-block underline" to="/wishes">{say('先建立願望清單', 'Create a wishlist first')}</Link> : <button className="mt-5 min-h-12 w-full rounded-xl bg-gray-900 px-4 text-white disabled:opacity-40" disabled={!selected || busy} onClick={() => selected && void submit(operation(choice, selected))}>{choice.action === 'ADD' ? say('確認加入', 'Confirm add') : say('確認移除', 'Confirm removal')}</button>}</MarketplaceDialog>}
  </Context.Provider>;
 }
-export default function ProductWishButton({ product }: {
+/** The result of the last add or removal, shown where the product's own page or dialog puts it. */
+export function ProductWishStatus() {
+    const c = useContext(Context), host = c?.host;
+    useEffect(() => { if (!host) return; host(1); return () => host(-1); }, [host]);
+    return <>{c?.status ?? null}</>;
+}
+const heartClass = 'product-wish-heart absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/95 text-gray-700 shadow-sm';
+const labeledClass = 'inline-flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4 text-stone-900';
+/** On a card the button is the bookmark over the photo; on a product's own page or dialog (`labeled`) it says what it does. */
+export default function ProductWishButton({ product, variant = 'icon' }: {
     product: Product;
-}) { const c = useContext(Context); if (!c)
-    return <Link to="/login" className="product-wish-heart absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/95 text-gray-700 shadow-sm" aria-label={say('登入以加入願望：', 'Sign in to save: ') + product.title}><Heart className="h-5 w-5" aria-hidden="true"/></Link>; const saved = c.saved.some(x => x.productKey === product.kind + ':' + product.id); return <button type="button" className="product-wish-heart absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/95 text-gray-700 shadow-sm disabled:opacity-50" aria-label={say(saved ? '已加入願望：' : '加入願望清單：', saved ? 'Wish saved: ' : 'Add to wishlist: ') + product.title} aria-pressed={saved} disabled={c.busy || !c.ready} onClick={e => { e.stopPropagation(); c.toggle(product); }}><Heart className="h-5 w-5" fill={saved ? 'currentColor' : 'none'} aria-hidden="true"/></button>; }
+    variant?: 'icon' | 'labeled';
+}) {
+    // After signing in from a product's own page the visitor comes back to it; the sign-in page accepts only the
+    // addresses it knows (lib/authReturnTo.ts).
+    const c = useContext(Context), labeled = variant === 'labeled', { pathname } = useLocation();
+    if (!c) return <Link to={labeled ? '/login?next=' + encodeURIComponent(pathname) : '/login'} className={labeled ? labeledClass : heartClass} aria-label={say('登入以加入願望：', 'Sign in to save: ') + product.title}><Heart className="h-5 w-5" aria-hidden="true"/>{labeled && say('加入願望清單', 'Add to wishlist')}</Link>;
+    const saved = c.saved.some(x => x.productKey === product.kind + ':' + product.id);
+    return <button type="button" className={(labeled ? labeledClass : heartClass) + ' disabled:opacity-50'} aria-label={say(saved ? '已加入願望：' : '加入願望清單：', saved ? 'Wish saved: ' : 'Add to wishlist: ') + product.title} aria-pressed={saved} disabled={c.busy || !c.ready} onClick={e => { e.stopPropagation(); c.toggle(product); }}><Heart className="h-5 w-5" fill={saved ? 'currentColor' : 'none'} aria-hidden="true"/>{labeled && (saved ? say('已加入願望清單', 'In your wishlist') : say('加入願望清單', 'Add to wishlist'))}</button>;
+}

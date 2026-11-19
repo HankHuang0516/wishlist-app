@@ -208,7 +208,7 @@ export function WishlistDetailSession() {
     };
 
     const handleToggleStatus = async (item: Item) => {
-        if(!token){navigate('/login?redirect='+encodeURIComponent('/wishlists/'+id));return;}
+        if(!token){navigate('/login?next='+encodeURIComponent('/wishlists/'+id));return;}
         if(!canMutate() || !wishlist)return;
         const wanted=!item.isPurchased;readSequence.current++;
         await operation.run({id:wishlist.id,kind:'PURCHASE',itemId:item.id,wanted},'/items/'+item.id,{isPurchased:wanted},ack=>{
@@ -268,7 +268,7 @@ export function WishlistDetailSession() {
     };
 
     const handleCloneClick = (item: Item) => {
-        if(!token){navigate('/login?redirect='+encodeURIComponent('/wishlists/'+id));return;}
+        if(!token){navigate('/login?next='+encodeURIComponent('/wishlists/'+id));return;}
         if(!canMutate())return;operation.resetFeedback();setFeedbackMessage(null);setIsDetailOpen(false);setSelectedItem(null);setItemToClone(item);setIsCloneModalOpen(true);void fetchMyWishlists();
     };
 
@@ -309,7 +309,7 @@ export function WishlistDetailSession() {
         {!operation.ready && token && <Button className="min-h-11" onClick={()=>void operation.restore()} disabled={operation.busy}>{t('common.retry')}</Button>}
     </section>;
     if (loading && !wishlist) return <div className="p-4 text-center">{t('common.processing')}</div>;
-    if (!wishlist) return <div className="p-4 space-y-4">{deleted && <p role="status">{detailItemText('listDeleted')}</p>}{recovery}<Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('dashboard')}</Link>{!token && <Link className="inline-flex min-h-11 items-center underline" to={'/login?redirect='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
+    if (!wishlist) return <div className="p-4 space-y-4">{deleted && <p role="status">{detailItemText('listDeleted')}</p>}{recovery}<Link className="inline-flex min-h-11 items-center underline" to="/dashboard">{detailItemText('dashboard')}</Link>{!token && <Link className="inline-flex min-h-11 items-center underline" to={'/login?next='+encodeURIComponent('/wishlists/'+id)}>{t('auth.login')}</Link>}</div>;
 
     const isOwner = user?.id === wishlist.userId;
 

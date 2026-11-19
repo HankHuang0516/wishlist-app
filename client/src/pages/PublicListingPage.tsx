@@ -12,6 +12,9 @@ import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import ProductActionsWeb from '../components/ProductActionsWeb';
 import ListingReportWeb from '../components/ListingReportWeb';
 import { getDisplayLocale } from '../utils/localization';
+import ProductWishButton, { ProductWishProvider, ProductWishStatus } from '../components/ProductWishButton';
+import { shareLocale } from '../lib/useShareText';
+import { productShareLines, withShareUrl } from '../../../mobile/shared/shareText';
 const say = (zh: string, en: string) => getDisplayLocale().startsWith('zh') ? zh : en;
 const listingId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function PublicListingGallery({listing}:{listing:PublicListing}) {
@@ -27,7 +30,7 @@ function PublicListingGallery({listing}:{listing:PublicListing}) {
 }
 export default function PublicListingPage() {
   const { id } = useParams(), { user, token } = useAuth();
-  return <PublicListingSession key={`${id}:${user?.id ?? 'anonymous'}:${token ?? ''}`} id={id} token={token} userId={user?.id ?? null} />;
+  return <ProductWishProvider><PublicListingSession key={`${id}:${user?.id ?? 'anonymous'}:${token ?? ''}`} id={id} token={token} userId={user?.id ?? null} /></ProductWishProvider>;
 }
 function PublicListingSession({ id, token, userId }: { id?: string; token: string | null; userId: number | null }) {
   const [listing, setListing] = useState<(PublicListing & { version: number }) | null>(null);
@@ -40,7 +43,9 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
   const shareGate = useRef(false);
   const shareUrl = listing ? new URL(`/listings/${listing.id}?v=${listing.version}`, window.location.origin).toString() : '';
   const shareDetails = listing ? `${listing.title}｜${publicListingPrice(listing.price)}` : '';
-  const shareText = `${shareDetails}\n${shareUrl}`;
+  // The same words the app shares for a product, then the address of this page on a line of its own.
+  const shareLines = listing ? productShareLines(listing.title, publicListingPrice(listing.price), shareLocale()) : '';
+  const shareText = withShareUrl(shareLines, shareUrl);
   useEffect(() => {
     if (!id || !listingId.test(id)) { setState('unavailable'); return; }
     const controller = new AbortController();
@@ -86,7 +91,7 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     if (!listing || Date.parse(listing.expiresAt) <= Date.now()) { setShareNotice('商品已失效，請重新載入核對。'); return; }
     shareGate.current = true; setSharing(true); setShareNotice('');
     try {
-      if (navigator.share) await navigator.share({ title: shareDetails, text: shareDetails, url: shareUrl });
+      if (navigator.share) await navigator.share({ title: shareDetails, text: shareLines, url: shareUrl });
       else { await navigator.clipboard.writeText(shareText); setShareNotice('商品資訊與連結已複製'); }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -118,9 +123,11 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
       {listing.description && <section><h2 className="font-semibold">{text('商品說明')}</h2><p className="mt-2 whitespace-pre-wrap break-words text-stone-700">{listing.description}</p></section>}
       <details className="rounded-xl border border-stone-200"><summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 font-medium">{say('商品資訊','Item information')}<ChevronDown className="h-4 w-4" aria-hidden="true"/></summary><dl className="space-y-2 px-3 pb-3 text-sm"><div><dt className="inline font-semibold">{text('品牌：')}</dt><dd className="inline">{listing.brand ?? text('未提供')}</dd></div><div><dt className="inline font-semibold">{text('交付：')}</dt><dd className="inline">{listing.deliveryMethods.map(method => text(method === 'MEETUP' ? '面交' : '寄送')).join(' / ')} · {text(listing.negotiable ? '可議價' : '不議價')}</dd></div><div><dt className="inline font-semibold">{text('失效時間：')}</dt><dd className="inline">{publicListingTime(listing.expiresAt)}{text('（台灣時間）')}</dd></div></dl></details>
       <Link to={`/explore?listing=${listing.id}`} className="inline-flex min-h-11 items-center rounded-xl border px-4">{text('在探索地圖定位此商品')}</Link>
+      <ProductWishButton variant="labeled" product={{ kind: 'listing', id: listing.id, title: listing.title }} />
       <button type="button" disabled={sharing} onClick={() => void share()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-5 text-white disabled:opacity-50"><Share2 className="h-4 w-4" aria-hidden="true" />{text(sharing ? '正在分享…' : '分享商品')}</button>
       <button type="button" disabled={sharing} onClick={toggleManualShare} className="inline-flex min-h-11 items-center rounded-xl border px-4 disabled:opacity-50">{text(manualShareVisible ? '收合分享文字' : '顯示分享文字與連結')}</button>
       <button type="button" disabled={sharing} onClick={reloadItem} className="inline-flex min-h-11 items-center rounded-xl border px-4 disabled:opacity-50">{text('重新載入商品')}</button>
+      <ProductWishStatus />
       {shareNotice && <p role="status" className="text-sm text-stone-600">{text(shareNotice)}</p>}
       {manualShareVisible && <label className="block space-y-2">
         <span className="block text-sm font-semibold">{text('商品分享文字與連結')}</span>

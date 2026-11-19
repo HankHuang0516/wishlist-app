@@ -42,6 +42,8 @@ const ChangelogPage = createLazyPage(() => import('./pages/ChangelogPage'));
 const ListingBatchPage = createLazyPage(() => import('./pages/ListingBatchPage'));
 const ManualListingPage = createLazyPage(() => import('./pages/ManualListingPage'));
 const PublicListingPage = createLazyPage(() => import('./pages/PublicListingPage'));
+const PublicProductPage = createLazyPage(() => import('./pages/PublicProductPage'));
+const SharedWishPage = createLazyPage(() => import('./pages/SharedWishPage'));
 const AccountDeletionPage = createLazyPage(() => import('./pages/AccountDeletionPage'));
 const MyListingsPage = createLazyPage(() => import('./pages/MyListingsPage'));
 const ListingReportsPage = createLazyPage(() => import('./pages/ListingReportsPage'));
@@ -96,6 +98,8 @@ function App() {
             <Route path="reports" element={<ListingReportsPage />} />
             <Route path="chat" element={<ChatPage />} />
             <Route path="listings/:id" element={<PublicListingPage />} />
+            <Route path="products/:kind/:id" element={<PublicProductPage />} />
+            <Route path="shared-wishes/:token" element={<SharedWishPage />} />
             <Route path="wishlists/:id" element={<WishlistDetail />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsPage />} />

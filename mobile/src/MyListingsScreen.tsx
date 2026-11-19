@@ -120,7 +120,7 @@ export function MyListingsScreen({ api, apiUrl, userId, token, onClose, closeReq
     try {
       const url = listingShareUrl(item, apiUrl, __DEV__);
       if (!url) return;
-      await Share.share({ message: listingShareMessage(item, url), url, title: item.title });
+      await Share.share({ message: listingShareMessage(item, url), title: item.title });
     } catch { Alert.alert('分享失敗', '無法開啟分享選單，請稍後重試。'); }
   }
   const now = Date.now(), visible = rows.filter(item => managementTab(item, now) === tab);

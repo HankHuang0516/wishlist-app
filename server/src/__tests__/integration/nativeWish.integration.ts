@@ -5,10 +5,11 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import routes from '../../routes/nativeWishRoutes';
+import { createSharedWishRoutes } from '../../routes/sharedWishRoutes';
 require('../../../../scripts/assert-test-database.cjs').assertTestDatabase(process.env.TEST_DATABASE_URL);
 if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Isolated test DB required');
 const secret = 'native-wish-integration-only'; process.env.JWT_SECRET = secret;
-const app = express(); app.use(express.json()); app.use('/api/native-wishes', routes);
+const app = express(); app.use(express.json()); app.use('/api/native-wishes', routes); app.use('/api/shared-wishes', createSharedWishRoutes());
 const server = createServer(app); const root = '/api/native-wishes';
 let owner: number, outsider: number;
 const auth = (id = owner) => 'Bearer ' + jwt.sign({ id }, secret, { algorithm: 'HS256' });
@@ -166,5 +167,31 @@ describe('native wish ownership and durable create receipts / PostgreSQL and rea
         } finally { allowClaim(); }
         await completion; expect((await creation).status).toBe(201);
         expect(await prisma.item.findUnique({ where: { id: existing.id } })).toMatchObject({ isPurchased: true, purchasedById: owner });
+    });
+    it('gives only the owner the address of a wish to share; whoever holds it reads the name and budget, and nothing private', async () => {
+        const privateList = await list({ title: '私人清單，名稱不外流' });
+        const created = await post(`/lists/${privateList.id}/items`, { clientRequestId: randomUUID(), name: '橘色桌燈', notes: 'PRIVATE_NOTE', link: 'https://shop.example/private-link', maxPrice: 1500, priceCurrency: 'TWD' });
+        expect(created.status).toBe(201); const id = created.body.resource.id as number, linkPath = `${root}/items/${id}/share-link`;
+        expect((await request(server).get(linkPath)).status).toBe(401);
+        expect((await request(server).get(linkPath).set('Authorization', auth(outsider))).status).toBe(404);
+        expect((await request(server).get(`${root}/items/0/share-link`).set('Authorization', auth())).status).toBe(400);
+        const link = await request(server).get(linkPath).set('Authorization', auth());
+        expect(link.status).toBe(200); expect(link.headers['cache-control']).toBe('private, no-store');
+        expect(Object.keys(link.body)).toEqual(['path']); expect(link.body.path).toMatch(/^\/shared-wishes\/[A-Za-z0-9_-]{22}$/);
+        // Asking again changes nothing and gives the same address.
+        expect((await request(server).get(linkPath).set('Authorization', auth())).body).toEqual(link.body);
+        expect(await prisma.item.count({ where: { wishlistId: privateList.id } })).toBe(1);
+        // No sign-in, and a sign-in of someone else, read the same thing: the two fields the share text says.
+        const shared = await request(server).get('/api' + link.body.path);
+        expect(shared.status).toBe(200); expect(shared.headers['cache-control']).toBe('no-store');
+        expect(shared.body).toEqual({ name: '橘色桌燈', maxPrice: 1500, priceCurrency: 'TWD' });
+        expect((await request(server).get('/api' + link.body.path).set('Authorization', auth(outsider))).body).toEqual(shared.body);
+        // The page follows the wish: an edit shows, and deleting the wish ends the address.
+        expect((await request(server).put(`${root}/items/${id}`).set('Authorization', auth()).send({ name: '白色桌燈', maxPrice: null })).status).toBe(200);
+        expect((await request(server).get('/api' + link.body.path)).body).toEqual({ name: '白色桌燈', maxPrice: null, priceCurrency: null });
+        expect((await request(server).delete(`${root}/items/${id}`).set('Authorization', auth())).status).toBeLessThan(300);
+        const gone = await request(server).get('/api' + link.body.path);
+        expect(gone.status).toBe(404); expect(gone.body).toEqual({ errorCode: 'SHARED_WISH_UNAVAILABLE' });
+        expect((await request(server).get(linkPath).set('Authorization', auth())).status).toBe(404);
     });
 });

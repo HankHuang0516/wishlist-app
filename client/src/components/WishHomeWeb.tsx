@@ -8,6 +8,7 @@ import { homeText } from '../lib/homeText';
 import { getDisplayLocale } from '../utils/localization';
 import MarketplaceDialog from './MarketplaceDialog';
 import DiscoveryProductDetail, { DiscoveryProductActions } from './DiscoveryProductDetail';
+import { OwnerProductWishProvider } from './ProductWishButton';
 // The product details are the explore page's; so are their styles (all scoped to its own class names).
 import '../pages/exploreDiscovery.css';
 
@@ -32,7 +33,7 @@ function Match({ item, hero = false, onOpen }: { item: DiscoveryProduct; hero?: 
 /** The signed-in home page: every open wish is matched against all public products as the page opens, and each wish
  *  shows its best matches. Nobody has to choose a wish and search for it. The parent keys this component by account
  *  and session, so a replaced session never shows the previous account's wishes. */
-export default function WishHomeWeb({ token, children }: { token: string; userId: number; children?: ReactNode }) {
+export default function WishHomeWeb({ token, userId, children }: { token: string; userId: number; children?: ReactNode }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [groups, setGroups] = useState<WishMatchGroup[] | null>(null), [expanded, setExpanded] = useState<number | null>(null);
@@ -101,6 +102,6 @@ export default function WishHomeWeb({ token, children }: { token: string; userId
       <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" aria-hidden="true" /><label htmlFor="home-search" className="sr-only">{homeText('search')}</label><input id="home-search" maxLength={100} value={query} onChange={event => setQuery(event.target.value)} placeholder={homeText('searchPlaceholder')} className="h-11 w-full rounded-md border border-gray-200 pl-10 pr-3 focus-visible:outline-muji-primary" /></div>
       <button type="submit" className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-blue-700 hover:bg-gray-50"><Search className="h-5 w-5" aria-hidden="true" />{homeText('searchButton')}</button>
     </form>
-    {detail && <MarketplaceDialog wide title={homeText('detail')} closeLabel={homeText('close')} onClose={() => setDetail(null)} footer={<DiscoveryProductActions item={detail} />}><DiscoveryProductDetail key={detail.key} item={detail} /></MarketplaceDialog>}
+    {detail && <OwnerProductWishProvider token={token} userId={userId}><MarketplaceDialog wide title={homeText('detail')} closeLabel={homeText('close')} onClose={() => setDetail(null)} footer={<DiscoveryProductActions item={detail} />}><DiscoveryProductDetail key={detail.key} item={detail} /></MarketplaceDialog></OwnerProductWishProvider>}
   </section>;
 }

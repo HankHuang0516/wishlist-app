@@ -8,6 +8,7 @@ import { WishItemUpdateError } from '../lib/wishItemUpdate';
 import { wakeEclawRecognitionWorker } from '../lib/eclawRecognitionQueue';
 import { enqueueWishPhotoErasure } from '../lib/wishPhotoErasure';
 import { isListingId } from '../lib/listingRules';
+import { wishSharePath } from '../lib/wishShare';
 const itemSelect = { id: true, wishlistId: true, name: true, notes: true, link: true, imageUrl: true, aiStatus: true, price: true, currency: true, aiLink: true, maxPrice: true, priceCurrency: true, isHidden: true, isPurchased: true, updatedAt: true } as const;
 const listSelect = { id: true, title: true, description: true, isPublic: true, maxItems: true, updatedAt: true, _count: { select: { items: true } } } as const;
 type Tx = Prisma.TransactionClient;
@@ -48,6 +49,13 @@ export const getNativeList = endpoint(async (req, userId) => {
         const rows = await tx.item.findMany({ where: { wishlistId: id, ...(after ? { id: { gt: after } } : {}) }, take: 51, orderBy: { id: 'asc' }, select: itemSelect });
         const items = rows.slice(0, 50); return { list, items, nextCursor: rows.length > 50 ? items[items.length - 1].id : null };
     }, { isolationLevel: 'RepeatableRead' });
+});
+// The address under which the owner shares one wish (lib/wishShare.ts). Asking for it changes nothing; it is the same
+// each time, and only the owner is told it.
+export const getNativeWishShareLink = endpoint(async (req, userId) => {
+    const id = wishId(req.params.id);
+    if (!await prisma.item.findFirst({ where: { id, wishlist: { userId } }, select: { id: true } })) throw new NativeWishError(404);
+    return { path: wishSharePath(id) };
 });
 // Read-only recovery: opening a browser must never resend a create operation.
 export const getNativeWishReceipt = endpoint(async (req, userId) => {

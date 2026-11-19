@@ -113,7 +113,7 @@ describe('public listing share destination', () => {
     mount('/listings/' + id); await screen.findByRole('heading', { name: '二手檯燈' });
     fireEvent.click(screen.getByRole('button', { name: '分享商品' }));
     await screen.findByText('商品資訊與連結已複製');
-    expect(writeText).toHaveBeenCalledWith(`二手檯燈｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
+    expect(writeText).toHaveBeenCalledWith(`看看「二手檯燈」｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
   });
   it('provides selectable read-only product text when clipboard access fails without claiming it was copied', async () => {
     const writeText = vi.fn().mockRejectedValue(new DOMException('PRIVATE_PERMISSION_DETAIL', 'NotAllowedError'));
@@ -123,7 +123,7 @@ describe('public listing share destination', () => {
     fireEvent.click(screen.getByRole('button', { name: '分享商品' }));
     const manual = await screen.findByRole('textbox', { name: '商品分享文字與連結' });
     expect(manual).toHaveAttribute('readonly');
-    expect(manual).toHaveValue(`二手檯燈｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
+    expect(manual).toHaveValue(`看看「二手檯燈」｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
     expect(screen.getByText('無法自動分享，請手動複製下方商品資訊與連結。')).toBeInTheDocument();
     expect(screen.queryByText('商品資訊與連結已複製')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('PRIVATE_PERMISSION_DETAIL');
@@ -136,7 +136,7 @@ describe('public listing share destination', () => {
     vi.stubGlobal('fetch', fetch);
     mount('/listings/' + id); await screen.findByRole('heading', { name: '二手檯燈' });
     fireEvent.click(screen.getByRole('button', { name: 'Show sharing text and link' }));
-    expect(screen.getByRole('textbox', { name: 'Item sharing text and link' })).toHaveValue(`二手檯燈｜Free\n${window.location.origin}/listings/${id}?v=3`);
+    expect(screen.getByRole('textbox', { name: 'Item sharing text and link' })).toHaveValue(`Take a look: 二手檯燈 | Free\n${window.location.origin}/listings/${id}?v=3`);
     expect(fetch).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Hide sharing text' }));
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -153,7 +153,7 @@ describe('public listing share destination', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '分享商品' })));
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '分享商品' })));
-    expect(screen.getByRole('textbox', { name: '商品分享文字與連結' })).toHaveValue(`二手檯燈｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
+    expect(screen.getByRole('textbox', { name: '商品分享文字與連結' })).toHaveValue(`看看「二手檯燈」｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
     expect(share).toHaveBeenCalledTimes(2);
     expect(document.body.textContent).not.toContain('PRIVATE_NATIVE_DETAIL');
   });
@@ -162,13 +162,13 @@ describe('public listing share destination', () => {
     vi.stubGlobal('fetch', fetch); vi.stubGlobal('navigator', {});
     mount('/listings/' + id); await screen.findByRole('heading', { name: '二手檯燈' });
     fireEvent.click(screen.getByRole('button', { name: '顯示分享文字與連結' }));
-    expect(screen.getByRole('textbox')).toHaveValue(`二手檯燈｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
+    expect(screen.getByRole('textbox')).toHaveValue(`看看「二手檯燈」｜NT$ 590\n${window.location.origin}/listings/${id}?v=3`);
     fireEvent.click(screen.getByRole('button', { name: '重新載入商品' }));
     await screen.findByRole('heading', { name: '更新後檯燈' });
     expect(screen.getByText('已保留')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '顯示分享文字與連結' }));
-    expect(screen.getByRole('textbox')).toHaveValue(`更新後檯燈｜免費贈送\n${window.location.origin}/listings/${id}?v=4`);
+    expect(screen.getByRole('textbox')).toHaveValue(`看看「更新後檯燈」｜免費贈送\n${window.location.origin}/listings/${id}?v=4`);
     expect(fetch).toHaveBeenCalledTimes(2);
     for (const call of fetch.mock.calls) expect(call[1]).toMatchObject({ credentials:'omit', cache:'no-store', redirect:'error' });
   });
@@ -193,7 +193,7 @@ describe('public listing share destination', () => {
     vi.stubGlobal('navigator', { share }); vi.stubGlobal('fetch', vi.fn(async () => responseOk(listing())));
     mount('/listings/' + id); await screen.findByRole('heading', { name: '二手檯燈' });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '分享商品' })));
-    expect(share).toHaveBeenCalledWith({ title: '二手檯燈｜NT$ 590', text: '二手檯燈｜NT$ 590', url: `${window.location.origin}/listings/${id}?v=3` });
+    expect(share).toHaveBeenCalledWith({ title: '二手檯燈｜NT$ 590', text: '看看「二手檯燈」｜NT$ 590', url: `${window.location.origin}/listings/${id}?v=3` });
     expect(screen.queryByText('無法分享，請稍後重試。')).not.toBeInTheDocument();
   });
   it('keeps the current public read and original share payload while native sharing is pending', async () => {
@@ -210,7 +210,7 @@ describe('public listing share destination', () => {
     await act(async () => finish());
     expect(screen.getByRole('button', { name:'重新載入商品' })).toBeEnabled();
     expect(share).toHaveBeenCalledTimes(1);
-    expect(share).toHaveBeenCalledWith({ title:'二手檯燈｜NT$ 590',text:'二手檯燈｜NT$ 590',url:`${window.location.origin}/listings/${id}?v=3` });
+    expect(share).toHaveBeenCalledWith({ title:'二手檯燈｜NT$ 590',text:'看看「二手檯燈」｜NT$ 590',url:`${window.location.origin}/listings/${id}?v=3` });
   });
   it('rejects a just-expired manual share and removes sharing controls on foreground expiry', async () => {
     const row = { ...listing(), expiresAt:new Date(Date.now()+60_000).toISOString() };
@@ -241,7 +241,9 @@ describe('public listing share destination', () => {
   it('does not expose a late old-session sharing failure or manual text in the new session', async () => {
     let reject!: (error: Error) => void;
     const share=vi.fn(()=>new Promise<void>((_resolve,no)=>{reject=no;}));
-    const fetch=vi.fn().mockResolvedValueOnce(responseOk(listing())).mockResolvedValueOnce(responseOk({...listing(),title:'新帳號的當前商品',version:4}));
+    // A signed-in page also reads the visitor's wishlists for its 加入願望清單 button; that read is not one of the two item reads.
+    const items=[listing(),{...listing(),title:'新帳號的當前商品',version:4}];
+    const fetch=vi.fn(async(url:unknown)=>String(url).includes('/product-wishes')?responseOk({lists:[],saved:[]}):responseOk(items.shift()));
     const auth={...anonymous,token:'synthetic-old',isAuthenticated:true,user:{id:4,phoneNumber:'synthetic-old'}};
     vi.stubGlobal('navigator',{share});vi.stubGlobal('fetch',fetch);
     const rendered=render(view('/listings/'+id,auth));await screen.findByRole('heading',{name:'二手檯燈'});
@@ -304,7 +306,7 @@ describe('public listing share destination', () => {
     expect(share).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Sharing…' })).toBeDisabled();
     localStorage.setItem('user-locale', 'zh-TW'); await act(async () => finish());
-    expect(share).toHaveBeenCalledWith({ title: '二手檯燈｜NT$ 1,250.5', text: '二手檯燈｜NT$ 1,250.5', url: `${window.location.origin}/listings/${id}?v=3` });
+    expect(share).toHaveBeenCalledWith({ title: '二手檯燈｜NT$ 1,250.5', text: 'Take a look: 二手檯燈 | NT$ 1,250.5', url: `${window.location.origin}/listings/${id}?v=3` });
     expect(screen.getByRole('button', { name: '分享商品' })).toBeEnabled();
   });
   it('uses bounded English failure notices when saved locale cannot be read', async () => {

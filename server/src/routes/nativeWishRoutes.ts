@@ -1,7 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth';
-import { getNativeLists, getNativeList, getNativeWishReceipt, createNativeList, createNativeWish, updateNativeList, deleteNativeList, deleteNativeWish } from '../controllers/nativeWishController';
+import { getNativeLists, getNativeList, getNativeWishReceipt, getNativeWishShareLink, createNativeList, createNativeWish, updateNativeList, deleteNativeList, deleteNativeWish } from '../controllers/nativeWishController';
 import { updateItem } from '../controllers/wishItemController';
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../middleware/auth';
@@ -17,6 +17,7 @@ router.get('/photo-removals/:clientUploadId', getWishPhotoRemoval);
 router.post('/photo-removals/:clientUploadId', removeUnusedWishPhoto);
 router.get('/lists/:id', getNativeList); router.put('/lists/:id', updateNativeList); router.delete('/lists/:id', deleteNativeList);
 router.post('/lists/:id/items', createNativeWish);
+router.get('/items/:id/share-link', getNativeWishShareLink);
 router.put('/items/:id', async (req: AuthRequest, res, next) => {
     try {
         const id = wishId(req.params.id);

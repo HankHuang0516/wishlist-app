@@ -94,6 +94,7 @@ const en = {
   "編輯願望": "Edit wish",
   "取消隱藏": "Unhide wish",
   "隱藏願望": "Hide wish",
+  "分享這個願望": "Share this wish",
   "取消完成": "Undo completion",
   "標記完成": "Mark complete",
   "查附近符合商品": "Find nearby matching items",

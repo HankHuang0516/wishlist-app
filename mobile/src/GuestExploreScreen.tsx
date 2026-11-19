@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { createApi } from './api';
 import { guestReadApi } from './guestAccess';
 import { NativeDiscovery } from './NativeDiscovery';
+import { NativeProductActions } from './NativeProductActions';
+import { NativeProductWishProvider } from './NativeProductWishes';
 import { PublicProductInterestProvider, ProductInterest } from './ProductInterestView';
 import { ListingDetailContent } from './ListingDetailContent';
 import { ListingPhoto } from './ListingPhoto';
@@ -39,7 +41,7 @@ export function GuestExploreScreen({ apiUrl, active, onSignIn }: { apiUrl: strin
     } catch { if (alive.current && generation.current === seq) setIssue('公開賣場暫時無法讀取，請稍後重試。'); }
   }
   function closeDetail() { generation.current++; setStorefront(null); setDetail(null); setIssue(''); }
-  return <PublicProductInterestProvider read={api} onRequireLogin={signIn}>
+  return <NativeProductWishProvider api={api} apiUrl={apiUrl} userId={null} onRequireLogin={signIn}><PublicProductInterestProvider read={api} onRequireLogin={signIn}>
     <View style={s.page}>
       <View style={s.header}><View style={{ flex: 1 }}><Text style={s.title}>探索</Text><Text style={s.note}>訪客瀏覽 · 不需要建立帳號</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel="登入或建立帳號" style={s.signIn} onPress={signIn}><Text style={s.link}>登入／建立帳號</Text></Pressable></View>
@@ -59,11 +61,11 @@ export function GuestExploreScreen({ apiUrl, active, onSignIn }: { apiUrl: strin
         : detail && 'kind' in detail && <View style={s.page}><View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel="返回探索" style={s.back} onPress={closeDetail}><Ionicons name="chevron-back" size={24} color={c.tint} /></Pressable><Text style={s.title}>商品詳情</Text></View>
           <ScrollView contentContainerStyle={s.content}>{detail.photos.length ? detail.photos.map(photo => <Image key={photo.id} source={{ uri: photo.url }} accessibilityLabel={detail.title + '商品照片'} style={s.photo} resizeMode="contain" />) : <ListingPhoto label={detail.title} uri={detail.thumbnailUrl ?? undefined} detail style={s.photo} />}
             <Text style={s.heading}>{detail.title}</Text><Text style={s.price}>{discoveryPrice(detail)}</Text><Text style={s.note}>{detail.county} {detail.district} · {detail.sourceLabel}</Text>
-            <ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind={detail.kind} id={detail.id} title={detail.title} price={detail.price??undefined} /><ProductInterest kind={detail.kind} id={detail.id} />
+            <ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind={detail.kind} id={detail.id} title={detail.title} price={detail.price??undefined} /><NativeProductActions product={{ kind: detail.kind, id: detail.id, title: detail.title }} price={discoveryPrice(detail)} apiUrl={apiUrl} /><ProductInterest kind={detail.kind} id={detail.id} />
             <Text style={s.heading}>商品說明</Text><Text style={s.body}>{detail.description}</Text><Text style={s.note}>公開來源資料，庫存與品況仍需向賣家確認。</Text>
           </ScrollView><Pressable accessibilityRole="button" style={s.signIn} onPress={signIn}><Text style={s.link}>登入後詢問商品</Text></Pressable></View>}
     </SafeAreaModal>
-  </PublicProductInterestProvider>;
+  </PublicProductInterestProvider></NativeProductWishProvider>;
 }
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: c.background }, header: { minHeight: 64, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },

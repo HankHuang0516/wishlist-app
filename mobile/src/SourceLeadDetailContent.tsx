@@ -6,6 +6,8 @@ import {Ionicons} from '@expo/vector-icons';
 import {ListingPhoto} from './ListingPhoto';
 import {NativeDisclosure} from './NativeDisclosure';
 import {ProductInterest} from './ProductInterestView';
+import {NativeProductActions} from './NativeProductActions';
+import {NativeProductWishHost} from './NativeProductWishes';
 import {sourceLocationLabel,type SourceLead} from './sourceLeadData';
 import {iosColors,iosRadius,iosType} from './iosTheme';
 
@@ -23,6 +25,7 @@ export function SourceLeadDetailContent({api,apiUrl,detail,error,onBack,onOrigin
     <Text style={s.badge}>{new URL(detail.canonicalUrl).hostname.replace(/^www\./,'')} · 庫存待確認</Text>
     <Text accessibilityRole="header" style={s.title}>{detail.title}</Text><Text style={s.price}>{facts?.priceText||'售價待詢問'}</Text><ProductRetailPriceInfo api={api} apiUrl={apiUrl} kind="source" id={detail.id} title={detail.title} priceText={facts?.priceText}/>
     <Text style={s.secondary}>{location?location+' · ':''}{sourceLocationLabel(detail)}，非現貨所在地</Text>
+    <NativeProductActions product={{kind:'source',id:detail.id,title:detail.title}} price={facts?.priceText||'售價待詢問'} apiUrl={apiUrl}/>
     <View style={s.interest}><ProductInterest kind="source" id={detail.id}/></View>
     <View style={s.notice}><Ionicons name="information-circle-outline" size={21} color={iosColors.warning}/><Text style={s.noticeText}>這是公開商品線索。現貨、品況與交易方式需向原賣家確認。</Text></View>
     <Text style={s.label}>商品說明</Text><Text style={s.text}>{detail.summary}</Text>
@@ -41,6 +44,7 @@ export function SourceLeadDetailContent({api,apiUrl,detail,error,onBack,onOrigin
 
    </View>
   </ScrollView>
+  <NativeProductWishHost/>
   <View style={s.footer}>{!!error&&<Text accessibilityRole="alert" style={[s.error,{width:'100%'}]}>{error}</Text>}<Pressable accessibilityRole="button" accessibilityLabel="前往原始來源" disabled={opening} style={s.original} onPress={()=>void original()}><Ionicons name="open-outline" size={20} color={iosColors.tint}/><Text style={s.linkText}>{opening?'確認來源中…':'原始來源'}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Wishlist AI 代問" style={s.contact} onPress={onContact}><Ionicons name="chatbubble-outline" size={20} color="white"/><Text style={s.contactText}>Wishlist AI 代問</Text></Pressable></View>
  </View>;
 }

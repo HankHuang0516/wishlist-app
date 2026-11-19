@@ -34,6 +34,8 @@ import adminRoutes from './routes/adminRoutes';
 import listingRoutes from './routes/listingRoutes';
 import { createListingSharePageRoutes } from './routes/listingSharePageRoutes';
 import { createFirstScreenPageRoutes } from './routes/firstScreenPageRoutes';
+import { createSharePageRoutes } from './routes/sharePageRoutes';
+import { createSharedWishRoutes } from './routes/sharedWishRoutes';
 import listingMediaRoutes from './routes/listingMediaRoutes';
 import minimaxRecognitionRoutes from './routes/minimaxRecognitionRoutes';
 import marketingRoutes from './routes/marketingRoutes';
@@ -122,6 +124,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/product-interest',productInterestRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/native-wishes', nativeWishRoutes);
+app.use('/api/shared-wishes', createSharedWishRoutes());
 app.use('/api/listing-reports', listingReportRoutes);
 app.use('/api/moderation', createListingModerationRoutes());
 app.use('/api/external-intake', createExternalIntakeRoutes());
@@ -211,6 +214,8 @@ app.get('/api/swagger.json', (req: Request, res: Response) => {
 app.use(express.static(clientBuildPath));
 // Product-specific metadata must be in the initial HTML for LINE and other link crawlers.
 app.use('/listings', createListingSharePageRoutes(path.join(clientBuildPath, 'index.html')));
+// A shared public-source product or wish names itself in the initial HTML the same way.
+app.use(createSharePageRoutes(path.join(clientBuildPath, 'index.html')));
 // Explore and the source map at their plain address name the pictures and reads of their first screen in the HTML.
 app.use(createFirstScreenPageRoutes(path.join(clientBuildPath, 'index.html')));
 

@@ -15,6 +15,7 @@ const id=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9._:-]{1,160}$/.test(v);
 const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const operation=(v:unknown)=>{if(typeof v!=='string'||!isListingId(v))throw new LeadError('OPERATION_ID_REQUIRED');return v;};
 const revision=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0&&Number(v)<2147483647;
+const REOPEN_CHECK_MAX_AGE_MS=48*3600000;
 const view=(r:any)=>({...recordSnapshot(r),stateHash:recordStateHash(r),stockStatus:'UNKNOWN',qualifiedSupply:false,checkoutEnabled:false});
 const replay=async(tx:any,operationId:string,requestHash:string)=>{
  const events=await tx.sourceLeadRecordEvent.findMany({where:{operationId},orderBy:{leadId:'asc'}});
@@ -102,6 +103,45 @@ export function createSourceLeadRecordRoutes(options:{draftOnly?:boolean}={}){
     results.push(receipt);
    }
    return {operationId:op,replayed:false,results,sourceReferencesPublished:results.length,qualifiedSupplyAdded:0};
+  });return res.json(result);
+ }catch(e){return fail(res,e);}});
+ // The way back for a record a source re-check withdrew (sold, expired, removed): /save and /publish keep it
+ // withdrawn on purpose. When a later check of the same page finds it on sale again, this turns it into a private
+ // draft holding that check; photos and /publish then follow as for any draft. A record taken down with
+ // /:id/withdraw carries a withdrawalRef and is never reopened here.
+ router.post('/reopen',async(req,res)=>{if(options.draftOnly)return res.status(403).json({errorCode:'MANAGER_REOPEN_NOT_ALLOWED'});try{
+  const b=object(req.body);exact(b,['operationId','items','confirmSourceAvailableAgain']);const op=operation(b.operationId);
+  if(b.confirmSourceAvailableAgain!==true||!Array.isArray(b.items)||!b.items.length||b.items.length>20)throw new LeadError('ONE_TO_20_REOPENED_RECORDS_REQUIRED');
+  const now=new Date();
+  const inputs=b.items.map((raw:any)=>{const r=object(raw);exact(r,['id','expectedRevision','expectedStateHash','facts']);if(!isListingId(r.id)||!revision(r.expectedRevision)||!hash(r.expectedStateHash))throw new LeadError('BOUND_RECORD_REVISION_REQUIRED');
+   const facts=parseRecordFacts(r.facts,now);
+   if(facts.sourceClaimState!=='UNKNOWN'||facts.checkedAt===null||!ref(facts.evidence.sourceCheckRef)||+now-Date.parse(facts.checkedAt)>REOPEN_CHECK_MAX_AGE_MS)throw new LeadError('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+   return {id:String(r.id),expectedRevision:Number(r.expectedRevision),expectedStateHash:String(r.expectedStateHash),facts};});
+  if(new Set(inputs.map((r:any)=>r.id)).size!==inputs.length)throw new LeadError('DUPLICATE_RECORD_ID');
+  const requestHash=digest({action:'REOPEN',items:inputs});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73009260930::bigint)`;
+   const oldReplay=await replay(tx,op,requestHash);if(oldReplay)return oldReplay;
+   const results=[];
+   for(const input of inputs){
+    const old=await tx.externalSourceLead.findUnique({where:{id:input.id}});
+    if(!old||old.recordRevision!==input.expectedRevision||recordStateHash(old)!==input.expectedStateHash||old.canonicalUrl!==input.facts.canonicalUrl)throw new LeadError('RECORD_STATE_CONFLICT');
+    if(old.status!=='WITHDRAWN')throw new LeadError('WITHDRAWN_RECORD_REQUIRED');
+    if(object(old.evidence).withdrawalRef!==undefined)throw new LeadError('ADMIN_WITHDRAWAL_NOT_REOPENED');
+    // The reopening check has to be newer than everything this record already knew, the withdrawal included.
+    const known=Math.max(+(old.checkedAt??0),Date.parse((old.pendingFacts as any)?.checkedAt??'')||0);
+    if(Date.parse(input.facts.checkedAt)<=known)throw new LeadError('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+    const sourceRef=input.facts.evidence.sourceCheckRef;
+    const prior=await tx.sourceLeadRecordEvent.findFirst({where:{sourceCheckRef:sourceRef}});
+    if(prior&&(+(prior.sourceCheckedAt??0)!==Date.parse(input.facts.checkedAt)||prior.sourceUrl!==input.facts.canonicalUrl))throw new LeadError('SOURCE_CHECK_REFERENCE_TIME_CONFLICT');
+    const nextRevision=old.recordRevision+1;
+    const changed=await tx.externalSourceLead.updateMany({where:{id:old.id,recordRevision:old.recordRevision,updatedAt:old.updatedAt,status:'WITHDRAWN'},data:{status:'PRIVATE_PENDING',sourceClaimState:'UNKNOWN',pendingFacts:json(input.facts),pendingHash:digest(input.facts),pendingEvidenceRef:null,recordRevision:nextRevision}});if(changed.count!==1)throw new LeadError('RECORD_STATE_CONFLICT');
+    const saved=await tx.externalSourceLead.findUniqueOrThrow({where:{id:old.id}});
+    const receipt={id:saved.id,archiveItemId:saved.archiveItemId,revision:saved.recordRevision,stateHash:recordStateHash(saved),pendingHash:saved.pendingHash,status:saved.status};
+    await tx.sourceLeadRecordEvent.create({data:{leadId:saved.id,operationId:op,action:'REOPEN',requestHash,appliedRevision:nextRevision,sourceCheckRef:sourceRef,sourceCheckedAt:new Date(input.facts.checkedAt),sourceUrl:input.facts.canonicalUrl,beforeSnapshot:json(recordSnapshot(old)),afterSnapshot:json({record:recordSnapshot(saved),result:receipt})}});
+    results.push(receipt);
+   }
+   return {operationId:op,replayed:false,results,recordsReopened:results.length,sourceReferencesPublished:0,qualifiedSupplyAdded:0};
   });return res.json(result);
  }catch(e){return fail(res,e);}});
  // Back up one FB post photo to Flickr; the signed receipt is bound to this record and only used by /photos.

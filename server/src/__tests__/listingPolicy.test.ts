@@ -16,6 +16,12 @@ describe('shared pilot marketplace listing policy', () => {
     it.each(['Nintendo Switch OLED', '筋膜槍', '二手登山裝備', '書籍', '手作布偶'])('does not broaden a restriction to unrelated product %s', title => {
         expect(forbiddenListingField({ title, brand: '自有品牌' })).toBeNull();
     });
+    it.each(['ONE PIECE 卡牌遊戲 EB-05 Heroines Edition 拆檢盒', 'Heroine', 'ＨＥＲＯＩＮＥＳ', 'superhero inside', 'héroïne 香水', 'Firearmor 模型', 'cannabist'])('does not read a restricted word into the longer word %s', title => {
+        expect(forbiddenListingField({ title })).toBeNull();
+    });
+    it.each(['heroin', 'Heroin 1g', '二手heroin出售', 'h e r o i n', 'hero in', 'heroins', 'heroin-free', 'FIREARMS', 'fire arm', 'cannabis oil', 'x_ammunition2'])('still rejects the restricted word standing on its own in %s', title => {
+        expect(forbiddenListingField({ title })).toBe('title');
+    });
     it('has a public version without describing itself as complete moderation', () => {
         expect(LISTING_POLICY_VERSION).toBe('2026-09-15-pilot-v1');
         expect(forbiddenListingField({ title: '安全商品', description: null, brand: null })).toBeNull();

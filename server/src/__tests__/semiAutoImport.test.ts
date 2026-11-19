@@ -14,6 +14,10 @@ test('CSV quoted commas, aliases and JSON map to identical item IDs; never publi
  const a=normalize(parseInput(csv,'csv')[0],now),b=normalize({sourceUrl:'https://example.com/items/1',itemKey:'1',title:'二手桌,椅',price:100,currency:'TWD'},now);
  expect(a).toEqual(b);expect(a.public).toBe(false);expect(a.rights).toBe('UNKNOWN');expect(a.issues).toContain('STOCK_UNVERIFIED');
 });
+test('a product name that only contains a restricted word inside a longer word is a safe title; contact details and the word itself are not',()=>{
+ expect(normalize({...row(),title:'ONE PIECE 卡牌遊戲 EB-05 Heroines Edition 拆檢盒'},now).title).toBe('ONE PIECE 卡牌遊戲 EB-05 Heroines Edition 拆檢盒');
+ for(const title of ['EB-05 拆檢盒 09'+'12345678','EB-05 拆檢盒 LINE ID: seller.123','EB-05 拆檢盒 seller@example.com','EB-05 heroin 拆檢盒'])expect(()=>normalize({...row(),title},now)).toThrow('SAFE_TITLE_REQUIRED');
+});
 test('one post multiple keys survive; same item duplicate and differing facts conflict',()=>{
  const s=new PendingImportStore(root);let j=s.create(JSON.stringify([row(),row('2'),row(),{...row(),price:200}]),'json',base,now);
  j=s.advance(j.id,0,base);expect(j).toMatchObject({accepted:2,duplicates:2,rejected:1,state:'COMPLETE'});

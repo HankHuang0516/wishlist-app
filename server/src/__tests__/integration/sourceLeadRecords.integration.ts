@@ -43,6 +43,45 @@ describe('same DB record save -> review -> publication (isolated only)',()=>{
   const before=(await get(uuid)).body;expect((await save(id,f,before)).status).toBe(200);const pending=(await get(uuid)).body;expect((await publish(pending)).status).toBe(200);const live=(await get(uuid)).body;expect(live.legacyArchive.version).toBe(16);expect(live.legacyArchive.historicalOnly).toBe(true);expect((await http.get('/leads/'+uuid)).status).toBe(200);
   const sold={...f,sourceClaimState:'SOLD',stateEvidenceRef:'source:synthetic-sold'};expect((await save(id,sold,live)).status).toBe(200);const hidden=(await get(uuid)).body;expect(hidden.status).toBe('WITHDRAWN');expect((await http.get('/leads/'+uuid)).status).toBe(404);expect((await publish(hidden)).status).toBe(409);
  });
+ test('a record a source re-check withdrew reopens only on a newer check of the same page, then publishes like any draft',async()=>{
+  const id=prefix+randomUUID(),base=facts(id),ago=(minutes:number)=>new Date(Date.now()-minutes*60000).toISOString();
+  const seen=(minutes:number,tag:string,more:any={})=>({...base,postedEarliestAt:ago(4500),postedLatestAt:ago(4500),checkedAt:ago(minutes),evidence:{...base.evidence,sourceCheckRef:'source:synthetic-'+tag+'-'+id},...more});
+  const reopen=(r:any,f:any,op=randomUUID(),confirm:any=true)=>post('reopen',{operationId:op,confirmSourceAvailableAgain:confirm,items:[{id:r.id,expectedRevision:r.recordRevision,expectedStateHash:r.stateHash,facts:f}]});
+  const first=await save(id,seen(120,'first'));expect(first.status).toBe(200);const uuid=first.body.results[0].id;expect((await publish((await get(uuid)).body)).status).toBe(200);
+  const live=(await get(uuid)).body;expect((await reopen(live,seen(1,'live'))).body.errorCode).toBe('WITHDRAWN_RECORD_REQUIRED');
+  expect((await save(id,seen(60,'sold',{sourceClaimState:'SOLD',stateEvidenceRef:'source:synthetic-sold-'+id}),live)).status).toBe(200);
+  const gone=(await get(uuid)).body;expect(gone.status).toBe('WITHDRAWN');expect((await http.get('/leads/'+uuid)).status).toBe(404);expect((await publish(gone)).status).toBe(409);
+  // What does not reopen: no explicit confirmation, a claim that is still sold, a check no newer than the withdrawal, another page, a stale revision.
+  expect((await reopen(gone,seen(30,'again'),randomUUID(),'yes')).body.errorCode).toBe('ONE_TO_20_REOPENED_RECORDS_REQUIRED');
+  expect((await reopen(gone,seen(30,'again',{sourceClaimState:'SOLD',stateEvidenceRef:'source:synthetic-sold-'+id}))).body.errorCode).toBe('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+  expect((await reopen(gone,seen(90,'older'))).body.errorCode).toBe('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+  expect((await reopen(gone,seen(60,'same-minute',{checkedAt:gone.pendingFacts.checkedAt}))).body.errorCode).toBe('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+  const elsewhere=base.canonicalUrl+'9';expect((await reopen(gone,seen(30,'again',{canonicalUrl:elsewhere,evidence:{...base.evidence,sourceUrl:elsewhere,sourceCheckRef:'source:synthetic-again-'+id}}))).body.errorCode).toBe('RECORD_STATE_CONFLICT');
+  expect((await reopen({...gone,recordRevision:gone.recordRevision+1},seen(30,'again'))).body.errorCode).toBe('RECORD_STATE_CONFLICT');
+  expect((await get(uuid)).body.stateHash).toBe(gone.stateHash);
+  const again=seen(30,'again'),op=randomUUID(),opened=await reopen(gone,again,op);
+  expect(opened.status).toBe(200);expect(opened.body).toMatchObject({replayed:false,recordsReopened:1,sourceReferencesPublished:0,qualifiedSupplyAdded:0});expect(opened.body.results[0]).toMatchObject({id:uuid,status:'PRIVATE_PENDING',revision:gone.recordRevision+1});
+  expect((await reopen(gone,again,op)).body.replayed).toBe(true);expect((await reopen(gone,seen(20,'other'),op)).body.errorCode).toBe('OPERATION_BODY_CONFLICT');
+  const draft=(await get(uuid)).body;expect(draft).toMatchObject({status:'PRIVATE_PENDING',sourceClaimState:'UNKNOWN',pendingHash:opened.body.results[0].pendingHash});expect(draft.pendingFacts.checkedAt).toBe(again.checkedAt);
+  expect((await http.get('/leads/'+uuid)).status).toBe(404);
+  expect((await publish(draft)).status).toBe(200);const back=(await get(uuid)).body;expect(back.status).toBe('PUBLISHED');expect(back.id).toBe(uuid);expect(new Date(back.checkedAt).toISOString()).toBe(again.checkedAt);expect((await http.get('/leads/'+uuid)).status).toBe(200);
+  const history=await http.get('/admin/records/'+uuid+'/history?limit=100').set('x-admin-key',admin);expect(history.body.items.map((e:any)=>e.action)).toEqual(['SAVE','PUBLISH','SAVE','REOPEN','PUBLISH']);
+  const event=history.body.items[3];expect(event.sourceCheckRef).toBe(again.evidence.sourceCheckRef);expect(event.beforeSnapshot.status).toBe('WITHDRAWN');expect(event.afterSnapshot.record.status).toBe('PRIVATE_PENDING');
+ });
+ test('reopening needs a check from the last 48 hours, refuses an administrative takedown and is not open to draft-only managers',async()=>{
+  const id=prefix+randomUUID(),base=facts(id),ago=(hours:number)=>new Date(Date.now()-hours*3600000).toISOString();
+  const seen=(hours:number,tag:string,more:any={})=>({...base,postedEarliestAt:ago(80),postedLatestAt:ago(80),checkedAt:ago(hours),evidence:{...base.evidence,sourceCheckRef:'source:synthetic-'+tag+'-'+id},...more});
+  const reopen=(r:any,f:any)=>post('reopen',{operationId:randomUUID(),confirmSourceAvailableAgain:true,items:[{id:r.id,expectedRevision:r.recordRevision,expectedStateHash:r.stateHash,facts:f}]});
+  const first=await save(id,seen(60,'first'));expect(first.status).toBe(200);const uuid=first.body.results[0].id;expect((await publish((await get(uuid)).body)).status).toBe(200);
+  expect((await save(id,seen(55,'sold',{sourceClaimState:'WITHDRAWN',stateEvidenceRef:'source:synthetic-removed-'+id}),(await get(uuid)).body)).status).toBe(200);
+  const gone=(await get(uuid)).body;expect(gone.status).toBe('WITHDRAWN');
+  expect((await reopen(gone,seen(50,'two-days-old'))).body.errorCode).toBe('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+  const {sourceCheckRef:_unbound,...unbound}=base.evidence;expect((await reopen(gone,seen(1,'unbound',{evidence:unbound}))).body.errorCode).toBe('FRESH_AVAILABLE_SOURCE_CHECK_REQUIRED');
+  expect((await http.post('/admin/'+uuid+'/withdraw').set('x-admin-key',admin).send({reasonRef:'review:synthetic-takedown'})).status).toBe(200);
+  const taken=(await get(uuid)).body;expect((await reopen(taken,seen(1,'after-takedown'))).body.errorCode).toBe('ADMIN_WITHDRAWAL_NOT_REOPENED');expect((await get(uuid)).body.status).toBe('WITHDRAWN');
+  const {createSourceLeadRecordRoutes}=require('../../routes/sourceLeadRecordRoutes');app.use('/draft-only',createSourceLeadRecordRoutes({draftOnly:true}));
+  const denied=await http.post('/draft-only/reopen').send({operationId:randomUUID(),confirmSourceAvailableAgain:true,items:[]});expect(denied.status).toBe(403);expect(denied.body.errorCode).toBe('MANAGER_REOPEN_NOT_ALLOWED');
+ });
  test('a DB draft without a seller meeting point publishes only as a labelled county illustration',async()=>{
   const {countyIllustration,COUNTY_ILLUSTRATION_SOURCE}=require('../../lib/sourceCountyIllustration');
   const id=prefix+randomUUID(),url='https://www.facebook.com/groups/123456789/posts/'+id,p=countyIllustration('臺中市'),at=new Date(Date.now()-3600000).toISOString();

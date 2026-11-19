@@ -1,22 +1,28 @@
 // Pilot marketplace restrictions, not a legal classifier or a substitute for
 // reports/manual review. Keep this shared across create/edit/publish.
 export const LISTING_POLICY_VERSION = '2026-09-15-pilot-v1';
-const RESTRICTED_TERMS = ['槍枝', '槍支', '槍械', '彈藥', '毒品', '大麻', '海洛因', '安非他命', '個人資料販售', '色情服務',
-    'firearm', 'ammunition', 'heroin', 'cannabis'] as const;
+const RESTRICTED_PHRASES = ['槍枝', '槍支', '槍械', '彈藥', '毒品', '大麻', '海洛因', '安非他命', '個人資料販售', '色情服務'] as const;
+const RESTRICTED_WORDS = ['firearm', 'ammunition', 'heroin', 'cannabis'] as const;
+// A Latin term is restricted as a word of its own. Its letters may be spaced out
+// ("h e r o i n", "fire arm") and it may take a plural s, exactly as before; what
+// no longer counts is a longer word that merely contains the letters, such as the
+// card set "Heroines Edition" or "superhero inside".
+const RESTRICTED_WORD_PATTERNS = RESTRICTED_WORDS.map(word =>
+    new RegExp('(?<![a-z])' + word.split('').join('\\s*') + '(?:\\s*s)?(?![a-z])'));
 
-function normalized(value: string): string {
+function readable(value: string): string {
     // NFKD covers full-width Latin text and decomposes combining marks. Remove
-    // presentation-only characters
-    // and spacing that must not make the same restricted phrase admissible.
-    return value.normalize('NFKD').toLowerCase().replace(/[\p{Cf}\p{M}\s]/gu, '');
+    // presentation-only characters that must not make the same restricted phrase admissible.
+    return value.normalize('NFKD').toLowerCase().replace(/[\p{Cf}\p{M}]/gu, '');
 }
 
 export function forbiddenListingField(input: { title: string; description?: string | null; brand?: string | null }): 'title' | 'description' | 'brand' | null {
     for (const field of ['title', 'description', 'brand'] as const) {
         const value = input[field];
         if (typeof value === 'string') {
-            const candidate = normalized(value);
-            if (RESTRICTED_TERMS.some(term => candidate.includes(term))) return field;
+            const text = readable(value), unspaced = text.replace(/\s/g, '');
+            if (RESTRICTED_PHRASES.some(phrase => unspaced.includes(phrase)) ||
+                RESTRICTED_WORD_PATTERNS.some(pattern => pattern.test(text))) return field;
         }
     }
     return null;

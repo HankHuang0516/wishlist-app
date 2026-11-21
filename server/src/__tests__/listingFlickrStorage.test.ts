@@ -59,6 +59,54 @@ describe('native Flickr media adapter', () => {
         await expect(new ListingFlickrStorage(fetcher as typeof fetch).upload(randomUUID(), await jpeg())).rejects.toThrow(FlickrMediaUnavailable);
         expect(fetcher).toHaveBeenCalledTimes(3);
     });
+    // What Flickr lists for a photo depends on the photo's own size: nothing larger than it (within a small tolerance).
+    const flickr = (listed: Array<[string, string, number | string, number | string]>) => jest.fn().mockImplementation(async (_url: string, init: RequestInit) =>
+        init.body instanceof FormData ? new Response('<rsp stat="ok"><photoid>123456</photoid></rsp>')
+            : init.method === 'POST' ? Response.json({ stat: 'ok' })
+                : Response.json({ stat: 'ok', sizes: { size: listed.map(([label, suffix, width, height]) =>
+                    ({ label, width, height, source: `https://live.staticflickr.com/22/123456_abc${suffix}.jpg` })) } }));
+    const at = (suffix: string) => `https://live.staticflickr.com/22/123456_abc${suffix}.jpg`;
+    it('keeps a photo smaller than every usual rendition, using the largest uncropped one Flickr lists', async () => {
+        // A 179x277 source photo: no "Small 320", which is the least the image used to need.
+        const fetcher = flickr([['Square', '_s', 75, 75], ['Large Square', '_q', 150, 150], ['Thumbnail', '_t', 65, 100],
+            ['Small', '_m', 155, 240], ['Original', '_o', 179, 277]]);
+        const stored = await new ListingFlickrStorage(fetcher as typeof fetch).upload(randomUUID(), await jpeg());
+        expect(stored).toEqual({ photoId: '123456', imageSource: at('_o'), thumbnailSource: at('_m') });
+        expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+    it('never stands a cropped square in for a tiny photo, and reads sizes Flickr sends as text', async () => {
+        const fetcher = flickr([['Square', '_s', '75', '75'], ['Large Square', '_q', '150', '150'], ['Original', '_o', '90', '60']]);
+        const stored = await new ListingFlickrStorage(fetcher as typeof fetch).upload(randomUUID(), await jpeg());
+        expect(stored).toEqual({ photoId: '123456', imageSource: at('_o'), thumbnailSource: at('_o') });
+    });
+    it('takes the 500px and 400px renditions by the names Flickr gives them', async () => {
+        const listed: Array<[string, string, number, number]> = [['Square', '_s', 75, 75], ['Thumbnail', '_t', 100, 75], ['Small', '_m', 240, 180],
+            ['Small 320', '_n', 320, 240], ['Small 400', '_w', 400, 300]];
+        expect(await new ListingFlickrStorage(flickr([...listed, ['Original', '_o', 430, 322]]) as typeof fetch).upload(randomUUID(), await jpeg()))
+            .toMatchObject({ imageSource: at('_w'), thumbnailSource: at('_n') });
+        expect(await new ListingFlickrStorage(flickr([...listed, ['Medium', '', 500, 375], ['Original', '_o', 520, 390]]) as typeof fetch).upload(randomUUID(), await jpeg()))
+            .toMatchObject({ imageSource: at(''), thumbnailSource: at('_n') });
+    });
+    it('still refuses a large photo whose renditions Flickr has not listed, and removes the upload', async () => {
+        const warned = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const large = flickr([['Square', '_s', 75, 75], ['Large Square', '_q', 150, 150], ['Original', '_o', 4000, 3000]]);
+            await expect(new ListingFlickrStorage(large as typeof fetch).upload(randomUUID(), await jpeg())).rejects.toThrow(FlickrMediaUnavailable);
+            expect(large).toHaveBeenCalledTimes(3);
+            // An image that fits but a thumbnail that does not: both are needed.
+            const noThumbnail = flickr([['Square', '_s', 75, 75], ['Original', '_o', 1000, 750]]);
+            await expect(new ListingFlickrStorage(noThumbnail as typeof fetch).upload(randomUUID(), await jpeg())).rejects.toThrow(FlickrMediaUnavailable);
+            // No sizes to judge by: nothing but a wanted name will do.
+            const unsized = jest.fn().mockImplementation(async (_url: string, init: RequestInit) => init.body instanceof FormData
+                ? new Response('<rsp stat="ok"><photoid>123456</photoid></rsp>')
+                : init.method === 'POST' ? Response.json({ stat: 'ok' })
+                    : Response.json({ stat: 'ok', sizes: { size: [{ label: 'Original', source: at('_o') }] } }));
+            await expect(new ListingFlickrStorage(unsized as typeof fetch).upload(randomUUID(), await jpeg())).rejects.toThrow(FlickrMediaUnavailable);
+            expect(warned).toHaveBeenCalledTimes(3);
+            expect(String(warned.mock.calls[0][1])).toBe('Square 75x75, Large Square 150x150, Original 4000x3000');
+            expect(warned.mock.calls.flat().join(' ')).not.toMatch(/staticflickr|123456/);
+        } finally { warned.mockRestore(); }
+    });
     it('reads a rendition from Flickr once and answers later and concurrent readers from memory', async () => {
         const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2000, 7)]);
         const fetcher = jest.fn().mockImplementation(async () => new Response(bytes, { headers: { 'content-type': 'image/jpeg', 'content-length': String(bytes.length) } }));

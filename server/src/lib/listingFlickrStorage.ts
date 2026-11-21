@@ -9,7 +9,7 @@ export class FlickrOrphanedUpload extends FlickrMediaUnavailable {
     constructor(public readonly photoId: string) { super(); }
 }
 
-type FlickrSize = { label: string; source: string };
+type FlickrSize = { label: string; source: string; width?: number | string; height?: number | string };
 const MAX_REMOTE_BYTES = 6 * 1024 * 1024;
 // Renditions read from Flickr stay in memory for a day: a photo's bytes at one URL never change, and every visitor of
 // a list page asks for the same thumbnails. Thumbnails and full-size images have separate budgets so a few large
@@ -54,9 +54,32 @@ export function validatedFlickrSource(raw: string, photoId: string) {
     return url.toString();
 }
 
-function source(sizes: FlickrSize[], photoId: string, labels: string[]) {
-    const selected = labels.map(label => sizes.find(size => size.label === label)).find(Boolean);
-    if (!selected) throw new FlickrMediaUnavailable();
+// Flickr's own names for its renditions, largest wanted first. It lists a rendition only when the photo is about that
+// large, so a photo under roughly 280px on its long side has none of these.
+const IMAGE_LABELS = ['Large 1600', 'Large', 'Medium 800', 'Medium 640', 'Medium', 'Small 400', 'Small 320'];
+const THUMBNAIL_LABELS = ['Small 320', 'Small'];
+const CROPPED_LABELS = new Set(['Square', 'Large Square']);
+
+function longSide(size: FlickrSize) {
+    const width = Number(size.width), height = Number(size.height);
+    return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? Math.max(width, height) : undefined;
+}
+
+/**
+ * The first wanted rendition Flickr lists. A photo smaller than every wanted rendition still has the uncropped ones
+ * Flickr does list (its original, and anything smaller), so the largest of those that fits is used rather than the
+ * photo being refused. A large photo whose renditions are missing still fails: its original does not fit.
+ */
+function source(sizes: FlickrSize[], photoId: string, labels: string[], fitWithin: number) {
+    const selected = labels.map(label => sizes.find(size => size.label === label)).find(Boolean)
+        ?? sizes.map(size => ({ size, long: longSide(size) }))
+            .filter((entry): entry is { size: FlickrSize; long: number } => entry.long !== undefined && entry.long <= fitWithin && !CROPPED_LABELS.has(entry.size.label))
+            .sort((a, b) => b.long - a.long)[0]?.size;
+    if (!selected) {
+        // Labels and pixel sizes only: enough to tell a small photo from a Flickr outage, and nothing private.
+        console.warn('Flickr listed no usable rendition:', sizes.map(size => `${String(size.label).slice(0, 20)} ${Number(size.width) || '?'}x${Number(size.height) || '?'}`).slice(0, 20).join(', '));
+        throw new FlickrMediaUnavailable();
+    }
     return validatedFlickrSource(selected.source, photoId);
 }
 
@@ -89,8 +112,8 @@ export class ListingFlickrStorage {
             const response = await this.rest('flickr.photos.getSizes', { photo_id: photoId });
             const sizes = (response as { sizes?: { size?: FlickrSize[] } }).sizes?.size;
             if (!Array.isArray(sizes)) throw new FlickrMediaUnavailable();
-            return { photoId, imageSource: source(sizes, photoId, ['Large 1600', 'Large', 'Medium 800', 'Medium 640', 'Medium 500', 'Small 320', 'Square 150', 'Square 75']),
-                thumbnailSource: source(sizes, photoId, ['Small 320', 'Small', 'Square 150', 'Square 75']) };
+            return { photoId, imageSource: source(sizes, photoId, IMAGE_LABELS, 1600),
+                thumbnailSource: source(sizes, photoId, THUMBNAIL_LABELS, 320) };
         } catch (error) {
             // A failed metadata lookup must not quietly leave a successful upload public.
             if (photoId) {

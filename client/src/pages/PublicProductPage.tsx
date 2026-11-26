@@ -4,7 +4,7 @@ import DiscoveryProductDetail, { DiscoveryProductActions } from '../components/D
 import { ProductWishProvider } from '../components/ProductWishButton';
 import { useAuth } from '../context/AuthContext';
 import { parseDiscovery, type DiscoveryProduct } from '../lib/discovery';
-import { api, ApiFailure, publicApi } from '../lib/marketplaceApi';
+import { api, ApiFailure, publicApi, withRequestTimeout } from '../lib/marketplaceApi';
 import { getDisplayLocale } from '../utils/localization';
 import './exploreDiscovery.css';
 
@@ -35,8 +35,9 @@ function ProductSession({ kind, id, token }: { kind: 'source' | 'external'; id: 
   const current = answer?.attempt === attempt ? answer : null, state = current?.state ?? 'loading', item = current?.item ?? null, limited = !!current?.limited;
   useEffect(() => {
     const controller = new AbortController(), path = `/discovery/products/${kind}/${id}`;
-    const init = { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) };
-    void (token ? api<unknown>(token, path, init) : publicApi<unknown>(path, init)).then(raw => {
+    void withRequestTimeout(controller.signal, signal =>
+      token ? api<unknown>(token, path, { signal }) : publicApi<unknown>(path, { signal })
+    ).then(raw => {
       if (controller.signal.aborted) return;
       const product = parseDiscovery(raw).items[0];
       if (!product || product.kind !== kind || product.id !== id) throw new Error('PRODUCT_DATA_INVALID');

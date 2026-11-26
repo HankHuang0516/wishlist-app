@@ -31,7 +31,27 @@ export function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function apiObserved<T>(token:string,path:string,init:RequestInit,observed:(status:number)=>void):Promise<T>{return request<T>(token,path,init,observed);}
 
-async function request<T>(token: string | null, path: string, init: RequestInit, observed?:(status:number)=>void): Promise<T> {
+// Some in-app browsers support AbortController but lack the newer AbortSignal helpers.
+export async function withRequestTimeout<T>(parent: AbortSignal | undefined, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const cancel = () => controller.abort(parent?.reason);
+  if (parent?.aborted) cancel();
+  else parent?.addEventListener('abort', cancel, { once: true });
+  const timer = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), 30_000);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+    parent?.removeEventListener('abort', cancel);
+  }
+}
+
+function request<T>(token: string | null, path: string, init: RequestInit, observed?:(status:number)=>void): Promise<T> {
+  if (init.signal) return readResponse<T>(token, path, init, init.signal, observed);
+  return withRequestTimeout(undefined, signal => readResponse<T>(token, path, init, signal, observed));
+}
+
+async function readResponse<T>(token: string | null, path: string, init: RequestInit, signal: AbortSignal, observed?:(status:number)=>void): Promise<T> {
   if (!/^\/[a-zA-Z0-9/_-]+(?:\?[a-zA-Z0-9_=&%+.,-]*)?$/.test(path) || path.startsWith('//') || /%(?![a-fA-F0-9]{2})/.test(path))
     throw new Error('無效的 API 路徑。');
   const group = token && (init.method ?? 'GET').toUpperCase() === 'GET' && /^\/(?:users\/me|discovery|product-wishes)(?:\/|\?|$)/.test(path) ? 'account' : 'data';
@@ -40,7 +60,7 @@ async function request<T>(token: string | null, path: string, init: RequestInit,
   if (remaining > 0) throw new ApiFailure('請求暫時受限，請稍後再試。', 429, 'RATE_LIMIT_COOLDOWN', remaining);
   deadlines[group] = 0;
   if(interestRoute)deadlines.interest=0;
-  const url = `${API_URL}${path}`, signal = init.signal ?? AbortSignal.timeout(30_000);
+  const url = `${API_URL}${path}`;
   // For a visitor who is not signed in, this very read may have been sent before the page existed
   // (firstScreen/boot.ts). Its answer is then this request's answer; otherwise nothing changes.
   const waiting = token === null ? earlyResponse(url, init, signal) : null;

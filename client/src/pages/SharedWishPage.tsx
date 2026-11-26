@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Gift, Search } from 'lucide-react';
 import { parseSharedWish, wishShareBudget, type SharedWishFields } from '../../../mobile/shared/shareText';
 import { useAuth } from '../context/AuthContext';
-import { ApiFailure, publicApi } from '../lib/marketplaceApi';
+import { ApiFailure, publicApi, withRequestTimeout } from '../lib/marketplaceApi';
 import { getDisplayLocale } from '../utils/localization';
 
 const say = (zh: string, en: string) => getDisplayLocale().startsWith('zh') ? zh : en;
@@ -33,7 +33,7 @@ function SharedWish({ token }: { token: string }) {
   const current = answer?.attempt === attempt ? answer : null, state = current?.state ?? 'loading', wish = current?.wish ?? null;
   useEffect(() => {
     const controller = new AbortController();
-    void publicApi<unknown>('/shared-wishes/' + token, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) }).then(raw => {
+    void withRequestTimeout(controller.signal, signal => publicApi<unknown>('/shared-wishes/' + token, { signal })).then(raw => {
       if (!controller.signal.aborted) setAnswer({ attempt, state: 'ready', wish: parseSharedWish(raw) });
     }).catch(failure => { if (!controller.signal.aborted) setAnswer({ attempt, state: failure instanceof ApiFailure && failure.status === 404 ? 'unavailable' : 'error' }); });
     return () => controller.abort();

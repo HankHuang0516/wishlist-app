@@ -64,7 +64,8 @@ describe('public listing share destination', () => {
     expect(screen.getByText('AI marketing illustration')).toBeVisible();
     expect(screen.queryByRole('img', { name: '二手檯燈 item photo 1' })).not.toBeInTheDocument();
   });
-  it('shows the public listing to a visitor without login or private fields', async () => {
+  it.each([false, true])('shows the public listing without login or private fields (older browser: %s)', async olderBrowser => {
+    if (olderBrowser) vi.stubGlobal('AbortSignal', class {});
     const fetch = vi.fn(async () => responseOk({ ...listing(), privatePhone: 'DO_NOT_SHOW' }));
     vi.stubGlobal('fetch', fetch);
     mount(`/listings/${id}`);

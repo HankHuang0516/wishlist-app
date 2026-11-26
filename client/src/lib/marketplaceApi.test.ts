@@ -1,16 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let api: typeof import('./marketplaceApi').api;
 let publicApi: typeof import('./marketplaceApi').publicApi;
+let withRequestTimeout: typeof import('./marketplaceApi').withRequestTimeout;
 let ApiFailure: typeof import('./marketplaceApi').ApiFailure;
 const fetchMock = vi.fn();
 beforeEach(async () => {
-  vi.resetModules(); ({ api, publicApi, ApiFailure } = await import('./marketplaceApi'));
+  vi.resetModules(); ({ api, publicApi, ApiFailure, withRequestTimeout } = await import('./marketplaceApi'));
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-02T15:00:00Z'));
   fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const rejected = (header?: string, body = '{"errorCode":"RATE_LIMIT_EXCEEDED"}') => new Response(body, { status: 429, headers: header ? { 'Retry-After': header } : {} });
 const success = () => new Response('{"ok":true}', { status: 200 });
+describe('request cancellation on older browsers', () => {
+  const pending = (signal: AbortSignal) => new Promise<never>((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+
+  it('times out a public read without AbortSignal.timeout or AbortSignal.any', async () => {
+    vi.stubGlobal('AbortSignal', class {});
+    fetchMock.mockImplementation((_url, { signal }) => pending(signal));
+    const failure = expect(publicApi('/listings/public-item')).rejects.toMatchObject({ name: 'TimeoutError' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await failure;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels promptly on navigation and clears the deadline', async () => {
+    vi.stubGlobal('AbortSignal', class {});
+    const parent = new AbortController();
+    const failure = expect(withRequestTimeout(parent.signal, pending)).rejects.toMatchObject({ name: 'AbortError' });
+    parent.abort();
+    await failure;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 describe('origin request cooldown', () => {
   it('isolates public cooldown from account reads and omits public credentials', async () => {
     fetchMock.mockResolvedValueOnce(rejected('120')).mockImplementation(async () => success());

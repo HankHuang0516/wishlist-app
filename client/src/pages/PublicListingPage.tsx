@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import { MapPin, Share2, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { parsePublicListing, type PublicListing } from '../lib/listingSearch';
-import { ApiFailure, publicApi } from '../lib/marketplaceApi';
+import { ApiFailure, publicApi, withRequestTimeout } from '../lib/marketplaceApi';
 import { publicListingText as text, publicListingPhotoLabel, publicListingPrice, publicListingTime, type PublicListingCopyKey } from '../lib/publicListingCopy';
 import { marketplaceOrigin } from '../lib/marketplaceUrl';
 import ProductActionsWeb from '../components/ProductActionsWeb';
@@ -50,7 +50,7 @@ function PublicListingSession({ id, token, userId }: { id?: string; token: strin
     if (!id || !listingId.test(id)) { setState('unavailable'); return; }
     const controller = new AbortController();
     setState('loading'); setReadLimited(false); setManualShareVisible(false); setShareNotice(''); setReport(false); setListing(null);
-    void publicApi<unknown>(`/listings/${id}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) })
+    void withRequestTimeout(controller.signal, signal => publicApi<unknown>(`/listings/${id}`, { signal }))
       .then(row => {
         if (controller.signal.aborted) return;
         const item = parsePublicListing(row, marketplaceOrigin(), import.meta.env.DEV);

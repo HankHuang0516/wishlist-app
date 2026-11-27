@@ -12,6 +12,7 @@ export interface ChangelogEntry {
 }
 
 export const changelogData: ChangelogEntry[] = [
+ {version:'2.0.858',date:'2026-11-27',title:'舊版探索商品詳情可直接分享',type:'Frontend',items:[{type:'Fix',content:'從舊版探索地圖開啟商品詳情後，可直接分享商品與公開連結。'}]},
  {version:'2.0.857',date:'2026-11-27',title:'修正分享連結的瀏覽器相容性',type:'Frontend',items:[{type:'Fix',content:'從通訊軟體或較舊的瀏覽器開啟公開商品或願望分享連結時，可以直接查看分享內容。'}]},
  {version:'2.0.856',date:'2026-11-19',title:'商品可加入願望清單與分享；願望分享附上連結',type:'Fullstack',items:[{type:'New',content:'每一種商品的詳情（站內刊登、公開來源、合作來源）都有「加入願望清單」與「分享商品」；分享內容是一行文字加上商品頁網址，公開來源與合作來源商品也有自己的商品頁，不必登入就能打開。'},{type:'New',content:'「我的願望」的每個願望可以「分享這個願望」：先看到將送出的文字與連結，再開啟分享選單或複製。收到的人不必登入就能打開連結，只會看到願望的名稱與預算，照片、備註與參考連結不會分享。'},{type:'Enhancement',content:'商品與願望的分享文字在網頁與 APP 相同；分享連結貼到 LINE 等通訊軟體時會顯示商品名稱、價格與照片，或願望名稱與預算。'},{type:'Fix',content:'未登入打開別人分享的願望清單連結時，登入後會回到那份清單。'}]},
  {version:'2.0.855',date:'2026-11-13',title:'登入與帳號頁面重新整理',type:'Frontend',items:[{type:'Enhancement',content:'登入頁只留下標題、帳號、密碼、忘記密碼、登入按鈕與註冊入口，手機上不用捲動就能按登入；隱私權政策與使用條款收成頁面下方一行小字。'},{type:'Enhancement',content:'「Weesh → Wishlist.ai：帳號與資料說明」移到登入與註冊表單下方，預設收合成一行，點開可閱讀並記住；內容與記住的方式不變。'},{type:'Enhancement',content:'重新寄送驗證信只在登入被告知 Email 尚未驗證時出現；「我已有驗證連結」「我已有重設連結」移到重寄驗證信與忘記密碼頁。註冊、忘記密碼、重設密碼、Email 驗證改用同一套版面，每頁只列出下一步會用到的連結。'}]},

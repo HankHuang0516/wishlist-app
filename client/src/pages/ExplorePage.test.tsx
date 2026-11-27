@@ -22,6 +22,17 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals();
 
 describe('bilingual exploration keeps original filters and verified facts', () => {
   const english = () => localStorage.setItem('user-locale', 'en-US');
+
+  const expectProductShare = async (dialog: HTMLElement, title: string, pathname: string) => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { share });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Share item' }));
+    await waitFor(() => expect(share).toHaveBeenCalledExactlyOnceWith({
+      title, text: expect.stringContaining(title), url: new URL(pathname, window.location.origin).href,
+    }));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Share item' })).toBeEnabled());
+  };
+
   const sellerFetch = (item = makeListing()) => vi.fn(async (url: string) => responseOk(
     url.endsWith(`/listings/${item.id}`) ? item : url.includes('match-wishes') ? { items: [], nextCursor: null }
       : url.includes('external-listings') ? { enabled: false, items: [], nextCursor: null } : { items: [item], nextCursor: null }));
@@ -56,6 +67,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     expect(within(dialog).getByText(item.summary)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.priceText)).toBeTruthy();expect(within(dialog).getByText(item.publicFacts!.originalDateLabel)).toBeTruthy();
     expect(within(dialog).getByText(/nothing has been forwarded/)).toBeTruthy();expect(within(dialog).getByText('All source item images have been imported (Source: 2; imported: 2)')).toBeTruthy();
     expect(within(dialog).getByRole('link',{name:'Ask Wishlist AI to inquire'})).toHaveAttribute('href','/chat?source='+item.id);expect(within(dialog).getByRole('link',{name:'Original source'})).toHaveAttribute('href',item.canonicalUrl);
+    await expectProductShare(dialog, item.title, '/products/source/' + item.id);
     fireEvent.click(within(dialog).getByRole('button',{name:'Next source image'}));expect(within(dialog).getByText('Image 2 of 2 imported images')).toBeTruthy();noWrites(fetch);
   });
 
@@ -152,6 +164,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     expect(within(dialog).getAllByRole('img')).toHaveLength(item.media.length);
     expect(within(dialog).getByRole('link',{name:'Open the shareable item page'})).toHaveAttribute('href',`/listings/${item.id}`);
     expect(await within(dialog).findByRole('button',{name:'Report this item'})).toBeInTheDocument();
+    await expectProductShare(dialog, item.title, '/listings/' + item.id);
     fireEvent.keyDown(dialog,{key:'Escape'});expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(fetch.mock.calls.filter(([url]) => url.endsWith(`/listings/${item.id}`))).toHaveLength(1);noWrites(fetch);
   });
@@ -173,6 +186,7 @@ describe('bilingual exploration keeps original filters and verified facts', () =
     expect(within(dialog).getByRole('status')).toHaveTextContent('The high-resolution photo could not load. Showing a thumbnail.');
     expect(thumbnail).toHaveClass('opacity-100');expect(source).toHaveAttribute('href',item.canonicalUrl);
     expect(fetch.mock.calls).toHaveLength(before);expect(fetch.mock.calls.filter(([url])=>url.endsWith(`/external-listings/${item.id}`))).toHaveLength(1);
+    await expectProductShare(dialog, item.title, '/products/external/' + item.id);
     expect(within(dialog).queryByRole('button',{name:/Contact seller/})).not.toBeInTheDocument();noWrites(fetch);
   });
 
